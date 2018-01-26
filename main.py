@@ -11,19 +11,20 @@ import torch.nn as nn
 import torch.optim as optim
 import torch
 import visualization
+from Loss.Image import SSIM
 
 def LogPrint(msg, level=20):
     logging.getLogger(__name__).log(level, msg)
     print msg
 
-def visualizeResults(out, gt):
+def visualizeResults(*args):
     """
 
     :param Variable out:
     :param Varialbe gt:
     :return:
     """
-    visualization.Visualize2D(out.cpu().data, gt.cpu().data,
+    visualization.Visualize2D(*[a.cpu().data for a in args],
                               env="ImageUpsampling_ResNet", indexrange=[0, 20], axis=0)
     pass
 
@@ -41,10 +42,10 @@ def main(a):
     # Training Mode
     if not mode:
         assert os.path.isdir(a.train), "Ground truth directory cannot be opened!"
-        inputDataset= ImageDataSet(a.input, dtype=np.float32, loadbySlice=1)
-        gtDataset   = ImageDataSet(a.train, dtype=np.float32, loadbySlice=1)
+        inputDataset= ImageDataSet(a.input, dtype=np.float32, loadbySlice=2)
+        gtDataset   = ImageDataSet(a.train, dtype=np.float32, loadbySlice=2)
         if os.path.isdir(a.mask):
-            maskDataset = ImageDataSet(a.mask, dtype=np.uint8, loadbySlice=0)
+            maskDataset = ImageDataSet(a.mask, dtype=np.uint8, loadbySlice=2)
             trainingSet = MaskedTensorDataset(inputDataset, gtDataset, maskDataset)
         else:
             trainingSet = TensorDataset(inputDataset, gtDataset)
@@ -52,7 +53,7 @@ def main(a):
 
         # Load Checkpoint or create new network
         #-----------------------------------------
-        net = ResNet(1, 1, 11)
+        net = ResNet(1, 1, 22)
         if os.path.isfile(a.checkpoint):
             LogPrint("Loading checkpoint " + a.checkpoint)
             net.load_state_dict(torch.load(a.checkpoint))
@@ -66,12 +67,13 @@ def main(a):
         mm = trainparams['momentum'] if trainparams.has_key('momentum') else 0.01
 
         criterion = nn.MSELoss()
+        ssim = SSIM()
         optimizer = optim.SGD([{'params': net.parameters(),
                                 'lr': lr, 'momentum': mm}])
         if a.usecuda:
             criterion = criterion.cuda()
+            ssim.cuda()
             net = net.cuda()
-            # optimizer.cuda()
 
         losses = []
         for i in xrange(a.epoch):
@@ -95,14 +97,15 @@ def main(a):
                     g = g * m
                     s = s * m
 
-                # loss = (criterion(out, g) - criterion(s, g))/ criterion(s, g)
-                loss = criterion(out,g)
+                # loss = (criterion(out, g) ) / criterion(s, g) + (1- ssim.forward(out.unsqueeze(1), g.unsqueeze(1)).squeeze())
+                loss = (criterion(out, g) ) / criterion(s, g)
+                # loss = criterion(out,g) * (1- ssim.forward(out.unsqueeze(1), g.unsqueeze(1)).squeeze())
                 loss.backward()
                 optimizer.step()
                 E.append(loss.data[0])
                 print "\t[Step %04d] Loss: %.010f"%(index, loss.data[0])
                 if a.plot:
-                    visualizeResults(s, g)
+                    visualizeResults(out, g, s)
             losses.append(E)
             torch.save(net.state_dict(), "./Backup/checkpoint_RESNET.pt")
             print "[Epoch %04d] Loss: %.010f"%(i, np.array(E).mean())
