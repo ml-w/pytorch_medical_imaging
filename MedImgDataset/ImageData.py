@@ -71,6 +71,7 @@ class ImageDataSet(Dataset):
         self.verbose = verbose
         self.dtype = dtype
         self.loadBySlice = loadbySlice
+        self.stackSize = [] # for reconstructing the images
         self._ParseRootDir()
 
     def _ParseRootDir(self):
@@ -102,6 +103,7 @@ class ImageDataSet(Dataset):
             else:
                 self.data.append(from_numpy(np.array(sitk.GetArrayFromImage(im), dtype=self.dtype)).transpose(
                     0, self.loadBySlice).contiguous())
+                self.stackSize.append(im.GetSize()[0])
 
             metadata = {}
             for key in im.GetMetaDataKeys():
@@ -114,8 +116,8 @@ class ImageDataSet(Dataset):
                     metadata[key] = im.GetMetaData(key)
             self.metadata.append(metadata)
 
-        # for im in self.data:
-        #     print self.rootdir, self.loadBySlice, im.size()
+        # for i, im in enumerate(self.data):
+        #     print self.dataSourcePath[i], im.size()
 
         if self.loadBySlice >= 0:
             self.data = cat(self.data, dim=0).contiguous()

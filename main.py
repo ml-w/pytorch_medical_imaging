@@ -128,13 +128,15 @@ def main(a):
                 LogPrint("Cannot create new directory")
                 return
         assert os.path.isdir(a.output), "Ground truth directory cannot be opened!"
-        inputDataset= ImageDataSet(a.input, dtype=np.float32)
+        inputDataset= ImageDataSet(a.input, dtype=np.float32, loadbySlice=2)
+        if os.path.isdir(a.mask):
+            maskDataset = ImageDataSet(a.mask, dtype=np.uint8)
         loader      = DataLoader(inputDataset, batch_size=a.batchsize, shuffle=False, num_workers=4)
-        net = ResNet(inputDataset[0].size()[0], inputDataset[0].size()[0], 11)
+        net = ResNet(1, 1, 22)
         if os.path.isfile(a.checkpoint):
             LogPrint("Loading parameters " + a.checkpoint)
             net.load_state_dict(torch.load(a.checkpoint))
-            net.training = False
+            net.eval()
         else:
             LogPrint("Parameters file cannot be opened!")
             return
@@ -148,17 +150,25 @@ def main(a):
             s = Variable(samples)
             if a.usecuda:
                 s = s.cuda()
-            out = net.forward(s)
-            for j in xrange(out.data.size()[0]):
-                results.append(out[i].data.cpu().numpy())
+            out = net.forward(s.unsqueeze(1)).squeeze()
+            results.append(out.data.squeeze().cpu().numpy())
+            del out
+        results = np.concatenate(results, axis=0)
 
-        for i, r in enumerate(results):
-            im = sitk.GetImageFromArray(r)
+        indexlist = np.cumsum(inputDataset.stackSize)
+        for i in xrange(len(indexlist)):
+            startindex = 0 if i == 0 else indexlist[i-1]
+            endindex = indexlist[i]
+            im = results[startindex:endindex].transpose(2, 1, 0)
+            if os.path.isdir(a.mask):
+                im = im * maskDataset[i].numpy()
+            im = sitk.GetImageFromArray(im)
             metadata = inputDataset.metadata[i]
             im = ImageDataSet.WrapImageWithMetaData(im, metadata)
             outfname = a.output + "/" + os.path.basename(inputDataset.dataSourcePath[i])
             LogPrint("Writing to " + outfname)
             sitk.WriteImage(im, outfname)
+
 
     pass
 
