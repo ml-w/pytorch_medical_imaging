@@ -442,11 +442,21 @@ def RenameImages(dir):
 
     pass
 
+import fnmatch
 if __name__ == '__main__':
     dirs = RecursiveListDir(3, "./TOCI/53.K_Fold")
+    # for d in dirs:
+    #     if os.path.isfile(d + "/Landmarks.csv"):
+    #         ExtractROIs(d, d + "/Landmarks.csv", d + "/ROIs", 64, 3)
     for d in dirs:
-        if os.path.isfile(d + "/Landmarks.csv"):
-            ExtractROIs(d, d + "/Landmarks.csv", d + "/ROIs", 64, 3)
+        if d.find("ROI") >= 0:
+            for j in xrange(4, 9):
+                files = os.listdir(d)
+                if not os.path.isdir(d + "/%i"%j):
+                    os.mkdir(d + "/%i"%j)
+                files = fnmatch.filter(files, "TOCI%s*"%j)
+                for F in files:
+                    os.system("mv %s %s"%(d + "/" + F, d + "/%s/"%j + F))
     # PlotImageWithLandmarks("./TOCI/52.BatchSource_SAR", "./TOCI/51.BatchSource/Landmarks.csv")
     # ResizeToSquare([512,512], "./TOCI/51.BatchSource", "./TOCI/52.BatchSource_SAR", "./TOCI/51.BatchSource/Landmarks.csv")
     #======================

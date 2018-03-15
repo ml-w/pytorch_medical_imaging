@@ -36,13 +36,14 @@ def main(a):
     mode = 0 # Training Mode
     assert os.path.isdir(a.input), "Input data directory not exist!"
     if a.train is None:
+        print "Evaluation..."
         mode = 1 # Eval mode
 
     ##############################
     # Training Mode
     if not mode:
-        assert os.path.isfile(a.train), "Ground truth directory cannot be opened!"
         if a.stage == 1:
+            assert os.path.isfile(a.train), "Ground truth directory cannot be opened!"
             inputDataset= ImageDataSet2D(a.input, dtype=np.float32, verbose=True)
             gtDataset   = Landmarks(a.train)
             trainingSet = ImageFeaturePair(inputDataset, gtDataset)
@@ -51,6 +52,14 @@ def main(a):
         elif a.stage == 2:
             imreader = lambda x: imread(x, as_grey=False)[:,:,:2] # Discard last layer
             inputDataset = ImageFolder(a.input, loader=imreader)
+            # Count number of images in each catagories to calculate the punish weightings
+            # weights = np.array(
+            #     [sum([inputDataset[i][1]==val for i in xrange(len(inputDataset))])
+            #      for val, key in enumerate(inputDataset.class_to_idx)], dtype=float)
+            # weights = 1/ weights
+            # weights = weights/np.linalg.norm(weights)
+            weights = np.array([100, 5, 1, 1, 1])
+            weights = torch.from_numpy(weights)
             loader = DataLoader(inputDataset, batch_size=a.batchsize, shuffle=True, num_workers=4, drop_last=True)
             pass
         else:
@@ -62,9 +71,11 @@ def main(a):
         net = ConvNet(inputDataset[0].size()[1]) if a.stage == 1 else WNet(5)
         net.train(True)
         if os.path.isfile(a.checkpoint):
-            assert os.path.isfile(a.checkpoint)
+            # assert os.path.isfile(a.checkpoint)
             LogPrint("Loading checkpoint " + a.checkpoint)
             net.load_state_dict(torch.load(a.checkpoint))
+        else:
+            LogPrint("Checkpoint doesn't exist!")
 
         trainparams = {}
         if not a.trainparams is None:
@@ -78,7 +89,7 @@ def main(a):
         if a.stage == 1:
             criterion = nn.SmoothL1Loss()
         elif a.stage == 2:
-            criterion = nn.NLLLoss()
+            criterion = nn.NLLLoss(weight=weights.float())
         else:
             pass
         optimizer = optim.SGD([{'params': net.parameters(),
@@ -128,10 +139,16 @@ def main(a):
 
             losses.append(E)
             if np.array(E).mean() <= lastloss:
-                backuppath = "./Backup/checkpoint_ConvNet.pt" if a.stage == 1 else "./Backup/checkpoint_WNet.pt"
+                if a.outcheckpoint=="":
+                    backuppath = "./Backup/checkpoint_ConvNet.pt" if a.stage == 1 else "./Backup/checkpoint_WNet.pt"
+                else:
+                    backuppath = a.outcheckpoint
                 torch.save(net.state_dict(), backuppath)
                 lastloss = np.array(E).mean()
             print "[Epoch %04d] Loss: %.010f"%(i, np.array(E).mean())
+            if np.array(E).mean() <= 1E-5 and a.stage == 2:
+                break
+
 
              # Decay learning rate
             if a.decay != 0:
@@ -235,6 +252,8 @@ if __name__ == '__main__':
                         help="If specified, all the messages will be written to the specified file.")
     parser.add_argument("--stage", dest='stage', default=1, action='store', type=int,
                         help="Stage 1: Feature location, Stage2: TOCI classification")
+    parser.add_argument("--checkpoint", dest='outcheckpoint', action='store', default='', type=str,
+                        help="Output checkpoint to specific location")
     a = parser.parse_args()
 
     if a.log is None:
