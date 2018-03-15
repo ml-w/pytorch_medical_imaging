@@ -180,7 +180,7 @@ def ResizeToSquare(size, root_dir, outputdir, landmarks_csv=None):
         outdict = {'File': [], 'Proximal Phalanx': [], 'Sesamoid': [], 'Metacarpal': [], 'Distal Phalanx': []}
         d = pd.read_csv(landmarks_csv)
         for i, row in d.iterrows():
-            im = imread(root_dir + "/" + row['File'].replace("png", 'jpg'), as_grey=False)
+            im = imread(root_dir + "/" + row[0].replace("png", 'jpg'), as_grey=False)
 
             newim = PadToSquare(im, size)
 
@@ -422,7 +422,36 @@ def ExtractROIs(root_dir, landmark_csv, outdir, patchsize, augment=0):
                 imsave(outnames, outim)
 
 
+def RenameImages(dir):
+    """
+    Description
+    ------------
+      Rename the classified images.
+
+    :param dir:
+    :return:
+    """
+
+    folders = os.listdir(dir)
+    for f in folders:
+        i = 0
+        files = os.listdir(dir + "/" + f)
+        for fs in files:
+            os.rename(dir + "/" + f + "/" + fs, dir + "/" + f + "/" + f + "_%04d.%s"%(i, fs.split('.')[-1]))
+            i += 1
+
+    pass
+
 if __name__ == '__main__':
+    dirs = RecursiveListDir(3, "./TOCI/53.K_Fold")
+    for d in dirs:
+        if os.path.isfile(d + "/Landmarks.csv"):
+            ExtractROIs(d, d + "/Landmarks.csv", d + "/ROIs", 64, 3)
+    # PlotImageWithLandmarks("./TOCI/52.BatchSource_SAR", "./TOCI/51.BatchSource/Landmarks.csv")
+    # ResizeToSquare([512,512], "./TOCI/51.BatchSource", "./TOCI/52.BatchSource_SAR", "./TOCI/51.BatchSource/Landmarks.csv")
+    #======================
+    # Examples
+    #======================
     # PlotImageWithLandmarks("./TOCI/04.Resized")
     # ExtractLandmarks("./TOCI/99.MISC/Annotate2/Results")
     # ResizeToSquare([512, 512], "./TOCI/10.TestData","./TOCI/10.TestData/Resized_SAR", landmarks_csv="./TOCI/11.AnnotatedTestData/Landmarks.csv")
@@ -430,13 +459,12 @@ if __name__ == '__main__':
     # PlotImageWithLandmarks("./TOCI/05.Resized_SAR")
     # DataAugmentatation("./TOCI/05.Resized_SAR", "./TOCI/05.Resized_SAR/aug", "./TOCI/05.Resized_SAR/Landmarks.csv")
     # ReadFeatures("./TOCI/03.Annotated/Landmarks.csv")
-    # ExtractROIs("./TOCI/10.TestData/Resized_SAR", "./TOCI/10.TestData/Resized_SAR/Landmarks.csv", "./TOCI/10.TestData/Resized_SAR/ROIs_GT", 64, 3)
-    ExtractROIs("./TOCI/05.Resized_SAR", "./TOCI/05.Resized_SAR/Landmarks.csv", "./TOCI/05.Resized_SAR/ROIs_Aug", 64, 3)
+    # ExtractROIs("./TOCI/10.TestData/Resized_SAR", "./TOCI/10.TestData/Resized_SAR/Landmarks.csv", "./TOCI/10.TestData/Resized_SAR/ROIs_GT", 64, 15)
+    # ExtractROIs("./TOCI/05.Resized_SAR", "./TOCI/05.Resized_SAR/Landmarks.csv", "./TOCI/10.TestData/Resized_SAR/ROIs_B", 64, 15)
     # ROIAugmentation("./TOCI/05.Resized_SAR/ROIs/5")
     # ROIAugmentation("./TOCI/05.Resized_SAR/ROIs/6")
     # ROIAugmentation("./TOCI/05.Resized_SAR/ROIs/7")
     # ROIAugmentation("./TOCI/05.Resized_SAR/ROIs/8")
-
     # import visdom
     # vis = visdom.Visdom(port=80)
     # im = imread("./TOCI/05.Resized_SAR/TOCI4_0004.png", as_grey=False)

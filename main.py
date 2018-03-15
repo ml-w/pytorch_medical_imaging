@@ -195,18 +195,14 @@ def main(a):
             data.to_csv(a.output, index=False)
         else:
             results = np.concatenate(results, 0).squeeze()
-            print results.shape
             outdict = {'File': [os.path.basename(p) for p in  inputDataset.dataSourcePath],
                        'Guess': ["TOCI%s"%(i + 4) for i in results.tolist()]}
             data = pd.DataFrame.from_dict(outdict)
             data.to_csv(a.output, index=False)
-            print data.to_string()
             hit = []
             for i, row in data.iterrows():
                 hit.append(row['File'].split('_')[0] == row['Guess'])
             print "Hit rate: ", np.sum(hit) / float(len(hit))
-
-
 
     pass
 
