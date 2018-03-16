@@ -58,7 +58,7 @@ def main(a):
             #      for val, key in enumerate(inputDataset.class_to_idx)], dtype=float)
             # weights = 1/ weights
             # weights = weights/np.linalg.norm(weights)
-            weights = np.array([100, 5, 1, 1, 1])
+            weights = np.array([5, 5, 1, 1, 1])
             weights = torch.from_numpy(weights)
             loader = DataLoader(inputDataset, batch_size=a.batchsize, shuffle=True, num_workers=4, drop_last=True)
             pass

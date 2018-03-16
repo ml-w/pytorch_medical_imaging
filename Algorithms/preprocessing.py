@@ -1,6 +1,6 @@
 import numpy as np
 import os
-from MedImgDataset import ImageDataSet2D
+from MedImgDataset import ImageDataSet2D, Landmarks
 from skimage.io import imread, imsave
 import matplotlib.pyplot as plt
 import imgaug as ia
@@ -442,12 +442,17 @@ def RenameImages(dir):
 
     pass
 
-import fnmatch
-if __name__ == '__main__':
+def SortImagesByClassPrefix(rootdir):
+    """
+    Description
+    -----------
+      Copy images into seperated folders according to the class
+
+    :param rootdir:
+    :return:
+    """
+
     dirs = RecursiveListDir(3, "./TOCI/53.K_Fold")
-    # for d in dirs:
-    #     if os.path.isfile(d + "/Landmarks.csv"):
-    #         ExtractROIs(d, d + "/Landmarks.csv", d + "/ROIs", 64, 3)
     for d in dirs:
         if d.find("ROI") >= 0:
             for j in xrange(4, 9):
@@ -457,8 +462,92 @@ if __name__ == '__main__':
                 files = fnmatch.filter(files, "TOCI%s*"%j)
                 for F in files:
                     os.system("mv %s %s"%(d + "/" + F, d + "/%s/"%j + F))
-    # PlotImageWithLandmarks("./TOCI/52.BatchSource_SAR", "./TOCI/51.BatchSource/Landmarks.csv")
-    # ResizeToSquare([512,512], "./TOCI/51.BatchSource", "./TOCI/52.BatchSource_SAR", "./TOCI/51.BatchSource/Landmarks.csv")
+
+def CropAllThumbs(root_dir, outdir, landmark_csv, augment=0):
+    """
+    Description
+    -----------
+      Crop thumbs into 299x299 images
+
+    :param root_dir:
+    :param outdir:
+    :param landmark_csv:
+    :param augment:
+    :return:
+    """
+    assert os.path.isdir(root_dir)
+    assert os.path.isfile(landmark_csv)
+
+    if not os.path.isdir(outdir):
+        os.mkdir(outdir)
+
+    features = ReadFeatures(landmark_csv)
+    images = ImageDataSet2D(root_dir,dtype=np.uint8, verbose=True, as_grey=False)
+    paths = images.dataSourcePath
+    for i, row in enumerate(zip(images, features)):
+        # if i==0:
+        #     continue
+        im = row[0].numpy()[:,:,0]
+        f = row[1]
+        if f.shape[0] == 4:
+            r, g, b = [f[0], f[2], f[3]]
+        else:
+            r, g, b = f
+        r, g, b = [np.array(x) for x in [r, g, b]]
+
+        patchsize=299
+
+        # Rotation
+        vect = b - g
+        vect = vect / np.linalg.norm(np.array(vect, dtype=float))
+        deg = np.arctan2(0, -1) - np.arctan2(vect[1], vect[0])
+        deg = np.rad2deg(deg)
+
+        # Translation
+        cent = (r + b) / 2.
+
+        # Scaling
+        scale = patchsize * 0.7 / np.linalg.norm(np.array(r-b, dtype=float))
+
+        halfsize = np.array(im.shape) / 2
+        bounds = (halfsize[0] - patchsize/2 - 1, halfsize[1] - patchsize/2 - 1, halfsize[0] - patchsize/2, halfsize[1] - patchsize/2) # top, right, bottom, left
+
+        if augment == 0:
+            seg =  iaa.Sequential([iaa.Affine(translate_px={'x':  int(- cent[1] + halfsize[1]), 'y': int(- cent[0] + halfsize[0])}),
+                                   iaa.Affine(rotate=-deg),
+                                   iaa.Crop(px=bounds, keep_size=False)])
+            ext = os.path.basename(paths[i]).split('.')[-1]
+            outnames = paths[i].replace(root_dir, outdir).replace('.' + ext, '_Thumb.' + ext)
+            image = seg.augment_image(im)
+            outim = np.zeros(shape=[patchsize, patchsize, 3], dtype=np.uint8)
+            outim[:,:,0] = image
+            outim[:,:,1] = image
+            outim[:,:,2] = image
+            imsave(outnames, image)
+        else:
+            for k in xrange(augment):
+                seg =  iaa.Sequential([iaa.Affine(translate_px={'x':  int(- cent[1] + halfsize[1]), 'y': int(- cent[0] + halfsize[0])}),
+                                       iaa.Affine(rotate=(-deg - 10, -deg + 10)),
+                                       iaa.Affine(scale=scale),
+                                       iaa.Affine(translate_px=(-16, 16), scale=(0.9,1.1)),
+                                       iaa.Crop(px=bounds, keep_size=False)])
+                ext = os.path.basename(paths[i]).split('.')[-1]
+                outnames = paths[i].replace(root_dir, outdir).replace('.' + ext, '_Thumb_AUG%02d.'%k + ext)
+                image = seg.augment_image(im)
+                print image.shape
+                outim = np.zeros(shape=[patchsize, patchsize, 3], dtype=np.uint8)
+                outim[:,:,0] = image[0:299,0:299]
+                outim[:,:,1] = image[0:299,0:299]
+                outim[:,:,2] = image[0:299,0:299]
+                imsave(outnames, image)
+
+
+
+
+
+import fnmatch
+if __name__ == '__main__':
+    CropAllThumbs("./TOCI/51.BatchSource/", "./TOCI/54.BatchSource_Thumb/" ,"./TOCI/51.BatchSource/Landmarks.csv", 3)
     #======================
     # Examples
     #======================
