@@ -7,12 +7,14 @@ from MedImgDataset import ImageDataSet2D, ImageFeaturePair, Landmarks
 from torch.utils.data import DataLoader, TensorDataset, sampler
 from torch.autograd import Variable
 from torchvision.datasets import ImageFolder
-from Networks import ConvNet, WNet
+from Networks import ConvNet, WNet, Inception3
 import torch.nn as nn
 import torch.optim as optim
 import torch
 import visualization
-from skimage.io import imread
+from skimage.io import imread, imsave
+
+
 
 def LogPrint(msg, level=20):
     logging.getLogger(__name__).log(level, msg)
@@ -50,8 +52,10 @@ def main(a):
             loader      = DataLoader(trainingSet, batch_size=a.batchsize, shuffle=True, num_workers=4)
                                      # sampler=sampler.WeightedRandomSampler(np.ones(len(trainingSet)).tolist(), a.batchsize*100))
         elif a.stage == 2:
-            imreader = lambda x: imread(x, as_grey=False)[:,:,:2] # Discard last layer
+            imreader = lambda x: imread(x, as_grey=True) # Discard last layer
             inputDataset = ImageFolder(a.input, loader=imreader)
+            # for i, iffs in enumerate(inputDataset):
+            #     print i, iffs[0].shape
             # Count number of images in each catagories to calculate the punish weightings
             # weights = np.array(
             #     [sum([inputDataset[i][1]==val for i in xrange(len(inputDataset))])
@@ -68,7 +72,7 @@ def main(a):
 
         # Load Checkpoint or create new network
         #-----------------------------------------
-        net = ConvNet(inputDataset[0].size()[1]) if a.stage == 1 else WNet(5)
+        net = ConvNet(inputDataset[0].size()[1]) if a.stage == 1 else Inception3(5 ,aux_logits=False)
         net.train(True)
         if os.path.isfile(a.checkpoint):
             # assert os.path.isfile(a.checkpoint)
@@ -114,7 +118,7 @@ def main(a):
                     out = net.forward(s.unsqueeze(1))
                     loss = criterion(out,g.float())
                 elif a.stage == 2:
-                    out = net.forward(s.permute(0, 3, 1, 2).float())
+                    out = net.forward(s.unsqueeze(1).float())
                     loss = criterion(out,g)
 
                 # if a.stage == 2:
@@ -164,15 +168,15 @@ def main(a):
             loader      = DataLoader(inputDataset, batch_size=a.batchsize, shuffle=False)
             net = ConvNet(inputDataset[0].size()[1])
         else:
-            imreader = lambda x: imread(x, as_grey=False)
-            inputDataset = ImageDataSet2D(a.input, dtype=np.uint8, verbose=True, as_grey=False, readfunc=imreader)
+            imreader = lambda x: imread(x, as_grey=True)
+            inputDataset = ImageDataSet2D(a.input, verbose=True, readfunc=imreader, dtype=float)
             loader      = DataLoader(inputDataset, batch_size=a.batchsize, shuffle=False)
-            net = WNet(5)
+            net = Inception3(5, aux_logits=False)
 
         if os.path.isfile(a.checkpoint):
             LogPrint("Loading parameters " + a.checkpoint)
-            net.load_state_dict(torch.load(a.checkpoint))
             net.train(False)
+            net.load_state_dict(torch.load(a.checkpoint))
         else:
             LogPrint("Parameters file cannot be opened!")
             return
@@ -186,7 +190,7 @@ def main(a):
             s = Variable(samples)
             if a.usecuda:
                 s = s.cuda()
-            out = net.forward(s.unsqueeze(1)).squeeze() if a.stage == 1 else net.forward(s.permute(0, 3, 1, 2)[:,:2].float())
+            out = net.forward(s.unsqueeze(1)).squeeze() if a.stage == 1 else net.forward(s.unsqueeze(1).float())
             if a.stage == 1:
                 for j in xrange(out.data.size()[0]):
                     results.append(out[j].data.cpu().numpy())

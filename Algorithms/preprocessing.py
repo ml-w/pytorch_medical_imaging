@@ -454,6 +454,7 @@ def SortImagesByClassPrefix(rootdir):
 
     dirs = RecursiveListDir(3, rootdir)
     for d in dirs:
+        print d
         if d.find("Training") >= 0:
             for j in xrange(4, 9):
                 files = os.listdir(d)
@@ -520,10 +521,10 @@ def CropAllThumbs(root_dir, outdir, landmark_csv, augment=0):
             outnames = paths[i].replace(root_dir, outdir).replace('.' + ext, '_Thumb.' + ext)
             image = seg.augment_image(im)
             outim = np.zeros(shape=[patchsize, patchsize, 3], dtype=np.uint8)
-            outim[:,:,0] = image
-            outim[:,:,1] = image
-            outim[:,:,2] = image
-            imsave(outnames, image)
+            outim[:,:,0] = image[0:299, 0:299]
+            outim[:,:,1] = image[0:299, 0:299]
+            outim[:,:,2] = image[0:299, 0:299]
+            imsave(outnames, outim)
         else:
             for k in xrange(augment):
                 seg =  iaa.Sequential([iaa.Affine(translate_px={'x':  int(- cent[1] + halfsize[1]), 'y': int(- cent[0] + halfsize[0])}),
@@ -534,12 +535,11 @@ def CropAllThumbs(root_dir, outdir, landmark_csv, augment=0):
                 ext = os.path.basename(paths[i]).split('.')[-1]
                 outnames = paths[i].replace(root_dir, outdir).replace('.' + ext, '_Thumb_AUG%02d.'%k + ext)
                 image = seg.augment_image(im)
-                print image.shape
                 outim = np.zeros(shape=[patchsize, patchsize, 3], dtype=np.uint8)
                 outim[:,:,0] = image[0:299,0:299]
                 outim[:,:,1] = image[0:299,0:299]
                 outim[:,:,2] = image[0:299,0:299]
-                imsave(outnames, image)
+                imsave(outnames, outim)
 
 
 
@@ -548,7 +548,7 @@ def CropAllThumbs(root_dir, outdir, landmark_csv, augment=0):
 import fnmatch
 if __name__ == '__main__':
     # CropAllThumbs("./TOCI/51.BatchSource/", "./TOCI/54.BatchSource_Thumb/" ,"./TOCI/51.BatchSource/Landmarks.csv", 3)
-    SortImagesByClassPrefix("./TOCI/55.K_Fold_Thumb/")
+    # SortImagesByClassPrefix("./TOCI/55.K_Fold_Thumb/")
     #======================
     # Examples
     #======================

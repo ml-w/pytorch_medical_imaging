@@ -18,20 +18,40 @@ class CNN6(nn.Module):
     def __init__(self, inchan, numOfClass):
         super(CNN6,self).__init__()
         self.initBn = nn.BatchNorm2d(inchan)
-        self.kern1 = StandardConv(inchan, 32, kernsize=5, padding=True)
-        self.kern2 = StandardConv(32, 64, kernsize=3, padding=True)
-        self.kern3 = StandardConv(64, 128, kernsize=3, padding=True)
-        self.kern4 = StandardConv(128, 256, kernsize=3, padding=True)
-        self.kern5 = StandardConv(256, 512, kernsize=2, padding=True)
+        # self.kern1 = StandardConv(inchan, 32, kernsize=5, padding=True)
+        # self.kern2 = StandardConv(32, 64, kernsize=3, padding=True)
+        # self.kern3 = StandardConv(64, 128, kernsize=3, padding=True)
+        # self.kern4 = StandardConv(128, 256, kernsize=3, padding=True)
+        # self.kern5 = StandardConv(256, 512, kernsize=2, padding=True)
+        self.kern1 = StandardConv(inchan, 32, kernsize=7)
+        self.kern2 = StandardConv(32, 64, kernsize=7)
+        self.kern3 = StandardConv(64, 128, kernsize=7)
+        self.kern4 = StandardConv(128, 256, kernsize=7)
+        self.kern5 = StandardConv(256, 512, kernsize=5)
+        self.kern6 = StandardConv(512, 512, kernsize=3)
         self.fc1 = nn.Linear(512, numOfClass)
 
     def forward(self, x):
         x = self.initBn(x)
-        x = F.max_pool2d(self.kern1(x), 2)
-        x = F.max_pool2d(self.kern2(x), 2)
-        x = F.max_pool2d(self.kern3(x), 2)
+        # x = F.max_pool2d(self.kern1(x), 2)
+        # x = F.max_pool2d(self.kern2(x), 2)
+        # x = F.max_pool2d(self.kern3(x), 2)
+        # x = F.max_pool2d(self.kern4(x), 2)
+        # x = F.max_pool2d(self.kern5(x), 2)
+
+        #64x64x?
+        x = self.kern1(x)
+        #58x58x32
+        x = self.kern2(x)
+        #51x51x64
+        x = self.kern3(x)
+        #44x44x128
         x = F.max_pool2d(self.kern4(x), 2)
-        x = F.max_pool2d(self.kern5(x), 2)
+        #19x19x256
+        x = F.max_pool2d(self.kern5(x), 5)
+        #3x3x512
+        x = self.kern6(x)
+        #1x1x512
         x = self.fc1(x.squeeze())
         return x
 
