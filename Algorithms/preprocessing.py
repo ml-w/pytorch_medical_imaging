@@ -452,9 +452,9 @@ def SortImagesByClassPrefix(rootdir):
     :return:
     """
 
-    dirs = RecursiveListDir(3, "./TOCI/53.K_Fold")
+    dirs = RecursiveListDir(3, rootdir)
     for d in dirs:
-        if d.find("ROI") >= 0:
+        if d.find("Training") >= 0:
             for j in xrange(4, 9):
                 files = os.listdir(d)
                 if not os.path.isdir(d + "/%i"%j):
@@ -547,7 +547,8 @@ def CropAllThumbs(root_dir, outdir, landmark_csv, augment=0):
 
 import fnmatch
 if __name__ == '__main__':
-    CropAllThumbs("./TOCI/51.BatchSource/", "./TOCI/54.BatchSource_Thumb/" ,"./TOCI/51.BatchSource/Landmarks.csv", 3)
+    # CropAllThumbs("./TOCI/51.BatchSource/", "./TOCI/54.BatchSource_Thumb/" ,"./TOCI/51.BatchSource/Landmarks.csv", 3)
+    SortImagesByClassPrefix("./TOCI/55.K_Fold_Thumb/")
     #======================
     # Examples
     #======================
