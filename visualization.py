@@ -48,9 +48,31 @@ def Visualize3D(*args, **kwargs):
     :keyword int nrow   Number of images per row
     :keyword iter displayrange  Display values range
     :keyword iter indexrange    Index range of the displayed image
+    :keyword iter slicerange    Slice index range to display
 
     :return: None
     """
+    # axis = kwargs['axis'] if kwargs.has_key('axis') else 0
+    # env = kwargs['env'] if kwargs.has_key('env') else "Name"
+    # prefix = kwargs['env'] if kwargs.has_key('Image') else 'Image'
+    # displayrange = kwargs['displayrange'] if kwargs.has_key('displayrange') else [0, 0]
+    # indexrange = kwargs['indexrange'] if kwargs.has_key('indexrange') else [0, 15]
+    # nrow = kwargs['nrow'] if kwargs.has_key('nrow') else 5
+    # slicerange = kwargs['slicerange'] if kwargs.has_key('slicerange') else None
+    #
+    # for i, tensor in enumerate(args):
+    #     assert issubclass(type(tensor), _TensorBase)
+    #     r = np.roll(range(2, 5), -axis).tolist()
+    #     r = [1, 2].extend(r)
+    #     t = tensor.permute(*r)
+    #     temp = t.numpy()
+    #     if displayrange == [0, 0]:
+    #         drange = [0, 0]
+    #         drange[0] = temp.min()
+    #         drange[1] = temp.max() + 0.1
+    #     else:
+    #         drange = displayrange
+    #     temp = Normalize()
     raise NotImplementedError
 
 

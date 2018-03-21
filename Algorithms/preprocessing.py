@@ -28,3 +28,20 @@ def RecursiveListDir(searchDepth, rootdir):
     return DD
 
 
+def SmoothImages(root_dir, out_dir):
+    import fnmatch
+
+    if not os.path.isdir(out_dir):
+        os.mkdir(out_dir)
+
+    f = os.listdir(root_dir)
+    fnmatch.filter(f, "*.nii.gz")
+
+    for fs in f:
+        print fs
+        im = sitk.ReadImage(root_dir + "/" + fs)
+        out = sitk.SmoothingRecursiveGaussian(im, 8, True)
+        sitk.WriteImage(out, out_dir + "/" + fs)
+
+if __name__ == '__main__':
+    SmoothImages("../BrainVessel/01.BatchSource/Label/", "../BrainVessel/02.Smoothed_Labels")
