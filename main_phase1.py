@@ -92,7 +92,7 @@ def main(a):
 
                 out = net.forward(s.unsqueeze(1))
                 # print torch.sum(out).data[0], torch.sum(g).data[0]
-                loss = criterion(out,g.float())
+                loss = criterion(F.sigmoid(out),F.sigmoid(g.float()))
 
 
                 loss.backward()
@@ -100,7 +100,10 @@ def main(a):
                 E.append(loss.data[0])
                 print "\t[Step %04d] Loss: %.010f"%(index, loss.data[0])
                 if a.plot:
-                    visualizeResults(g[0].squeeze(), out[0].squeeze())
+                    visualization.Visualize2D(out[0].squeeze().cpu().data,
+                                              F.sigmoid(out[0].squeeze()).cpu().data,
+                                              g[0].squeeze().cpu().data,
+                              env="MCA_run", nrow=3, indexrange=[50,60])
 
             losses.append(E)
             if np.array(E).mean() <= lastloss:
