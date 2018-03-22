@@ -69,5 +69,8 @@ class ShallowMasked(nn.Module):
         return x
 
     def cuda(self, device=None):
-        super(ShallowMasked, self).cuda()
-        self.weightmask.cuda()
+        self.weightmask = self.weightmask.cuda()
+        return super(ShallowMasked, self).cuda()
+
+    def cpu(self):
+        self.weightmask = self.weightmask.cpu()
