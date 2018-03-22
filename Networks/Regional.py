@@ -68,9 +68,3 @@ class ShallowMasked(nn.Module):
         x = F.upsample(x, scale_factor=[1, 4, 4], mode='trilinear')
         return x
 
-    def cuda(self, device=None):
-        self.weightmask = self.weightmask.cuda()
-        return super(ShallowMasked, self).cuda()
-
-    def cpu(self):
-        self.weightmask = self.weightmask.cpu()
