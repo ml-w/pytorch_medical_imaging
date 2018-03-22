@@ -49,7 +49,8 @@ class ShallowMasked(nn.Module):
         super(ShallowMasked, self).__init__()
 
         assert len(indim) == 2
-        d = [1, 1, 1].extend(indim)
+        d = [1, 1, 1]
+        d.extend(indim)
         self.weightmask = Variable(torch.ones(d), requires_grad=True)
         self.conv1 = StandardConv(1, 16, 5)
         self.conv2 = StandardConv(16, 32, 5)
