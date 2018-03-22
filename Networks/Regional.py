@@ -67,3 +67,7 @@ class ShallowMasked(nn.Module):
         x = self.conv6(self.conv5(self.conv4(self.conv3(self.conv2(x)))))
         x = F.upsample(x, scale_factor=[1, 4, 4], mode='trilinear')
         return x
+
+    def cuda(self, device=None):
+        super(ShallowMasked, self).cuda()
+        self.weightmask.cuda()
