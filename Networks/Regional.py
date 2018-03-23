@@ -61,6 +61,7 @@ class ShallowMasked(nn.Module):
         self.initbn = nn.BatchNorm3d(1)
 
     def forward(self, x):
+	print torch.sum(self.weightmask).data[0]
         x = x * self.weightmask.expand_as(x)
         x = self.initbn(x)
         x = self.conv1(F.max_pool3d(x, kernel_size=[1, 4, 4]))

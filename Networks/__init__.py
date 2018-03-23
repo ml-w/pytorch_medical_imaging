@@ -1,3 +1,3 @@
-from Regional import Shallow
+from Regional import Shallow, ShallowMasked
 
-__all__ = ['Shallow']
+__all__ = ['Shallow', 'ShallowMasked']
