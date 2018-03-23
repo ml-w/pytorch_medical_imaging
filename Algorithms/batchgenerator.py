@@ -46,5 +46,5 @@ def GenerateKFoldBatch(sourcedir, targetdir, numOfTestSamples):
                 copy2(row[2].dataSourcePath[j], targetdir + "/%03d/Training/Smoothed"%i)
 
 if __name__ == '__main__':
-    GenerateKFoldBatch("./BrainVessel/01.BatchSource", "./BrainVessel/10.K_Fold_Batches", 10)
-
+    # GenerateKFoldBatch("./BrainVessel/01.BatchSource", "./BrainVessel/10.K_Fold_Batches", 10)
+    pass

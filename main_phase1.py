@@ -86,13 +86,14 @@ def main(a):
             for index, samples in enumerate(loader):
                 if a.usecuda:
                     s = Variable(samples[0]).cuda()
-                    g = Variable(samples[1]*1e5).cuda()
+                    g = Variable(samples[1]).cuda()
                 else:
                     s, g = Variable(samples[0]), Variable(samples[1])
 
                 out = net.forward(s.unsqueeze(1))
-                # print torch.sum(out).data[0], torch.sum(g).data[0]
-                loss = criterion(F.sigmoid(out),F.sigmoid(g.float()))
+                # out = F.normalize(out, dim=1)
+                # g = F.normalize(g.unsqueeze(1).float(), dim=1)
+                loss = criterion(out.squeeze(), g.float() * 1E3)
 
 
                 loss.backward()
