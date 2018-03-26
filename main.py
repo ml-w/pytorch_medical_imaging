@@ -62,7 +62,7 @@ def main(a):
             #      for val, key in enumerate(inputDataset.class_to_idx)], dtype=float)
             # weights = 1/ weights
             # weights = weights/np.linalg.norm(weights)
-            weights = np.array([5, 5, 1, 1, 1])
+            weights = np.array([3, 3, 1, 1, 1])
             weights = torch.from_numpy(weights)
             loader = DataLoader(inputDataset, batch_size=a.batchsize, shuffle=True, num_workers=4, drop_last=True)
             pass
@@ -150,7 +150,7 @@ def main(a):
                 torch.save(net.state_dict(), backuppath)
                 lastloss = np.array(E).mean()
             print "[Epoch %04d] Loss: %.010f"%(i, np.array(E).mean())
-            if np.array(E).mean() <= 1E-5 and a.stage == 2:
+            if np.array(E).mean() <= 1E-2 and a.stage == 2:
                 break
 
 
@@ -169,7 +169,7 @@ def main(a):
             net = ConvNet(inputDataset[0].size()[1])
         else:
             imreader = lambda x: imread(x, as_grey=True)
-            inputDataset = ImageDataSet2D(a.input, verbose=True, readfunc=imreader, dtype=float)
+            inputDataset = ImageDataSet2D(a.input, verbose=False, readfunc=imreader, dtype=float)
             loader      = DataLoader(inputDataset, batch_size=a.batchsize, shuffle=False)
             net = Inception3(5, aux_logits=False)
 
