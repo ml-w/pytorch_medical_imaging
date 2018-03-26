@@ -15,36 +15,6 @@ class StandardConv(nn.Module):
     def forward(self, x):
         return F.relu(self.bn(self.conv(x)))
 
-
-# class ConvNet(nn.Module):
-#     def __init__(self, indim):
-#         super(ConvNet,self).__init__()
-#         self.indim = indim
-#         self.kern1 = StandardConv(1, 32)
-#         self.kern2 = StandardConv(32, 64)
-#         self.kern3 = StandardConv(64, 128)
-#         self.kern4 = StandardConv(128, 256)
-#         self.kern5 = StandardConv(256, 128)
-#         self.kern6 = StandardConv(128, 64)
-#         self.kern7 = StandardConv(64, 32)
-#         self.kern8 = nn.Conv2d(32, 8, 5)
-#         self.linear = nn.Linear(2, 2, bias=True)
-#         self.linear.bias.data.fill_(float(indim)/2.)
-#
-#     def forward(self, x):
-#         x = F.avg_pool2d(x, 2)
-#         x = self.kern2(self.kern1(x))
-#         x = F.max_pool2d(x, 2)
-#         x = self.kern4(self.kern3(x))
-#         x = F.max_pool2d(x, 2)
-#         x = self.kern8(self.kern7(self.kern6(self.kern5(x))))
-#         x = F.max_pool2d(x, x.data.size()[2])
-#         x = x.view(-1, 2)
-#         x = self.linear(x)
-#         x = x.view(-1, 4, 2)
-#         return x
-
-
 class ConvNet(nn.Module):
     def __init__(self, indim):
         super(ConvNet,self).__init__()
