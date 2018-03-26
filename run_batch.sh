@@ -1,11 +1,13 @@
 #!/bin/bash
 
 ROOT_DIR=~/Source/Repos/TOCI/TOCI/55.K_Fold_Thumb/
-BATCHS=`ls $ROOT_DIR`
+BATCHS="006 007 008 009 017 018 019 029 022"
+CUDA_VISIBLE_DEVICES=0
 
 echo Running in $ROOT_DIR and looping over $BATCHS
 
-for i in $BATCHS
+for i in ${BATCHS}
+
 do
     echo Doing $ROOT_DIR/$i...
     /home/lwong/Toolkits/Anaconda2/bin/python main.py $ROOT_DIR/$i/Training \
