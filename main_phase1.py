@@ -14,7 +14,7 @@ import torch
 import visualization
 from skimage.io import imread
 
-from Networks import Shallow
+from Networks import MultiScale
 
 # import your own newtork
 
@@ -55,7 +55,8 @@ def main(a):
 
         # Load Checkpoint or create new network
         #-----------------------------------------
-        net = Shallow()
+        net = MultiScale()
+        net = nn.DataParallel(net)
         net.train(True)
         if os.path.isfile(a.checkpoint):
             assert os.path.isfile(a.checkpoint)
@@ -91,19 +92,14 @@ def main(a):
                     s, g = Variable(samples[0]), Variable(samples[1])
 
                 out = net.forward(s.unsqueeze(1))
-                # out = F.normalize(out, dim=1)
-                # g = F.normalize(g.unsqueeze(1).float(), dim=1)
-                loss = criterion(out.squeeze(), g.float() * 1E3)
-
-
+                loss = criterion(out.squeeze(), g.float() * 1E5)
                 loss.backward()
                 optimizer.step()
                 E.append(loss.data[0])
                 print "\t[Step %04d] Loss: %.010f"%(index, loss.data[0])
                 if a.plot:
-                    visualization.Visualize2D(out[0].squeeze().cpu().data,
-                                              F.sigmoid(out[0].squeeze()).cpu().data,
-                                              g[0].squeeze().cpu().data,
+                    visualization.Visualize2D(out[0].squeeze().cpu().data * 1E4,
+                                              g[0].squeeze().cpu().data * 1E4,
                               env="MCA_run", nrow=3, indexrange=[50,60])
 
             losses.append(E)
@@ -114,7 +110,7 @@ def main(a):
             print "[Epoch %04d] Loss: %.010f"%(i, np.array(E).mean())
 
              # Decay learning rate
-            if a.decay != 0:
+            if a.decay != 0 and i % 100 == 0:
                 for pg in optimizer.param_groups:
                     pg['lr'] = pg['lr'] * np.exp(-i * a.decay / float(a.epoch))
 
