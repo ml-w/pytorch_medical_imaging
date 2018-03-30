@@ -1,9 +1,11 @@
 from torch.utils.data import Dataset
 from torch import from_numpy
+from tqdm import tqdm
 import fnmatch
 import os
 import numpy as np
 import SimpleITK as sitk
+
 
 NIFTI_DICT = {
     "sizeof_hdr": int,
@@ -93,7 +95,9 @@ class ImageDataSet(Dataset):
             print "Found %s nii.gz files..."%self.length
             print "Start Loading"
 
-        for f in filenames:
+        for f in tqdm(filenames, disable= not self.verbose):
+            if self.verbose:
+                tqdm.write("Loading from " + self.rootdir + "/" + f + "...")
             im = sitk.ReadImage(self.rootdir + "/" + f)
             self.dataSourcePath.append(self.rootdir + "/" + f)
             self.data.append(from_numpy(np.array(sitk.GetArrayFromImage(im), dtype=self.dtype)))
