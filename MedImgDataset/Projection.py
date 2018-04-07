@@ -9,7 +9,7 @@ import SimpleITK as sitk
 import gc
 
 
-class Projection_v2(Dataset):
+class Projection(Dataset):
     def __init__(self, rootdir, verbose=False, dtype=np.float32, cachesize=8):
         """ImageDataSet2D
         Description
@@ -21,7 +21,7 @@ class Projection_v2(Dataset):
         :param callable readfunc: If this is set, it will be used to load image files, as_grey option will be ignored
         :param type dtype:   The type to cast the tensors
         """
-        super(Projection_v2, self).__init__()
+        super(Projection, self).__init__()
         assert os.path.isdir(rootdir), "Cannot access directory!"
         self.rootdir = rootdir
         self.dataSourcePath = []
@@ -56,8 +56,7 @@ class Projection_v2(Dataset):
 
     def __getitem__(self, item):
         try:
-            return from_numpy(self.datacache[item]['arr'].astype('float')), \
-                   from_numpy(self.datacache[item]['factor'])
+            return from_numpy(self.datacache[item].astype('float'))
         except KeyError:
             try:
                 k = pydicom.dcmread(self.dataSourcePath[item], force=True)
@@ -67,27 +66,21 @@ class Projection_v2(Dataset):
                 M = k.RescaleSlope
                 arr = np.array(k.pixel_array, dtype=np.float32) * M + C
 
-                # Record the focal center of detector and calculate componenets
-                focalcenter = k.DetectorFocalCenterAngularPosition
-                ishor = 0.9 if abs(focalcenter - np.pi/2.) < np.deg2rad(10) or abs(focalcenter - 3*np.pi / 2) else 0.1
-                factor = np.array([ishor, 1 - ishor])
-
                 # delete some items if the cahche size exceeds a certain limit
-                while self._CalChacheSize() > self.cachesize * (1024. ** 3) / 8.:
+                while self._CalChacheSize() > self.cachesize * (1024 ** 3) / 8.:
                     dictitem = self.datacache.popitem()
                     del dictitem
                     gc.collect()
 
-                self.datacache[item] = {'arr': arr.astype(self.dtype), 'factor': factor}
+                self.datacache[item] =arr.astype(self.dtype)
                 return self[item]
             except AttributeError:
                 tqdm.write("File %s has some missing attributes! Returning random image instead!"%self.dataSourcePath[item])
-                return from_numpy(self.datacache[self.datacache.keys()[0]]['arr'].astype('float')), \
-                       from_numpy(self.datacache[self.datacache.keys()[0]]['factor'])
+                return from_numpy(self.datacache[self.datacache.keys()[0]])
             except:
                 tqdm.write("Unknow error at file %s"%self.dataSourcePath[item])
-                return from_numpy(self.datacache[self.datacache.keys()[0]]['arr'].astype('float')), \
-                       from_numpy(self.datacache[self.datacache.keys()[0]]['factor'])
+                return from_numpy(self.datacache[self.datacache.keys()[0]])
+
 
     def __str__(self):
         from pandas import DataFrame as df
@@ -121,7 +114,7 @@ class Projection_v2(Dataset):
 
         :return: size in bytes
         """
-        return len(self.datacache) * float(self.datamemsize)
+        return len(self.datacache) * self.datamemsize
 
     def size(self, int):
         return self.datasize[int]
