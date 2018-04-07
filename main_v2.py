@@ -123,6 +123,39 @@ def main(a):
 
     # Evaluation mode
     else:
+        inputDataset= Projection_v2(a.input, dtype=np.float32, verbose=True, cachesize=1)
+        loader = DataLoader(inputDataset, batch_size=a.batchsize, shuffle=False, num_workers=4)
+
+        assert os.path.isfile(a.checkpoint), "Cannot open saved states"
+
+        if not os.path.isdir(a.output):
+            os.mkdir(a.output)
+        assert os.path.isdir(a.output), "Cannot create output directories"
+
+
+        # Load Checkpoint or create new network
+        #-----------------------------------------
+        net = ADResNet(1, 1, 20)
+        net.load_state_dict(torch.load(a.checkpoint))
+        net.train(False)
+        if a.usecuda:
+            net.cuda()
+
+        out_tensor = []
+        for index, samples in enumerate(tqdm(loader, desc="Steps")):
+            if a.usecuda:
+                s = Variable(samples[0], volatile=True).float().cuda()
+                f = Variable(samples[1], volatile=True).float().cuda()
+            else:
+                s = Variable(samples[0], volatile=True).float()
+                f = Variable(samples[1], volatile=True).float()
+
+            out = net.forward(s.unsqueeze(1), f).squeeze()
+            out_tensor.append(out.data.cpu())
+        out_tensor = torch.cat(out_tensor, dim=0)
+        inputDataset.Write(out_tensor, a.output)
+
+
         pass
 
     pass

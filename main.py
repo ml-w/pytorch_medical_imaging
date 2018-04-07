@@ -2,22 +2,23 @@ import argparse
 import os
 import logging
 import numpy as np
+import datetime
 
-from MedImgDataset import ImageDataSet2D, ImageFeaturePair, Landmarks
+from MedImgDataset import ImageDataSet2D, ImageFeaturePair, Landmarks, Projection
 from torch.utils.data import DataLoader, TensorDataset, sampler
 from torch.autograd import Variable
-from torchvision.datasets import ImageFolder
+from tqdm import tqdm
 import torch.nn as nn
 import torch.optim as optim
 import torch
 import visualization
-from skimage.io import imread
+from Networks import ResNet
 
 # import your own newtork
 
 def LogPrint(msg, level=20):
     logging.getLogger(__name__).log(level, msg)
-    print msg
+    tqdm.write(msg)
 
 def visualizeResults(out, gt):
     """
@@ -26,8 +27,7 @@ def visualizeResults(out, gt):
     :param Varialbe gt:
     :return:
     """
-    visualization.VisualizeMapWithLandmarks(out.cpu().data.numpy() * 255, gt.cpu().data.numpy(),
-                              env="TOCI_run", N=45)
+
     pass
 
 def main(a):
@@ -42,17 +42,16 @@ def main(a):
     ##############################
     # Training Mode
     if not mode:
-        assert os.path.isfile(a.train), "Ground truth directory cannot be opened!"
-        inputDataset= ImageDataSet2D(a.input, dtype=np.float32, verbose=True)
-        gtDataset   = Landmarks(a.train)
-        trainingSet = ImageFeaturePair(inputDataset, gtDataset)
+        inputDataset= Projection(a.input, dtype=np.float32, verbose=True, cachesize=4)
+        gtDataset   = Projection(a.train, dtype=np.float32, verbose=True, cachesize=4)
+        trainingSet = TensorDataset(inputDataset, gtDataset)
         loader      = DataLoader(trainingSet, batch_size=a.batchsize, shuffle=True, num_workers=4)
                                  # sampler=sampler.WeightedRandomSampler(np.ones(len(trainingSet)).tolist(), a.batchsize*100))
 
-
         # Load Checkpoint or create new network
         #-----------------------------------------
-        net = ConvNet(inputDataset[0].size()[1]) if a.stage == 1 else WNet(5)
+        net = ResNet(1, 1, 20)
+        # net = nn.DataParallel(net)
         net.train(True)
         if os.path.isfile(a.checkpoint):
             assert os.path.isfile(a.checkpoint)
@@ -68,8 +67,8 @@ def main(a):
         mm = trainparams['momentum'] if trainparams.has_key('momentum') else 0.01
 
 
-        criterion = nn.SmoothL1Loss()
-        optimizer = optim.SGD([{'params': net.parameters(),
+        criterion = nn.L1Loss()
+        optimizer = optim.ASGD([{'params': net.parameters(),
                                 'lr': lr, 'momentum': mm}])
         if a.usecuda:
             criterion = criterion.cuda()
@@ -78,32 +77,42 @@ def main(a):
 
         lastloss = 1e32
         losses = []
-        for i in xrange(a.epoch):
+        for i in range(a.epoch):
             E = []
+            temploss = 1e32
             for index, samples in enumerate(loader):
                 if a.usecuda:
-                    s = Variable(samples[0]).cuda()
-                    g = Variable(samples[1]).cuda()
+                    s = Variable(samples[0]).float().cuda()
+                    g = Variable(samples[1]).float().cuda()
                 else:
-                    s, g = samples[0], samples[1]
+                    s, g = Variable(samples[0]), Variable(samples[1])
 
                 out = net.forward(s.unsqueeze(1))
                 loss = criterion(out,g.float())
 
-
+                optimizer.zero_grad()
                 loss.backward()
                 optimizer.step()
                 E.append(loss.data[0])
-                print "\t[Step %04d] Loss: %.010f"%(index, loss.data[0])
+                LogPrint("\t[Step %04d] Loss: %.010f"%(index, loss.data[0]))
                 if a.plot:
-                    visualizeResults(s, out)
+                    visualization.Visualize2D(s.squeeze().cpu().permute(0, 2, 1).data,
+                                              g.squeeze().cpu().permute(0, 2, 1).data,
+                                              out.squeeze().cpu().permute(0, 2, 1).data,
+                                              env="CT_SinoFilter", indexrange=[0,25], nrow=1)
+
+                if loss.data[0] <= temploss:
+                    backuppath = "./Backup/checkpoint_ResNet_temp.pt" if a.outcheckpoint is None else \
+                        a.outcheckpoint.replace('.pt', '_temp.pt')
+                    torch.save(net.state_dict(), backuppath)
+                    temploss = loss.data[0]
 
             losses.append(E)
             if np.array(E).mean() <= lastloss:
-                backuppath = "./Backup/checkpoint_ConvNet.pt" if a.stage == 1 else "./Backup/checkpoint_WNet.pt"
+                backuppath = "./Backup/checkpoint_ResNet.pt" if a.outcheckpoint is None else a.outcheckpoint
                 torch.save(net.state_dict(), backuppath)
                 lastloss = np.array(E).mean()
-            print "[Epoch %04d] Loss: %.010f"%(i, np.array(E).mean())
+            LogPrint("[Epoch %04d] Loss: %.010f"%(i, np.array(E).mean()))
 
              # Decay learning rate
             if a.decay != 0:
@@ -113,58 +122,36 @@ def main(a):
 
     # Evaluation mode
     else:
-        import pandas as pd
-        if a.stage == 1:
-            inputDataset= ImageDataSet2D(a.input, dtype=np.float32, verbose=True)
-            loader      = DataLoader(inputDataset, batch_size=a.batchsize, shuffle=False)
-            net = ConvNet(inputDataset[0].size()[1])
-        else:
-            imreader = lambda x: imread(x, as_grey=False)
-            inputDataset = ImageDataSet2D(a.input, dtype=np.uint8, verbose=True, as_grey=False, readfunc=imreader)
-            loader      = DataLoader(inputDataset, batch_size=a.batchsize, shuffle=False)
-            net = WNet(5)
+        inputDataset= Projection(a.input, dtype=np.float32, verbose=True, cachesize=1)
+        loader = DataLoader(inputDataset, batch_size=a.batchsize, shuffle=False, num_workers=4)
 
-        if os.path.isfile(a.checkpoint):
-            LogPrint("Loading parameters " + a.checkpoint)
-            net.load_state_dict(torch.load(a.checkpoint))
-            net.train(False)
-        else:
-            LogPrint("Parameters file cannot be opened!")
-            return
+        assert os.path.isfile(a.checkpoint), "Cannot open saved states"
+
+        if not os.path.isdir(a.output):
+            os.mkdir(a.output)
+        assert os.path.isdir(a.output), "Cannot create output directories"
 
 
+        # Load Checkpoint or create new network
+        #-----------------------------------------
+        net = ResNet(1, 1, 20)
+        net.load_state_dict(torch.load(a.checkpoint))
+        net.train(False)
         if a.usecuda:
-            net = net.cuda()
+            net.cuda()
 
-        results = []
-        for i, samples in enumerate(loader):
-            s = Variable(samples)
+        out_tensor = []
+        for index, samples in enumerate(tqdm(loader, desc="Steps")):
             if a.usecuda:
-                s = s.cuda()
-            out = net.forward(s.unsqueeze(1)).squeeze() if a.stage == 1 else net.forward(s.permute(0, 3, 1, 2)[:,:2].float())
-            if a.stage == 1:
-                for j in xrange(out.data.size()[0]):
-                    results.append(out[j].data.cpu().numpy())
+                s = Variable(samples, volatile=True).float().cuda()
             else:
-                val, guess = torch.max(out, 1)
-                results.append(guess.cpu().data.numpy().squeeze())
-                del val, guess
+                s = Variable(samples, volatile=True).float()
 
-            if a.plot:
-                if a.stage == 1:
-                    visualizeResults(s, out)
-
-
-        outdict = {'File': [], 'Proximal Phalanx': [], 'Metacarpal': [], 'Distal Phalanx': []}
-        for i, res in enumerate(results):
-            outdict['File'].append(os.path.basename(inputDataset.dataSourcePath[i]))
-            outdict['Proximal Phalanx'].append(np.array(res[0], dtype=int).tolist())
-            outdict['Metacarpal'].append(np.array(res[1], dtype=int).tolist())
-            outdict['Distal Phalanx'].append(np.array(res[2], dtype=int).tolist())
-        data = pd.DataFrame.from_dict(outdict)
-        data = data[['File', 'Proximal Phalanx', 'Metacarpal', 'Distal Phalanx']]
-        data.to_csv(a.output, index=False)
-
+            out = net.forward(s.unsqueeze(1)).squeeze()
+            out_tensor.append(out.data.cpu())
+        out_tensor = torch.cat(out_tensor, dim=0)
+        inputDataset.Write(out_tensor, a.output)
+        pass
 
     pass
 
@@ -195,17 +182,17 @@ if __name__ == '__main__':
                         help="Path to a file with dictionary of training parameters written inside")
     parser.add_argument("--log", dest='log', action='store', type=str, default=None,
                         help="If specified, all the messages will be written to the specified file.")
-    parser.add_argument("--stage", dest='stage', default=1, action='store', type=int,
-                        help="Stage 1: Feature location, Stage2: TOCI classification")
+    parser.add_argument("--checkpoint", dest='outcheckpoint', action='store', default='', type=str,
+                        help="Output checkpoint to specific location")
     a = parser.parse_args()
 
     if a.log is None:
         if not os.path.isdir("./Backup/Log"):
             os.mkdir("./Backup/Log")
         if a.train:
-            a.log = "./Backup/Log/run_%03d.log"%(a.epoch)
+            a.log = "./Backup/Log/run_%s.log"%(datetime.datetime.now().strftime("%Y%m%d"))
         else:
-            a.log = "./Backup/Log/eval_%03d.log"%(a.epoch)
+            a.log = "./Backup/Log/eval_%s.log"%(datetime.datetime.now().strftime("%Y%m%d"))
 
     logging.basicConfig(format="[%(asctime)-12s - %(levelname)s] %(message)s", filename=a.log)
 
