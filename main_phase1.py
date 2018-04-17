@@ -2,25 +2,28 @@ import argparse
 import os
 import logging
 import numpy as np
+import datetime
 
+from tqdm import tqdm
 from MedImgDataset import ImageDataSet
 from torch.utils.data import DataLoader, TensorDataset, sampler
 from torch.autograd import Variable
-from torchvision.datasets import ImageFolder
 import torch.nn as nn
 import torch.nn.functional as F
 import torch.optim as optim
 import torch
 import visualization
-from skimage.io import imread
-
+from tensorboardX import SummaryWriter
+from torchvision.utils import make_grid
 from Networks import MultiScale
+
+from Loss import normalized_loss
 
 # import your own newtork
 
 def LogPrint(msg, level=20):
     logging.getLogger(__name__).log(level, msg)
-    print msg
+    tqdm.write(msg)
 
 def visualizeResults(out, gt):
     """
@@ -42,6 +45,7 @@ def main(a):
     if a.train is None:
         mode = 1 # Eval mode
 
+
     ##############################
     # Training Mode
     if not mode:
@@ -51,7 +55,6 @@ def main(a):
         trainingSet = TensorDataset(inputDataset, gtDataset)
         loader      = DataLoader(trainingSet, batch_size=a.batchsize, shuffle=True, num_workers=4)
                                  # sampler=sampler.WeightedRandomSampler(np.ones(len(trainingSet)).tolist(), a.batchsize*100))
-
 
         # Load Checkpoint or create new network
         #-----------------------------------------
@@ -72,9 +75,10 @@ def main(a):
         mm = trainparams['momentum'] if trainparams.has_key('momentum') else 0.01
 
 
-        criterion = nn.L1Loss()
+        criterion = nn.SmoothL1Loss()
         optimizer = optim.SGD([{'params': net.parameters(),
                                 'lr': lr, 'momentum': mm}])
+        # optimizer = optim.ASGD(net.parameters(), lr, weight_decay=a.decay)
         if a.usecuda:
             criterion = criterion.cuda()
             net = net.cuda()
@@ -82,37 +86,54 @@ def main(a):
 
         lastloss = 1e32
         losses = []
-        for i in xrange(a.epoch):
+        for i in tqdm(range(a.epoch), desc='Epoch', leave=False):
+            writer = SummaryWriter('/media/storage/PytorchRuns/MCA', 'run_%03d'%i)
             E = []
             for index, samples in enumerate(loader):
+                optimizer.zero_grad()
+
                 if a.usecuda:
                     s = Variable(samples[0]).cuda()
                     g = Variable(samples[1]).cuda()
                 else:
                     s, g = Variable(samples[0]), Variable(samples[1])
 
+
                 out = net.forward(s.unsqueeze(1))
-                loss = criterion(out.squeeze(), g.float() * 1E5)
+                # out = normalized_loss.BatchNormLayer().forward(out)
+                g = normalized_loss.BatchNormLayer().forward(g)
+                loss = criterion(out.squeeze(), g.float())
                 loss.backward()
                 optimizer.step()
                 E.append(loss.data[0])
-                print "\t[Step %04d] Loss: %.010f"%(index, loss.data[0])
+                LogPrint("\t[Step %04d] Loss: %.010f"%(index, loss.data[0]))
                 if a.plot:
-                    visualization.Visualize2D(out[0].squeeze().cpu().data * 1E4,
-                                              g[0].squeeze().cpu().data * 1E4,
-                              env="MCA_run", nrow=3, indexrange=[50,60])
+                    try:
+                        # visualization.Visualize2D(out[0].squeeze().cpu().data * 1E4,
+                        #                           g[0].squeeze().cpu().data * 1E4,
+                        #                           env="MCA_run", nrow=3, indexrange=[50,60])
+
+                        poolim = make_grid(F.avg_pool2d(out[0].squeeze().unsqueeze(1), 4).data, nrow=4, padding=1, normalize=True)
+                        poolgt = make_grid(F.avg_pool2d(g[0].squeeze().unsqueeze(1), 4).data, nrow=4, padding=1, normalize=True)
+                        writer.add_image('Image/Image', poolim, index)
+                        writer.add_image('Image/Groundtruth', poolgt, index)
+                        writer.add_scalar('Loss', loss.data[0], index)
+                        del poolim, poolgt
+                    except AssertionError:
+                        tqdm.write(str(g[0].data.size()))
 
             losses.append(E)
             if np.array(E).mean() <= lastloss:
                 backuppath = "./Backup/checkpoint_Shallow.pt"
                 torch.save(net.state_dict(), backuppath)
                 lastloss = np.array(E).mean()
-            print "[Epoch %04d] Loss: %.010f"%(i, np.array(E).mean())
+            LogPrint("[Epoch %04d] Loss: %.010f"%(i, np.array(E).mean()))
+            writer.close()
 
              # Decay learning rate
-            if a.decay != 0 and i % 100 == 0:
-                for pg in optimizer.param_groups:
-                    pg['lr'] = pg['lr'] * np.exp(-i * a.decay / float(a.epoch))
+            # if a.decay != 0 and i % 100 == 0:
+            #     for pg in optimizer.param_groups:
+            #         pg['lr'] = pg['lr'] * np.exp(-i * a.decay / float(a.epoch))
 
 
     # Evaluation mode
@@ -190,10 +211,10 @@ if __name__ == '__main__':
         if not os.path.isdir("./Backup/Log"):
             os.mkdir("./Backup/Log")
         if a.train:
-            a.log = "./Backup/Log/run_%03d.log"%(a.epoch)
+            a.log = "./Backup/Log/run_%s.log"%(datetime.datetime.now().strftime("%Y%m%d"))
         else:
-            a.log = "./Backup/Log/eval_%03d.log"%(a.epoch)
+            a.log = "./Backup/Log/eval_%s.log"%(datetime.datetime.now().strftime("%Y%m%d"))
 
-    logging.basicConfig(format="[%(asctime)-12s - %(levelname)s] %(message)s", filename=a.log)
+    logging.basicConfig(format="[%(asctime)-12s - %(levelname)s] %(message)s", filename=a.log, level=20)
 
     main(a)
