@@ -138,7 +138,7 @@ class ImageDataSet(Dataset):
             print "Start Loading"
 
         self._itemindexes = [0] # [image index of start slice]
-        for i, f in enumerate(tqdm(filenames, disable=not self.verbose)) if not self._debug else 3:
+        for i, f in enumerate(tqdm(filenames, disable=not self.verbose)) if not self._debug else tqdm(range(3)):
             if self.verbose:
                 tqdm.write("Reading from "+f)
             im = sitk.ReadImage(self.rootdir + "/" + f)
