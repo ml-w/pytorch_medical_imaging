@@ -1,10 +1,11 @@
 from torch.utils.data import Dataset
-from torch import from_numpy
+from torch import from_numpy, cat
 from tqdm import tqdm
 import fnmatch
 import os
 import numpy as np
 import SimpleITK as sitk
+
 
 
 NIFTI_DICT = {
@@ -58,13 +59,14 @@ class ImageDataSet(Dataset):
     This dataset automatically load all the nii files in the specific directory to
     generate a 3D dataset
     """
-    def __init__(self, rootdir, verbose=False, dtype=float):
+    def __init__(self, rootdir, loadBySlices=-1, verbose=False, dtype=float, debugmode=False):
         """
 
         :param rootdir:
         """
         super(Dataset, self)
         assert os.path.isdir(rootdir), "Cannot access directory!"
+        assert loadBySlices <= 2, "This class only handle 3D data!"
         self.rootdir = rootdir
         self.dataSourcePath = []
         self.data = []
@@ -72,6 +74,8 @@ class ImageDataSet(Dataset):
         self.length = 0
         self.verbose = verbose
         self.dtype = dtype
+        self._debug=debugmode
+        self._byslices=loadBySlices
         self._ParseRootDir()
 
     def _ParseRootDir(self):
@@ -126,12 +130,13 @@ class ImageDataSet(Dataset):
         s = "==========================================================================================\n" \
             "Root Path: %s \n" \
             "Number of loaded images: %i\n" \
+            "Load By Slice: %i \n" \
             "Image Details:\n" \
-            "--------------\n"%(self.rootdir, self.length)
+            "--------------\n"%(self.rootdir, self.length, self._byslices)
         # "File Paths\tSize\t\tSpacing\t\tOrigin\n"
         # printable = {'File Name': []}
         printable = {'File Name': [], 'Size': [], 'Spacing': [], 'Origin': []}
-        for i in xrange(self.length):
+        for i in xrange(len(self.dataSourcePath)):
             printable['File Name'].append(os.path.basename(self.dataSourcePath[i]))
             # for keys in self.metadata[i]:
             #     if not printable.has_key(keys):
@@ -163,24 +168,26 @@ class ImageDataSet(Dataset):
         if isinstance(inImage, np.ndarray):
             im = sitk.GetImageFromArray(im)
 
-        spacing = np.array([metadata['pixdim[1]'], metadata['pixdim[2]'], metadata['pixdim[3]']],
+        if metadata['qform_code'] > 0:
+            spacing = np.array([metadata['pixdim[1]'], metadata['pixdim[2]'], metadata['pixdim[3]']],
+                               dtype=float)
+            ori = np.array([-metadata['qoffset_x'], -metadata['qoffset_y'], metadata['qoffset_z']],
                            dtype=float)
-        ori = np.array([-metadata['qoffset_x'], -metadata['qoffset_y'], metadata['qoffset_z']],
-                       dtype=float)
-        b = float(metadata['quatern_b'])
-        c = float(metadata['quatern_c'])
-        d = float(metadata['quatern_d'])
-        a = np.sqrt(np.abs(1 - b**2 - c**2 - d**2))
-        A = np.array([
-                [a*a + b*b - c*c - d*d, 2*b*c - 2*a*d, 2*b*d + 2*a*c],
-                [2*b*c + 2*a*d , a*a+c*c-b*b-d*d, 2*c*d - 2*a*b],
-                [2*b*d - 2*a*c, 2*c*d + 2*a*b, a*a + d*d - c*c - b*b]
-            ])
-        A[:2, :3] = -A[:2, :3]
-        im.SetOrigin(ori)
-        im.SetDirection(A.flatten())
-        im.SetSpacing(spacing)
-        return im
+            b = float(metadata['quatern_b'])
+            c = float(metadata['quatern_c'])
+            d = float(metadata['quatern_d'])
+            a = np.sqrt(np.abs(1 - b**2 - c**2 - d**2))
+            A = np.array([
+                    [a*a + b*b - c*c - d*d, 2*b*c - 2*a*d, 2*b*d + 2*a*c],
+                    [2*b*c + 2*a*d , a*a+c*c-b*b-d*d, 2*c*d - 2*a*b],
+                    [2*b*d - 2*a*c, 2*c*d + 2*a*b, a*a + d*d - c*c - b*b]
+                ])
+            A[:2, :3] = -A[:2, :3]
+            A[:,2] = metadata['pixdim[0]'] * A[:,2]
+            im.SetOrigin(ori)
+            im.SetDirection(A.flatten())
+            im.SetSpacing(spacing)
+            return im
 
 class MaskedTensorDataset(Dataset):
     """
@@ -206,5 +213,3 @@ class MaskedTensorDataset(Dataset):
 
     def __len__(self):
         return self.data_tensor.size(0)
-
-
