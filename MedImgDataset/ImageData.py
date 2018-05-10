@@ -1,10 +1,11 @@
 from torch.utils.data import Dataset
-from torch import from_numpy
+from torch import from_numpy, cat
 from tqdm import tqdm
 import fnmatch
 import os
 import numpy as np
 import SimpleITK as sitk
+
 
 
 NIFTI_DICT = {
@@ -58,13 +59,14 @@ class ImageDataSet(Dataset):
     This dataset automatically load all the nii files in the specific directory to
     generate a 3D dataset
     """
-    def __init__(self, rootdir, verbose=False, dtype=float):
+    def __init__(self, rootdir, loadBySlices=-1, verbose=False, dtype=float):
         """
 
         :param rootdir:
         """
         super(Dataset, self)
         assert os.path.isdir(rootdir), "Cannot access directory!"
+        assert loadBySlices <= 2, "This class only handle 3D data!"
         self.rootdir = rootdir
         self.dataSourcePath = []
         self.data = []
@@ -72,6 +74,7 @@ class ImageDataSet(Dataset):
         self.length = 0
         self.verbose = verbose
         self.dtype = dtype
+        self._byslices=loadBySlices
         self._ParseRootDir()
 
     def _ParseRootDir(self):
@@ -112,6 +115,56 @@ class ImageDataSet(Dataset):
                     metadata[key] = im.GetMetaData(key)
             self.metadata.append(metadata)
 
+    def _ParseRootDir(self):
+        """
+        Description
+        -----------
+          Load all nii images to cache
+
+        :return:
+        """
+
+        if self.verbose:
+            print "Parsing root path: ", self.rootdir
+        filenames = os.listdir(self.rootdir)
+        filenames = fnmatch.filter(filenames, "*.nii.gz")
+        filenames.sort()
+
+
+        self.length = len(filenames)
+        if self.verbose:
+            print "Found %s nii.gz files..."%self.length
+            print "Start Loading"
+
+        self._itemindexes = [0] # [image index of start slice]
+        for i, f in enumerate(tqdm(filenames, disable=not self.verbose)):
+            if self.verbose:
+                tqdm.write("Reading from "+f)
+            im = sitk.ReadImage(self.rootdir + "/" + f)
+            self.dataSourcePath.append(self.rootdir + "/" + f)
+            self.data.append(from_numpy(np.array(sitk.GetArrayFromImage(im), dtype=self.dtype)))
+            self._itemindexes.append(self.data[i].size()[0])
+            metadata = {}
+            for key in im.GetMetaDataKeys():
+                try:
+                    if key.split('['):
+                        key_type = key.split('[')[0]
+                    t = NIFTI_DICT[key_type]
+                    metadata[key] = t(im.GetMetaData(key))
+                except:
+                    metadata[key] = im.GetMetaData(key)
+            self.metadata.append(metadata)
+
+        if self._byslices >= 0:
+            try:
+                self._itemindexes = np.cumsum(self._itemindexes)
+                self.length = np.sum([m.size()[self._byslices] for m in self.data])
+                self.data = cat(self.data, dim=self._byslices)
+            except IndexError:
+                print "Wrong Index is used!"
+                self.length = len(self.dataSourcePath)
+
+
     def size(self, int):
         return self.length
 
@@ -126,12 +179,13 @@ class ImageDataSet(Dataset):
         s = "==========================================================================================\n" \
             "Root Path: %s \n" \
             "Number of loaded images: %i\n" \
+            "Load By Slice: %i \n" \
             "Image Details:\n" \
-            "--------------\n"%(self.rootdir, self.length)
+            "--------------\n"%(self.rootdir, self.length, self._byslices)
         # "File Paths\tSize\t\tSpacing\t\tOrigin\n"
         # printable = {'File Name': []}
         printable = {'File Name': [], 'Size': [], 'Spacing': [], 'Origin': []}
-        for i in xrange(self.length):
+        for i in xrange(len(self.dataSourcePath)):
             printable['File Name'].append(os.path.basename(self.dataSourcePath[i]))
             # for keys in self.metadata[i]:
             #     if not printable.has_key(keys):
@@ -208,5 +262,3 @@ class MaskedTensorDataset(Dataset):
 
     def __len__(self):
         return self.data_tensor.size(0)
-
-
