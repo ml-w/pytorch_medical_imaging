@@ -116,6 +116,56 @@ class ImageDataSet(Dataset):
                     metadata[key] = im.GetMetaData(key)
             self.metadata.append(metadata)
 
+    def _ParseRootDir(self):
+        """
+        Description
+        -----------
+          Load all nii images to cache
+
+        :return:
+        """
+
+        if self.verbose:
+            print "Parsing root path: ", self.rootdir
+        filenames = os.listdir(self.rootdir)
+        filenames = fnmatch.filter(filenames, "*.nii.gz")
+        filenames.sort()
+
+
+        self.length = len(filenames)
+        if self.verbose:
+            print "Found %s nii.gz files..."%self.length
+            print "Start Loading"
+
+        self._itemindexes = [0] # [image index of start slice]
+        for i, f in enumerate(tqdm(filenames, disable=not self.verbose)) if not self._debug else enumerate(tqdm(filenames[:3], disable=not self.verbose)):
+            if self.verbose:
+                tqdm.write("Reading from "+f)
+            im = sitk.ReadImage(self.rootdir + "/" + f)
+            self.dataSourcePath.append(self.rootdir + "/" + f)
+            self.data.append(from_numpy(np.array(sitk.GetArrayFromImage(im), dtype=self.dtype)))
+            self._itemindexes.append(self.data[i].size()[0])
+            metadata = {}
+            for key in im.GetMetaDataKeys():
+                try:
+                    if key.split('['):
+                        key_type = key.split('[')[0]
+                    t = NIFTI_DICT[key_type]
+                    metadata[key] = t(im.GetMetaData(key))
+                except:
+                    metadata[key] = im.GetMetaData(key)
+            self.metadata.append(metadata)
+
+        if self._byslices >= 0:
+            try:
+                self._itemindexes = np.cumsum(self._itemindexes)
+                self.length = np.sum([m.size()[self._byslices] for m in self.data])
+                self.data = cat(self.data, dim=self._byslices)
+            except IndexError:
+                print "Wrong Index is used!"
+                self.length = len(self.dataSourcePath)
+
+
     def size(self, int):
         return self.length
 
