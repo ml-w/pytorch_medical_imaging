@@ -1,13 +1,8 @@
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-import torchvision
-from torch.autograd import Variable
-from pyinn import im2col, col2im
-from pyinn.im2col import Im2Col, Col2Im
 import visdom
 # testing
-import matplotlib.pyplot as plt
 import numpy as np
 
 vis = visdom.Visdom(port=80)

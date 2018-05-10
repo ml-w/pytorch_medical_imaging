@@ -52,7 +52,7 @@ def main(a):
         loader      = DataLoader(zip(inputDataset, gtDataset, maskDataset), batch_size=a.batchsize, shuffle=True, num_workers=4)
                                  # sampler=sampler.WeightedRandomSampler(np.ones(len(trainingSet)).tolist(), a.batchsize*100))
 
-        writer = SummaryWriter("/media/storage/PytorchRuns/ResNetRecon_"+datetime.datetime.now().strftime("%Y%m%d_%H%M"))
+        writer = SummaryWriter("/media/storage/PytorchRuns/ResNetRecon_"+datetime.datetime.now().strftime("%Y%m%d_%H%M%S"))
         # Load Checkpoint or create new network
         #-----------------------------------------
         net = ResNet()
