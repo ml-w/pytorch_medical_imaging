@@ -163,24 +163,26 @@ class ImageDataSet(Dataset):
         if isinstance(inImage, np.ndarray):
             im = sitk.GetImageFromArray(im)
 
-        spacing = np.array([metadata['pixdim[1]'], metadata['pixdim[2]'], metadata['pixdim[3]']],
+        if metadata['qform_code'] > 0:
+            spacing = np.array([metadata['pixdim[1]'], metadata['pixdim[2]'], metadata['pixdim[3]']],
+                               dtype=float)
+            ori = np.array([-metadata['qoffset_x'], -metadata['qoffset_y'], metadata['qoffset_z']],
                            dtype=float)
-        ori = np.array([-metadata['qoffset_x'], -metadata['qoffset_y'], metadata['qoffset_z']],
-                       dtype=float)
-        b = float(metadata['quatern_b'])
-        c = float(metadata['quatern_c'])
-        d = float(metadata['quatern_d'])
-        a = np.sqrt(np.abs(1 - b**2 - c**2 - d**2))
-        A = np.array([
-                [a*a + b*b - c*c - d*d, 2*b*c - 2*a*d, 2*b*d + 2*a*c],
-                [2*b*c + 2*a*d , a*a+c*c-b*b-d*d, 2*c*d - 2*a*b],
-                [2*b*d - 2*a*c, 2*c*d + 2*a*b, a*a + d*d - c*c - b*b]
-            ])
-        A[:2, :3] = -A[:2, :3]
-        im.SetOrigin(ori)
-        im.SetDirection(A.flatten())
-        im.SetSpacing(spacing)
-        return im
+            b = float(metadata['quatern_b'])
+            c = float(metadata['quatern_c'])
+            d = float(metadata['quatern_d'])
+            a = np.sqrt(np.abs(1 - b**2 - c**2 - d**2))
+            A = np.array([
+                    [a*a + b*b - c*c - d*d, 2*b*c - 2*a*d, 2*b*d + 2*a*c],
+                    [2*b*c + 2*a*d , a*a+c*c-b*b-d*d, 2*c*d - 2*a*b],
+                    [2*b*d - 2*a*c, 2*c*d + 2*a*b, a*a + d*d - c*c - b*b]
+                ])
+            A[:2, :3] = -A[:2, :3]
+            A[:,2] = metadata['pixdim[0]'] * A[:,2]
+            im.SetOrigin(ori)
+            im.SetDirection(A.flatten())
+            im.SetSpacing(spacing)
+            return im
 
 class MaskedTensorDataset(Dataset):
     """
