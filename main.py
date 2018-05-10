@@ -4,16 +4,19 @@ import logging
 import numpy as np
 import datetime
 
-from MedImgDataset import ImageDataSet2D, ImageFeaturePair, Landmarks, Projection
+from MedImgDataset import ImageDataSet
 from torch.utils.data import DataLoader, TensorDataset, sampler
 from torch.autograd import Variable
+from torchvision.utils import make_grid
 from tqdm import tqdm
 import torch.nn as nn
 import torch.optim as optim
+import torch.nn.functional as F
 import torch
 import visualization
 from Networks import ResNet
 
+from tensorboardX import SummaryWriter
 # import your own newtork
 
 def LogPrint(msg, level=20):
@@ -42,15 +45,17 @@ def main(a):
     ##############################
     # Training Mode
     if not mode:
-        inputDataset= Projection(a.input, dtype=np.float32, verbose=True, cachesize=4)
-        gtDataset   = Projection(a.train, dtype=np.float32, verbose=True, cachesize=4)
-        trainingSet = TensorDataset(inputDataset, gtDataset)
-        loader      = DataLoader(trainingSet, batch_size=a.batchsize, shuffle=True, num_workers=4)
+        inputDataset= ImageDataSet(a.input, dtype=np.float32, verbose=True, loadBySlices=0)
+        gtDataset   = ImageDataSet(a.train, dtype=np.float32, verbose=True, loadBySlices=0)
+        maskDataset = ImageDataSet(a.mask,  dtype=np.uint8, verbose=True, loadBySlices=0)
+        # trainingSet = TensorDataset(inputDataset, gtDataset)
+        loader      = DataLoader(zip(inputDataset, gtDataset, maskDataset), batch_size=a.batchsize, shuffle=True, num_workers=4)
                                  # sampler=sampler.WeightedRandomSampler(np.ones(len(trainingSet)).tolist(), a.batchsize*100))
 
+        writer = SummaryWriter("/media/storage/PytorchRuns/ResNetRecon_"+datetime.datetime.now().strftime("%Y%m%d_%H%M"))
         # Load Checkpoint or create new network
         #-----------------------------------------
-        net = ResNet(1, 1, 20)
+        net = ResNet()
         # net = nn.DataParallel(net)
         net.train(True)
         if os.path.isfile(a.checkpoint):
@@ -67,7 +72,7 @@ def main(a):
         mm = trainparams['momentum'] if trainparams.has_key('momentum') else 0.01
 
 
-        criterion = nn.L1Loss()
+        criterion = nn.MSELoss()
         optimizer = optim.ASGD([{'params': net.parameters(),
                                 'lr': lr, 'momentum': mm}])
         if a.usecuda:
@@ -84,11 +89,15 @@ def main(a):
                 if a.usecuda:
                     s = Variable(samples[0]).float().cuda()
                     g = Variable(samples[1]).float().cuda()
+                    m = Variable(samples[2], requires_grad=False).byte().cuda()
                 else:
-                    s, g = Variable(samples[0]), Variable(samples[1])
+                    s, g, m = Variable(samples[0]).float(), Variable(samples[1]).float(), Variable(samples[2], requires_grad=False).byte()
 
-                out = net.forward(s.unsqueeze(1))
-                loss = criterion(out,g.float())
+                out = net.forward(s.unsqueeze(1)).squeeze()
+                s_masked = torch.masked_select(s, m)
+                out_masked = torch.masked_select(out, m)
+                g_masked=torch.masked_select(g, m)
+                loss = criterion(out_masked, g_masked) / criterion(s_masked, g_masked)
 
                 optimizer.zero_grad()
                 loss.backward()
@@ -96,14 +105,18 @@ def main(a):
                 E.append(loss.data[0])
                 LogPrint("\t[Step %04d] Loss: %.010f"%(index, loss.data[0]))
                 if a.plot:
-                    visualization.Visualize2D(s.squeeze().cpu().permute(0, 2, 1).data,
-                                              g.squeeze().cpu().permute(0, 2, 1).data,
-                                              out.squeeze().cpu().permute(0, 2, 1).data,
-                                              env="CT_SinoFilter", indexrange=[0,25], nrow=1)
+                    step = i * len(loader) + index
+                    inputim = make_grid(F.avg_pool2d(s.unsqueeze(1), 2).cpu().data, nrow=2, padding=1, normalize=True)
+                    outputim = make_grid(F.avg_pool2d(out.unsqueeze(1), 2).cpu().data, nrow=2, padding=1, normalize=True)
+                    diffim = torch.abs(inputim - outputim)
+                    writer.add_image('ResNetRecon_%s/Input'%a.input.split('/')[-1], inputim, step)
+                    writer.add_image('ResNetRecon_%s/Output'%a.input.split('/')[-1], outputim, step)
+                    writer.add_image('ResNetRecon_%s/Diff'%a.input.split('/')[-1], diffim, step)
+                    writer.add_scalar('ResNetRecon_%s/Loss'%a.input.split('/')[-1], loss.data[0], step)
 
                 if loss.data[0] <= temploss:
-                    backuppath = "./Backup/checkpoint_ResNet_temp.pt" if a.outcheckpoint is None else \
-                        a.outcheckpoint.replace('.pt', '_temp.pt')
+                    backuppath = "./Backup/checkpoint_ResNet.pt" if a.outcheckpoint is None else \
+                        a.outcheckpoint
                     torch.save(net.state_dict(), backuppath)
                     temploss = loss.data[0]
 
@@ -122,7 +135,7 @@ def main(a):
 
     # Evaluation mode
     else:
-        inputDataset= Projection(a.input, dtype=np.float32, verbose=True, cachesize=1)
+        inputDataset= ImageDataSet(a.input, dtype=np.float32, verbose=True)
         loader = DataLoader(inputDataset, batch_size=a.batchsize, shuffle=False, num_workers=4)
 
         assert os.path.isfile(a.checkpoint), "Cannot open saved states"
@@ -134,7 +147,7 @@ def main(a):
 
         # Load Checkpoint or create new network
         #-----------------------------------------
-        net = ResNet(1, 1, 20)
+        net = ResNet()
         net.load_state_dict(torch.load(a.checkpoint))
         net.train(False)
         if a.usecuda:
@@ -162,6 +175,8 @@ if __name__ == '__main__':
     parser.add_argument("-t", "--train", metavar='train', action='store', type=str, default=None,
                         help="Required directory with target data which serve as ground truth for training. Do no" 
                              "Set this to enable training mode.")
+    parser.add_argument("-m", "--mask", metavar='mask', dest='mask', action='store', type=str, default=None,
+                        help="Set mask directory (Required for training)")
     parser.add_argument("-o", metavar='output', dest='output', action='store', type=str, default=None,
                         help="Set where to store outputs for eval mode")
     parser.add_argument("-p", dest='plot', action='store_true', default=False,

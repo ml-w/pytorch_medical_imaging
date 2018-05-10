@@ -102,7 +102,7 @@ class ResNet(nn.Module):
         self.poolingLayers = nn.ModuleList()
         self.linearModules = nn.ModuleList()
         self.miscParams = nn.ParameterList()
-        self.bnModules['init'] = nn.BatchNorm2d(1)
+        self.initBn = nn.BatchNorm2d(1)
 
         self.d_32 = DownTransition(1, self.chansize, self.kernsize)
         self.DTrans = [ResidualDownTransition(self.chansize, self.kernsize)
@@ -129,18 +129,16 @@ class ResNet(nn.Module):
         assert x.is_cuda, "Inputs are not in GPU!"
 
         orix = x * 1
-        x = self.bnModules['init'].cuda()(x.unsqueeze(1))
+        x = self.initBn(x)
 
         x = self.d_32.forward(x)
         for i in xrange(self.num_of_layers - 1):
             x = self.DTrans[i].forward(x)
-
         x = self.d_36.forward(x)
         x = self.u.forward(x)
-        x = x.squeeze()
         x = x + orix
-        s = x.data.size()
 
+        # s = x.data.size()
         # if self.CircularMask is None:
         #     self.CircularMask = []
         #     for i in xrange(s[-2]):
