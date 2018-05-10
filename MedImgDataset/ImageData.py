@@ -59,7 +59,7 @@ class ImageDataSet(Dataset):
     This dataset automatically load all the nii files in the specific directory to
     generate a 3D dataset
     """
-    def __init__(self, rootdir, loadBySlices=-1, verbose=False, dtype=float):
+    def __init__(self, rootdir, loadBySlices=-1, verbose=False, dtype=float, debugmode=False):
         """
 
         :param rootdir:
@@ -74,6 +74,7 @@ class ImageDataSet(Dataset):
         self.length = 0
         self.verbose = verbose
         self.dtype = dtype
+        self._debug=debugmode
         self._byslices=loadBySlices
         self._ParseRootDir()
 
@@ -137,7 +138,7 @@ class ImageDataSet(Dataset):
             print "Start Loading"
 
         self._itemindexes = [0] # [image index of start slice]
-        for i, f in enumerate(tqdm(filenames, disable=not self.verbose)):
+        for i, f in enumerate(tqdm(filenames, disable=not self.verbose)) if self._debug else 3:
             if self.verbose:
                 tqdm.write("Reading from "+f)
             im = sitk.ReadImage(self.rootdir + "/" + f)
