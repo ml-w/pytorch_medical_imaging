@@ -1,96 +1,164 @@
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
+import torchvision
 from torch.autograd import Variable
-import math
+from pyinn import im2col, col2im
+from pyinn.im2col import Im2Col, Col2Im
+import visdom
+# testing
+import matplotlib.pyplot as plt
+import numpy as np
 
-class Kernel(nn.Module):
-    def __init__(self, inchan, outchan, kernsize=5):
-        super(Kernel, self).__init__()
-        self.conv = nn.Conv2d(inchan, outchan, kernsize, padding=(kernsize - 1)/2 )
-        self.bn = nn.BatchNorm2d(outchan)
+vis = visdom.Visdom(port=80)
+
+
+class ResidualDownTransition(nn.Module):
+    def __init__(self, feqtureSize, kernsize):
+        super(ResidualDownTransition, self).__init__()
+
+        self.feqtureSize = feqtureSize
+
+        pad = np.int(kernsize/2.)
+        self.conv1 = nn.Conv2d(feqtureSize, feqtureSize, kernel_size=kernsize,padding=pad, bias=False)
+        self.bn1 = nn.BatchNorm2d(feqtureSize)
+        self.conv2 = nn.Conv2d(feqtureSize, feqtureSize, kernel_size=kernsize,padding=pad, bias=False)
+        self.bn2 = nn.BatchNorm2d(feqtureSize)
 
     def forward(self, x):
-        x = F.relu(self.bn(self.conv(x)))
+
+        down = F.relu(self.bn1(self.conv1(x)))
+        down = F.relu(self.bn2(self.conv2(down)) + x)
+        return down
+
+class WeightedSum(nn.Module):
+    def __init__(self, channels, positive=True):
+        super(WeightedSum, self).__init__()
+
+        self.channels = channels
+        self.positive = positive
+        self.params = nn.ParameterList()
+        self.params.extend([nn.Parameter(torch.ones(1)) for i in xrange(channels)])
+
+
+    def forward(self, x):
+        assert x.data.size()[1] == self.channels, "Wrong number of channels!"
+
+        tempx = x[:, 0] * self.params[0].expand_as(x[:,0])
+        for i in xrange(1, self.channels):
+            if self.positive:
+                tempx = tempx + x[:,i] * torch.abs(self.params[i]).expand_as(x[:,i])
+            else:
+                tempx = tempx + x[:,i] * self.params[i].expand_as(x[:,i])
+        x = tempx / self.channels
         return x
 
-class ResKernel(nn.Module):
-    def __init__(self, inchan):
-        super(ResKernel, self).__init__()
-        self.k1 = Kernel(inchan, inchan)
-        self.conv = nn.Conv2d(inchan, inchan, [3, 7], padding=(1,3))
-        self.bn = nn.BatchNorm2d(inchan)
+class DownTransition(nn.Module):
+    def __init__(self, inchan, outchan, kernsize, padding=True):
+        super(DownTransition, self).__init__()
+
+        self.inchan = inchan
+        self.outchan = outchan
+        self.padding = padding
+        self.kernsize = kernsize
+
+        if padding:
+            pad = np.int(kernsize/2.)
+        else:
+            pad = 0
+
+        self.conv1 = nn.Conv2d(inchan, outchan, kernel_size=kernsize,padding=pad, bias=False)
+        self.bn1 = nn.BatchNorm2d(outchan)
 
     def forward(self, x):
-        c = self.k1(x)
-        c = self.bn(self.conv(c))
-        c = c + x
-        c = F.relu(c)
-        return c
+        x = F.relu(self.bn1(self.conv1(x)))
+        return x
+
+class UpTransition(nn.Module):
+    def __init__(self, upscaleFactor):
+        super(UpTransition, self).__init__()
+
+        self.ps = nn.PixelShuffle(upscaleFactor)
+        self.pool = nn.AvgPool2d(upscaleFactor)
+        self.bn = nn.BatchNorm2d(1)
+
+    def forward(self, x):
+        x = self.pool(self.ps(x))
+        x = self.bn(x)
+        return x
 
 class ResNet(nn.Module):
-    def __init__(self, inchan, outchan, depth):
+    def __init__(self):
         super(ResNet, self).__init__()
-        self.depth = depth
-        self.features = 64
-        self.upscale = 8
 
-        self.inBn = nn.BatchNorm2d(1)
-        self.initkern = Kernel(inchan, self.features)
-        self.kerns1 = nn.Sequential(*[ResKernel(self.features) for i in xrange((depth - 1)/2)])
-        # self.kerns2 = nn.Sequential(*[ResKernel(self.features/(self.upscale**2))
-        #                               for i in xrange((depth - 1)/4)])
-        # self.outkern = Kernel(self.features/(self.upscale**2), outchan)
-        self.outConv = nn.Conv2d(1, 1, self.upscale, stride=self.upscale)
-        self.bnout = nn.BatchNorm2d(1)
+        self.kernsize = 7
+        self.chansize = 32
+        self.num_of_layers = 9
 
-    def forward(self, x):
-        c = self.inBn(x)
-        c = self.initkern(c)
-        c = self.kerns1.forward(c)
-        c = F.pixel_shuffle(c, self.upscale)
-        c = self.outConv(c)
-        c = self.bnout(c)
-        # c = self.kerns2.forward(c)
-        # c = self.outkern(c)
-        # c = F.avg_pool2d(c, self.upscale)
-        c = c + x
-        return c
+        self.convsModules = nn.ModuleList()
+        self.psModules = nn.ModuleList()
+        self.fcModules = nn.ModuleList()
+        self.bnModules = nn.ModuleList()
+        self.poolingLayers = nn.ModuleList()
+        self.linearModules = nn.ModuleList()
+        self.miscParams = nn.ParameterList()
+        self.bnModules['init'] = nn.BatchNorm2d(1)
 
+        self.d_32 = DownTransition(1, self.chansize, self.kernsize)
+        self.DTrans = [ResidualDownTransition(self.chansize, self.kernsize)
+                       for i in xrange(self.num_of_layers - 1)]
+        self.d_36 = DownTransition(self.chansize, 36, self.kernsize)
+        self.u   = UpTransition(np.int(np.sqrt(36)))
 
-class ResNetB(nn.Module):
-    def __init__(self, inchan, outchan, depth):
-        super(ResNetB, self).__init__()
-        self.upscale = int(math.sqrt(inchan))
-        self.depth = depth
-        self.kerns1 = nn.Sequential(*[ResKernel(inchan) for i in xrange((depth - 1)/2)])
-        self.outConv = nn.Conv2d(1, outchan, self.upscale, stride=self.upscale)
-        self.bnout = nn.BatchNorm2d(outchan)
+        self.convsModules.extend([d for d in self.DTrans])
+        self.psModules.append(self.u)
+
+        # self.CircularMask = None
+
+        self.current_step = 0
+        self.current_epoch = 0
+        self.loss_list = []
 
     def forward(self, x):
-        c = self.kerns1.forward(x)
-        c = F.pixel_shuffle(c, self.upscale)
-        c = self.outConv(c)
-        c = self.bnout(c)
-        return c
+        """
+        x2 should have better resolution
+        :param x1:
+        :param x2:
+        :return:
+        """
+        assert x.is_cuda, "Inputs are not in GPU!"
+
+        orix = x * 1
+        x = self.bnModules['init'].cuda()(x.unsqueeze(1))
+
+        x = self.d_32.forward(x)
+        for i in xrange(self.num_of_layers - 1):
+            x = self.DTrans[i].forward(x)
+
+        x = self.d_36.forward(x)
+        x = self.u.forward(x)
+        x = x.squeeze()
+        x = x + orix
+        s = x.data.size()
+
+        # if self.CircularMask is None:
+        #     self.CircularMask = []
+        #     for i in xrange(s[-2]):
+        #         for j in xrange(s[-1]):
+        #             if (i - s[-2]/2.) ** 2 + (j - s[-1] / 2.) ** 2 > ((s[-2]/2.)**2.) + 1:
+        #                 self.CircularMask.append([i,j])
+        #
+        # for c in self.CircularMask:
+        #     x[:,c[0],c[1]] = 0
+
+        return x
 
 
-class ADResNet(nn.Module):
-    def __init__(self, inchan, outchan, depth):
-        super(ADResNet, self).__init__()
-        self.features = 49
+    def num_flat_features(self, x):
+        size = x.size()[1:]  # all dimensions except the batch dimension
+        num_features = 1
+        for s in size:
+            num_features *= s
+        return num_features
 
-        self.res1 = ResNetB(self.features, outchan, depth)
-        self.res2 = ResNetB(self.features, outchan, depth)
-        self.initbn = nn.BatchNorm2d(inchan)
-        self.initkern = Kernel(inchan, self.features)
 
-    def forward(self, x, ratio):
-        t = self.initkern(self.initbn(x))
-        t1 = self.res1.forward(t) + x
-        t2 = self.res2.forward(t) + x
-        t1 = t1.transpose(0, -1)
-        t2 = t2.transpose(0, -1)
-        t = ratio[:,0].expand_as(t1) * t1  + ratio[:,1].expand_as(t2) * t2
-        t = t.transpose(0, -1)
-        return t

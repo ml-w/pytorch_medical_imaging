@@ -1,4 +1,3 @@
-from Regional import Shallow
-from ResNet import ResNet, ResNetB, ADResNet
+from ResNet import ResNet
 
-__all__ = ['Shallow', 'ResNet', 'ADResNet']
+__all__ = ['ResNet']
