@@ -49,7 +49,7 @@ def main(a):
         gtDataset   = ImageDataSet(a.train, dtype=np.float32, verbose=True, loadBySlices=0)
         maskDataset = ImageDataSet(a.mask,  dtype=np.uint8, verbose=True, loadBySlices=0)
         # trainingSet = TensorDataset(inputDataset, gtDataset)
-        loader      = DataLoader(zip(inputDataset, gtDataset, maskDataset), batch_size=a.batchsize, shuffle=True, num_workers=4)
+        loader      = DataLoader(zip(inputDataset, gtDataset, maskDataset), batch_size=a.batchsize, shuffle=True, num_workers=4, drop_last=True)
                                  # sampler=sampler.WeightedRandomSampler(np.ones(len(trainingSet)).tolist(), a.batchsize*100))
 
         writer = SummaryWriter("/media/storage/PytorchRuns/ResNetRecon_"+datetime.datetime.now().strftime("%Y%m%d_%H%M%S"))
@@ -105,14 +105,17 @@ def main(a):
                 E.append(loss.data[0])
                 LogPrint("\t[Step %04d] Loss: %.010f"%(index, loss.data[0]))
                 if a.plot:
-                    step = i * len(loader) + index
-                    inputim = make_grid(F.avg_pool2d(s.unsqueeze(1), 2).cpu().data, nrow=2, padding=1, normalize=True)
-                    outputim = make_grid(F.avg_pool2d(out.unsqueeze(1), 2).cpu().data, nrow=2, padding=1, normalize=True)
-                    diffim = torch.abs(inputim - outputim)
-                    writer.add_image('ResNetRecon_%s/Input'%a.input.split('/')[-1], inputim, step)
-                    writer.add_image('ResNetRecon_%s/Output'%a.input.split('/')[-1], outputim, step)
-                    writer.add_image('ResNetRecon_%s/Diff'%a.input.split('/')[-1], diffim, step)
-                    writer.add_scalar('ResNetRecon_%s/Loss'%a.input.split('/')[-1], loss.data[0], step)
+                    try:
+                        step = i * len(loader) + index
+                        inputim = make_grid(F.avg_pool2d(s.unsqueeze(1), 2).cpu().data, nrow=2, padding=1, normalize=True)
+                        outputim = make_grid(F.avg_pool2d(out.unsqueeze(1), 2).cpu().data, nrow=2, padding=1, normalize=True)
+                        diffim = torch.abs(inputim - outputim)
+                        writer.add_image('ResNetRecon_%s/Input'%a.input.split('/')[-1], inputim, step)
+                        writer.add_image('ResNetRecon_%s/Output'%a.input.split('/')[-1], outputim, step)
+                        writer.add_image('ResNetRecon_%s/Diff'%a.input.split('/')[-1], diffim, step)
+                        writer.add_scalar('ResNetRecon_%s/Loss'%a.input.split('/')[-1], loss.data[0], step)
+                    except:
+                        tqdm.write("Error!")
 
                 if loss.data[0] <= temploss:
                     backuppath = "./Backup/checkpoint_ResNet.pt" if a.outcheckpoint is None else \
