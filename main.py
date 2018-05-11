@@ -82,7 +82,7 @@ def main(a):
 
         lastloss = 1e32
         losses = []
-        for i in range(a.epoch):
+        for i in tqdm(range(a.epoch), desc="Epoch"):
             E = []
             temploss = 1e32
             for index, samples in enumerate(loader):
