@@ -110,9 +110,12 @@ def main(a):
                         inputim = make_grid(F.avg_pool2d(s.unsqueeze(1), 2).cpu().data, nrow=2, padding=1, normalize=True)
                         outputim = make_grid(F.avg_pool2d(out.unsqueeze(1), 2).cpu().data, nrow=2, padding=1, normalize=True)
                         diffim = torch.abs(inputim - outputim)
-                        writer.add_image('ResNetRecon_%s/Input'%a.input.split('/')[-1], inputim, step)
+                        diffim = (diffim - torch.min(diffim)) / torch.max(diffim)
+                        gtim = make_grid(F.avg_pool2d(g.unsqueeze(1), 2).cpu().data, nrow=2, padding=1, normalize=True)
+                        # writer.add_image('ResNetRecon_%s/Input'%a.input.split('/')[-1], inputim, step)
                         writer.add_image('ResNetRecon_%s/Output'%a.input.split('/')[-1], outputim, step)
                         writer.add_image('ResNetRecon_%s/Diff'%a.input.split('/')[-1], diffim, step)
+                        writer.add_image('ResNetRecon_%s/GT'%a.input.split('/')[-1], gtim, step)
                         writer.add_scalar('ResNetRecon_%s/Loss'%a.input.split('/')[-1], loss.data[0], step)
                     except:
                         tqdm.write("Error!")
