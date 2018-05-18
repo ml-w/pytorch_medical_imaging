@@ -43,7 +43,9 @@ class Projection_v2(Dataset):
         """
 
         filenames = os.listdir(self.rootdir)
+        filenames = fnmatch.filter(filenames, "*.dcm")
         filenames.sort()
+
         self.dataSourcePath = [self.rootdir + "/" + F for F in filenames]
         self.dataSourcePath.sort()
         self.length = len(self.dataSourcePath)
@@ -66,6 +68,10 @@ class Projection_v2(Dataset):
                 C = k.RescaleIntercept
                 M = k.RescaleSlope
                 arr = np.array(k.pixel_array, dtype=np.float32) * M + C
+                # if self.dtype != np.uint16:
+                #     arr = np.array(k.pixel_array, dtype=np.float32) * M + C
+                # else:
+                #     arr = k.pixel_array
 
                 # Record the focal center of detector and calculate componenets
                 focalcenter = k.DetectorFocalCenterAngularPosition
@@ -73,13 +79,16 @@ class Projection_v2(Dataset):
                 factor = np.array([ishor, 1 - ishor])
 
                 # delete some items if the cahche size exceeds a certain limit
-                while self._CalChacheSize() > self.cachesize * (1024. ** 3) / 8.:
-                    dictitem = self.datacache.popitem()
-                    del dictitem
-                    gc.collect()
+                if self.cachesize > 0:
+                    while self._CalChacheSize() > self.cachesize * (1024. ** 3) / 8.:
+                        dictitem = self.datacache.popitem()
+                        del dictitem
+                        gc.collect()
 
-                self.datacache[item] = {'arr': arr.astype(self.dtype), 'factor': factor}
-                return self[item]
+                    self.datacache[item] = {'arr': arr.astype(self.dtype), 'factor': factor}
+                    return self[item]
+                else:
+                    return arr.astype(self.dtype), factor
             except AttributeError:
                 tqdm.write("File %s has some missing attributes! Returning random image instead!"%self.dataSourcePath[item])
                 return from_numpy(self.datacache[self.datacache.keys()[0]]['arr'].astype('float')), \
@@ -138,3 +147,4 @@ class Projection_v2(Dataset):
             tosave = tosave.astype(np.uint16)
             k.PixelData = tosave.tostring()
             k.save_as(self.dataSourcePath[i].replace(self.rootdir, out_rootdir + "/"))
+            del k

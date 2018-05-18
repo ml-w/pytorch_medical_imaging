@@ -152,6 +152,7 @@ def main(a):
 
             out = net.forward(s.unsqueeze(1), f).squeeze()
             out_tensor.append(out.data.cpu())
+
         out_tensor = torch.cat(out_tensor, dim=0)
         inputDataset.Write(out_tensor, a.output)
 

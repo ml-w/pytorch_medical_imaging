@@ -1,4 +1,4 @@
-from MedImgDataset import ImageDataSet
+from MedImgDataset import ImageDataSet, Projection
 from random import shuffle
 from shutil import copy2
 import os
