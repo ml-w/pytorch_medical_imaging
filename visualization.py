@@ -109,7 +109,6 @@ def Visualize2D(*args, **kwargs):
             drange = displayrange
         temp = Normalize(temp, drange[0], drange[1])
         newRange = [max(0, indexrange[0]), min(indexrange[1], temp.shape[0])]
-        newRange = [min(newRange[0], t.shape[0] - 1), min(newRange[1], t.shape[0])]
 
         vis.images(np.expand_dims(temp, 1)[newRange[0]:newRange[1]],
                    nrow=nrow, env=env, win=prefix+"%i"%i)
