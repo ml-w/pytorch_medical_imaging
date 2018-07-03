@@ -2,15 +2,14 @@
 import matplotlib as mpl
 mpl.use('Qt5Agg')
 import numpy as np
-import sys, os
-from skimage.feature import greycomatrix, greycoprops
+import os
 import SimpleITK as sitk
 import pandas as pd
-from MedImgDataset import Projection_v2
 from tqdm import tqdm
 
-import matplotlib.pyplot as plt
-
+#========================================
+# Similarity functions
+#========================================
 def SSIM(x,y, axis=None):
     """
     Description
@@ -24,6 +23,9 @@ def SSIM(x,y, axis=None):
                \sigma_xy is the covariance of the two image
                \c_i = (k_i L)^2
                k_1 = 0.01, k2 = 0.03
+
+        To facilitate comparison, the bit length constant is set to min(x.dtype.itemsize*8, 16)
+
     :param np.ndarray x: Image 1
     :param np.ndarray y: Image 2
     :return:
@@ -34,7 +36,7 @@ def SSIM(x,y, axis=None):
     assert x.shape == y.shape, "Inputs cannot have different shapes!"
 
     L = 2**(np.min([x.dtype.itemsize * 8, 16])) - 1
-    # L = 1
+
     cal = lambda mu1, mu2, va1, va2, va12: \
         (2*mu1*mu2 + (0.01*L)**2)*(2*va12 + (0.03*L)**2) / ((mu1**2 + mu2**2 + (0.01*L)**2)*(va1**2 +va2**2 + (0.03*L)**2))
 
@@ -43,7 +45,6 @@ def SSIM(x,y, axis=None):
         va_x, va_y = x.astype('float32').var(), y.astype('float32').var()
         va_xy = np.cov(x.flatten(), y.flatten())
         va_xy = va_xy[0][1]*va_xy[1][0]
-        # print "%.03f %.03f %.03f %.03f %.03f"%(mu_x, mu_y, va_x, va_y, va_xy)
         return cal(mu_x, mu_y, va_x, va_y, va_xy)
     else:
         assert axis <= x.ndim, "Axis larger than dimension of inputs."
@@ -66,72 +67,13 @@ def SSIM(x,y, axis=None):
 
         return np.array(out, dtype=float)
 
-
-def BatchSSIM(files, groundtruth, outfile):
-    """
-    Description
-    -----------
-    :param str dir:
-    :return:
-    """
-
-    assert all([os.path.isfile(f)] for f in files + [groundtruth]), "Cannot open directory!"
-
-
-    data = {}
-    for f in files:
-        data[os.path.basename(f)] = sitk.GetArrayFromImage(sitk.ReadImage(f))
-    gtarr = sitk.GetArrayFromImage(sitk.ReadImage(groundtruth))
-
-    df = pd.DataFrame(columns=['File', 'Slice Number', 'SSIM'])
-    g = {}
-    for key in data:
-        g[key] = []
-
-    for i in tqdm(range(gtarr.shape[0])):
-        gt = gtarr[i]
-        for key in data:
-            ssim = SSIM(np.array(data[key][i], dtype=np.int16),
-                        np.array(gt, dtype=np.int16))
-            row = pd.DataFrame([[key, i, ssim]] ,columns=['File', 'Slice Number', 'SSIM'])
-            df = df.append(row)
-    df.to_csv(outfile, index=False)
-
-def ProjBatchSSIM(folders, groundtruth, outfile):
-    """
-    Description
-    -----------
-    :param str dir:
-    :return:
-    """
-
-    assert all([os.path.isdir(f)] for f in folders + [groundtruth]), "Cannot open directory!"
-
-    p = {}
-    for f in folders:
-        p[os.path.basename(os.path.dirname(f))] = Projection_v2(f, verbose=True, dtype=np.float16, cachesize=0)
-    gt = Projection_v2(groundtruth, verbose=True, dtype=np.float16, cachesize=0)
-
-    df = pd.DataFrame(columns=['Folder', 'InstanceNumber', 'SSIM'])
-    for i in tqdm(range(len(gt))):
-        l_gt = gt[i][0]
-        for key in p:
-            ssim = SSIM(np.array(p[key][i][0], dtype=np.float16),
-                        np.array(l_gt, dtype=np.float16))
-            print ssim
-            row = pd.DataFrame([[key, i, ssim]] ,columns=['Folder', 'InstanceNumber', 'SSIM'])
-            df = df.append(row)
-        if i == 200:
-            break
-    df.to_csv(outfile, index=False)
-
-
 def CNR(x, y, noise):
     """
     Description
     -----------
       Calculate the contrast to noise ratio according to the following equation:
         CNR = |mu_x - mu_y| / VAR(noise)
+
     :param np.ndarray x:     Array of tissue x
     :param np.ndarray y:     Array of tissue y
     :param np.ndarray noise: Array of pure noise
@@ -143,7 +85,6 @@ def CNR(x, y, noise):
            isinstance(y, np.ndarray), "Input must be numpy arrays!"
 
     return np.abs(x.mean() - y.mean()) / noise.var()
-
 
 def RMSE(x, y):
     """
@@ -159,66 +100,6 @@ def RMSE(x, y):
 
     d = ((x - y)**2).mean(axis=None)
     return np.sqrt(d)
-
-def BatchcMSE(files, groundtruth, outfile):
-    """
-    Description
-    -----------
-      Return the MSE of all the files w.r.t. ground truth slice be slice and output them to outfile.csv
-
-    :param files:
-    :param groundtruth:
-    :param outfile:
-    :return:
-    """
-
-    assert all([os.path.isfile(f)] for f in files + [groundtruth]), "Cannot open directory!"
-
-
-    data = {}
-    for f in files:
-        data[os.path.basename(f)] = sitk.GetArrayFromImage(sitk.ReadImage(f))
-    gtarr = sitk.GetArrayFromImage(sitk.ReadImage(groundtruth))
-
-    df = pd.DataFrame(columns=['File', 'Slice Number', 'RMSE'])
-    g = {}
-    for key in data:
-        g[key] = []
-
-    for i in tqdm(range(gtarr.shape[0])):
-        gt = gtarr[i]
-        for key in data:
-            mse = RMSE(np.array(data[key][i], dtype=np.int16),
-                        np.array(gt, dtype=np.int16))
-            row = pd.DataFrame([[key, i, mse]] ,columns=['File', 'Slice Number', 'RMSE'])
-            df = df.append(row)
-    df.to_csv(outfile, index=False)
-
-def ProjBatchMSE(folders, groundtruth, outfile):
-    """
-    Description
-    -----------
-    :param str dir:
-    :return:
-    """
-
-    assert all([os.path.isdir(f)] for f in folders + [groundtruth]), "Cannot open directory!"
-
-    p = {}
-    for f in folders:
-        p[os.path.basename(os.path.dirname(f))] = Projection_v2(f, verbose=True, dtype=np.float32, cachesize=0)
-    gt = Projection_v2(groundtruth, verbose=True, dtype=np.float32, cachesize=0)
-
-    df = pd.DataFrame(columns=['Folder', 'InstanceNumber', 'RMSE'])
-    for i in tqdm(range(len(gt))):
-        l_gt = gt[i][0].numpy()
-        for key in p:
-            mse = RMSE(np.array(p[key][i][0].numpy(), dtype=np.float32),
-                        np.array(l_gt, dtype=np.float32))
-            row = pd.DataFrame([[key, i, mse]] ,columns=['Folder', 'InstanceNumber', 'RMSE'])
-            df = df.append(row)
-    df.to_csv(outfile, index=False)
-
 
 def PSNR(x, y):
     """
@@ -240,11 +121,21 @@ def PSNR(x, y):
 def MSE(x, y):
     return RMSE(x,y)**2
 
+
+#=========================================
+# General batch analysis
+#=========================================
 def BatchAnalysis(dir, func, usemask=False, outputcsvdir=None):
     """
     Description
     -----------
-      Return a dataframe holding the metric returned by func
+      Return a dataframe holding the metric returned by func. In this function, the comparison is only done between
+      folders with one datafiles only.
+
+      The folder structure is defined to be like this:
+      - Root
+        - Views
+          - Group
 
     :param x:
     :param groundtruth:
