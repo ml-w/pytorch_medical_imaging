@@ -177,7 +177,7 @@ def BatchAnalysis(dir, func, usemask=False, outputcsvdir=None):
                 view = int(root.split('/')[-1])
                 tt = root.split('/')[-2]
                 tar = sitk.GetArrayFromImage(sitk.ReadImage(root + '/' + name))
-                for i in xrange(tar.shape[0]):
+                for i in tqdm(range(tar.shape[0]), desc="Slice number"):
                     instancenumber = i
                     values = []
                     for fs in func:
