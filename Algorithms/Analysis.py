@@ -33,7 +33,7 @@ def SSIM(x,y, axis=None):
     assert x.dtype == y.dtype, "Inputs must have the same data type!"
     assert x.shape == y.shape, "Inputs cannot have different shapes!"
 
-    L = 2**(np.min([x.dtype.itemsize * 8, 32])) - 1
+    L = 2**(np.min([x.dtype.itemsize * 8, 16])) - 1
     # L = 1
     cal = lambda mu1, mu2, va1, va2, va12: \
         (2*mu1*mu2 + (0.01*L)**2)*(2*va12 + (0.03*L)**2) / ((mu1**2 + mu2**2 + (0.01*L)**2)*(va1**2 +va2**2 + (0.03*L)**2))
@@ -43,7 +43,7 @@ def SSIM(x,y, axis=None):
         va_x, va_y = x.astype('float32').var(), y.astype('float32').var()
         va_xy = np.cov(x.flatten(), y.flatten())
         va_xy = va_xy[0][1]*va_xy[1][0]
-        print "%.03f %.03f %.03f %.03f %.03f"%(mu_x, mu_y, va_x, va_y, va_xy)
+        # print "%.03f %.03f %.03f %.03f %.03f"%(mu_x, mu_y, va_x, va_y, va_xy)
         return cal(mu_x, mu_y, va_x, va_y, va_xy)
     else:
         assert axis <= x.ndim, "Axis larger than dimension of inputs."
@@ -145,84 +145,6 @@ def CNR(x, y, noise):
     return np.abs(x.mean() - y.mean()) / noise.var()
 
 
-def HarlickTextureFeatures(x, range=None):
-    """
-    Description
-    -----------
-      Return the Harlick Texture Feature [1] of the input image patch. Assume input to be 2D
-      numpy array. This method uses skimage package.
-    References
-    ----------
-      [1] Harlick, Robert M., and Karthikeyan Shammugam, "Textural features for image classification."
-          IEEE Transcations on systems, man, and cybernetics 6 (1973): 610-621
-    :param np.ndarray x:
-    :return:
-    """
-
-    assert isinstance(x, np.ndarray), "Input must be numpy array!"
-    assert x.ndim == 2, "Input must be 2D!"
-
-    x = ImageRebining(x, np.uint8, range)
-
-    return greycomatrix(x, [1], np.linspace(0, 2*np.pi, 10)[:-1])
-
-
-def HarlickDistance(x, y, customrange = None):
-    """
-    Description
-    -----------
-      Compute the normalized distance between two harlick feature matrices by the following equation
-        D(x, y) = \sqrt{\sum_i \left(\frac{h_i(x) - h_i(y)}{h_i(y)} \right)}
-      Note that y is considered as normalization factor (i.e. groundtruth) when doing comparisons.
-    :param x:
-    :param y:
-    :return:
-    """
-
-    assert x.shape == y.shape, "Dimension of two image must be the same!gx"
-
-    if customrange is None:
-        X = HarlickTextureFeatures(x, [y.min(), y.max()]) # y should be the same image if comparison is to be done
-        Y = HarlickTextureFeatures(y)
-    else:
-        X = HarlickTextureFeatures(x, customrange)
-        Y = HarlickTextureFeatures(y, customrange)
-
-    X, Y = [np.array(G, dtype=np.int64) for G in [X, Y]]
-
-    diff = np.abs((X - Y)).sum() / float(X.flatten().shape[0])
-    return diff
-
-
-def ImageRebining(x, datatype, customrange=None):
-    """
-    Description
-    -----------
-      Re-bin the image into specified data type with full utilization of all possible
-      levels. Input should be numpy arrays.
-    :param np.ndarray x:
-    :param np.dtype datatype:
-    :return:
-    """
-
-    assert isinstance(datatype, type)
-
-    x = np.array(x, dtype=np.float64)
-    if customrange is None:
-        x -= x.min()
-        x /= x.max()
-    else:
-        assert  len(customrange) == 2, "Range must be a 2-element vector."
-        assert customrange[0] < customrange[1], "Wrong range!"
-
-        x = np.clip(x, customrange[0], customrange[1])
-        x -= customrange[0]
-        x /= customrange[1] - customrange[0]
-
-    levels = 2**(datatype(0).itemsize * 8) - 1
-    x *= levels
-    return np.array(x, dtype=datatype)
-
 def RMSE(x, y):
     """
     Description
@@ -315,30 +237,77 @@ def PSNR(x, y):
 
     return 20 * np.log10(MAX_I / np.sqrt(MSE(x, y)))
 
-def BatchPSNR(dir):
-    """
-    :param dir:
-    :return:
-    """
-    assert os.path.isdir(dir), "Directory doesn't exist!"
+def MSE(x, y):
+    return RMSE(x,y)**2
 
-    b = NiiDataLoader(dir, tonumpy=True)
+def BatchAnalysis(dir, func, usemask=False, outputcsvdir=None):
+    """
+    Description
+    -----------
+      Return a dataframe holding the metric returned by func
 
-    import csv
-    k = ['SIRTm', 'SARTm', 'FBPpbm', 'FBPpbhm', 'processedm']
-    f = file(dir + "/Result_PSNR.csv", 'wb')
-    writer = csv.writer(f)
-    writer.writerow(['Data', 'Number of Projections', 'Recon Method', 'Slice Number', 'PSNR', 'RMSE'])
-    for i in xrange(len(b)):
-        if not b[i].has_key('groundtruthm'):
+    :param x:
+    :param groundtruth:
+    :param func:
+    :return: pd.DataFrame
+    """
+
+    columnlist = ['RootFile', 'InstanceNumber', 'View', 'Group']
+    for fs in func:
+        if isinstance(fs, type(lambda: None)):
+            columnlist.append(fs.__name__)
+
+    GT = None
+    Mask = None
+    df = pd.DataFrame(columns=columnlist)
+    for root, dirs, files in os.walk(dir):
+        if 'GT' in root.split('/'):
+            GT = sitk.GetArrayFromImage(sitk.ReadImage(root + '/' + files[0]))
+        if 'Mask' in root.split('/') and usemask:
+            Mask = sitk.GetArrayFromImage(sitk.ReadImage(root + '/' + files[0]))
+
+
+    if GT is None:
+        print "Error! Cannot locate groundtruth!"
+        return
+    if Mask is None and usemask:
+        print "Error! Cannot locate mask"
+
+
+    for root, dirs, files in os.walk(dir):
+        if 'GT' in root.split('/'):
             continue
-        for j in xrange(len(b[i]['groundtruthm'])):
-            for keys in k:
-                line = [b.unique_prefix[i], dir.split('_')[-1], j + 1, keys]
-                line.append(PSNR(b[i][keys][j], b[i]['groundtruthm'][j]))
-                line.append(np.sqrt(MSE(b[i][keys][j], b[i]['groundtruthm'][j])))
-                writer.writerow(line)
-    f.close()
+        if usemask:
+            if 'Mask' in root.split('/'):
+                continue
+        for name in files:
+            if name.find(".nii.gz") > -1:
+                print "Processing: ", root + '/' + name
+                view = int(root.split('/')[-1])
+                tt = root.split('/')[-2]
+                tar = sitk.GetArrayFromImage(sitk.ReadImage(root + '/' + name))
+                for i in xrange(tar.shape[0]):
+                    instancenumber = i
+                    values = []
+                    for fs in func:
+                        if usemask:
+                            tar[i][np.invert(Mask[i])] = 0
+                            GT[i][np.invert(Mask[i])] = 0
+
+                        val = fs(tar[i], GT[i])
+                        values.append(val)
+
+                    l_df = pd.DataFrame([[ root + '/' + name, instancenumber, view, tt,] + values],
+                                        columns=columnlist)
+                    df = df.append(l_df)
+
+    if not outputcsvdir is None:
+        df.to_csv(outputcsvdir)
+    return df
+
+
+
+
 
 if __name__ == '__main__':
     # rootdir = "/home/lwong/Source/Repos/CT-Rebinning-Toolkit/examples/"
@@ -347,12 +316,12 @@ if __name__ == '__main__':
     #                                  'quarter_DICOM-CT-PD_oneres_out.nii.gz']],
     #           rootdir + "/full_DICOM-CT-PD_out.nii.gz",
     #           rootdir + "SSIM.csv")
-    rootdir = "/media/storage/Data/CTReconstruction/ProjectionData/10.Batch_01/testing/"
-    ProjBatchSSIM([rootdir + d for d in ['quarter_DICOM-CT-PD/',
-                                     'quarter_DICOM-CT-PD_oneres/',
-                                     'quarter_DICOM-CT-PD_Processed/']],
-              rootdir + "/full_DICOM-CT-PD/",
-              rootdir + "SSIM_proj.csv")
+    # rootdir = "/media/storage/Data/CTReconstruction/ProjectionData/10.Batch_01/testing/"
+    # ProjBatchSSIM([rootdir + d for d in ['quarter_DICOM-CT-PD/',
+    #                                  'quarter_DICOM-CT-PD_oneres/',
+    #                                  'quarter_DICOM-CT-PD_Processed/']],
+    #           rootdir + "/full_DICOM-CT-PD/",
+    #           rootdir + "SSIM_proj.csv")
     # rootdir = "/home/lwong/Source/Repos/CT-Rebinning-Toolkit/examples/"
     # BatchcMSE([rootdir + d for d in ['quarter_DICOM-CT-PD_out.nii.gz',
     #                                  'quarter_DICOM-CT-PD_Processed_out.nii.gz',
@@ -365,3 +334,6 @@ if __name__ == '__main__':
     #                                  'quarter_DICOM-CT-PD_Processed/']],
     #           rootdir + "/full_DICOM-CT-PD/",
     #           rootdir + "MSE_proj.csv")
+
+    rootdir = "/media/storage/Data/CTReconstruction/ProjectionData/05.MVDRN_RESNET"
+    BatchAnalysis(rootdir, [PSNR, SSIM, RMSE], usemask=True, outputcsvdir=rootdir+'/newresult.csv' )
