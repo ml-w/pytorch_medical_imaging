@@ -55,4 +55,5 @@ def GenerateKFoldBatch(sourcedir, targetdir, numOfTestSamples, landmarks=True):
 
 if __name__ == '__main__':
     # GenerateKFoldBatch("../TOCI/54.BatchSource_Thumb", "../TOCI/55.K_Fold_Thumb", 100, False)
+    # GenerateKFoldBatch("../TOCI/70.BatchSource_Thumb_NoAUG", "../TOCI/71.K_Fold_Thumb_NoAug", 100, False)
     pass

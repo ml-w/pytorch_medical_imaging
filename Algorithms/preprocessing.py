@@ -1,3 +1,5 @@
+import matplotlib as mpl
+mpl.use('Qt5Agg')
 import numpy as np
 import os
 from MedImgDataset import ImageDataSet2D, Landmarks
@@ -437,7 +439,11 @@ def RenameImages(dir):
         i = 0
         files = os.listdir(dir + "/" + f)
         for fs in files:
-            os.rename(dir + "/" + f + "/" + fs, dir + "/" + f + "/" + f + "_%04d.%s"%(i, fs.split('.')[-1]))
+            try:
+                os.rename(dir + "/" + f + "/" + fs,
+                          dir + "/" + f + "/" + f + "_%04d.%s"%(i, fs.split('.')[-1]))
+            except:
+                print dir + "/" + f + "/" + fs
             i += 1
 
     pass
@@ -530,7 +536,7 @@ def CropAllThumbs(root_dir, outdir, landmark_csv, augment=0):
                 seg =  iaa.Sequential([iaa.Affine(translate_px={'x':  int(- cent[1] + halfsize[1]), 'y': int(- cent[0] + halfsize[0])}),
                                        iaa.Affine(rotate=(-deg - 10, -deg + 10)),
                                        iaa.Affine(scale=scale),
-                                       iaa.Affine(translate_px=(-16, 16), scale=(0.9,1.1)),
+                                       iaa.Affine(translate_px=(-16, 16), scale=(0.8,1.2)),
                                        iaa.Crop(px=bounds, keep_size=False)])
                 ext = os.path.basename(paths[i]).split('.')[-1]
                 outnames = paths[i].replace(root_dir, outdir).replace('.' + ext, '_Thumb_AUG%02d.'%k + ext)
@@ -544,19 +550,23 @@ def CropAllThumbs(root_dir, outdir, landmark_csv, augment=0):
 
 
 
-
 import fnmatch
 if __name__ == '__main__':
-    # CropAllThumbs("./TOCI/51.BatchSource/", "./TOCI/54.BatchSource_Thumb/" ,"./TOCI/51.BatchSource/Landmarks.csv", 3)
+    # CropAllThumbs("./TOCI/51.BatchSource/", "./TOCI/70.BatchSource_Thumb_NoAUG/" ,"./TOCI/51.BatchSource/Landmarks.csv")
+    SortImagesByClassPrefix("./TOCI/71.K_Fold_Thumb_NoAug")
     # SortImagesByClassPrefix("./TOCI/55.K_Fold_Thumb/")
+    # CropAllThumbs("./TOCI/61.EOS_Sorted/temp", "./TOCI/61.EOS_Sorted/temp/ROIs" ,"./TOCI/61.EOS_Sorted/temp/Landmarks.csv", 3)
+    # SortImagesByClassPrefix("./TOCI/61.EOS_Sorted/temp/ROIs")
     #======================
     # Examples
     #======================
+    # RenameImages("./TOCI/60.Xi_Sorted")
+    # RenameImages("./TOCI/61.EOS_Sorted")
     # PlotImageWithLandmarks("./TOCI/04.Resized")
     # ExtractLandmarks("./TOCI/99.MISC/Annotate2/Results")
     # ResizeToSquare([512, 512], "./TOCI/10.TestData","./TOCI/10.TestData/Resized_SAR", landmarks_csv="./TOCI/11.AnnotatedTestData/Landmarks.csv")
     # ResizeToSquare([512, 512], "./TOCI/02.ALL","./TOCI/05.Resized_SAR", landmarks_csv="./TOCI/03.Annotated/Landmarks.csv")
-    # PlotImageWithLandmarks("./TOCI/05.Resized_SAR")
+    # PlotImageWithLandmarks("./TOCI/61.EOS_Sorted/temp", "./TOCI/61.EOS_Sorted/temp/Landmarks.csv")
     # DataAugmentatation("./TOCI/05.Resized_SAR", "./TOCI/05.Resized_SAR/aug", "./TOCI/05.Resized_SAR/Landmarks.csv")
     # ReadFeatures("./TOCI/03.Annotated/Landmarks.csv")
     # ExtractROIs("./TOCI/10.TestData/Resized_SAR", "./TOCI/10.TestData/Resized_SAR/Landmarks.csv", "./TOCI/10.TestData/Resized_SAR/ROIs_GT", 64, 15)

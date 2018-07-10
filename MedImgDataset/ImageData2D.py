@@ -4,9 +4,13 @@ import fnmatch
 import os
 import numpy as np
 from skimage.io import imread
+import imgaug as ia
+import imgaug.augmenters as iaa
+from tqdm import tqdm
+
 
 class ImageDataSet2D(Dataset):
-    def __init__(self, rootdir, as_grey=True, verbose=False, dtype=float, readfunc=None):
+    def __init__(self, rootdir, as_grey=True, recursive=False, verbose=False, dtype=float, readfunc=None, resizetosquare=-1):
         """ImageDataSet2D
         Description
         -----------
@@ -14,6 +18,7 @@ class ImageDataSet2D(Dataset):
 
         :param str rootdir:  Specify which directory to look into
         :param str readmode: This argument is passed to skimage.io.imread
+        :param bool recursive: If this is true, walk through all subdirectories
         :param bool verbose: Set to True if you want verbose info
         :param callable readfunc: If this is set, it will be used to load image files, as_grey option will be ignored
         :param type dtype:   The type to cast the tensors
@@ -28,7 +33,10 @@ class ImageDataSet2D(Dataset):
         self.dtype = dtype
         self.as_grey=as_grey
         self.readfunc = readfunc
+        self._recursive = recursive
+        self._metadata = {'Original Size': []}
         self._ParseRootDir()
+        self._resize = resizetosquare
 
     def _ParseRootDir(self):
         """
@@ -38,19 +46,30 @@ class ImageDataSet2D(Dataset):
         :return:
         """
 
-        filenames = os.listdir(self.rootdir)
-        filenames.sort()
-        [self.dataSourcePath.extend(fnmatch.filter(filenames, "*" + ext)) for ext in ['.png','.jpg']]
-        self.dataSourcePath = [self.rootdir + "/" + F for F in self.dataSourcePath]
-        self.dataSourcePath.sort()
+        if not self._recursive:
+            filenames = os.listdir(self.rootdir)
+            filenames.sort()
+            [self.dataSourcePath.extend(fnmatch.filter(filenames, "*" + ext)) for ext in ['.png','.jpg', '.JPG', '.PNG']]
+            self.dataSourcePath = [self.rootdir + "/" + F for F in self.dataSourcePath]
+            self.dataSourcePath.sort()
+        else:
+            filenames = []
+            for root, dirnames, fnames in os.walk(self.rootdir):
+                for filename in fnames:
+                    if filename.endswith(('.jpg', '.png', '.PNG', '.JPG')):
+                        filenames.append(os.path.join(root, filename))
+            filenames.sort()
+            self.dataSourcePath = filenames
 
-        for f in self.dataSourcePath:
+        for f in tqdm(self.dataSourcePath, disable=not self.verbose):
             if self.verbose:
-                print "Reading from ", f
+                tqdm.write("Reading from "+f)
             if self.readfunc is None:
                 im = imread(f, as_grey=self.as_grey)
             else:
                 im = self.readfunc(f)
+
+            self._metadata['Original Size'].append(im.shape)
             im = from_numpy(np.array(im*255, dtype=self.dtype)) if self.as_grey and self.dtype == np.uint8 else \
                 from_numpy(np.array(im, dtype=self.dtype))
             self.data.append(im)
@@ -59,8 +78,10 @@ class ImageDataSet2D(Dataset):
 
 
     def __getitem__(self, item):
-        return self.data[item]
-
+        if self._resize < 0:
+            return self.data[item]
+        else:
+            return self.ResizeToSquare(self.data[item])
 
     def __str__(self):
         from pandas import DataFrame as df
@@ -81,6 +102,7 @@ class ImageDataSet2D(Dataset):
             #     printable[keys].append(self.metadata[i][keys])
             printable['Size'].append([self.__getitem__(i).size()[0],
                                       self.__getitem__(i).size()[1]])
+        printable['Original Size'] = self._metadata['Original Size']
 
         data = df(data=printable)
         s += data.to_string()
@@ -93,12 +115,23 @@ class ImageDataSet2D(Dataset):
         assert self.length != 0
         return cat([K.unsqueeze(0) for K in self.data], dim=0).numpy()
 
-if __name__ == '__main__':
-    import visdom as vis
+    def ResizeToSquare(self, imagedata):
+        # Get data
+        im = (imagedata.numpy() * 255.).astype('uint8')
 
-    v = vis.Visdom(port=80)
+        b = im.shape[0] > im.shape[1]  # True if height > width
+        s = 512 / float(max(im.shape))
+        py, px = np.round(self._resize - np.array(im.shape).astype('float32') * s)
+        pl, pr = int(np.floor(px / 2.)), int(np.ceil(px/2.))
+        pu, pd = int(np.floor(py / 2.)), int(np.ceil(py/2.))
 
-    data = ImageDataSet2D("./TOCI/10.TestData/Resized_SAR", dtype=np.float, verbose=True, as_gray=True)
-    im = np.array([d.numpy()*255 for d in data.data], dtype=np.uint8)
-    im = np.tile(im[:,None,:,:], (1, 3, 1, 1))
-    v.images(im, env="Test", win="Image")
+        # seq = iaa.Sequential([iaa.Pad(px=(pu, pr, pd, pl)),
+        seq = iaa.Sequential([iaa.Scale({'height':self._resize, "width": "keep-aspect-ratio" } if b else
+                                        {'width':self._resize, "height": "keep-aspect-ratio" } ),
+                              iaa.Pad(px=(pu, pr, pd, pl), pad_mode='constant', pad_cval=0, keep_size=False),
+                              iaa.Scale({'height':self._resize, "width":self._resize})]) # top, right, bottom, left
+        seq_det = seq.to_deterministic()
+        im_aug = seq_det.augment_image(im)
+        return from_numpy(im_aug.astype(self.dtype)/255.)
+
+

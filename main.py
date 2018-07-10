@@ -2,6 +2,7 @@ import argparse
 import os
 import logging
 import numpy as np
+import datetime
 
 from MedImgDataset import ImageDataSet2D, ImageFeaturePair, Landmarks
 from torch.utils.data import DataLoader, TensorDataset, sampler
@@ -13,8 +14,8 @@ import torch.optim as optim
 import torch
 import visualization
 from skimage.io import imread, imsave
-
-
+from tqdm import tqdm
+from tensorboardX import SummaryWriter
 
 def LogPrint(msg, level=20):
     logging.getLogger(__name__).log(level, msg)
@@ -70,6 +71,7 @@ def main(a):
             return
 
 
+        writer = SummaryWriter("/media/storage/PytorchRuns/TOCI_"+datetime.datetime.now().strftime("%Y%m%d_%H%M"))
         # Load Checkpoint or create new network
         #-----------------------------------------
         net = ConvNet(inputDataset[0].size()[1]) if a.stage == 1 else Inception3(5 ,aux_logits=False)
@@ -103,6 +105,7 @@ def main(a):
             net = net.cuda()
             # optimizer.cuda()
 
+
         lastloss = 1e32
         losses = []
         for i in xrange(a.epoch):
@@ -133,13 +136,15 @@ def main(a):
                 if a.plot:
                     if a.stage == 1:
                         visualizeResults(s, out)
+                        writer.add_scalar("KeyPointExtraction/Loss", loss.data[0], index + i * len(loader))
                     elif a.stage == 2:
                         import pandas as pd
                         val, guess = torch.max(out, 1)
                         d = {'Guess': guess.cpu().data.numpy().tolist(),
                              'Ans': g.cpu().data.numpy().tolist()}
                         d = pd.DataFrame.from_dict(d)
-                        print d.to_string()
+                        writer.add_text("TOCI/result", d.to_string(), index + i * len(loader))
+                        writer.add_scalar("TOCI/Loss", loss.data[0], index + i * len(loader))
 
             losses.append(E)
             if np.array(E).mean() <= lastloss:
@@ -158,14 +163,15 @@ def main(a):
             if a.decay != 0:
                 for pg in optimizer.param_groups:
                     pg['lr'] = pg['lr'] * np.exp(-i * a.decay / float(a.epoch))
-
+        writer.close()
 
     # Evaluation mode
     else:
         import pandas as pd
         if a.stage == 1:
-            inputDataset= ImageDataSet2D(a.input, dtype=np.float32, verbose=True)
+            inputDataset= ImageDataSet2D(a.input, dtype=np.float32, recursive=True, verbose=True, resizetosquare=512)
             loader      = DataLoader(inputDataset, batch_size=a.batchsize, shuffle=False)
+            ori_size    = inputDataset._metadata['Original Size']
             net = ConvNet(inputDataset[0].size()[1])
         else:
             imreader = lambda x: imread(x, as_grey=True)
@@ -185,11 +191,13 @@ def main(a):
         if a.usecuda:
             net = net.cuda()
 
+
         results = []
-        for i, samples in enumerate(loader):
-            s = Variable(samples)
+        for i, samples in enumerate(tqdm(loader)):
+            s = Variable(samples, volatile=True)
             if a.usecuda:
                 s = s.cuda()
+
             out = net.forward(s.unsqueeze(1)).squeeze() if a.stage == 1 else net.forward(s.unsqueeze(1).float())
             if a.stage == 1:
                 for j in xrange(out.data.size()[0]):
@@ -203,10 +211,14 @@ def main(a):
                 if a.stage == 1:
                     visualizeResults(s, out)
 
-
+        print inputDataset
         if a.stage == 1:
             outdict = {'File': [], 'Proximal Phalanx': [], 'Metacarpal': [], 'Distal Phalanx': []}
             for i, res in enumerate(results):
+                s = np.array(ori_size[i])
+                scale = s.max() / 512.
+                px, py = 512 - s / scale
+                res = res * scale - np.array([px,py])
                 outdict['File'].append(os.path.basename(inputDataset.dataSourcePath[i]))
                 outdict['Proximal Phalanx'].append(np.array(res[0], dtype=int).tolist())
                 outdict['Metacarpal'].append(np.array(res[1], dtype=int).tolist())
