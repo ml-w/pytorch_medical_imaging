@@ -43,3 +43,6 @@ def SimulateSparseView(filename, projector='parallel', noise=False):
         test = aa.create_sino3d_gpu(sitk.GetArrayFromImage(im), pg[0], vol_geom)
 
 
+'''Testing'''
+if __name__ == '__main__':
+    pass
