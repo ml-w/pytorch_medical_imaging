@@ -4,14 +4,14 @@ import logging
 import numpy as np
 import datetime
 
-from MedImgDataset import ImageDataSet2D, ImageFeaturePair, Landmarks, Projection
-from torch.utils.data import DataLoader, TensorDataset, sampler
+from MedImgDataset import Projection
+from torch.utils.data import DataLoader, TensorDataset
 from torch.autograd import Variable
 from tqdm import tqdm
 import torch.nn as nn
 import torch.optim as optim
 import torch
-import visualization
+from Algorithms import visualization
 from Networks import ResNet
 
 # import your own newtork
