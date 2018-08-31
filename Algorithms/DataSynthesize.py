@@ -4,11 +4,21 @@ import numpy as np
 import os
 import multiprocessing as mpi
 
+from FilterBanks import DirectionalFilterBankDown
+
+
 def SimulateSparseView(filename, projector='parallel3d', add_noise=False, output_dir=None):
+    """Simulate sparse view CT protocols from existing images
+    """
     assert isinstance(filename, str)
     assert os.path.isfile(filename), "Input file not exist!"
 
     print "Working on ", filename
+
+    # Check available gpu
+    num_of_gpu = 0
+    while aa.get_gpu_info(num_of_gpu).find('Invalid device (10)') ==-1:
+        num_of_gpu += 1
 
     # Load image
     im = sitk.ReadImage(filename)
@@ -67,7 +77,7 @@ def SimulateSparseView(filename, projector='parallel3d', add_noise=False, output
             sino3d = aa.create_sino3d_gpu(arrim, pg3d[i], vol_geom)     # This use GPU to prepare sinogram
             aa.data3d.delete(sino3d[0])                                 # Release some memory
             n_view = len(pg['ProjectionAngles'])                        # Number of views used
-
+            gpu_index = np.random.randint(num_of_gpu)
 
             # List to hold individual slices
             recon_image = []
@@ -83,6 +93,7 @@ def SimulateSparseView(filename, projector='parallel3d', add_noise=False, output
                 cfg['ProjectionDataId'] = sino2d_id
                 cfg['ReconstructionDataId'] = rec2d_id
                 cfg['ProjectorId'] = projector_id
+                # cfg['option'] = {'GPUindex': gpu_index}               # It looks like this is useless
 
 
                 # Add noise if option checked
@@ -90,11 +101,11 @@ def SimulateSparseView(filename, projector='parallel3d', add_noise=False, output
                     # Calculate background intensity
                     I_0 = 1E5
                     default_views = 2048
-                    I = 1E5 * n_view / 2048.
+                    I = I_0 * n_view / default_views
 
                     # Store data into cuda object
                     min_sino = sino3d[1][j,:,:].min()
-                    aa.data2d.store(sino2d_id, aa.add_noise_to_sino(sino3d[1][j,:,:] - min_sino, I) + min_sino)
+                    aa.data2d.store(sino2d_id, aa.add_noise_to_sino(sino3d[1][j,:,:] - min_sino, 1E4) + min_sino)
                 else:
                     # Store data into cuda object
                     aa.data2d.store(sino2d_id, sino3d[1][j,:,:])
@@ -127,17 +138,57 @@ def SimulateSparseView(filename, projector='parallel3d', add_noise=False, output
                 sitk.WriteImage(outim, outname)
 
 
+def DirectionalDecomposition(filename, output_dir=None):
+    assert os.path.isfile(filename)
 
-'''Synthesize Data'''
+    # Prepare input
+    im = sitk.GetArrayFromImage(sitk.ReadImage(filename))
+    assert im.ndim == 3
+
+    # Directional Decomposition
+    stack = []
+    d = DirectionalFilterBankDown()
+    d.set_shrink(True)
+    for i in xrange(im.shape[0]):
+        print i
+        subbands = d.run(im[i])
+        temp = np.stack([np.fft.ifft2(np.fft.fftshift(subbands[:,:,j])) for j in xrange(subbands.shape[-1])], axis=-1)
+        stack.append(temp.real.astype('float32'))
+
+    # Save image to destination
+    if output_dir is None:
+        outname = filename.replace('.nii.gz', '_subbands')
+    else:
+        if not os.path.isdir(output_dir):
+            os.mkdir(output_dir)
+        outname = output_dir + '/' + os.path.basename(filename).replace('.nii.gz', '_subbands')
+    np.savez(outname, subbands=np.stack(stack))
+
+
+
+
 if __name__ == '__main__':
     from functools import partial
 
-    root_dir = '../DFB_Recon/00.RAW'
+    '''Synthesize Data Sparse View CT'''
+    # root_dir = '../DFB_Recon/00.RAW'
+    # files = os.listdir(root_dir)
+    #
+    # args = [(root_dir + '/' + f) for f in files]
+    # pool = mpi.Pool(10)
+    # pool.map_async(partial(SimulateSparseView, output_dir='../DFB_Recon/03.SparseView_Const_Noise', add_noise=True), args)
+    # pool.close()
+    # pool.join()
+
+    '''Decompose image into subbands'''
+    root_dir = '../DFB_Recon/01.SparseView'
     files = os.listdir(root_dir)
 
+    # DirectionalDecomposition(root_dir + '/' + files[0], output_dir='../DFB_Recon/10.GT_Subbands')
     args = [(root_dir + '/' + f) for f in files]
     pool = mpi.Pool(10)
-    pool.map_async(partial(SimulateSparseView, output_dir='../DFB_Recon/02.SparseView_Noisy', add_noise=True), args)
+    pool.map_async(partial(DirectionalDecomposition, output_dir='../DFB_Recon/11.SparseView_Subbands'), args)
     pool.close()
     pool.join()
+    #
     pass
