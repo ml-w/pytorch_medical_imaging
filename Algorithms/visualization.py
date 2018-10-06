@@ -1,6 +1,6 @@
 import visdom
 import numpy as np
-from torch.tensor import _TensorBase
+# from torch.tensor import TensorBase
 
 vis = visdom.Visdom(port=80)
 
@@ -98,7 +98,7 @@ def Visualize2D(*args, **kwargs):
 
 
     for i, tensor in enumerate(args):
-        assert issubclass(type(tensor), _TensorBase)
+        # assert issubclass(type(tensor), _TensorBase)
         t = tensor.permute(*np.roll(range(3), -axis).tolist())
         temp = t.numpy()
         if displayrange == [0, 0]:

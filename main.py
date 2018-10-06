@@ -4,16 +4,18 @@ import logging
 import numpy as np
 import datetime
 
-from MedImgDataset import Projection
+from MedImgDataset import Subbands
 from torch.utils.data import DataLoader, TensorDataset
 from torch.autograd import Variable
 from tqdm import tqdm
 import torch.nn as nn
 import torch.optim as optim
 import torch
+from torchvision.utils import make_grid
 from Algorithms import visualization
-from Networks import ResNet
+from Networks.UNet import UNet
 
+from tensorboardX import SummaryWriter
 # import your own newtork
 
 def LogPrint(msg, level=20):
@@ -42,21 +44,24 @@ def main(a):
     ##############################
     # Training Mode
     if not mode:
-        inputDataset= Projection(a.input, dtype=np.float32, verbose=True, cachesize=4)
-        gtDataset   = Projection(a.train, dtype=np.float32, verbose=True, cachesize=4)
+        inputDataset= Subbands(a.input, dtype=np.float32, verbose=True, debugmode=False, filesuffix=a.lsuffix, loadBySlices=0)
+        gtDataset   = Subbands(a.train, dtype=np.float32, verbose=True, debugmode=False, loadBySlices=0)
         trainingSet = TensorDataset(inputDataset, gtDataset)
         loader      = DataLoader(trainingSet, batch_size=a.batchsize, shuffle=True, num_workers=4)
                                  # sampler=sampler.WeightedRandomSampler(np.ones(len(trainingSet)).tolist(), a.batchsize*100))
 
+        writer = SummaryWriter("/media/storage/PytorchRuns/DFB_%s_"%a.lsuffix+datetime.datetime.now().strftime("%Y%m%d_%H%M"))
         # Load Checkpoint or create new network
         #-----------------------------------------
-        net = ResNet(1, 1, 20)
+        net = UNet(8)
         # net = nn.DataParallel(net)
         net.train(True)
         if os.path.isfile(a.checkpoint):
-            assert os.path.isfile(a.checkpoint)
+            # assert os.path.isfile(a.checkpoint)
             LogPrint("Loading checkpoint " + a.checkpoint)
             net.load_state_dict(torch.load(a.checkpoint))
+        else:
+            LogPrint("Checkpoint doesn't exist!")
 
         trainparams = {}
         if not a.trainparams is None:
@@ -67,7 +72,7 @@ def main(a):
         mm = trainparams['momentum'] if trainparams.has_key('momentum') else 0.01
 
 
-        criterion = nn.L1Loss()
+        criterion, normfactor = nn.MSELoss(), nn.MSELoss()
         optimizer = optim.ASGD([{'params': net.parameters(),
                                 'lr': lr, 'momentum': mm}])
         if a.usecuda:
@@ -76,40 +81,49 @@ def main(a):
             # optimizer.cuda()
 
         lastloss = 1e32
+        writerindex = 0
         losses = []
         for i in range(a.epoch):
             E = []
             temploss = 1e32
             for index, samples in enumerate(loader):
                 if a.usecuda:
-                    s = Variable(samples[0]).float().cuda()
-                    g = Variable(samples[1]).float().cuda()
+                    s = Variable(samples[0]).float().cuda().permute(0, 3, 1, 2)
+                    g = Variable(samples[1]).float().cuda().permute(0, 3, 1, 2)
                 else:
                     s, g = Variable(samples[0]), Variable(samples[1])
 
-                out = net.forward(s.unsqueeze(1))
-                loss = criterion(out,g.float())
+                out = net.forward(s)
+                loss = criterion(out,g.float()) / normfactor(s, g)
 
                 optimizer.zero_grad()
                 loss.backward()
                 optimizer.step()
-                E.append(loss.data[0])
-                LogPrint("\t[Step %04d] Loss: %.010f"%(index, loss.data[0]))
+                E.append(loss.data)
+                LogPrint("\t[Step %04d] Loss: %.010f"%(index, loss.data))
                 if a.plot:
-                    visualization.Visualize2D(s.squeeze().cpu().permute(0, 2, 1).data,
-                                              g.squeeze().cpu().permute(0, 2, 1).data,
-                                              out.squeeze().cpu().permute(0, 2, 1).data,
-                                              env="CT_SinoFilter", indexrange=[0,25], nrow=1)
+                    try:
+                        poolim = make_grid(out[0].unsqueeze(1).data, nrow=4, padding=1, normalize=True)
+                        poolgt = make_grid(g[0].unsqueeze(1).data, nrow=4, padding=1, normalize=True)
+                        pooldiff = make_grid((out[0] - s[0]).unsqueeze(1).data, nrow=4, padding=1, normalize=True)
+                        writer.add_image('Image/Image', poolim, writerindex)
+                        writer.add_image('Image/Groundtruth', poolgt, writerindex)
+                        writer.add_image('Image/Diff', pooldiff, writerindex)
+                        writer.add_scalar('Loss', loss.data, writerindex)
+                        writerindex += 1
+                        del poolim, poolgt
+                    except:
+                        tqdm.write(str(g[0].data.size()))
 
-                if loss.data[0] <= temploss:
-                    backuppath = "./Backup/checkpoint_ResNet_temp.pt" if a.outcheckpoint is None else \
+                if loss.data <= temploss:
+                    backuppath = u"./Backup/checkpoint_UNet_temp.pt" if a.outcheckpoint is None else \
                         a.outcheckpoint.replace('.pt', '_temp.pt')
                     torch.save(net.state_dict(), backuppath)
-                    temploss = loss.data[0]
+                    temploss = loss.data
 
             losses.append(E)
             if np.array(E).mean() <= lastloss:
-                backuppath = "./Backup/checkpoint_ResNet.pt" if a.outcheckpoint is None else a.outcheckpoint
+                backuppath = u"./Backup/checkpoint_UNet.pt" if a.outcheckpoint is None else a.outcheckpoint
                 torch.save(net.state_dict(), backuppath)
                 lastloss = np.array(E).mean()
             LogPrint("[Epoch %04d] Loss: %.010f"%(i, np.array(E).mean()))
@@ -182,11 +196,15 @@ if __name__ == '__main__':
                         help="Path to a file with dictionary of training parameters written inside")
     parser.add_argument("--log", dest='log', action='store', type=str, default=None,
                         help="If specified, all the messages will be written to the specified file.")
-    parser.add_argument("--checkpoint", dest='outcheckpoint', action='store', default='', type=str,
+    parser.add_argument("--checkpoint", dest='outcheckpoint', action='store', default=None, type=str,
                         help="Output checkpoint to specific location")
+    parser.add_argument("--loadersuffix", dest='lsuffix', action='store', type=str, default=None,
+                        help="Data loader will use this suffix to grep according files for input dataset.")
     a = parser.parse_args()
 
     if a.log is None:
+        if not os.path.isdir('./Backup'):
+            os.mkdir('./Backup/')
         if not os.path.isdir("./Backup/Log"):
             os.mkdir("./Backup/Log")
         if a.train:

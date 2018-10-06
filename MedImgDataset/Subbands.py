@@ -43,6 +43,7 @@ class Subbands(Dataset):
         filenames = fnmatch.filter(filenames, "*.npz")
         if not self.filesuffix is None:
             filenames = fnmatch.filter(filenames, "*" + self.filesuffix + "*")
+            print filenames
         filenames.sort()
 
         self.length = len(filenames)
@@ -61,7 +62,6 @@ class Subbands(Dataset):
             self.data.append(from_numpy(im.astype(self.dtype)))
             self._itemindexes.append(self.data[i].size()[0])
 
-        print self.dataSourcePath
         if self._byslices >= 0:
             try:
                 self._itemindexes = np.cumsum(self._itemindexes)
@@ -97,6 +97,9 @@ class Subbands(Dataset):
 
     def __len__(self):
         return self.length
+
+    def size(self, i):
+        return self.data.size(i)
 
     def Write(self, tensor, out_rootdir):
         raise NotImplementedError
