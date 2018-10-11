@@ -59,7 +59,7 @@ class ImageDataSet(Dataset):
     This dataset automatically load all the nii files in the specific directory to
     generate a 3D dataset
     """
-    def __init__(self, rootdir, loadBySlices=-1, verbose=False, dtype=float, debugmode=False):
+    def __init__(self, rootdir, filelist=None, filesuffix=None, loadBySlices=-1, verbose=False, dtype=float, debugmode=False):
         """
 
         :param rootdir:
@@ -74,6 +74,8 @@ class ImageDataSet(Dataset):
         self.length = 0
         self.verbose = verbose
         self.dtype = dtype
+        self.filelist = filelist
+        self.filesuffix = filesuffix
         self._debug=debugmode
         self._byslices=loadBySlices
         self._ParseRootDir()
@@ -90,8 +92,21 @@ class ImageDataSet(Dataset):
 
         if self.verbose:
             print "Parsing root path: ", self.rootdir
-        filenames = os.listdir(self.rootdir)
-        filenames = fnmatch.filter(filenames, "*.nii.gz")
+
+        # Load files written in filelist from the root_dir
+        if self.filelist is None:
+            filenames = os.listdir(self.rootdir)
+            filenames = fnmatch.filter(filenames, "*.nii.gz")
+        else:
+            filelist = open(self.filelist, 'r')
+            filenames = [fs.rstrip() for fs in filelist.readlines()]
+            for fs in filenames:
+                if not os.path.isfile(self.rootdir + '/' + fs):
+                    filenames.remove(fs)
+                    print "Cannot find " + fs + " in " + self.rootdir
+
+        if not self.filesuffix is None:
+            filenames = fnmatch.filter(filenames, "*" + self.filesuffix + "*")
         filenames.sort()
 
 
@@ -113,7 +128,11 @@ class ImageDataSet(Dataset):
                 try:
                     if key.split('['):
                         key_type = key.split('[')[0]
-                    t = NIFTI_DICT[key_type]
+
+                    try:
+                        t = NIFTI_DICT[key_type]
+                    except:
+                        continue
                     metadata[key] = t(im.GetMetaData(key))
                 except:
                     metadata[key] = im.GetMetaData(key)
