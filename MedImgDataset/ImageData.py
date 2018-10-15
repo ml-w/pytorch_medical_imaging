@@ -121,7 +121,9 @@ class ImageDataSet(Dataset):
                 tqdm.write("Reading from "+f)
             im = sitk.ReadImage(self.rootdir + "/" + f)
             self.dataSourcePath.append(self.rootdir + "/" + f)
-            self.data.append(from_numpy(np.array(sitk.GetArrayFromImage(im), dtype=self.dtype)))
+            imarr = sitk.GetArrayFromImage(im).astype(self.dtype)
+            imarr[imarr <= -1000] = -1000
+            self.data.append(from_numpy(imarr))
             self._itemindexes.append(self.data[i].size()[0])
             metadata = {}
             for key in im.GetMetaDataKeys():
