@@ -14,6 +14,7 @@ import torch
 from torchvision.utils import make_grid
 from Algorithms import visualization
 from Networks.UNet import UNet
+from Loss.NMSE import NMSELoss
 
 from tensorboardX import SummaryWriter
 # import your own newtork
@@ -44,13 +45,32 @@ def main(a):
     ##############################
     # Training Mode
     if not mode:
-        inputDataset= Subbands(a.input, dtype=np.float32, verbose=True, debugmode=False, filesuffix=a.lsuffix, loadBySlices=0)
-        gtDataset   = Subbands(a.train, dtype=np.float32, verbose=True, debugmode=False, loadBySlices=0)
+        if a.loadbyfilelist is None:
+            inputDataset= Subbands(a.input, dtype=np.float32, verbose=True, debugmode=False, filesuffix=a.lsuffix,
+                                   loadBySlices=0)
+            gtDataset   = Subbands(a.train, dtype=np.float32, verbose=True, debugmode=False, loadBySlices=0)
+        else:
+            gt_filelist, input_filelist = a.loadbyfilelist.split(',')
+            inputDataset= Subbands(a.input, dtype=np.float32, verbose=True, loadBySlices=0, filelist=input_filelist,
+                                   filesuffix=a.lsuffix, debugmode=False)
+            gtDataset   = Subbands(a.train, dtype=np.float32, verbose=True, loadBySlices=0, filelist=gt_filelist,
+                                   debugmode=False)
+
         trainingSet = TensorDataset(inputDataset, gtDataset)
         loader      = DataLoader(trainingSet, batch_size=a.batchsize, shuffle=True, num_workers=4)
-                                 # sampler=sampler.WeightedRandomSampler(np.ones(len(trainingSet)).tolist(), a.batchsize*100))
+        # sampler=sampler.WeightedRandomSampler(np.ones(len(trainingSet)).tolist(), a.batchsize*100))
 
-        writer = SummaryWriter("/media/storage/PytorchRuns/DFB_%s_"%a.lsuffix+datetime.datetime.now().strftime("%Y%m%d_%H%M"))
+        # Read tensorboard dir from env
+        tensorboard_rootdir = os.environ['TENSORBOARD_LOGDIR']
+        try:
+            if not os.path.isdir(tensorboard_rootdir):
+                print "Cannot read from TENORBOARD_LOGDIR, retreating to default path..."
+                tensorboard_rootdir = "/media/storage/PytorchRuns"
+            writer = SummaryWriter(tensorboard_rootdir + "/DFB_%s_"%a.lsuffix+datetime.datetime.now().strftime("%Y%m%d_%H%M"))
+        except OSError:
+            writer = None
+            a.plot = False
+
         # Load Checkpoint or create new network
         #-----------------------------------------
         net = UNet(8)
@@ -72,11 +92,13 @@ def main(a):
         mm = trainparams['momentum'] if trainparams.has_key('momentum') else 0.01
 
 
-        criterion, normfactor = nn.MSELoss(), nn.MSELoss()
-        optimizer = optim.ASGD([{'params': net.parameters(),
-                                'lr': lr, 'momentum': mm}])
+        # criterion, normfactor = nn.MSELoss(), nn.MSELoss()
+        criterion = NMSELoss(size_average=False)
+        optimizer = optim.SGD([{'params': net.parameters(),
+                                 'lr': lr, 'momentum': mm}])
         if a.usecuda:
             criterion = criterion.cuda()
+            # normfactor = normfactor.cuda()
             net = net.cuda()
             # optimizer.cuda()
 
@@ -94,7 +116,8 @@ def main(a):
                     s, g = Variable(samples[0]), Variable(samples[1])
 
                 out = net.forward(s)
-                loss = criterion(out,g.float()) / normfactor(s, g)
+                # loss = criterion(out,g.float()) / normfactor(s, g)
+                loss = criterion(out, g.float())
 
                 optimizer.zero_grad()
                 loss.backward()
@@ -126,18 +149,21 @@ def main(a):
                 backuppath = u"./Backup/checkpoint_UNet.pt" if a.outcheckpoint is None else a.outcheckpoint
                 torch.save(net.state_dict(), backuppath)
                 lastloss = np.array(E).mean()
-            LogPrint("[Epoch %04d] Loss: %.010f"%(i, np.array(E).mean()))
 
-             # Decay learning rate
+            # Decay learning rate
             if a.decay != 0:
                 for pg in optimizer.param_groups:
                     pg['lr'] = pg['lr'] * np.exp(-i * a.decay / float(a.epoch))
 
+            LogPrint("[Epoch %04d] Loss: %.010f LR: %.010f"%(i, np.array(E).mean(), pg['lr']))
+
 
     # Evaluation mode
     else:
-        inputDataset= Projection(a.input, dtype=np.float32, verbose=True, cachesize=1)
+        inputDataset= Subbands(a.input, dtype=np.float32, verbose=True,
+                               debugmode=False, filesuffix=a.lsuffix, loadBySlices=0, filelist=a.loadbyfilelist)
         loader = DataLoader(inputDataset, batch_size=a.batchsize, shuffle=False, num_workers=4)
+        print inputDataset
 
         assert os.path.isfile(a.checkpoint), "Cannot open saved states"
 
@@ -148,7 +174,7 @@ def main(a):
 
         # Load Checkpoint or create new network
         #-----------------------------------------
-        net = ResNet(1, 1, 20)
+        net = UNet(8)
         net.load_state_dict(torch.load(a.checkpoint))
         net.train(False)
         if a.usecuda:
@@ -161,8 +187,10 @@ def main(a):
             else:
                 s = Variable(samples, volatile=True).float()
 
-            out = net.forward(s.unsqueeze(1)).squeeze()
-            out_tensor.append(out.data.cpu())
+            out = net.forward(s.permute(0, 3, 1, 2)).squeeze()
+            if out.dim() == 3:
+                out = out.unsqueeze(0)
+            out_tensor.append(out.data.permute(0, 2, 3, 1).cpu())
         out_tensor = torch.cat(out_tensor, dim=0)
         inputDataset.Write(out_tensor, a.output)
         pass
@@ -200,6 +228,10 @@ if __name__ == '__main__':
                         help="Output checkpoint to specific location")
     parser.add_argument("--loadersuffix", dest='lsuffix', action='store', type=str, default=None,
                         help="Data loader will use this suffix to grep according files for input dataset.")
+    parser.add_argument('--load-by-file-list', dest='loadbyfilelist', action='store', type=str, default=None,
+                        help="Specify two files that contains files to load in forms of 'file1,file2' for "
+                             "training mode and 'file1' for evaluation mode, remember to use quotations if"
+                             " there are spaces in the string")
     a = parser.parse_args()
 
     if a.log is None:
