@@ -1,14 +1,16 @@
+import sys
+sys.path.append('../')
+sys.path.append('../ThirdParty/py_2d_filter_banks')
+
 import SimpleITK as sitk
 import astra as aa
 import numpy as np
 import os
 import multiprocessing as mpi
+import fnmatch
 
-import matplotlib as mpl
-mpl.use('Qt5Agg')
-
-from FilterBanks import DirectionalFilterBankDown, DirectionalFilterBankUp
-from FilterBanks.Functions.Utility import display_subbands, display_images
+from functools import partial
+from  FilterBanks import DirectionalFilterBankDown, DirectionalFilterBankUp
 
 
 def SimulateSparseView(filename, projector='parallel3d', add_noise=False, output_dir=None):
@@ -244,14 +246,16 @@ def SimulateSparseView(filename, projector='parallel3d', add_noise=False, output
 
 
 def DirectionalDecomposition(filename, output_dir=None):
+    r"""DirectionalDecomposition->None
+    Decompose an input nifty file into its DFB subbands and save it to output_dir
+    """
     assert os.path.isfile(filename)
 
     # Prepare input
     im = sitk.GetArrayFromImage(sitk.ReadImage(filename))
-    assert im.ndim == 3
 
     # Force the region out of FOV to have HU value of air
-    # im[im==-3024] = -1000
+    im[im <= -1000] = -1000
 
     # Directional Decomposition
     stack = []
@@ -271,10 +275,14 @@ def DirectionalDecomposition(filename, output_dir=None):
             os.mkdir(output_dir)
         outname = output_dir + '/' + os.path.basename(filename).replace('.nii.gz', '_subbands')
     np.savez_compressed(outname, subbands=np.stack(stack))
+    del d, stack
 
-import matplotlib.pyplot as plt
 
 def DirecionalReconstruction(filename, output_dir=None, ref_dir=None):
+    r"""DirectionalReconstruction->None
+    Reconstruct the input .npz file, which stores DFB subband information, into its nifty format. Metadata from ref-dir will
+    be used as metadata of the output files.
+    """
     assert os.path.isfile(filename)
 
     # Load image
@@ -306,11 +314,48 @@ def DirecionalReconstruction(filename, output_dir=None, ref_dir=None):
         im.CopyInformation(tempim)
 
     sitk.WriteImage(im, outname)
+    return
 
 
-if __name__ == '__main__':
+def SparseViewSynthesis(srcdir, outdir, workers=10, add_noise=True):
     from functools import partial
 
+    assert os.path.isdir(srcdir)
+    if not os.path.isdir(outdir):
+        os.mkdir(outdir)
+        if not os.path.isdir(outdir):
+            return
+
+    files = os.listdir(srcdir)
+
+    args = [(srcdir + '/' + f) for f in files]
+    pool = mpi.Pool(workers)
+    pool.map_async(partial(SimulateSparseView, output_dir=outdir, add_noise=add_noise), args)
+    pool.close()
+    pool.join()
+
+def SubbandsSynthesis(srcdir, outdir, workers=10):
+    out_dir = srcdir.replace(os.path.basename(srcdir), outdir)
+    if not os.path.isdir(outdir):
+        os.mkdir(outdir)
+        if not os.path.isdir(outdir):
+            raise IOError("Cannot locate %s"%outdir)
+
+    # root_dir = '../DFB_Recon/00.RAW'
+    files = os.listdir(srcdir)
+
+    # DirectionalDecomposition(root_dir + '/' + files[0], output_dir=out_dir)
+    args = [(srcdir + '/' + f) for f in files]
+    pool = mpi.Pool(workers)
+    pool.map_async(partial(DirectionalDecomposition, output_dir=out_dir), args)
+    pool.close()
+    pool.join()
+    print "Finished: ", srcdir
+
+
+import argparse
+
+if __name__ == '__main__':
     '''Synthesize Data Sparse View CT'''
     # root_dir = '../DFB_Recon/00.RAW'
     # files = os.listdir(root_dir)
@@ -329,10 +374,10 @@ if __name__ == '__main__':
 
     '''Decompose image into subbands'''
     # root_dir = '../DFB_Recon/01.SparseView'
-    # rpairs = [('../DFB_Recon/00.RAW', '../DFB_Recon/10.GT_Subbands'),
-    #           ('../DFB_Recon/01.SparseView', '11.SparseView_subbands'),
-    #           ('../DFB_Recon/02.SparseView_Noisy', '12.SparseView_Noisy_subbands'),
-    #           ('../DFB_Recon/03.SparseView_Const_Noise', '13.SparseView_Const_Noise_subbands')]
+    # rpairs = [#('../DFB_Recon/00.RAW', '../DFB_Recon/20.GT_Subbands_se'),
+    #           # ('../DFB_Recon/01.SparseView', '21.SparseView_subbands_se'),
+    #           ('../DFB_Recon/02.SparseView_Noisy', '22.SparseView_Noisy_subbands_se'),
+    #           ('../DFB_Recon/03.SparseView_Const_Noise', '23.SparseView_Const_Noise_subbands_se')]
     #
     # for p in rpairs:
     #     root_dir, out_dir = p
@@ -341,18 +386,29 @@ if __name__ == '__main__':
     #     # root_dir = '../DFB_Recon/00.RAW'
     #     files = os.listdir(root_dir)
     #
-    #     # DirectionalDecomposition(root_dir + '/' + files[0], output_dir='../DFB_Recon/10.GT_Subbands')
+    #     # DirectionalDecomposition(root_dir + '/' + files[0], output_dir=out_dir)
     #     args = [(root_dir + '/' + f) for f in files]
-    #     pool = mpi.Pool(10)
+    #     pool = mpi.Pool(8)
     #     pool.map_async(partial(DirectionalDecomposition, output_dir=out_dir), args)
     #     pool.close()
     #     pool.join()
+    #     print "Finished: ", p
 
     '''Reconstruct image from subband '''
-    root_dir = '../DFB_Recon/11.SparseView_subbands'
+    # # root_dir = '../DFB_Recon/11.SparseView_subbands'
+    root_dir = '../DFB_Recon/99.Testing/Batch/Output_064_3/'
+    # # root_dir = '../DFB_Recon/10.GT_Subbands'
     ref_dir = '../DFB_Recon/01.SparseView'
+    # # ref_dir = '../DFB_Recon/00.RAW'
+    out_dir = '../DFB_Recon/99.Testing/Batch/Output_064_3/'
     files = os.listdir(root_dir)
-
-    DirecionalReconstruction(root_dir + '/' + files[0], output_dir='../DFB_Recon',
-                             ref_dir=ref_dir)
+    files = fnmatch.filter(files, "*npz")
+    files.sort()
+    #
+    # DirectionalDecomposition(root_dir + '/' + files[0], output_dir='../DFB_Recon/10.GT_Subbands')
+    args = [(root_dir + '/' + f) for f in files]
+    pool = mpi.Pool(8)
+    pool.map_async(partial(DirecionalReconstruction, output_dir=out_dir, ref_dir=ref_dir), args)
+    pool.close()
+    pool.join()
     pass
