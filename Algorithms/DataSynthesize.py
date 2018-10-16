@@ -1,11 +1,11 @@
-import sys
-sys.path.append('../')
-sys.path.append('../ThirdParty/py_2d_filter_banks')
+import os,sys,inspect
+curdir = os.path.dirname(os.path.abspath(inspect.getfile(inspect.currentframe())))
+sys.path.append(curdir + '/../')
+sys.path.append(curdir + '/../ThirdParty/py_2d_filter_banks')
 
 import SimpleITK as sitk
 import astra as aa
 import numpy as np
-import os
 import multiprocessing as mpi
 import fnmatch
 
@@ -278,7 +278,7 @@ def DirectionalDecomposition(filename, output_dir=None):
     del d, stack
 
 
-def DirecionalReconstruction(filename, output_dir=None, ref_dir=None):
+def DirectionalReconstruction(filename, output_dir=None, ref_dir=None):
     r"""DirectionalReconstruction->None
     Reconstruct the input .npz file, which stores DFB subband information, into its nifty format. Metadata from ref-dir will
     be used as metadata of the output files.
@@ -334,6 +334,7 @@ def SparseViewSynthesis(srcdir, outdir, workers=10, add_noise=True):
     pool.close()
     pool.join()
 
+
 def SubbandsSynthesis(srcdir, outdir, workers=10):
     out_dir = srcdir.replace(os.path.basename(srcdir), outdir)
     if not os.path.isdir(outdir):
@@ -354,61 +355,95 @@ def SubbandsSynthesis(srcdir, outdir, workers=10):
 
 
 import argparse
-
 if __name__ == '__main__':
-    '''Synthesize Data Sparse View CT'''
-    # root_dir = '../DFB_Recon/00.RAW'
-    # files = os.listdir(root_dir)
-    #
-    # args = [(root_dir + '/' + f) for f in files]
-    # pool = mpi.Pool(10)
-    # pool.map_async(partial(SimulateSparseView, output_dir='../DFB_Recon/02.SparseView_Noisy', add_noise=True), args)
-    # pool.close()
-    # pool.join()
+    parser = argparse.ArgumentParser(description='')
+    parser.add_argument('-a', '--action', dest='action', action='store', type=str, default=None,
+                        help='{Decompose|Reconstruct|SparseView} input into output')
+    parser.add_argument('-p', '--multi-process', dest='mpi', action='store', type=int, default=0,
+                        help='Set number of workers for mpi processing. Default to 0.')
+    parser.add_argument('-n', '--noise', dest='noise', action='store_true', default=False,
+                        help='If action is "Decompose", this option will affect whether the sparse-view simulation'
+                             ' will inject noise to the projection or not. Default to False.')
+    parser.add_argument('--ref-dir', dest='ref_dir', action='store', type=str,
+                        help='If action is "Reconstruct", files in the specified directory will be used for metadata'
+                             'copying.')
+    parser.add_argument('--recon-method', dest='recon_method', action='store', type=str, default=None,
+                        help='If action is "Decompose", this option choise which methodwill be used during '
+                             'sparse-view reconstruction. Currently only support FBP so this is useless.')
+    parser.add_argument('--proj-method', dest='recon_method', action='store', type=str, default=None,
+                        help='If action is "Decompose", this option choise the projection simulation method. Currently, '
+                             'only parallel projection are implemented so this is useless')
+    parser.add_argument('input', metavar='input', action='store', type=str,
+                        help='Directory of input folder/file.')
+    parser.add_argument('output', metavar='output', action='store', type=str,
+                        help='Directory for output files/')
+    a = parser.parse_args()
 
-    '''Decompose one image'''
-    # root_dir = '../DFB_Recon/01.SparseView'
-    # files = os.listdir(root_dir)
-    # DirectionalDecomposition(root_dir + '/LCTSC-Train-S2-010_0256.nii.gz', output_dir='../DFB_Recon')
 
+    if a.action == 'Decompose' or a.action == 'decompose':
+        if a.mpi > 0:
+            print 'Batch image decomposition...'
+            assert os.path.isdir(a.input)
+            SubbandsSynthesis(a.input, a.output, a.mpi)
+            print "Finished."
+        else:
+            print "Sigle image decompostion..."
+            assert os.path.isfile(a.input)
+            DirectionalDecomposition(a.input, a.output)
+    elif a.action == 'Reconstruct' or a.action == 'reconstruct':
+        if a.mpi >0:
+            print 'Batch image reconstruction'
+            assert os.path.isdir(a.input)
+            assert os.path.isdir(a.ref_dir)
 
-    '''Decompose image into subbands'''
-    # root_dir = '../DFB_Recon/01.SparseView'
-    # rpairs = [#('../DFB_Recon/00.RAW', '../DFB_Recon/20.GT_Subbands_se'),
-    #           # ('../DFB_Recon/01.SparseView', '21.SparseView_subbands_se'),
-    #           ('../DFB_Recon/02.SparseView_Noisy', '22.SparseView_Noisy_subbands_se'),
-    #           ('../DFB_Recon/03.SparseView_Const_Noise', '23.SparseView_Const_Noise_subbands_se')]
-    #
-    # for p in rpairs:
-    #     root_dir, out_dir = p
-    #     out_dir = root_dir.replace(os.path.basename(root_dir), out_dir)
-    #
-    #     # root_dir = '../DFB_Recon/00.RAW'
-    #     files = os.listdir(root_dir)
-    #
-    #     # DirectionalDecomposition(root_dir + '/' + files[0], output_dir=out_dir)
-    #     args = [(root_dir + '/' + f) for f in files]
-    #     pool = mpi.Pool(8)
-    #     pool.map_async(partial(DirectionalDecomposition, output_dir=out_dir), args)
-    #     pool.close()
-    #     pool.join()
-    #     print "Finished: ", p
+            if not os.path.isdir(os.path.abspath(a.output)):
+                os.mkdir(os.path.abspath(a.output))
+                if not os.path.isdir(a.output):
+                    raise IOError("Cannot create output directory!")
 
-    '''Reconstruct image from subband '''
-    # # root_dir = '../DFB_Recon/11.SparseView_subbands'
-    root_dir = '../DFB_Recon/99.Testing/Batch/Output_064_3/'
-    # # root_dir = '../DFB_Recon/10.GT_Subbands'
-    ref_dir = '../DFB_Recon/01.SparseView'
-    # # ref_dir = '../DFB_Recon/00.RAW'
-    out_dir = '../DFB_Recon/99.Testing/Batch/Output_064_3/'
-    files = os.listdir(root_dir)
-    files = fnmatch.filter(files, "*npz")
-    files.sort()
-    #
-    # DirectionalDecomposition(root_dir + '/' + files[0], output_dir='../DFB_Recon/10.GT_Subbands')
-    args = [(root_dir + '/' + f) for f in files]
-    pool = mpi.Pool(8)
-    pool.map_async(partial(DirecionalReconstruction, output_dir=out_dir, ref_dir=ref_dir), args)
-    pool.close()
-    pool.join()
-    pass
+            root_dir = a.input
+            out_dir = a.output.replace(os.path.basename(a.input), os.path.basename(a.output))
+            ref_dir = a.ref_dir
+            files = os.listdir(root_dir)
+            files = fnmatch.filter(files, "*npz")
+            files.sort()
+
+            # MPI
+            args = [(root_dir + '/' + f) for f in files]
+            pool = mpi.Pool(a.mpi)
+            pool.map_async(partial(DirectionalReconstruction, output_dir=out_dir, ref_dir=ref_dir), args)
+            pool.close()
+            pool.join()
+        else:
+            print "Single image reconstruction..."
+            assert os.path.isfile(a.input)
+            assert os.path.isdir(a.ref_dir)
+
+            if not os.path.isdir(os.path.abspath(a.output)):
+                os.mkdir(os.path.abspath(a.output))
+                if not os.path.isdir(a.output):
+                    raise IOError("Cannot create output directory!")
+
+            DirectionalReconstruction(a.input, a.output, a.ref_dir)
+            pass
+    elif a.action == 'SparseView' or a.action == 'sparseview':
+        if a.mpi > 0:
+            print "Batch sparse-view siulation: "
+            assert os.path.isdir(a.input)
+
+            if not os.path.isdir(os.path.abspath(a.output)):
+                os.mkdir(os.path.abspath(a.output))
+                if not os.path.isdir(a.output):
+                    raise IOError("Cannot create output directory!")
+            root_dir = a.input
+            files = os.listdir(root_dir)
+
+            args = [root_dir + '/' + f for f in files]
+            pool = mpi.Pool(a.mpi)
+            pool.map_async(partial(SimulateSparseView, output_dir=a.output, add_noise=a.noise), args)
+            pool.close()
+            pool.join()
+        else:
+            raise NotImplementedError("Single sprase-view siulation is not implemented.")
+    else:
+        parser.print_help()
