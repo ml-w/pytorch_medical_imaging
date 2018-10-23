@@ -16,7 +16,7 @@ class NMSELoss(nn.Module):
         zeros = Variable(torch.zeros(input.size()), requires_grad=False)
         if self.cuda():
             zeros = zeros.cuda()
-        factor = F.mse_loss(input, zeros,
+        factor = F.mse_loss(target, zeros,
                             size_average=self._size_average,
                             reduce = self._reduce)
         return mseloss / factor
