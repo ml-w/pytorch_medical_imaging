@@ -359,7 +359,7 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='')
     parser.add_argument('-a', '--action', dest='action', action='store', type=str, default=None,
                         help='{Decompose|Reconstruct|SparseView} input into output')
-    parser.add_argument('-p', '--multi-process', dest='mpi', action='store', type=int, default=0,
+    parser.add_argument('-p', '--multi-process', dest='mpi', action='store', type=int, default=1,
                         help='Set number of workers for mpi processing. Default to 0.')
     parser.add_argument('-n', '--noise', dest='noise', action='store_true', default=False,
                         help='If action is "Decompose", this option will affect whether the sparse-view simulation'
@@ -381,7 +381,7 @@ if __name__ == '__main__':
 
 
     if a.action == 'Decompose' or a.action == 'decompose':
-        if a.mpi > 0:
+        if a.mpi > 1:
             print 'Batch image decomposition...'
             assert os.path.isdir(a.input)
             SubbandsSynthesis(a.input, a.output, a.mpi)
@@ -391,7 +391,7 @@ if __name__ == '__main__':
             assert os.path.isfile(a.input)
             DirectionalDecomposition(a.input, a.output)
     elif a.action == 'Reconstruct' or a.action == 'reconstruct':
-        if a.mpi >0:
+        if a.mpi > 1:
             print 'Batch image reconstruction'
             assert os.path.isdir(a.input)
             assert os.path.isdir(a.ref_dir)
@@ -427,7 +427,7 @@ if __name__ == '__main__':
             DirectionalReconstruction(a.input, a.output, a.ref_dir)
             pass
     elif a.action == 'SparseView' or a.action == 'sparseview':
-        if a.mpi > 0:
+        if a.mpi > 1:
             print "Batch sparse-view siulation: "
             assert os.path.isdir(a.input)
 
