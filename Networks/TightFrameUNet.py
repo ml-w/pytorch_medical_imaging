@@ -31,9 +31,6 @@ class HaarDown(nn.Module):
         self.weights = torch.zeros([inchan, inchan, 2, 2])
         for i in xrange(inchan):
             self.weights[i, i] = self.haar_matrix
-        # self.weights = Variable(self.weights, requires_grad=False)
-        # self.haar_pool = nn.Conv2d(inchan, inchan, 2, 2, bias=False)
-        # self.haar_pool.weight = nn.Parameter(self.weights, requires_grad=False)
 
     def forward(self, x):
         if x.is_cuda:
