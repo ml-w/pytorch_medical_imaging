@@ -4,17 +4,19 @@ import logging
 import numpy as np
 import datetime
 
-from MedImgDataset import Subbands
+from MedImgDataset import Subbands, ImagePatchesLoader
 from torch.utils.data import DataLoader, TensorDataset
 from torch.autograd import Variable
 from tqdm import tqdm
 import torch.nn as nn
 import torch.optim as optim
 import torch
+from torch import cat, stack
 from torchvision.utils import make_grid
 from Algorithms import visualization
-from Networks.UNet import UNet
+from Networks import UNet, TightFrameUNet
 from Loss.NMSE import NMSELoss
+
 
 from tensorboardX import SummaryWriter
 # import your own newtork
@@ -32,6 +34,10 @@ def visualizeResults(out, gt):
     """
 
     pass
+
+def init_weights(m):
+    if type(m) == nn.Conv2d:
+        torch.nn.init.xavier_normal_(m.weight, 0.5)
 
 def main(a):
     ##############################
@@ -52,9 +58,14 @@ def main(a):
         else:
             gt_filelist, input_filelist = a.loadbyfilelist.split(',')
             inputDataset= Subbands(a.input, dtype=np.float32, verbose=True, loadBySlices=0, filelist=input_filelist,
-                                   filesuffix=a.lsuffix, debugmode=False)
+                                   filesuffix=a.lsuffix, debugmode=True)
             gtDataset   = Subbands(a.train, dtype=np.float32, verbose=True, loadBySlices=0, filelist=gt_filelist,
-                                   debugmode=False)
+                                   debugmode=True)
+
+        # Use image patches for training
+        if a.usepatch > 0:
+            inputDataset = ImagePatchesLoader(inputDataset, patch_stride=a.usepatch/2, patch_size=a.usepatch)
+            gtDataset = ImagePatchesLoader(gtDataset, patch_stride=a.usepatch/2, patch_size=a.usepatch)
 
         trainingSet = TensorDataset(inputDataset, gtDataset)
         loader      = DataLoader(trainingSet, batch_size=a.batchsize, shuffle=True, num_workers=4)
@@ -66,15 +77,17 @@ def main(a):
             if not os.path.isdir(tensorboard_rootdir):
                 print "Cannot read from TENORBOARD_LOGDIR, retreating to default path..."
                 tensorboard_rootdir = "/media/storage/PytorchRuns"
-            writer = SummaryWriter(tensorboard_rootdir + "/DFB_%s_"%a.lsuffix+datetime.datetime.now().strftime("%Y%m%d_%H%M"))
+            writer = SummaryWriter(tensorboard_rootdir + "/DFB_TF_%s_"%a.lsuffix+datetime.datetime.now().strftime("%Y%m%d_%H%M"))
         except OSError:
             writer = None
             a.plot = False
 
         # Load Checkpoint or create new network
         #-----------------------------------------
-        net = UNet(8)
-        # net = nn.DataParallel(net)
+        # net = UNet(8, False)
+        net = TightFrameUNet(8)
+        net.apply(init_weights)
+
         net.train(True)
         if os.path.isfile(a.checkpoint):
             # assert os.path.isfile(a.checkpoint)
@@ -93,7 +106,7 @@ def main(a):
 
 
         # criterion, normfactor = nn.MSELoss(), nn.MSELoss()
-        criterion = NMSELoss(size_average=False)
+        criterion = NMSELoss(size_average=True)
         optimizer = optim.SGD([{'params': net.parameters(),
                                  'lr': lr, 'momentum': mm}])
         if a.usecuda:
@@ -114,7 +127,6 @@ def main(a):
                     g = Variable(samples[1]).float().cuda().permute(0, 3, 1, 2)
                 else:
                     s, g = Variable(samples[0]), Variable(samples[1])
-
                 out = net.forward(s)
                 # loss = criterion(out,g.float()) / normfactor(s, g)
                 loss = criterion(out, g.float())
@@ -126,17 +138,17 @@ def main(a):
                 LogPrint("\t[Step %04d] Loss: %.010f"%(index, loss.data))
                 if a.plot:
                     try:
-                        poolim = make_grid(out[0].unsqueeze(1).data, nrow=4, padding=1, normalize=True)
-                        poolgt = make_grid(g[0].unsqueeze(1).data, nrow=4, padding=1, normalize=True)
-                        pooldiff = make_grid((out[0] - s[0]).unsqueeze(1).data, nrow=4, padding=1, normalize=True)
+                        writer.add_scalar('Loss', loss.data, writerindex)
+                        poolim = make_grid(cat([out[z].unsqueeze(1).data for z in xrange(15)], 0), nrow=4, padding=1, normalize=True)
+                        poolgt = make_grid(cat([g[z].unsqueeze(1).data for z in xrange(15)], 0), nrow=4, padding=1, normalize=True)
+                        pooldiff = make_grid(cat([(out[z] - s[z]).unsqueeze(1) for z in xrange(15)], 0).data, nrow=4, padding=1, normalize=True)
                         writer.add_image('Image/Image', poolim, writerindex)
                         writer.add_image('Image/Groundtruth', poolgt, writerindex)
                         writer.add_image('Image/Diff', pooldiff, writerindex)
-                        writer.add_scalar('Loss', loss.data, writerindex)
                         writerindex += 1
                         del poolim, poolgt
                     except:
-                        tqdm.write(str(g[0].data.size()))
+                        tqdm.write(str(cat([g[z].unsqueeze(1).data for z in xrange(15)], 0)))
 
                 if loss.data <= temploss:
                     backuppath = u"./Backup/checkpoint_UNet_temp.pt" if a.outcheckpoint is None else \
@@ -216,6 +228,8 @@ if __name__ == '__main__':
                         help="Specify how many steps to run per epoch.")
     parser.add_argument("-b", "--batchsize", dest='batchsize', action='store', type=int, default=5,
                         help="Specify batchsize in each iteration.")
+    parser.add_argument("--usepatch", dest='usepatch', action='store', default=0, type=int,
+                        help="Option to use patches for training, only support square patches now.")
     parser.add_argument("--load", dest='checkpoint', action='store', default='',
                         help="Specify network checkpoint.")
     parser.add_argument("--useCUDA", dest='usecuda', action='store_true',default=False,

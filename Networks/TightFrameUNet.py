@@ -31,12 +31,15 @@ class HaarDown(nn.Module):
         self.weights = torch.zeros([inchan, inchan, 2, 2])
         for i in xrange(inchan):
             self.weights[i, i] = self.haar_matrix
-        self.weights = Variable(self.weights, requires_grad=False)
-        self.haar_pool = nn.Conv2d(inchan, inchan, 2, 2, bias=False)
-        self.haar_pool.weight = nn.Parameter(self.weights, requires_grad=False)
+        # self.weights = Variable(self.weights, requires_grad=False)
+        # self.haar_pool = nn.Conv2d(inchan, inchan, 2, 2, bias=False)
+        # self.haar_pool.weight = nn.Parameter(self.weights, requires_grad=False)
 
     def forward(self, x):
-        x = self.haar_pool(x)
+        if x.is_cuda:
+            x = F.conv2d(x, self.weights.cuda())
+        else:
+            x = F.conv2d(x, self.weights)
         return x
 
 
@@ -47,12 +50,12 @@ class HaarUp(nn.Module):
         self.weights = torch.zeros([inchan, inchan, 2, 2])
         for i in xrange(inchan):
             self.weights[i, i] = self.haar_matrix
-        self.weights = Variable(self.weights, requires_grad=False)
-        self.haar_up = nn.ConvTranspose2d(inchan, inchan, 2, 2, bias=False)
-        self.haar_up.weight = nn.Parameter(self.weights, requires_grad=False)
 
     def forward(self, x):
-        x = self.haar_up(x)
+        if x.is_cuda:
+            x = F.conv_transpose2d(x, self.weights.cuda())
+        else:
+            x = F.conv_transpose2d(x, self.weights)
         return x
 
 
@@ -86,7 +89,7 @@ class Up(nn.Module):
         super(Up, self).__init__()
 
         if bilinear:
-            self.up = nn.Upsample
+            self.up = nn.Upsample(scale_factor=2, mode='bilinear', align_corners=True)
         else:
             self.up = nn.ConvTranspose2d(inchan//2, outchan//2, 2, stride=2)
 
@@ -94,10 +97,10 @@ class Up(nn.Module):
 
     def forward(self, x1, x2, x3):
         x1 = self.up(x1)
-        diffX1 = x1.size()[2] - x2.size()[2]
-        diffY1 = x1.size()[3] - x2.size()[3]
         diffX2 = x1.size()[2] - x3.size()[2]
         diffY2 = x1.size()[3] - x3.size()[3]
+        diffX1 = x1.size()[2] - x2.size()[2]
+        diffY1 = x1.size()[3] - x2.size()[3]
         x2 = F.pad(x2, (diffX1 // 2, int(diffX1 / 2),
                         diffY1 // 2, int(diffY1 / 2)))
         x3 = F.pad(x3, (diffX2 // 2, int(diffX2 / 2),
@@ -110,7 +113,7 @@ class Up(nn.Module):
 class OutConv(nn.Module):
     def __init__(self, inchan, outchan):
         super(OutConv, self).__init__()
-        self.conv = nn.Conv2d(inchan * 2, outchan)
+        self.conv = nn.Conv2d(inchan * 2, outchan, 1)
 
     def forward(self, x1, x2):
         x = torch.cat([x2, x1], dim=1)
@@ -132,16 +135,16 @@ class TightFrameUNet(nn.Module):
         self.haar3 = Haar(256)
         self.haar4 = Haar(512)
         self.up1 = Up(1536, 256)
-        self.up2 = Up(768, 128)
-        self.up3 = Up(384, 64)
-        self.up4 = Up(192, 64)
+        self.up2 = Up(1024, 128)
+        self.up3 = Up(512, 64)
+        self.up4 = Up(256, 64)
 
     def forward(self, x):
-        x1 = self.inc(x)
-        x2 = self.down1(x1)
-        x3 = self.down2(x2)
-        x4 = self.down3(x3)
-        x5 = self.down4(x4)
+        x1 = self.inc(x)            # B x 64  x H x W
+        x2 = self.down1(x1)         # B x 128 x H x W
+        x3 = self.down2(x2)         # B x 256 x H x W
+        x4 = self.down3(x3)         # B x 512 x H x W
+        x5 = self.down4(x4)         # B x 512 x H x W
         x1_haar = self.haar1(x1)
         x2_haar = self.haar2(x2)
         x3_haar = self.haar3(x3)
@@ -152,6 +155,8 @@ class TightFrameUNet(nn.Module):
         x = self.up2(x4_haar, x, x3 )
         x = self.up3(x3_haar, x, x2)
         x = self.up4(x2_haar, x, x1)
-        x = self.OutConv(x1_haar, x)
+        x = self.outc(x1_haar, x)
         return x
+
+
 
