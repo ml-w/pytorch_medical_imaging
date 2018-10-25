@@ -21,7 +21,7 @@ from Loss.NMSE import NMSELoss
 from tensorboardX import SummaryWriter
 # import your own newtork
 
-def LogPrint(msg, level=20):
+def LogPrint(msg, level=logging.INFO):
     logging.getLogger(__name__).log(level, msg)
     tqdm.write(msg)
 
@@ -58,9 +58,9 @@ def main(a):
         else:
             gt_filelist, input_filelist = a.loadbyfilelist.split(',')
             inputDataset= Subbands(a.input, dtype=np.float32, verbose=True, loadBySlices=0, filelist=input_filelist,
-                                   filesuffix=a.lsuffix, debugmode=True)
+                                   filesuffix=a.lsuffix, debugmode=False)
             gtDataset   = Subbands(a.train, dtype=np.float32, verbose=True, loadBySlices=0, filelist=gt_filelist,
-                                   debugmode=True)
+                                   debugmode=False)
 
         # Use image patches for training
         if a.usepatch > 0:
@@ -182,11 +182,13 @@ def main(a):
         if not os.path.isdir(a.output):
             os.mkdir(a.output)
         assert os.path.isdir(a.output), "Cannot create output directories"
+        torch.no_grad()
 
 
         # Load Checkpoint or create new network
         #-----------------------------------------
-        net = UNet(8)
+        # net = UNet(8)
+        net = TightFrameUNet(8)
         net.load_state_dict(torch.load(a.checkpoint))
         net.train(False)
         if a.usecuda:
@@ -195,9 +197,9 @@ def main(a):
         out_tensor = []
         for index, samples in enumerate(tqdm(loader, desc="Steps")):
             if a.usecuda:
-                s = Variable(samples, volatile=True).float().cuda()
+                s = Variable(samples).float().cuda()
             else:
-                s = Variable(samples, volatile=True).float()
+                s = Variable(samples).float()
 
             out = net.forward(s.permute(0, 3, 1, 2)).squeeze()
             if out.dim() == 3:
@@ -258,6 +260,6 @@ if __name__ == '__main__':
         else:
             a.log = "./Backup/Log/eval_%s.log"%(datetime.datetime.now().strftime("%Y%m%d"))
 
-    logging.basicConfig(format="[%(asctime)-12s - %(levelname)s] %(message)s", filename=a.log)
+    logging.basicConfig(format="[%(asctime)-12s - %(levelname)s] %(message)s", filename=a.log, level=logging.DEBUG)
 
     main(a)

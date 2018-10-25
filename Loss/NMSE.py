@@ -3,6 +3,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 from torch.autograd import Variable
 
+# TODO: something wrong with this loss function in 0.4.1, something to do with size average
 class NMSELoss(nn.Module):
     def __init__(self, size_average=True, reduce=True):
         super(NMSELoss, self).__init__()
