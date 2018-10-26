@@ -43,14 +43,20 @@ class HaarDown(nn.Module):
 
 
 class HaarUp(nn.Module):
-    def __init__(self, inchan):
+    def __init__(self, inchan, reduce=True):
         super(HaarUp, self).__init__()
         self.haar_matrix = torch.tensor([[1., -1., -1., 1.],
                                          [1., -1., 1., -1.],
                                          [1., 1., -1., -1.]]).float().view(3, 2, 2) / 2.
-        self.weights = torch.zeros([inchan*3, inchan, 2, 2])
-        for i in xrange(inchan):
-            self.weights[3*i:3*i+3, i] = self.haar_matrix
+
+        if reduce:
+            self.weights = torch.zeros([inchan*3, inchan, 2, 2])
+            for i in xrange(inchan):
+                self.weights[3*i:3*i+3, i] = self.haar_matrix
+        else:
+            self.weights = torch.zeros([inchan*3, inchan*3, 2, 2])
+            for i in xrange(inchan):
+                self.weights[i, 3*i:3*i+3] = self.haar_matrix
 
     def forward(self, x):
         if x.is_cuda:
@@ -71,7 +77,10 @@ class AvgUp(nn.Module):
         repeat_idx[1] = self.upscale**2
         a = x.repeat(*(repeat_idx))
         order_index = torch.cat([s * torch.arange(self.upscale**2) + i for i in range(s)]).to(torch.long)
-        x = torch.index_select(a, 1, order_index)
+        if x.is_cuda:
+            x = torch.index_select(a, 1, order_index.cuda())
+        else:
+            x = torch.index_select(a, 1, order_index)
         return F.pixel_shuffle(x, upscale_factor=self.upscale)
 
 
@@ -106,7 +115,8 @@ class Up(nn.Module):
         super(Up, self).__init__()
 
         if bilinear:
-            self.up = nn.Upsample(scale_factor=2, mode='bilinear', align_corners=True)
+            # self.up = nn.Upsample(scale_factor=2, mode='bilinear', align_corners=True)
+            self.up = AvgUp(2)
         else:
             self.up = nn.ConvTranspose2d(inchan//2, outchan//2, 2, stride=2)
 
