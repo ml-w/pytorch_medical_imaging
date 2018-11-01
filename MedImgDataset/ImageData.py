@@ -1,6 +1,6 @@
 from torch.utils.data import Dataset
 from torch import from_numpy, cat
-from tqdm import tqdm
+from tqdm import *
 import fnmatch
 import os
 import numpy as np
@@ -116,7 +116,8 @@ class ImageDataSet(Dataset):
             print "Start Loading"
 
         self._itemindexes = [0] # [image index of start slice]
-        for i, f in enumerate(tqdm(filenames, disable=not self.verbose)) if not self._debug else enumerate(tqdm(filenames[:3], disable=not self.verbose)):
+        for i, f in enumerate(tqdm(filenames, disable=not self.verbose)) \
+                if not self._debug else enumerate(tqdm(filenames[:3], disable=not self.verbose)):
             if self.verbose:
                 tqdm.write("Reading from "+f)
             im = sitk.ReadImage(self.rootdir + "/" + f)
@@ -189,6 +190,17 @@ class ImageDataSet(Dataset):
         data = df(data=printable)
         s += data.to_string()
         return s
+
+    def Write(self, tensor_data, outputdirectory):
+        assert self._itemindexes[-1] == tensor_data.size()[0], "Dimension mismatch!"
+
+        td=tensor_data.numpy()
+        for i in xrange(len(self.dataSourcePath)):
+            start=self._itemindexes[i]
+            end=self._itemindexes[i+1]
+            # image=sitk.GetImageFromArray(td[start:end])
+            image=self.WrapImageWithMetaData(td[start:end], self.metadata[i])
+            sitk.WriteImage(image, outputdirectory+'/'+os.path.basename(self.dataSourcePath[i]))
 
     @staticmethod
     def WrapImageWithMetaData(inImage, metadata):

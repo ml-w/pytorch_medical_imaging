@@ -7,7 +7,7 @@ import numpy as np
 import gc
 
 class Subbands(Dataset):
-    def __init__(self, rootdir, loadBySlices=-1, filesuffix=None, verbose=False, dtype=np.float32, debugmode=False):
+    def __init__(self, rootdir, filelist = None, loadBySlices=-1, filesuffix=None, verbose=False, dtype=np.float32, debugmode=False):
         """Subbands
         Description
         -----------
@@ -27,6 +27,7 @@ class Subbands(Dataset):
         self.verbose = verbose
         self.dtype = dtype
         self.filesuffix = filesuffix
+        self.filelist = filelist
         self._debug=debugmode
         self._byslices=loadBySlices
         self._ParseRootDir()
@@ -39,11 +40,20 @@ class Subbands(Dataset):
         :return:
         """
 
-        filenames = os.listdir(self.rootdir)
-        filenames = fnmatch.filter(filenames, "*.npz")
+        # Load files written in filelist from the root_dir
+        if self.filelist is None:
+            filenames = os.listdir(self.rootdir)
+            filenames = fnmatch.filter(filenames, "*.npz")
+        else:
+            filelist = open(self.filelist, 'r')
+            filenames = [fs.rstrip() for fs in filelist.readlines()]
+            for fs in filenames:
+                if not os.path.isfile(self.rootdir + '/' + fs):
+                    filenames.remove(fs)
+                    print "Cannot find " + fs + " in " + self.rootdir
+
         if not self.filesuffix is None:
             filenames = fnmatch.filter(filenames, "*" + self.filesuffix + "*")
-            print filenames
         filenames.sort()
 
         self.length = len(filenames)
@@ -102,10 +112,11 @@ class Subbands(Dataset):
         return self.data.size(i)
 
     def Write(self, tensor, out_rootdir):
-        raise NotImplementedError
-
         assert tensor.size()[0] == self.__len__(), "Length is in correct!"
         tensor = tensor.numpy()
 
-        for i in tqdm(range(tensor.shape[0])):
+        for i in tqdm(range(len(self._itemindexes)-1)):
+            outfname = self.dataSourcePath[self._itemindexes[i]].replace(self.rootdir, out_rootdir)
+            np.savez_compressed(outfname, subbands=tensor[self._itemindexes[i]:
+                                                          self._itemindexes[i+1]])
             pass

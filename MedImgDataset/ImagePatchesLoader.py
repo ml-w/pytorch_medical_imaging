@@ -33,6 +33,7 @@ class ImagePatchesLoader(Dataset):
             self._calculate_patch_indexes()
             pass
         else:
+            assert isinstance(reference_dataset, ImagePatchesLoader)
             self._patch_indexes = reference_dataset._patch_indexes
 
     def _calculate_corner_range(self):
@@ -45,9 +46,11 @@ class ImagePatchesLoader(Dataset):
         Xpat, Ypat = self._patch_size
         Xstr, Ystr = self._patch_stride
 
+        # Max partitions
         nX = (Xlen - Xpat) / Xstr
         nY = (Ylen - Ypat) / Ystr
 
+        # Division residual
         resX = (Xlen - Xpat) % Xstr
         resY = (Ylen - Ypat) % Ystr
 
@@ -65,6 +68,18 @@ class ImagePatchesLoader(Dataset):
             if resX != 0 and resY != 0 and i == nX and j == nY and self._include_last_patch:
                 self._patch_indexes.append([i * Xstr + resX, j * Ystr + resY])
 
+    def size(self, val=None):
+        newsize = list(self._unit_dimension)
+        for i in xrange(len(newsize)):
+            if i == self._axis[0]:
+                newsize[i] = self._patch_size[0]
+            elif i == self._axis[1]:
+                newsize[i] = self._patch_size[1]
+        size = [self.__len__()] + newsize
+        if val is None:
+            return size
+        else:
+            return size[val]
 
     def __len__(self):
         return len(self._patch_indexes) * len(self._base_dataset)
