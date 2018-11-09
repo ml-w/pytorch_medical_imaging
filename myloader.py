@@ -29,7 +29,7 @@ def LoadImageDataset(a):
     image = lambda input, fsuffix, filelist: ImageDataSet(input,
                                                           dtype=np.float32,
                                                           verbose=True,
-                                                          debugmode=True,
+                                                          debugmode=False,
                                                           filesuffix=fsuffix,
                                                           loadBySlices=0,
                                                           filelist=filelist)

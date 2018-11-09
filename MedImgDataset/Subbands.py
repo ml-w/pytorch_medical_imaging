@@ -69,7 +69,7 @@ class Subbands(Dataset):
                 tqdm.write("Reading from "+f)
             im = np.load(self.rootdir + '/' + f)['subbands']
             self.dataSourcePath.append(self.rootdir + "/" + f)
-            self.data.append(from_numpy(im.astype(self.dtype)))
+            self.data.append(from_numpy(im.transpose(0, 3, 1, 2).astype(self.dtype))) # align with B x C x H x W
             self._itemindexes.append(self.data[i].size()[0])
 
         if self._byslices >= 0:
@@ -78,7 +78,7 @@ class Subbands(Dataset):
                 self.dataSourcePath = [p for k in xrange(len(self.dataSourcePath))
                                          for p in [self.dataSourcePath[k]]*self.data[k].size()[self._byslices]]
                 self.length = np.sum([m.size()[self._byslices] for m in self.data])
-                self.data = cat(self.data, dim=self._byslices)
+                self.data = cat(self.data, dim=self._byslices).transpose(0, self._byslices)
             except IndexError:
                 print "Wrong Index is used!"
                 self.length = len(self.dataSourcePath)
@@ -112,8 +112,8 @@ class Subbands(Dataset):
         return self.data.size(i)
 
     def Write(self, tensor, out_rootdir):
-        assert tensor.size()[0] == self.__len__(), "Length is in correct!"
-        tensor = tensor.numpy()
+        assert tensor.size()[0] == self.__len__(), "Length is incorrect!"
+        tensor = tensor.numpy().transpose(0, 2, 3, 1)
 
         for i in tqdm(range(len(self._itemindexes)-1)):
             outfname = self.dataSourcePath[self._itemindexes[i]].replace(self.rootdir, out_rootdir)

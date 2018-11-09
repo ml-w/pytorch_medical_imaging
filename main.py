@@ -36,7 +36,7 @@ def init_weights(m):
 
 def excepthook(*args):
     logging.getLogger().error('Uncaught exception:', exc_info=args)
-    traceback.print_exe(args)
+    traceback.print_exc(args)
 
 def main(a):
     LogPrint("Recieve arguments: %s"%a)
@@ -75,7 +75,7 @@ def main(a):
                     LogPrint("Cannot read from TENORBOARD_LOGDIR, retreating to default path...",
                              logging.WARNING)
                     tensorboard_rootdir = "/media/storage/PytorchRuns"
-                writer = SummaryWriter(tensorboard_rootdir + "/%s_%s_"%(a.network,
+                writer = SummaryWriter(tensorboard_rootdir + "/%s_%s"%(a.network,
                                                                         a.lsuffix+datetime.datetime.now().strftime("%Y%m%d_%H%M")))
             except OSError:
                 writer = None
@@ -210,7 +210,7 @@ def main(a):
             out = net.forward(s).squeeze()
             if out.dim() == 3:
                 out = out.unsqueeze(0)
-            out_tensor.append(out.data.permute(0, 2, 3, 1).cpu())
+            out_tensor.append(out.data.cpu())
         out_tensor = torch.cat(out_tensor, dim=0)
         inputDataset.Write(out_tensor, a.output)
         pass
