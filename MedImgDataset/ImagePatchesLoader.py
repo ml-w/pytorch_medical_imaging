@@ -18,7 +18,7 @@ class ImagePatchesLoader(Dataset):
         self._base_dataset = base_dataset
         self._patch_size = patch_size
         self._patch_stride = patch_stride
-        self._axis = axis if not axis is None else [0, 1]
+        self._axis = axis if not axis is None else [-2, -1]
         self._include_last_patch= include_last_patch
         self._patch_indexes = []      # [(xmin, ymin), ... ], patches has
 
@@ -99,9 +99,9 @@ class ImagePatchesLoader(Dataset):
 
             indexes = []
             for i in xrange(self._slice_dim):
-                if i == self._axis[0]:
+                if i == self._axis[0] % self._slice_dim:
                     indexes.append(slice(p[0], p[0] + self._patch_size[0]))
-                elif i == self._axis[1]:
+                elif i == self._axis[1] % self._slice_dim:
                     indexes.append(slice(p[1], p[1] + self._patch_size[1]))
                 else:
                     indexes.append(slice(None))

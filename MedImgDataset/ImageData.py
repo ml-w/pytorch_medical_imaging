@@ -145,7 +145,7 @@ class ImageDataSet(Dataset):
             try:
                 self._itemindexes = np.cumsum(self._itemindexes)
                 self.length = np.sum([m.size()[self._byslices] for m in self.data])
-                self.data = cat(self.data, dim=self._byslices)
+                self.data = cat(self.data, dim=self._byslices).transpose(0, self._byslices).unsqueeze(1)
             except IndexError:
                 print "Wrong Index is used!"
                 self.length = len(self.dataSourcePath)
