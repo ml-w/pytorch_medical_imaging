@@ -36,7 +36,7 @@ def init_weights(m):
 
 def excepthook(*args):
     logging.getLogger().error('Uncaught exception:', exc_info=args)
-    traceback.print_exc(args)
+    traceback.print_tb(args)
 
 def main(a):
     LogPrint("Recieve arguments: %s"%a)
@@ -75,8 +75,9 @@ def main(a):
                     LogPrint("Cannot read from TENORBOARD_LOGDIR, retreating to default path...",
                              logging.WARNING)
                     tensorboard_rootdir = "/media/storage/PytorchRuns"
-                writer = SummaryWriter(tensorboard_rootdir + "/%s_%s"%(a.network,
-                                                                        a.lsuffix+datetime.datetime.now().strftime("%Y%m%d_%H%M")))
+                writer = SummaryWriter(tensorboard_rootdir + "/%s_%s_%s"%(a.network,
+                                                                       a.lsuffix,
+                                                                       datetime.datetime.now().strftime("%Y%m%d_%H%M")))
             except OSError:
                 writer = None
                 a.plot = False
@@ -139,10 +140,11 @@ def main(a):
                 LogPrint("\t[Step %04d] Loss: %.010f"%(index, loss.data))
                 if a.plot and index % 10 == 0:
                     try:
+                        Zrange = out.shape[0] if out.shape[0] < 15 else 15
                         writer.add_scalar('Loss', loss.data, writerindex)
-                        poolim = make_grid(cat([out[z].unsqueeze(1).data for z in xrange(15)], 0), nrow=4, padding=1, normalize=True)
-                        poolgt = make_grid(cat([g[z].unsqueeze(1).data for z in xrange(15)], 0), nrow=4, padding=1, normalize=True)
-                        pooldiff = make_grid(cat([(out[z] - s[z]).unsqueeze(1) for z in xrange(15)], 0).data, nrow=4, padding=1, normalize=True)
+                        poolim = make_grid(cat([out[z].unsqueeze(1).data for z in xrange(Zrange)], 0), nrow=4, padding=1, normalize=True)
+                        poolgt = make_grid(cat([g[z].unsqueeze(1).data for z in xrange(Zrange)], 0), nrow=4, padding=1, normalize=True)
+                        pooldiff = make_grid(cat([(out[z] - s[z]).unsqueeze(1) for z in xrange(Zrange)], 0).data, nrow=4, padding=1, normalize=True)
                         writer.add_image('Image/Image', poolim, writerindex)
                         writer.add_image('Image/Groundtruth', poolgt, writerindex)
                         writer.add_image('Image/Diff', pooldiff, writerindex)
@@ -163,7 +165,7 @@ def main(a):
 
             losses.append(E)
             if np.array(E).mean() <= lastloss:
-                backuppath = u"./Backup/cp_%s_%s_temp.pt"%(a.datatype, a.network) \
+                backuppath = u"./Backup/cp_%s_%s.pt"%(a.datatype, a.network) \
                     if a.outcheckpoint is None else a.outcheckpoint
                 torch.save(net.state_dict(), backuppath)
                 lastloss = np.array(E).mean()
@@ -182,7 +184,7 @@ def main(a):
         if not os.path.isfile(a.loadbyfilelist):
             LogPrint("Cannot open input file list!", logging.WARNING)
 
-        inputDataset= ml.datamap[a.datatype]
+        inputDataset= ml.datamap[a.datatype](a)
         loader = DataLoader(inputDataset, batch_size=a.batchsize, shuffle=False, num_workers=4)
         assert os.path.isfile(a.checkpoint), "Cannot open saved states"
         if not os.path.isdir(a.output):
@@ -192,7 +194,8 @@ def main(a):
 
         # Load Checkpoint or create new network
         #-----------------------------------------
-        inchan = loader[0].size()[1]
+        indim = inputDataset[0].dim()
+        inchan = inputDataset[0].size()[0]
         net = available_networks[a.network](inchan)
         net.load_state_dict(torch.load(a.checkpoint))
         net.train(False)
@@ -208,7 +211,7 @@ def main(a):
 
             torch.no_grad()
             out = net.forward(s).squeeze()
-            if out.dim() == 3:
+            if out.dim() < indim:
                 out = out.unsqueeze(0)
             out_tensor.append(out.data.cpu())
         out_tensor = torch.cat(out_tensor, dim=0)
