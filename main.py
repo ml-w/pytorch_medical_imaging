@@ -14,7 +14,7 @@ import torch
 import traceback
 from torch import cat, stack
 from torchvision.utils import make_grid
-from Networks import UNet
+from Networks.UNet import *
 from Networks.TightFrameUNet import *
 from Networks.FullyDecimatedUNet import *
 from Loss.NMSE import NMSELoss
@@ -144,7 +144,7 @@ def main(a):
                         writer.add_scalar('Loss', loss.data, writerindex)
                         poolim = make_grid(cat([out[z].unsqueeze(1).data for z in xrange(Zrange)], 0), nrow=4, padding=1, normalize=True)
                         poolgt = make_grid(cat([g[z].unsqueeze(1).data for z in xrange(Zrange)], 0), nrow=4, padding=1, normalize=True)
-                        pooldiff = make_grid(cat([(out[z] - s[z]).unsqueeze(1) for z in xrange(Zrange)], 0).data, nrow=4, padding=1, normalize=True)
+                        pooldiff = make_grid(cat([(out[z] - g[z]).unsqueeze(1) for z in xrange(Zrange)], 0).data, nrow=4, padding=1, normalize=True)
                         writer.add_image('Image/Image', poolim, writerindex)
                         writer.add_image('Image/Groundtruth', poolgt, writerindex)
                         writer.add_image('Image/Diff', pooldiff, writerindex)
@@ -194,7 +194,7 @@ def main(a):
 
         # Load Checkpoint or create new network
         #-----------------------------------------
-        indim = inputDataset[0].dim()
+        indim = inputDataset[0].squeeze().dim()
         inchan = inputDataset[0].size()[0]
         net = available_networks[a.network](inchan)
         net.load_state_dict(torch.load(a.checkpoint))
@@ -211,7 +211,8 @@ def main(a):
 
             torch.no_grad()
             out = net.forward(s).squeeze()
-            if out.dim() < indim:
+            while out.dim() <= indim:
+                LogPrint('Unsqueezing last batch.')
                 out = out.unsqueeze(0)
             out_tensor.append(out.data.cpu())
         out_tensor = torch.cat(out_tensor, dim=0)
@@ -224,7 +225,7 @@ def main(a):
 if __name__ == '__main__':
     from functools import partial
     # This controls the available networks
-    available_networks = {'UNet': UNet,
+    available_networks = {'UNet': UNetSubbands,
                           'TFUNet': TightFrameUNetSubbands,
                           'FDUNet': FullyDecimatedUNet,
                           'PRUNet': PRDecimateUNet,
