@@ -1,13 +1,14 @@
 from MedImgDataset import Subbands, ImageDataSet
+from functools import partial
 import os
 import numpy as np
 
 # DataLoaders
-def LoadSubbandDataset(a):
+def LoadSubbandDataset(a, debug=False):
     subband = lambda input, fsuffix, filelist: Subbands(input,
                                                         dtype=np.float32,
                                                         verbose=True,
-                                                        debugmode=False,
+                                                        debugmode=debug,
                                                         filesuffix=fsuffix,
                                                         loadBySlices=0,
                                                         filelist=filelist
@@ -25,11 +26,11 @@ def LoadSubbandDataset(a):
             return subband(a.input, a.lsuffix, input_filelist), subband(a.train, None, gt_filelist)
 
 
-def LoadImageDataset(a):
+def LoadImageDataset(a, debug=False):
     image = lambda input, fsuffix, filelist: ImageDataSet(input,
                                                           dtype=np.float32,
                                                           verbose=True,
-                                                          debugmode=False,
+                                                          debugmode=debug,
                                                           filesuffix=fsuffix,
                                                           loadBySlices=0,
                                                           filelist=filelist)
@@ -48,4 +49,7 @@ def LoadImageDataset(a):
 
 
 datamap = {'subband':LoadSubbandDataset,
-           'image2D':LoadImageDataset}
+           'image2D':LoadImageDataset,
+           'subband_debug': partial(LoadSubbandDataset, debug=True),
+           'image2D_debug': partial(LoadImageDataset, debug=True)
+           }
