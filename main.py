@@ -7,7 +7,7 @@ import datetime
 from MedImgDataset import Subbands, ImagePatchesLoader
 from torch.utils.data import DataLoader, TensorDataset
 from torch.autograd import Variable
-from tqdm import tqdm
+from tqdm import *
 import torch.nn as nn
 import torch.optim as optim
 import torch
@@ -199,6 +199,7 @@ def main(a):
         net = available_networks[a.network](inchan)
         net.load_state_dict(torch.load(a.checkpoint))
         net.train(False)
+        net.eval()
         if a.usecuda:
             net.cuda()
 
@@ -230,8 +231,9 @@ if __name__ == '__main__':
                           'FDUNet': FullyDecimatedUNet,
                           'PRUNet': PRDecimateUNet,
                           'OverkillUNet': OverKillUNet,
-                          'UNet_res': partial(UNet.__init__, residual=True),
-                          'TFUNet_res': partial(TightFrameUNetSubbands.__init__, residual=True)}
+                          'CircularTFUNet': lambda chan:  TightFrameUNetSubbands(chan, circular=True),
+                          'UNet_res': lambda chan: UNetSubbands(chan, residual=True),
+                          'TFUNet_res': lambda chan: TightFrameUNetSubbands(chan, residual=True)}
 
 
     parser = argparse.ArgumentParser(description="Training reconstruction from less projections.")

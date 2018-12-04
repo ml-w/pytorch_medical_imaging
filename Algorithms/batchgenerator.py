@@ -1,14 +1,52 @@
 from MedImgDataset import ImageDataSet, Projection
 from random import shuffle
-from shutil import copy2
+import fnmatch
 import os
 import numpy as np
 
 
-def GenerateKFoldBatch(sourcedir, targetdir, numOfTestSamples):
-    images = ImageDataSet(sourcedir + "/Image", verbose=True, dtype=np.uint8)
-    labels = ImageDataSet(sourcedir + "/Label", verbose=True, dtype=np.uint8)
-    smoothed = ImageDataSet(sourcedir + "/Smoothed", verbose=True, dtype=np.uint8)
+
+def GenerateTestBatch(gt_files, input_files, numOfTestSamples, outdir, prefix="Batch_"):
+    # assert len(gt_files) == len(input_files)
+    # assert len(gt_files) > numOfTestSamples
+
+    indexes = range(len(gt_files))
+    shuffle(indexes)
+
+    # check if outdir exist
+    if not os.path.isdir(outdir):
+        os.mkdir(outdir)
+        assert os.path.isdir(outdir), "Cannot create director!"
+
+    # Testing batch files
+    testing_gt = open(outdir + '/' + prefix + "Testing_GT.txt", "w")
+    testing_input = open(outdir + '/' + prefix + "Testing_Input.txt", "w")
+
+    # Training batch files
+    training_gt = open(outdir + '/' + prefix + "Training_GT.txt", 'w')
+    training_input = open(outdir + '/' + prefix + "Training_Input.txt", 'w')
+
+    training_samples = {'input': [], 'gt':  []}
+    testing_samples = {'input': [], 'gt': []}
+    for i in xrange(len(indexes)):
+        if i < numOfTestSamples:
+            target = testing_samples
+        else:
+            target = training_samples
+
+        target['input'].extend(fnmatch.filter(input_files, gt_files[indexes[i]].split('_')[0] + "*"))
+        target['gt'].append(gt_files[indexes[i]])
+
+    testing_gt.writelines([f + '\n' for f in testing_samples['gt']])
+    testing_input.writelines([f + '\n' for f in testing_samples['input']])
+
+    training_gt.writelines([f + '\n' for f in training_samples['gt']])
+    training_input.writelines([f + '\n' for f in training_samples['input']])
+
+    [f.close() for f in [testing_gt, testing_input, training_input, training_gt]]
+
+def GenerateKFoldBatch(GTfiles, targetdir, numOfTestSamples):
+    files = sourcedir
 
     indexes = range(len(images))
     shuffle(indexes)
@@ -20,31 +58,20 @@ def GenerateKFoldBatch(sourcedir, targetdir, numOfTestSamples):
     if not os.path.isdir(targetdir):
         os.mkdir(targetdir)
 
-    # Discard last batch
-    row = [images, labels, smoothed]
+    # last batch has more data
     for i in xrange(indexes.shape[0] - 1):
-        if not os.path.isdir(targetdir + "/%03d"%i):
-            os.mkdir(targetdir + "/%03d"%i)
-        if not os.path.isdir(targetdir + "/%03d/Testing"%i):
-            os.mkdir(targetdir + "/%03d/Testing"%i)
-        if not os.path.isdir(targetdir + "/%03d/Training"%i):
-            os.mkdir(targetdir + "/%03d/Training"%i)
-        for subdir in ["Image", "Label", "Smoothed"]:
-            if not os.path.isdir(targetdir + "/%03d/Testing/%s"%(i, subdir)):
-                os.mkdir(targetdir + "/%03d/Testing/%s"%(i, subdir))
-            if not os.path.isdir(targetdir + "/%03d/Training/%s"%(i, subdir)):
-                os.mkdir(targetdir + "/%03d/Training/%s"%(i, subdir))
+        testlist = 0
 
-        for j in xrange(len(images)):
-            if j in indexes[i]:
-                copy2(row[0].dataSourcePath[j], targetdir + "/%03d/Testing/Image"%i)
-                copy2(row[1].dataSourcePath[j], targetdir + "/%03d/Testing/Label"%i)
-                copy2(row[2].dataSourcePath[j], targetdir + "/%03d/Testing/Smoothed"%i)
-            else:
-                copy2(row[0].dataSourcePath[j], targetdir + "/%03d/Training/Image"%i)
-                copy2(row[1].dataSourcePath[j], targetdir + "/%03d/Training/Label"%i)
-                copy2(row[2].dataSourcePath[j], targetdir + "/%03d/Training/Smoothed"%i)
+
+
 
 if __name__ == '__main__':
-    GenerateKFoldBatch("./BrainVessel/01.BatchSource", "./BrainVessel/10.K_Fold_Batches", 10)
+    import os, fnmatch
+    # GenerateKFoldBatch("./BrainVessel/01.BatchSource", "./BrainVessel/10.K_Fold_Batches", 10)
+    GenerateTestBatch(os.listdir('../DFB_Recon/10.GT_Subbands'),
+                      os.listdir('../DFB_Recon/11.SparseView_subbands'),
+                      15,
+                      '../DFB_Recon/99.Testing/Batch',
+                      prefix="B01_"
+                      )
 

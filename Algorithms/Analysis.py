@@ -5,7 +5,7 @@ import numpy as np
 import os
 import SimpleITK as sitk
 import pandas as pd
-from tqdm import tqdm
+from tqdm import *
 
 #========================================
 # Similarity functions
@@ -96,7 +96,7 @@ def RMSE(x, y):
     :return:
     """
     assert isinstance(x, np.ndarray) and isinstance(x, np.ndarray), "Input num be numpy arrays"
-    assert x.shape == y.shape, "Two images must have same dimensions"
+    assert x.shape == y.shape, "Two images must have same dimensions" + str(x.shape) + str(y.shape)
 
     d = ((x - y)**2).mean(axis=None)
     return np.sqrt(d)
@@ -125,73 +125,69 @@ def MSE(x, y):
 #=========================================
 # General batch analysis
 #=========================================
-def BatchAnalysis(dir, func, usemask=False, outputcsvdir=None):
+def BatchAnalysis(targetfiles, testfiles, func, mask=None, outputcsvdir=None):
     """
     Description
     -----------
-      Return a dataframe holding the metric returned by func. In this function, the comparison is only done between
-      folders with one datafiles only.
 
-      The folder structure is defined to be like this:
-      - Root
-        - Views
-          - Group
-
-    :param x:
-    :param groundtruth:
-    :param func:
     :return: pd.DataFrame
     """
 
-    columnlist = ['RootFile', 'InstanceNumber', 'View', 'Group']
+    columnlist = ['RootFile', 'InstanceNumber', 'Group']
     for fs in func:
         if isinstance(fs, type(lambda: None)):
             columnlist.append(fs.__name__)
 
-    GT = None
-    Mask = None
-    df = pd.DataFrame(columns=columnlist)
-    for root, dirs, files in os.walk(dir):
-        if 'GT' in root.split('/'):
-            GT = sitk.GetArrayFromImage(sitk.ReadImage(root + '/' + files[0]))
-        if 'Mask' in root.split('/') and usemask:
-            Mask = sitk.GetArrayFromImage(sitk.ReadImage(root + '/' + files[0]))
 
+    assert isinstance(testfiles, dict), "Expect testfiles input to be dictionary of list."
+    assert all([len(targetfiles) == len(testfiles[tf]) for tf in testfiles])
 
-    if GT is None:
-        print "Error! Cannot locate groundtruth!"
+    # Check existance of all files
+    allfiles = []
+    allfiles.extend(targetfiles)
+    if not mask is None:
+        assert len(mask) == len(targetfiles), "Input mask files list has wrong length."
+        allfiles.extend(mask)
+    [allfiles.extend(testfiles[tf]) for tf in testfiles]
+    b = [os.path.isfile(f) for f in allfiles]
+    if not all(b):
+        print "Following files doesn't exist:"
+        print '\n'.join(np.array(allfiles)[np.invert(b)])
         return
-    if Mask is None and usemask:
-        print "Error! Cannot locate mask"
 
 
-    for root, dirs, files in os.walk(dir):
-        if 'GT' in root.split('/'):
-            continue
-        if usemask:
-            if 'Mask' in root.split('/'):
-                continue
-        for name in files:
-            if name.find(".nii.gz") > -1:
-                print "Processing: ", root + '/' + name
-                view = int(root.split('/')[-1])
-                tt = root.split('/')[-2]
-                tar = sitk.GetArrayFromImage(sitk.ReadImage(root + '/' + name))
-                for i in tqdm(range(tar.shape[0]), desc="Slice number"):
-                    instancenumber = i
-                    values = []
-                    for fs in func:
-                        if usemask:
-                            tar[i][np.invert(Mask[i])] = 0
-                            GT[i][np.invert(Mask[i])] = 0
+    df = pd.DataFrame(columns=columnlist)
+    loadimage = lambda imdir: sitk.GetArrayFromImage(sitk.ReadImage(imdir)).astype('int')
+    targets = [loadimage(tf) for tf in targetfiles]
+    if not mask is None:
+        mas = [loadimage(tf).astype('bool') for tf in mask]
+    N = len(targetfiles)    # Number of files per batch to process
+    for group in tqdm(testfiles, desc='Group', leave=False):
+        for i in trange(N, desc='Files', leave=False):
+            tar = targets[i]
+            input = loadimage(testfiles[group][i])
+            for s in range(tar.shape[0]):
+                instancenumber = s
+                values = []
+                for fs in func:
+                    try:
+                        if mask is None:
+                            val = fs(input[s], tar[s])
+                            values.append(val)
+                        else:
+                            m = np.invert(mas[i][s])
+                            input[s][m] = 0
+                            tar[s][m] = 0
+                            val = fs(input[s], tar[s])
+                            values.append(val)
 
-                        val = fs(tar[i], GT[i])
-                        values.append(val)
-
-                    l_df = pd.DataFrame([[ root + '/' + name, instancenumber, view, tt,] + values],
-                                        columns=columnlist)
-                    df = df.append(l_df)
-
+                    except IndexError:
+                        values.append('N/A')
+                l_df = pd.DataFrame([[os.path.basename(testfiles[group][i]),
+                                      instancenumber,
+                                      group] + values],
+                                    columns=columnlist)
+                df = df.append(l_df)
     if not outputcsvdir is None:
         df.to_csv(outputcsvdir)
     return df
@@ -201,30 +197,20 @@ def BatchAnalysis(dir, func, usemask=False, outputcsvdir=None):
 
 
 if __name__ == '__main__':
-    # rootdir = "/home/lwong/Source/Repos/CT-Rebinning-Toolkit/examples/"
-    # BatchSSIM([rootdir + d for d in ['quarter_DICOM-CT-PD_out.nii.gz',
-    #                                  'quarter_DICOM-CT-PD_Processed_out.nii.gz',
-    #                                  'quarter_DICOM-CT-PD_oneres_out.nii.gz']],
-    #           rootdir + "/full_DICOM-CT-PD_out.nii.gz",
-    #           rootdir + "SSIM.csv")
-    # rootdir = "/media/storage/Data/CTReconstruction/ProjectionData/10.Batch_01/testing/"
-    # ProjBatchSSIM([rootdir + d for d in ['quarter_DICOM-CT-PD/',
-    #                                  'quarter_DICOM-CT-PD_oneres/',
-    #                                  'quarter_DICOM-CT-PD_Processed/']],
-    #           rootdir + "/full_DICOM-CT-PD/",
-    #           rootdir + "SSIM_proj.csv")
-    # rootdir = "/home/lwong/Source/Repos/CT-Rebinning-Toolkit/examples/"
-    # BatchcMSE([rootdir + d for d in ['quarter_DICOM-CT-PD_out.nii.gz',
-    #                                  'quarter_DICOM-CT-PD_Processed_out.nii.gz',
-    #                                  'quarter_DICOM-CT-PD_oneres_out.nii.gz']],
-    #           rootdir + "/full_DICOM-CT-PD_out.nii.gz",
-    #           rootdir + "MSE.csv")
-    # rootdir = "/media/storage/Data/CTReconstruction/ProjectionData/10.Batch_01/testing/"
-    # ProjBatchMSE([rootdir + d for d in ['quarter_DICOM-CT-PD/',
-    #                                  'quarter_DICOM-CT-PD_oneres/',
-    #                                  'quarter_DICOM-CT-PD_Processed/']],
-    #           rootdir + "/full_DICOM-CT-PD/",
-    #           rootdir + "MSE_proj.csv")
+    import fnmatch
 
-    rootdir = "/media/storage/Data/CTReconstruction/ProjectionData/05.MVDRN_RESNET"
-    BatchAnalysis(rootdir, [PSNR, SSIM, RMSE], usemask=True, outputcsvdir=rootdir+'/newresult.csv' )
+    inputdict = {}
+    dir = "/home/lwong/Source/Repos/dfb_sparse_view_reconstruction/DFB_Recon/99.Testing/Batch/B01"
+    files = os.listdir(dir)
+    files.remove('target_files.txt')
+    files.remove('mask_files.txt')
+    files = fnmatch.filter(files, "*txt")
+    for k in files:
+        kdir = dir + '/' + k
+        inputdict[k.split('_')[-1].replace('.txt', '')] = [f.rstrip() for f in open(kdir).readlines()]
+
+    tarfiles = [f.rstrip() for f in open(dir + '/target_files.txt').readlines()]
+    maskfiles = [f.strip() for f in open(dir + '/mask_files.txt').readlines()]
+
+    BatchAnalysis(tarfiles, inputdict, [PSNR, SSIM, RMSE], outputcsvdir=dir+'/newresult_mask.csv',
+                  mask=maskfiles)

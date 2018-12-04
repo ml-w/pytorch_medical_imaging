@@ -23,6 +23,74 @@ class DoubleConv(nn.Module):
         x = self.conv(x)
         return x
 
+class CircularDoubleConv(nn.Module):
+    '''(conv => BN => ReLU) * 2'''
+    def __init__(self, in_ch, out_ch, linear=False):
+        super(CircularDoubleConv, self).__init__()
+        if linear:
+            self.conv0 = nn.Sequential(
+                nn.Conv2d(in_ch, out_ch, 3),
+                nn.BatchNorm2d(out_ch)
+            )
+            self.conv1 = nn.Sequential(
+                nn.Conv2d(out_ch, out_ch, 3),
+                nn.BatchNorm2d(out_ch)
+            )
+        else:
+            self.conv0 = nn.Sequential(
+                nn.Conv2d(in_ch, out_ch, 3),
+                nn.BatchNorm2d(out_ch),
+                nn.ReLU(inplace=True)
+            )
+            self.conv1 = nn.Sequential(
+                nn.Conv2d(out_ch, out_ch, 3),
+                nn.BatchNorm2d(out_ch),
+                nn.ReLU(inplace=True)
+            )
+
+    @staticmethod
+    def pad_circular(x, pad, dim=[-2, -1]):
+        """
+
+        :param x: shape [H, W]
+        :param pad: int >= 0
+        :return:
+        """
+        indim = x.dim()
+
+        indexes_1 = []
+        indexes_2 = []
+        indexes_3 = []
+        indexes_4 = []
+        for i in xrange(indim):
+            if i == dim[0] % indim:
+                indexes_1.append(slice(0, pad))
+                indexes_2.append(slice(None))
+                indexes_3.append(slice(-2*pad, -pad))
+                indexes_4.append(slice(None))
+            elif i == dim[1] % indim:
+                indexes_1.append(slice(None))
+                indexes_2.append(slice(0, pad))
+                indexes_3.append(slice(None))
+                indexes_4.append(slice(-2*pad, -pad))
+            else:
+                indexes_1.append(slice(None))
+                indexes_2.append(slice(None))
+                indexes_3.append(slice(None))
+                indexes_4.append(slice(None))
+
+        x = torch.cat([x, x[indexes_1]], dim=dim[0])
+        x = torch.cat([x, x[indexes_2]], dim=dim[1])
+        x = torch.cat([x[indexes_3], x], dim=dim[0])
+        x = torch.cat([x[indexes_4], x], dim=dim[1])
+        return x
+
+    def forward(self, x):
+        x = self.pad_circular(x, 1)
+        x = self.conv0(x)
+        x = self.pad_circular(x, 1)
+        x = self.conv1(x)
+        return x
 
 class HaarDown(nn.Module):
     def __init__(self, inchan):
@@ -67,7 +135,7 @@ class HaarUp(nn.Module):
 
 
 class AvgUp(nn.Module):
-    def __init__(self, upscale):
+    def  __init__(self, upscale):
         super(AvgUp, self).__init__()
         self.upscale = upscale
 
@@ -89,7 +157,7 @@ class Haar(nn.Module):
         super(Haar, self).__init__()
         self.haar = nn.Sequential(
             HaarDown(inchan),
-            HaarUp(inchan)
+            HaarUp(inchan, False)
         )
 
 
@@ -99,11 +167,12 @@ class Haar(nn.Module):
 
 
 class Down(nn.Module):
-    def __init__(self, inchan, outchan):
+    def __init__(self, inchan, outchan, circular=False):
         super(Down, self).__init__()
+        conv = CircularDoubleConv if circular else DoubleConv
         self.d = nn.Sequential(
             nn.AvgPool2d(2),
-            DoubleConv(inchan, outchan)
+            conv(inchan, outchan)
         )
 
     def forward(self, x):
@@ -111,7 +180,7 @@ class Down(nn.Module):
         return x
 
 class Up(nn.Module):
-    def __init__(self, inchan, outchan, bilinear=True):
+    def __init__(self, inchan, outchan, bilinear=True, circular=False):
         super(Up, self).__init__()
 
         if bilinear:
@@ -120,7 +189,7 @@ class Up(nn.Module):
         else:
             self.up = nn.ConvTranspose2d(inchan//2, outchan//2, 2, stride=2)
 
-        self.conv = DoubleConv(inchan, outchan)
+        self.conv = CircularDoubleConv(inchan, outchan) if circular else DoubleConv(inchan, outchan)
 
     def forward(self, x1, x2, x3):
         x1 = self.up(x1)
@@ -140,32 +209,31 @@ class Up(nn.Module):
 class OutConv(nn.Module):
     def __init__(self, inchan, outchan):
         super(OutConv, self).__init__()
-        self.conv = nn.Conv2d(inchan * 2, outchan, 1)
+        self.conv = nn.Conv2d(inchan, outchan, 1)
 
-    def forward(self, x1, x2):
-        x = torch.cat([x2, x1], dim=1)
+    def forward(self, x):
         x = self.conv(x)
         return x
 
 
 class TightFrameUNet(nn.Module):
-    def __init__(self, chan, residual=False):
+    def __init__(self, chan, residual=False, circular=False):
         super(TightFrameUNet, self).__init__()
-        self.inc = DoubleConv(chan, 64)
+        self.inc = CircularDoubleConv(chan, 64) if circular else DoubleConv(chan, 64)
         self.outc = OutConv(64, chan)
-        self.down1 = Down(64, 128)
-        self.down2 = Down(128, 256)
-        self.down3 = Down(256, 512)
-        self.down4 = Down(512, 512)
+        self.down1 = Down(64, 128, circular=circular)
+        self.down2 = Down(128, 256, circular=circular)
+        self.down3 = Down(256, 512, circular=circular)
+        self.down4 = Down(512, 512, circular=circular)
         self.haar1 = Haar(64)
         self.haar2 = Haar(128)
         self.haar3 = Haar(256)
         self.haar4 = Haar(512)
         self.haar5 = Haar(512)
-        self.up1 = Up(1536, 256)
-        self.up2 = Up(1024, 128)
-        self.up3 = Up(512, 64)
-        self.up4 = Up(256, 64)
+        self.up1 = Up(2560, 256, circular=circular)
+        self.up2 = Up(1280, 128, circular=circular)
+        self.up3 = Up(640, 64, circular=circular)
+        self.up4 = Up(320, 64, circular=circular)
         self.residual = residual
 
     def forward(self, x):
@@ -179,17 +247,67 @@ class TightFrameUNet(nn.Module):
         x2_haar = self.haar2(x2)
         x3_haar = self.haar3(x3)
         x4_haar = self.haar4(x4)
-        x5_haar = self.haar5(x5)
 
-        x = self.up1(x5, x5_haar, x4)
-        x = self.up2(x, x4_haar, x3 )
-        x = self.up3(x, x3_haar, x2)
-        x = self.up4(x, x2_haar, x1)
+        x = self.up1(x5, x4_haar, x4)
+        x = self.up2(x, x3_haar, x3 )
+        x = self.up3(x, x2_haar, x2)
+        x = self.up4(x, x1_haar, x1)
         if self.residual:
-            x = self.outc(x1_haar, x) + temp
+            x = self.outc(x) + temp
         else:
-            x = self.outc(x1_haar, x)
+            x = self.outc(x)
         return x
 
+
+class TightFrameUNetSubbands(nn.Module):
+    def __init__(self, chan, circular=False):
+        super(TightFrameUNetSubbands, self).__init__()
+        self.chan = chan
+        if chan > 1:
+            self.net1 = TightFrameUNet(chan//2, circular=circular)
+            self.net2 = TightFrameUNet(chan//2, circular=circular)
+        else:
+            self.net = TightFrameUNet(1, circular=circular)
+
+    def forward(self, x):
+        if self.chan > 1:
+            x1 = self.net1(x.narrow(1, 0, self.chan//2))
+            x2 = self.net2(x.narrow(1, self.chan//2, self.chan//2))
+            return torch.cat([x1, x2], dim=1)
+        else:
+            return self.net.forward(x)
+
+
+class OverKillUNet(nn.Module):
+    def __init__(self, chan):
+        super(OverKillUNet, self).__init__()
+        self.chan = chan
+        # self.nets = [TightFrameUNet(1) for i in xrange(chan)]
+        self.net0 = TightFrameUNet(1)
+        self.net1 = TightFrameUNet(1)
+        self.net2 = TightFrameUNet(1)
+        self.net3 = TightFrameUNet(1)
+        self.net4 = TightFrameUNet(1)
+        self.net5 = TightFrameUNet(1)
+        self.net6 = TightFrameUNet(1)
+        self.net7 = TightFrameUNet(1)
+
+    # def cuda(self, device=None):
+    #     super(OverKillUNet, self).cuda(device)
+        # for n in self.nets:
+        #     n = n.cuda()
+        # return self
+
+    def forward(self, x):
+        # X = [self.nets[i].forward(x.narrow(1, i, 1)) for i in xrange(self.chan)]
+        x0 = self.net0.forward(x.narrow(1, 0, 1))
+        x1 = self.net0.forward(x.narrow(1, 1, 1))
+        x2 = self.net0.forward(x.narrow(1, 2, 1))
+        x3 = self.net0.forward(x.narrow(1, 3, 1))
+        x4 = self.net0.forward(x.narrow(1, 4, 1))
+        x5 = self.net0.forward(x.narrow(1, 5, 1))
+        x6 = self.net0.forward(x.narrow(1, 6, 1))
+        x7 = self.net0.forward(x.narrow(1, 7, 1))
+        return torch.cat([x0, x1, x2, x3, x4, x5, x6, x7], dim=1)
 
 
