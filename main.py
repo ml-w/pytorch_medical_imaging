@@ -4,7 +4,7 @@ import logging
 import numpy as np
 import datetime
 
-from MedImgDataset import Subbands, ImagePatchesLoader
+from MedImgDataset import ImagePatchesLoader
 from torch.utils.data import DataLoader, TensorDataset
 from torch.autograd import Variable
 from tqdm import *
@@ -12,13 +12,11 @@ import torch.nn as nn
 import torch.optim as optim
 import torch
 import traceback
-from torch import cat, stack
 from torchvision.utils import make_grid
 from Networks.UNet import *
 from Networks.TightFrameUNet import *
 from Networks.FullyDecimatedUNet import *
 from Loss.NMSE import NMSELoss
-from Loss.IMSE import IMSELoss
 import myloader as ml
 
 
@@ -65,7 +63,7 @@ def main(a):
 
         inchan = inputDataset[0].size()[0]
         trainingSet = TensorDataset(inputDataset, gtDataset)
-        loader      = DataLoader(trainingSet, batch_size=a.batchsize, shuffle=True, num_workers=4)
+        loader      = DataLoader(trainingSet, batch_size=a.batchsize, shuffle=True, num_workers=4, drop_last=True)
 
         # Read tensorboard dir from env
         if a.plot:
@@ -90,6 +88,7 @@ def main(a):
         net.apply(init_weights)
 
         net.train(True)
+        net = nn.DataParallel(net)
         if os.path.isfile(a.checkpoint):
             # assert os.path.isfile(a.checkpoint)
             LogPrint("Loading checkpoint " + a.checkpoint)

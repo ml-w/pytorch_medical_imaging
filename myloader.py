@@ -1,4 +1,4 @@
-from MedImgDataset import Subbands, ImageDataSet
+from MedImgDataset import *
 from functools import partial
 import os
 import numpy as np
@@ -48,8 +48,62 @@ def LoadImageDataset(a, debug=False):
             return image(a.input, a.lsuffix, input_filelist), image(a.train, None, gt_filelist)
 
 
+def LoadSegmentationImageDataset(a, debug=False):
+    image = lambda input, fsuffix, filelist, dtype: ImageDataSet(input,
+                                                          dtype=dtype,
+                                                          verbose=True,
+                                                          debugmode=debug,
+                                                          filesuffix=fsuffix,
+                                                          loadBySlices=0,
+                                                          filelist=filelist)
+
+    if a.train is None:
+        assert os.path.isfile(a.loadbyfilelist), "Cannot open filelist!"
+        # Eval mode
+        return image(a.input, a.lsuffix, a.loadbyfilelist, np.float32)
+    else:
+        # Training Mode
+        if a.loadbyfilelist is None:
+            return image(a.input, a.lsuffix, None, np.float32), image(a.train, None, None, np.uint8)
+        else:
+            gt_filelist, input_filelist = a.loadbyfilelist.split(',')
+            return image(a.input, a.lsuffix, input_filelist, np.float32), image(a.train, None, gt_filelist, np.uint8)
+
+
+def LoadSegmentationImageDatasetWithPos(a, debug=False):
+    imagewifpos = lambda input, fsuffix, filelist, dtype: ImageDataSetWithPos(input,
+                                                          dtype=dtype,
+                                                          verbose=True,
+                                                          debugmode=debug,
+                                                          filesuffix=fsuffix,
+                                                          loadBySlices=0,
+                                                          filelist=filelist)
+    image = lambda input, fsuffix, filelist, dtype: ImageDataSet(input,
+                                                          dtype=dtype,
+                                                          verbose=True,
+                                                          debugmode=debug,
+                                                          filesuffix=fsuffix,
+                                                          loadBySlices=0,
+                                                          filelist=filelist)
+
+    if a.train is None:
+        assert os.path.isfile(a.loadbyfilelist), "Cannot open filelist!"
+        # Eval mode
+        return imagewifpos(a.input, a.lsuffix, a.loadbyfilelist, np.float32)
+    else:
+        # Training Mode
+        if a.loadbyfilelist is None:
+            return imagewifpos(a.input, a.lsuffix, None, np.float32), image(a.train, None, None, np.uint8)
+        else:
+            gt_filelist, input_filelist = a.loadbyfilelist.split(',')
+            return imagewifpos(a.input, a.lsuffix, input_filelist, np.float32), image(a.train, None, gt_filelist, np.uint8)
+
 datamap = {'subband':LoadSubbandDataset,
            'image2D':LoadImageDataset,
+           'seg2D': LoadSegmentationImageDataset,
+           'seg2DwifPos': LoadSegmentationImageDatasetWithPos,
            'subband_debug': partial(LoadSubbandDataset, debug=True),
-           'image2D_debug': partial(LoadImageDataset, debug=True)
+           'image2D_debug': partial(LoadImageDataset, debug=True),
+           'seg2D_debug': partial(LoadSegmentationImageDataset, debug=True),
+           'seg2DwifPos_debug': partial(LoadSegmentationImageDatasetWithPos, debug=True)
            }

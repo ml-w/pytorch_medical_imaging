@@ -54,7 +54,7 @@ class up(nn.Module):
         #  would be a nice idea if the upsampling could be learned too,
         #  but my machine do not have enough memory to handle all those weights
         if bilinear:
-            self.up = nn.Upsample(scale_factor=2, mode='bilinear', align_corners=True)
+            self.up = nn.Upsample(scale_factor=2, mode='bilinear', align_corners=False)
         else:
             self.up = nn.ConvTranspose2d(in_ch//2, in_ch//2, 2, stride=2)
 
@@ -74,7 +74,7 @@ class up(nn.Module):
 class outconv(nn.Module):
     def __init__(self, in_ch, out_ch):
         super(outconv, self).__init__()
-        self.conv = nn.Conv2d(in_ch, out_ch, 1)
+        self.conv = nn.Conv2d(in_ch, out_ch, 3, padding=1)
 
     def forward(self, x):
         x = self.conv(x)
@@ -82,7 +82,7 @@ class outconv(nn.Module):
 
 
 class UNet(nn.Module):
-    def __init__(self, n_channels, residual=True):
+    def __init__(self, n_channels, outchan=None, residual=True):
         super(UNet, self).__init__()
         self.inc = inconv(n_channels, 64)
         self.down1 = down(64, 128)
@@ -93,7 +93,7 @@ class UNet(nn.Module):
         self.up2 = up(512, 128, True)
         self.up3 = up(256, 64, True)
         self.up4 = up(128, 64, True)
-        self.outc = outconv(64, n_channels)
+        self.outc = outconv(64, n_channels) if outchan is None else outconv(64, outchan)
         self.residual= residual
 
     def forward(self, x):
@@ -113,6 +113,40 @@ class UNet(nn.Module):
             x = self.outc(x)
         return x
 
+class UNetPosAware(UNet):
+    def __init__(self, *args, **kwargs):
+        super(UNetPosAware, self).__init__(*args, **kwargs)
+        self.fc = nn.Sequential(
+            nn.Linear(1, 256),
+            nn.Linear(256, 256),
+            nn.Linear(256, 128),
+            nn.Linear(128, 64)
+        )
+        self.outc = nn.Conv2d(64, 2, 1)
+
+
+    def forward(self, x, pos):
+        temp = x
+        x1 = self.inc(x)
+        x2 = self.down1(x1)
+        x3 = self.down2(x2)
+        x4 = self.down3(x3)
+        x5 = self.down4(x4)
+        x = self.up1(x5, x4)
+        x = self.up2(x, x3)
+        x = self.up3(x, x2)
+        x = self.up4(x, x1)
+
+        # expand pos
+        pos = self.fc(pos.view(len(pos), 1))
+        pos = pos.expand_as(x.permute(2, 3, 0, 1)).permute(2, 3, 0, 1)
+        x = x * pos
+        if self.residual:
+            x = self.outc(x) + temp
+        else:
+            x = self.outc(x)
+        return x
+
 class UNetSubbands(nn.Module):
     def __init__(self, inchan):
         super(UNetSubbands, self).__init__()
@@ -121,7 +155,7 @@ class UNetSubbands(nn.Module):
             self.net1 = UNet(inchan//2)
             self.net2 = UNet(inchan//2)
         else:
-            self = UNet(1)
+            self.net = UNet(1)
 
     def forward(self, x):
         if self.chan > 1:
@@ -129,4 +163,5 @@ class UNetSubbands(nn.Module):
             x2 = self.net2(x.narrow(1, self.chan//2, self.chan//2))
             return torch.cat([x1, x2], dim=1)
         else:
-            return self.forward(x)
+
+            return self.net.forward(x)
