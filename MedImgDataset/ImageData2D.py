@@ -92,13 +92,3 @@ class ImageDataSet2D(Dataset):
     def tonumpy(self):
         assert self.length != 0
         return cat([K.unsqueeze(0) for K in self.data], dim=0).numpy()
-
-if __name__ == '__main__':
-    import visdom as vis
-
-    v = vis.Visdom(port=80)
-
-    data = ImageDataSet2D("./TOCI/10.TestData/Resized_SAR", dtype=np.float, verbose=True, as_gray=True)
-    im = np.array([d.numpy()*255 for d in data.data], dtype=np.uint8)
-    im = np.tile(im[:,None,:,:], (1, 3, 1, 1))
-    v.images(im, env="Test", win="Image")
