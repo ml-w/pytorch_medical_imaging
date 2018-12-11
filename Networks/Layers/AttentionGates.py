@@ -31,11 +31,11 @@ class AttentionBlock(nn.Module):
         assert x.shape[0] == g.shape[0], "Unequal batch size."
 
         theta_x = self.theta(x)
-        phi_g = F.upsample(self.phi(g), size=theta_x.shape[2:], mode='bilinear')
+        phi_g = F.upsample(self.phi(g), size=theta_x.shape[2:], mode='bilinear', align_corners=True)
         f = F.relu(theta_x + phi_g, inplace=True)
         f = F.sigmoid(self.psi(f))
 
-        f = F.upsample(f, size=x_size[2:], mode='bilinear')
+        f = F.upsample(f, size=x_size[2:], mode='bilinear', align_corners=True)
         y = f.expand_as(x) * x
         W_y = self.W(y)
         return W_y, f
@@ -44,3 +44,15 @@ class AttentionBlock(nn.Module):
     def forward(self, *input):
         return self._concatentation(*input)
 
+
+class AttentionGating(nn.Module):
+    def __init__(self, inchan, outchan):
+        super(AttentionGating, self).__init__()
+        self.conv = nn.Sequential(
+            nn.Conv2d(inchan, outchan, 1, padding=0),
+            nn.BatchNorm2d(outchan),
+            nn.ReLU(inplace=True)
+        )
+
+    def forward(self, x):
+        return self.conv(x)

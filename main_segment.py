@@ -8,15 +8,13 @@ from MedImgDataset import ImagePatchesLoader
 from torch.utils.data import DataLoader, TensorDataset
 from torch.autograd import Variable
 from tqdm import *
+import torch
 import torch.nn as nn
 import torch.optim as optim
-import torch
+import torch.nn.functional as F
 import traceback
 from torchvision.utils import make_grid
-from Networks.DenseUNet import *
-from Networks.UNet import *
-from Networks.TightFrameUNet import *
-from Networks.FullyDecimatedUNet import *
+from Networks import *
 import myloader as ml
 
 
@@ -280,7 +278,8 @@ if __name__ == '__main__':
     # This controls the available networks
     available_networks = {'UNet':UNet,
                           'UNetPosAware': UNetPosAware,
-                          'DenseUNet': DenseUNet2D
+                          'DenseUNet': DenseUNet2D,
+                          'AttentionUNet': AttentionUNet
                           }
 
 
