@@ -105,13 +105,14 @@ def main(a):
         # net.apply(init_weights)
 
         net.train(True)
-        net = nn.DataParallel(net)
         if os.path.isfile(a.checkpoint):
             # assert os.path.isfile(a.checkpoint)
             LogPrint("Loading checkpoint " + a.checkpoint)
             net.load_state_dict(torch.load(a.checkpoint))
         else:
             LogPrint("Checkpoint doesn't exist!")
+        net = nn.DataParallel(net)
+
 
         trainparams = {}
         if not a.trainparams is None:
@@ -191,14 +192,14 @@ def main(a):
                 if loss.data.cpu() <= temploss:
                     backuppath = u"./Backup/cp_%s_%s_temp.pt"%(a.datatype, a.network) \
                         if a.outcheckpoint is None else a.outcheckpoint.replace('.pt', '_temp.pt')
-                    torch.save(net.state_dict(), backuppath)
+                    torch.save(net.module.state_dict(), backuppath)
                     temploss = loss.data.cpu()
 
             losses.append(E)
             if np.array(E).mean() <= lastloss:
                 backuppath = u"./Backup/cp_%s_%s.pt"%(a.datatype, a.network) \
                     if a.outcheckpoint is None else a.outcheckpoint
-                torch.save(net.state_dict(), backuppath)
+                torch.save(net.module.state_dict(), backuppath)
                 lastloss = np.array(E).mean()
 
             # Decay learning rate
@@ -229,15 +230,17 @@ def main(a):
         try:
             indim = inputDataset[0].squeeze().dim() + 1
             inchan = inputDataset[0].size()[0]
+            print indim
         except AttributeError:
             # retreat to 1 channel and dim=4
-            indim = 4
+            indim = 3
             inchan = 1
         except Exception as e:
             LogPrint(str(e), logging.ERROR)
             LogPrint("Terminating", logging.ERROR)
             return
         net = available_networks[a.network](inchan, 2)
+        # net = nn.DataParallel(net)
         net.load_state_dict(torch.load(a.checkpoint))
         net.train(False)
         net.eval()
@@ -259,7 +262,7 @@ def main(a):
             else:
                 out = net.forward(s).squeeze()
 
-            while out.dim() < indim:
+            while out.dim() <= indim:
                 LogPrint('Unsqueezing last batch.')
                 out = out.unsqueeze(0)
             out = F.log_softmax(out, dim=1)

@@ -74,8 +74,8 @@ def main(a):
                              logging.WARNING)
                     tensorboard_rootdir = "/media/storage/PytorchRuns"
                 writer = SummaryWriter(tensorboard_rootdir + "/%s_%s_%s"%(a.network,
-                                                                       a.lsuffix,
-                                                                       datetime.datetime.now().strftime("%Y%m%d_%H%M")))
+                                                                          a.lsuffix,
+                                                                          datetime.datetime.now().strftime("%Y%m%d_%H%M")))
             except OSError:
                 writer = None
                 a.plot = False
@@ -88,13 +88,13 @@ def main(a):
         net.apply(init_weights)
 
         net.train(True)
-        net = nn.DataParallel(net)
         if os.path.isfile(a.checkpoint):
             # assert os.path.isfile(a.checkpoint)
             LogPrint("Loading checkpoint " + a.checkpoint)
             net.load_state_dict(torch.load(a.checkpoint))
         else:
             LogPrint("Checkpoint doesn't exist!")
+        net = nn.DataParallel(net)
 
         trainparams = {}
         if not a.trainparams is None:
@@ -109,7 +109,7 @@ def main(a):
         # criterion = NMSELoss(size_average=True)
         criterion = NMSELoss(size_average=True)
         optimizer = optim.SGD([{'params': net.parameters(),
-                                 'lr': lr, 'momentum': mm}])
+                                'lr': lr, 'momentum': mm}])
         if a.usecuda:
             criterion = criterion.cuda()
             # normfactor = normfactor.cuda()
@@ -159,14 +159,14 @@ def main(a):
                 if loss.data.cpu() <= temploss:
                     backuppath = u"./Backup/cp_%s_%s_temp.pt"%(a.datatype, a.network) \
                         if a.outcheckpoint is None else a.outcheckpoint.replace('.pt', '_temp.pt')
-                    torch.save(net.state_dict(), backuppath)
+                    torch.save(net.module.state_dict(), backuppath)
                     temploss = loss.data.cpu()
 
             losses.append(E)
             if np.array(E).mean() <= lastloss:
                 backuppath = u"./Backup/cp_%s_%s.pt"%(a.datatype, a.network) \
                     if a.outcheckpoint is None else a.outcheckpoint
-                torch.save(net.state_dict(), backuppath)
+                torch.save(net.module.state_dict(), backuppath)
                 lastloss = np.array(E).mean()
 
             # Decay learning rate
