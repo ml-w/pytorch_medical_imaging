@@ -1,7 +1,8 @@
 from ImagePatchesLoader import ImagePatchesLoader
 from ImageData2D import ImageDataSet2D
 from ImageFeaturePair import ImageFeaturePair
-from ImageData import ImageDataSet, ImageDataSetWithPos
+from ImageData import ImageDataSet
+from Computation import *
 from Subbands import Subbands
 from Landmarks import Landmarks
 from Projection import Projection
