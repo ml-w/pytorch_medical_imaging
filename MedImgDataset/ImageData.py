@@ -191,7 +191,7 @@ class ImageDataSet(Dataset):
         s += data.to_string()
         return s
 
-    def Write(self, tensor_data, outputdirectory):
+    def Write(self, tensor_data, outputdirectory, prefix=''):
         assert self._itemindexes[-1] == tensor_data.size()[0], "Dimension mismatch!"
 
         td=tensor_data.numpy()
@@ -203,7 +203,7 @@ class ImageDataSet(Dataset):
             image = sitk.GetImageFromArray(td[start:end])
             image.CopyInformation(templateim)
             # image=self.WrapImageWithMetaData(td[start:end], self.metadata[i])
-            sitk.WriteImage(image, outputdirectory+'/'+os.path.basename(self.dataSourcePath[i]))
+            sitk.WriteImage(image, outputdirectory+'/'+ prefix + '_' + os.path.basename(self.dataSourcePath[i]))
 
     @staticmethod
     def WrapImageWithMetaData(inImage, metadata):
