@@ -203,7 +203,7 @@ class ImageDataSet(Dataset):
             image = sitk.GetImageFromArray(td[start:end])
             image.CopyInformation(templateim)
             # image=self.WrapImageWithMetaData(td[start:end], self.metadata[i])
-            sitk.WriteImage(image, outputdirectory+'/'+ prefix + '_' + os.path.basename(self.dataSourcePath[i]))
+            sitk.WriteImage(image, outputdirectory+'/'+ prefix + os.path.basename(self.dataSourcePath[i]))
 
     @staticmethod
     def WrapImageWithMetaData(inImage, metadata):
