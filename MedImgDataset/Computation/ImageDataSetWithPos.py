@@ -18,8 +18,12 @@ class ImageDataSetWithPos(ImageDataSet):
 
     def __getitem__(self, item):
         if isinstance(item, slice):
-            pos = [self._getpos(i) for i in xrange(item.start, item.stop, item.step if not item.step is None else 1)]
-            pos = tensor(pos).expand(len(pos), 1, 1, 1)
+            start, stop, step = [item.start ,item.stop, item.step]
+            start = start if not start is None else 0
+            stop = stop if not stop is None else len(self.data)
+            step = step if not step is None else 1
+            pos = [self._getpos(i) for i in xrange(start, stop, step)]
+            pos = tensor(pos).view(len(pos), 1, 1, 1)
         else:
             pos = tensor(self._getpos(item)).expand(1, 1, 1)
         return super(ImageDataSetWithPos, self).__getitem__(item), pos
