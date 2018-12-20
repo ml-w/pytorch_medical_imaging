@@ -130,6 +130,46 @@ class UNetPosAware(UNet):
             x = self.outc(x)
         return x
 
+class UNetLocTexAware(UNet):
+    def __init__(self, *args, **kwargs):
+        super(UNetLocTexAware, self).__init__(*args, **kwargs)
+
+        self.inc = nn.Sequential(
+            nn.Conv2d(args[0], 128, groups=2, kernel_size=3, padding=1),
+            nn.Conv2d(128, 64, kernel_size=1)
+        )
+
+        self.fc = nn.Sequential(
+            nn.Linear(4, 256),
+            nn.Linear(256, 256),
+            nn.Linear(256, 128),
+            nn.Linear(128, 64)
+        )
+        self.outc = nn.Conv2d(64, 2, 1)
+
+
+    def forward(self, x, pos):
+        temp = x
+        x1 = self.inc(x)
+        x2 = self.down1(x1)
+        x3 = self.down2(x2)
+        x4 = self.down3(x3)
+        x5 = self.down4(x4)
+        x = self.up1(x5, x4)
+        x = self.up2(x, x3)
+        x = self.up3(x, x2)
+        x = self.up4(x, x1)
+
+        # expand pos
+        pos = self.fc(pos)
+        pos = pos.expand_as(x.permute(2, 3, 0, 1)).permute(2, 3, 0, 1)
+        x = x * pos
+        if self.residual:
+            x = self.outc(x) + temp
+        else:
+            x = self.outc(x)
+        return x
+
 class UNetSubbands(nn.Module):
     def __init__(self, inchan):
         super(UNetSubbands, self).__init__()

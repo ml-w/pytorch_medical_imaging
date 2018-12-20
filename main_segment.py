@@ -68,9 +68,13 @@ def main(a):
 
         # if the input datatyle is not standard, retreat to 1
         try:
-            inchan = inputDataset[0].size()[0]
+            if isinstance(inputDataset[0], tuple) or isinstance(inputDataset[0], list):
+                inchan = inputDataset[0][0].shape[0]
+            else:
+                inchan = inputDataset[0].size()[0]
         except AttributeError:
             # retreat to 1 channel
+            LogPrint("Retreating to 1 channel.", logging.WARNING)
             inchan = 1
         except Exception as e:
             LogPrint(str(e), logging.ERROR)
@@ -204,6 +208,12 @@ def main(a):
             if a.decay != 0:
                 for pg in optimizer.param_groups:
                     pg['lr'] = pg['lr'] * np.exp(-i * a.decay / float(a.epoch))
+                # update loss function weight
+                if isinstance(criterion, nn.CrossEntropyLoss):
+                    weights = torch.tensor([r * i] + [1.] * (numOfClasses - 1))
+                    criterion.weight.copy_(weights)
+
+
 
             LogPrint("[Epoch %04d] Loss: %.010f LR: %.010f"%(i, np.array(E).mean(), pg['lr']))
 
@@ -226,10 +236,18 @@ def main(a):
         #-----------------------------------------
         # if the input datatyle is not standard, retreat to 1
         try:
-            indim = inputDataset[0].squeeze().dim() + 1
-            inchan = inputDataset[0].size()[0]
-            print indim
+            if isinstance(inputDataset[0], tuple) or isinstance(inputDataset[0], list):
+                inchan = inputDataset[0][0].shape[0]
+                indim = inputDataset[0][0].squeeze().dim() + 1
+                if a.datatype.find('loctex') > -1: # Speacial case where data already have channels dim
+                    indim -= 1
+
+            else:
+                inchan = inputDataset[0].size()[0]
+                indim = inputDataset[0].squeeze().dim() + 1
+
         except AttributeError:
+            LogPrint("Retreating to indim=3, inchan=1.", logging.WARNING)
             # retreat to 1 channel and dim=4
             indim = 3
             inchan = 1
@@ -261,15 +279,21 @@ def main(a):
                 out = net.forward(s).squeeze()
 
             while out.dim() <= indim:
-                LogPrint('Unsqueezing last batch.')
                 out = out.unsqueeze(0)
-            out = F.log_softmax(out, dim=1)
-            val, out = torch.max(out, 1)
+                LogPrint('Unsqueezing last batch.' + str(out.shape))
+            # out = F.log_softmax(out, dim=1)
+            # val, out = torch.max(out, 1)
             out_tensor.append(out.data.cpu())
-            del val
-        out_tensor = torch.cat(out_tensor, dim=0).int()
-        inputDataset.Write(out_tensor, a.output)
-        pass
+            del out
+
+        out_tensor = torch.cat(out_tensor, dim=0)
+        if a.datatype.find('loctex') > -1:
+            out_tensor = inputDataset.piece_patches(out_tensor)
+        out_tensor = F.log_softmax(out_tensor, dim=1)
+        out_tensor = torch.argmax(out_tensor, dim=1)
+        inputDataset.Write(out_tensor.squeeze().int(), a.output)
+        # inputDataset.Write(out_tensor[:,1].squeeze().float(), a.output)
+        # inputDataset.Write(out_tensor[:,0].squeeze().float(), a.output, prefix='D_')
 
     pass
 
@@ -278,8 +302,12 @@ if __name__ == '__main__':
     # This controls the available networks
     available_networks = {'UNet':UNet,
                           'UNetPosAware': UNetPosAware,
+                          'UNetLocTexAware': UNetLocTexAware,
                           'DenseUNet': DenseUNet2D,
-                          'AttentionUNet': AttentionUNet
+                          'AttentionUNet': AttentionUNet,
+                          'AttentionDenseUNet': AttentionDenseUNet2D,
+                          'AttentionUNetPosAware': AttentionUNetPosAware,
+                          'AttentionUNetLocTexAware': AttentionUNetLocTexAware,
                           }
 
 

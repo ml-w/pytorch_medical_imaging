@@ -1,6 +1,7 @@
 import SimpleITK as sitk
 import os
 import numpy as np
+import re
 from tqdm import *
 sitk.ProcessObject_GlobalWarningDisplayOff()
 
@@ -57,17 +58,32 @@ def dicom2nii(folder, out_dir=None):
     print "Handling: ", folder
     folder = os.path.abspath(folder)
     f = folder.replace('\\', '/')
-    prefix1 = f.split('/')[-2]
-    prefix2 = f.split('/')[-1]
+    # matchobj = re.search('NPC[0-9]+', f)
+    matchobj = re.search('[^sS][0-9]{4}', f)
+    # prefix1 = f.split('/')[-2]
+    prefix1 = f[matchobj.start():matchobj.end()]
 
-    outname = out_dir + '/%s-%s.nii.gz'%(prefix1, prefix2)
-    reader = sitk.ImageSeriesReader()
-    reader.SetFileNames(sitk.ImageSeriesReader_GetGDCMSeriesFileNames(
-        f
-    ))
-    outimage = reader.Execute()
-    sitk.WriteImage(outimage, outname)
-    del reader
+
+    # Read file
+    series = sitk.ImageSeriesReader_GetGDCMSeriesIDs(f)
+    for ss in series:
+        reader = sitk.ImageSeriesReader()
+        reader.SetFileNames(sitk.ImageSeriesReader_GetGDCMSeriesFileNames(
+            f,
+            ss
+        ))
+        outimage = reader.Execute()
+
+        # Generate out file name
+        headerreader = sitk.ImageFileReader()
+        headerreader.SetFileName(reader.GetFileNames()[0])
+        headerreader.LoadPrivateTagsOn()
+        headerreader.ReadImageInformation()
+        outname = out_dir + '/%s-%s.nii.gz'%(prefix1, headerreader.GetMetaData('0008|103e').rstrip().replace(' ', '_'))
+
+        # Write image
+        sitk.WriteImage(outimage, outname)
+        del reader
 
 
 def batch_dicom2nii(folderlist, out_dir, workers=8):
@@ -124,6 +140,7 @@ def make_mask_from_dir(indir, outdir):
     p.join()
 
 if __name__ == '__main__':
-    make_mask_from_dir('../DFB_Recon/00.RAW', '../DFB_Recon/09.Mask')
-
-    # SmoothImages("../BrainVessel/01.BatchSource/Label/", "../BrainVessel/02.Smoothed_Labels")
+    # folders = RecursiveListDir(5, '../NPC_Segmentation/00.RAW/Benign NP')
+    # batch_dicom2nii(folders, out_dir='../NPC_Segmentation/00.RAW/NIFTI/Benign')
+    folders = RecursiveListDir(5, '../NPC_Segmentation/00.RAW/NPC new dx cases')
+    batch_dicom2nii(folders, out_dir='../NPC_Segmentation/00.RAW/NIFTI/NPC_dx')

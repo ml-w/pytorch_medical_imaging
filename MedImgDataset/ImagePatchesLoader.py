@@ -1,5 +1,7 @@
-from torch import cat, stack
+from torch import cat, stack, tensor
 from torch.utils.data import Dataset
+from ImageData import ImageDataSet
+import numpy as np
 
 class ImagePatchesLoader(Dataset):
     def __init__(self, base_dataset, patch_size, patch_stride, include_last_patch=True,
@@ -21,6 +23,7 @@ class ImagePatchesLoader(Dataset):
         self._axis = axis if not axis is None else [-2, -1]
         self._include_last_patch= include_last_patch
         self._patch_indexes = []      # [(xmin, ymin), ... ], patches has
+        self.data = self._base_dataset.data
 
         # check axis
         assert len(self._patch_size) <= 2, "Support 2D patches only."
@@ -80,6 +83,33 @@ class ImagePatchesLoader(Dataset):
             return size
         else:
             return size[val]
+
+    def piece_patches(self, inpatches):
+        assert inpatches.shape[0] == self.__len__(), "Size mismatch." + str(inpatches.shape[0]) + str(self.__len__())
+
+        count = np.zeros(self._base_dataset.data.shape, dtype=np.uint16)
+        temp_slice = np.zeros(self._base_dataset.data.shape, dtype=np.float64)
+        for i in xrange(len(self._base_dataset)):
+            for j, p in enumerate(self._patch_indexes):
+                indexes = []
+                for k in xrange(count.ndim):
+                    if k == self._axis[0] % count.ndim:
+                        indexes.append(slice(p[0], p[0] + self._patch_size[0]))
+                    elif k == self._axis[1] % count.ndim:
+                        indexes.append(slice(p[1], p[1] + self._patch_size[1]))
+                    elif k == 0 and count.ndim == 4: # Batch dimension
+                        indexes.append(slice(i, i+1))
+                    else:
+                        indexes.append(slice(None))
+                temp_slice[indexes] += inpatches[i * len(self._patch_indexes) + j]
+                count[indexes] += 1
+        temp_slice /= count.astype('float')
+        return tensor(temp_slice)
+
+
+    def Write(self, slices, outputdir, prefix=''):
+        self._base_dataset.Write(slices, outputdir, prefix)
+
 
     def __len__(self):
         return len(self._patch_indexes) * len(self._base_dataset)

@@ -1,8 +1,7 @@
 import torch
 import torch.nn as nn
 
-from numpy import argmax, array
-from numpy.linalg import norm
+import numpy as np
 from .. import ImageDataSet, ImagePatchesLoader
 from .LocalBinaryPattern import LBP
 
@@ -24,7 +23,7 @@ class ImagePatchLocTex(ImagePatchesLoader):
         slice_index = item / len(self._patch_indexes)
 
         # locate item position
-        n = argmax(self._base_dataset._itemindexes > slice_index)
+        n = np.argmax(self._base_dataset._itemindexes > slice_index)
         range = [self._base_dataset._itemindexes[n - 1], self._base_dataset._itemindexes[n]]
         loc = slice_index - self._base_dataset._itemindexes[n-1]
         pos = loc / float(range[1] - range[0]) - 0.5
@@ -37,26 +36,25 @@ class ImagePatchLocTex(ImagePatchesLoader):
         return p[0], p[1], pos
 
     def _get_center(self):
-        c = array(self._base_dataset[0].shape[-2:]) / 2.
+        c = np.array(self._base_dataset[0].shape[-2:]) / 2.
         return c[0], c[1], 0.
 
     def _calculate_patch_dist(self, item):
-        return norm(array(self._calculate_patch_pos(item)) - array(self._get_center()))
+        return np.linalg.norm(np.array(self._calculate_patch_pos(item)) - \
+                              np.array(self._get_center()))
 
 
     def __getitem__(self, item):
-        out_0 = super(ImagePatchLocTex, self).__getitem__(item)
         if isinstance(item, slice):
             start = item.start if not item.start is None else 0
             stop = item.stop if not item.stop is None else self.__len__()
             step = item.step if not item.step is None else 1
-            feats = []
-            for i in xrange(start, stop, step):
-                feats.append(torch.cat([torch.tensor(self._calculate_patch_pos(i)).float(),
-                                        torch.tensor([self._calculate_patch_dist(i)]).float()]))
-            return out_0.squeeze(), torch.stack(feats)
+
+            L = [self.__getitem__(i)[0] for i in xrange(start, stop, step)]
+            out_0 = torch.stack([l[0] for l in L], 0)
+            feats = torch.stack([l[1] for l in L], 0)
+            return out_0.squeeze(), feats
         else:
-            return out_0
-
-
-
+            feats = torch.cat([torch.tensor(self._calculate_patch_pos(item)).float(),
+                               torch.tensor([self._calculate_patch_dist(item)]).float()])
+            return super(ImagePatchLocTex, self).__getitem__(item), feats

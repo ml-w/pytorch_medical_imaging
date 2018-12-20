@@ -1,7 +1,4 @@
-from MedImgDataset import ImageDataSet, Projection
 from random import shuffle
-import fnmatch
-import os
 import numpy as np
 
 
@@ -45,33 +42,15 @@ def GenerateTestBatch(gt_files, input_files, numOfTestSamples, outdir, prefix="B
 
     [f.close() for f in [testing_gt, testing_input, training_input, training_gt]]
 
-def GenerateKFoldBatch(GTfiles, targetdir, numOfTestSamples):
-    files = sourcedir
-
-    indexes = range(len(images))
-    shuffle(indexes)
-    indexes = np.array(indexes, dtype=int)
-    indexes = np.pad(indexes, [(0, numOfTestSamples - len(images) % numOfTestSamples)], 'constant', constant_values=0)
-    indexes = indexes.reshape(len(indexes)/numOfTestSamples, numOfTestSamples)
-
-    # d1 for testing, d2 for training
-    if not os.path.isdir(targetdir):
-        os.mkdir(targetdir)
-
-    # last batch has more data
-    for i in xrange(indexes.shape[0] - 1):
-        testlist = 0
-
-
 
 
 if __name__ == '__main__':
     import os, fnmatch
     # GenerateKFoldBatch("./BrainVessel/01.BatchSource", "./BrainVessel/10.K_Fold_Batches", 10)
-    GenerateTestBatch(os.listdir('../DFB_Recon/10.GT_Subbands'),
-                      os.listdir('../DFB_Recon/11.SparseView_subbands'),
-                      15,
-                      '../DFB_Recon/99.Testing/Batch',
+    GenerateTestBatch(os.listdir('../NPC_Segmentation/02.NPC_seg'),
+                      os.listdir('../NPC_Segmentation/01.NPC_dx'),
+                      2,
+                      '../NPC_Segmentation/99.Testing',
                       prefix="B01_"
                       )
 

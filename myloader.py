@@ -1,4 +1,5 @@
 from MedImgDataset import *
+from MedImgDataset.Computation import *
 from functools import partial
 import os
 import numpy as np
@@ -98,12 +99,50 @@ def LoadSegmentationImageDatasetWithPos(a, debug=False):
             gt_filelist, input_filelist = a.loadbyfilelist.split(',')
             return imagewifpos(a.input, a.lsuffix, input_filelist, np.float32), image(a.train, None, gt_filelist, np.uint8)
 
+
+def LoadSegmentationPatchLocTex(a, debug=False):
+    imset = lambda input, fsuffix, filelist, dtype: ImageDataSet(input,
+                                                          dtype=dtype,
+                                                          verbose=True,
+                                                          debugmode=debug,
+                                                          filesuffix=fsuffix,
+                                                          loadBySlices=0,
+                                                          filelist=filelist)
+    imseg = lambda input, fsuffix, filelist, dtype: ImageDataSet(input,
+                                                          dtype=dtype,
+                                                          verbose=True,
+                                                          debugmode=debug,
+                                                          filesuffix=fsuffix,
+                                                          loadBySlices=0,
+                                                          filelist=filelist)
+
+
+    patchsize = 128
+    stride = 32
+
+    if a.train is None:
+        assert os.path.isfile(a.loadbyfilelist), "Cannot open filelist!"
+        # Eval mode
+        return ImagePatchLocTex(imset(a.input, a.lsuffix, a.loadbyfilelist, np.float32),
+                                patchsize, patch_stride=stride)
+    else:
+        # Training Mode
+        if a.loadbyfilelist is None:
+            return ImagePatchLocTex(imset(a.input, a.lsuffix, None, np.float32), patchsize, stride), \
+                   ImagePatchesLoader(imseg(a.train, None, None, np.uint8), patchsize, stride)
+        else:
+            gt_filelist, input_filelist = a.loadbyfilelist.split(',')
+            return ImagePatchLocTex(imset(a.input, a.lsuffix, input_filelist, np.float32), patchsize, stride), \
+                   ImagePatchesLoader(imseg(a.train, None, gt_filelist, np.uint8), patchsize, stride)
+
 datamap = {'subband':LoadSubbandDataset,
            'image2D':LoadImageDataset,
            'seg2D': LoadSegmentationImageDataset,
            'seg2DwifPos': LoadSegmentationImageDatasetWithPos,
+           'seg2Dloctex': LoadSegmentationPatchLocTex,
            'subband_debug': partial(LoadSubbandDataset, debug=True),
            'image2D_debug': partial(LoadImageDataset, debug=True),
            'seg2D_debug': partial(LoadSegmentationImageDataset, debug=True),
-           'seg2DwifPos_debug': partial(LoadSegmentationImageDatasetWithPos, debug=True)
+           'seg2DwifPos_debug': partial(LoadSegmentationImageDatasetWithPos, debug=True),
+           'seg2Dloctex_debug': partial(LoadSegmentationPatchLocTex, debug=True)
            }
