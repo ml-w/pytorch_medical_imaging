@@ -49,7 +49,7 @@ if __name__ == '__main__':
     # GenerateKFoldBatch("./BrainVessel/01.BatchSource", "./BrainVessel/10.K_Fold_Batches", 10)
     GenerateTestBatch(os.listdir('../NPC_Segmentation/02.NPC_seg'),
                       os.listdir('../NPC_Segmentation/01.NPC_dx'),
-                      2,
+                      20,
                       '../NPC_Segmentation/99.Testing',
                       prefix="B01_"
                       )

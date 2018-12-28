@@ -13,7 +13,7 @@ class ImageDataSetWithPos(ImageDataSet):
         n = argmax(self._itemindexes > item)
         range = [self._itemindexes[n - 1], self._itemindexes[n]]
         loc = item - self._itemindexes[n-1]
-        pos = loc / float(range[1] - range[0]) - 0.5
+        pos = loc / float(range[1] - range[0]) - 0.5                # anatomy normalized by ratio
         return pos
 
     def __getitem__(self, item):

@@ -6,4 +6,4 @@ from AttentionDenseUNet import *
 
 __all__ = ['UNet', 'TightFrameUNet', 'DenseUNet2D', 'AttentionUNet', 'UNetPosAware',
            'AttentionUNetPosAware', 'AttentionDenseUNet2D', 'AttentionUNetLocTexAware',
-           'UNetLocTexAware']
+           'UNetLocTexAware', 'UNetLocTexAware2']

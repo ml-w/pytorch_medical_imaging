@@ -142,8 +142,12 @@ class UNetLocTexAware(UNet):
         self.fc = nn.Sequential(
             nn.Linear(4, 256),
             nn.Linear(256, 256),
+            nn.BatchNorm1d(256),
+            nn.ReLU(inplace=True),
             nn.Linear(256, 128),
-            nn.Linear(128, 64)
+            nn.BatchNorm1d(128),
+            nn.ReLU(inplace=True),
+            nn.Linear(128, 2),
         )
         self.outc = nn.Conv2d(64, 2, 1)
 
@@ -160,14 +164,61 @@ class UNetLocTexAware(UNet):
         x = self.up3(x, x2)
         x = self.up4(x, x1)
 
-        # expand pos
-        pos = self.fc(pos)
-        pos = pos.expand_as(x.permute(2, 3, 0, 1)).permute(2, 3, 0, 1)
-        x = x * pos
         if self.residual:
             x = self.outc(x) + temp
         else:
             x = self.outc(x)
+
+        # expand pos
+        pos = self.fc(pos)
+        pos = pos.expand_as(x.permute(2, 3, 0, 1)).permute(2, 3, 0, 1)
+        x = x * pos
+
+        return x
+
+
+class UNetLocTexAware2(UNet):
+    def __init__(self, *args, **kwargs):
+        super(UNetLocTexAware2, self).__init__(*args, **kwargs)
+
+        self.fc = nn.Sequential(
+            nn.Linear(104, 208),
+            nn.LayerNorm(208),
+            nn.ReLU(inplace=True)
+        )
+        self.fc5 = nn.Linear(208, 512)
+        self.fc4 = nn.Linear(208, 512)
+        self.fc3 = nn.Linear(208, 256)
+        self.fc2 = nn.Linear(208, 128)
+
+        self.outc = nn.Conv2d(64, 2, 1)
+        self.dropout1 = nn.Dropout2d(0.2, inplace=False)
+        self.dropout2 = nn.Dropout2d(0.3, inplace=False)
+
+
+    def forward(self, x, pos):
+        x1 = self.inc(x)
+        x2 = self.down1(x1)
+        x3 = self.down2(x2)
+        x4 = self.down3(x3)
+        x5 = self.down4(x4)
+
+        # expand pos
+        pos = self.fc(pos)
+
+        X = []
+        for _x, _fc in zip([x2, x3, x4, x5], [self.fc2, self.fc3, self.fc4, self.fc5]):
+            _pos = _fc(pos).expand_as(_x.permute(2, 3, 0, 1)).permute(2, 3, 0, 1)
+            _x = _x * _pos
+            X.append(_x)
+        x2, x3, x4, x5 = X
+
+        x = self.up1(self.dropout2(x5), self.dropout1(x4))
+        x = self.up2(x, x3)
+        x = self.up3(x, x2)
+        x = self.up4(x, x1)
+
+        x = self.outc(x)
         return x
 
 class UNetSubbands(nn.Module):

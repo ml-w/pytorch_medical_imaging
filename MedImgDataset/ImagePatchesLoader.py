@@ -5,7 +5,7 @@ import numpy as np
 
 class ImagePatchesLoader(Dataset):
     def __init__(self, base_dataset, patch_size, patch_stride, include_last_patch=True,
-                 axis=None, reference_dataset=None):
+                 axis=None, reference_dataset=None, pre_shuffle=False):
         super(ImagePatchesLoader, self).__init__()
 
         assert axis is None or len(axis) == 2, "Axis argument should contain the two axises that forms the base image."
@@ -17,6 +17,7 @@ class ImagePatchesLoader(Dataset):
         if isinstance(patch_stride, int):
             patch_stride = [patch_stride, patch_stride]
 
+        self._pre_shuffle = pre_shuffle
         self._base_dataset = base_dataset
         self._patch_size = patch_size
         self._patch_stride = patch_stride
@@ -38,6 +39,11 @@ class ImagePatchesLoader(Dataset):
         else:
             assert isinstance(reference_dataset, ImagePatchesLoader)
             self._patch_indexes = reference_dataset._patch_indexes
+
+        if self._pre_shuffle:
+            self._shuffle_index_arr = np.arange(self.__len__())
+            np.random.shuffle(self._shuffle_index_arr)
+            self._inverse_shuffle_arr = self._shuffle_index_arr.argsort()
 
     def _calculate_corner_range(self):
         pass
@@ -86,6 +92,7 @@ class ImagePatchesLoader(Dataset):
 
     def piece_patches(self, inpatches):
         assert inpatches.shape[0] == self.__len__(), "Size mismatch." + str(inpatches.shape[0]) + str(self.__len__())
+        inpatches = inpatches[self._inverse_shuffle_arr]
 
         count = np.zeros(self._base_dataset.data.shape, dtype=np.uint16)
         temp_slice = np.zeros(self._base_dataset.data.shape, dtype=np.float64)
@@ -121,6 +128,10 @@ class ImagePatchesLoader(Dataset):
             step = item.step if not item.step is None else 1
             return stack([self.__getitem__(i) for i in xrange(start, stop, step)], 0)
         else:
+            # map item to shuffled list
+            if self._pre_shuffle:
+                item = self._shuffle_index_arr[item]
+
             slice_index = item / len(self._patch_indexes)
             patch_index = item % len(self._patch_indexes)
 

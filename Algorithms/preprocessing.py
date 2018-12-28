@@ -59,7 +59,7 @@ def dicom2nii(folder, out_dir=None):
     folder = os.path.abspath(folder)
     f = folder.replace('\\', '/')
     # matchobj = re.search('NPC[0-9]+', f)
-    matchobj = re.search('[^sS][0-9]{4}', f)
+    matchobj = re.search('[^sS][0-9]{3,4}', f)
     # prefix1 = f.split('/')[-2]
     prefix1 = f[matchobj.start():matchobj.end()]
 

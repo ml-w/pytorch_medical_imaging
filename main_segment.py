@@ -171,7 +171,7 @@ def main(a):
                 LogPrint("\t[Step %04d] Loss: %.010f"%(index, loss.data))
                 if a.plot and index % 10 == 0:
                     try:
-                        Zrange = out.shape[0] if out.shape[0] < 15 else 15
+                        Zrange = out.shape[0] if out.shape[0] < 40 else 40
                         writer.add_scalar('Loss', loss.data, writerindex)
                         val, ar = torch.max(out, 1)
                         poolim = make_grid(out[:Zrange, numOfClasses-1].unsqueeze(1).data, nrow=4, padding=1, normalize=True)
@@ -209,9 +209,13 @@ def main(a):
                 for pg in optimizer.param_groups:
                     pg['lr'] = pg['lr'] * np.exp(-i * a.decay / float(a.epoch))
                 # update loss function weight
+                sigmoid = lambda x: 1. / (1. + np.exp(-x * 0.05 + 6))
+                #
                 if isinstance(criterion, nn.CrossEntropyLoss):
-                    weights = torch.tensor([r * i] + [1.] * (numOfClasses - 1))
+                    LogPrint('Current weight: ' + str(criterion.weight), logging.INFO)
+                    weights = torch.tensor([r * sigmoid(i)*100] + [1.] * (numOfClasses - 1))
                     criterion.weight.copy_(weights)
+                    LogPrint('New weight: ' + str(criterion.weight), logging.INFO)
 
 
 
@@ -303,6 +307,7 @@ if __name__ == '__main__':
     available_networks = {'UNet':UNet,
                           'UNetPosAware': UNetPosAware,
                           'UNetLocTexAware': UNetLocTexAware,
+                          'UNetLocTexHist': UNetLocTexAware2,
                           'DenseUNet': DenseUNet2D,
                           'AttentionUNet': AttentionUNet,
                           'AttentionDenseUNet': AttentionDenseUNet2D,
@@ -330,19 +335,19 @@ if __name__ == '__main__':
     parser.add_argument("-b", "--batchsize", dest='batchsize', action='store', type=int, default=5,
                         help="Specify batchsize in each iteration.")
     parser.add_argument("--usepatch", dest='usepatch', action='store', default=0, type=int,
-                        help="Option to use patches for training, only support square patches now.")
+                        help="(Optional) Option to use patches for training, only support square patches now.")
     parser.add_argument("--load", dest='checkpoint', action='store', default='',
-                        help="Specify network checkpoint.")
+                        help="(Optional) Specify network checkpoint.")
     parser.add_argument("--useCUDA", dest='usecuda', action='store_true',default=False,
-                        help="Set whether to use CUDA or not.")
+                        help="(Optional) Use GPU for computation. Default to False.")
     parser.add_argument("--train-params", dest='trainparams', action='store', type=str, default=None,
-                        help="Path to a file with dictionary of training parameters written inside")
+                        help="(Optional) Stringify dictional to specifiy training parameters.")
     parser.add_argument("--log", dest='log', action='store', type=str, default=None,
-                        help="If specified, all the messages will be written to the specified file.")
+                        help="(Optional) If specified, all the messages will be written to the specified file.")
     parser.add_argument("--checkpoint", dest='outcheckpoint', action='store', default=None, type=str,
-                        help="Output checkpoint to specific location")
+                        help="(Optional) Output checkpoint to specific location.")
     parser.add_argument("--loadersuffix", dest='lsuffix', action='store', type=str, default=None,
-                        help="Data loader will use this suffix to grep according files for input dataset.")
+                        help="(Optional) Data loader will use this suffix to grep according files for input dataset.")
     parser.add_argument('--load-by-file-list', dest='loadbyfilelist', action='store', type=str, default=None,
                         help="Specify two files that contains files to load in forms of 'file1,file2' for "
                              "training mode and 'file1' for evaluation mode, remember to use quotations if"
@@ -353,8 +358,12 @@ if __name__ == '__main__':
     parser.add_argument('--datatype', dest='datatype', action='store', type=str, default='',
                         choices=ml.datamap.keys(),
                         help="Select input datatype.")
+    parser.add_argument('--initial-weight', dest='initialweight', action='store', type=float, default=None,
+                        help="(Optional) Choose initial training weight factor of the loss function. The weight of "
+                             "the loss function is initially assigned to be the ratio of ")
     a = parser.parse_args()
 
+    # Parameters check
     if a.log is None:
         if not os.path.isdir('./Backup'):
             os.mkdir('./Backup/')
@@ -365,7 +374,11 @@ if __name__ == '__main__':
         else:
             a.log = "./Backup/Log/eval_%s.log"%(datetime.datetime.now().strftime("%Y%m%d-%H%M"))
 
-    logging.basicConfig(format="[%(asctime)-12s-%(levelname)s] %(message)s", filename=a.log, level=logging.DEBUG)
 
+    logging.basicConfig(format="[%(asctime)-12s-%(levelname)s] %(message)s", filename=a.log, level=logging.DEBUG)
     sys.excepthook = excepthook
+
+    assert a.network != '', "Network not specified."
+    assert a.datatype != '', 'Datatype not specified'
+
     main(a)
