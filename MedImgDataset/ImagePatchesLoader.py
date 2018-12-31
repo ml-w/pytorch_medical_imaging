@@ -5,7 +5,18 @@ import numpy as np
 
 class ImagePatchesLoader(Dataset):
     def __init__(self, base_dataset, patch_size, patch_stride, include_last_patch=True,
-                 axis=None, reference_dataset=None, pre_shuffle=False):
+                 axis=None, reference_dataset=None, pre_shuffle=False, random_patches=-1):
+        """
+
+        :param base_dataset:
+        :param patch_size:
+        :param patch_stride:
+        :param include_last_patch:
+        :param axis:
+        :param reference_dataset:
+        :param pre_shuffle:
+        :param random_patches:
+        """
         super(ImagePatchesLoader, self).__init__()
 
         assert axis is None or len(axis) == 2, "Axis argument should contain the two axises that forms the base image."
@@ -34,7 +45,12 @@ class ImagePatchesLoader(Dataset):
         self._slice_dim = self._base_dataset[0].dim()
 
         if reference_dataset is None:
-            self._calculate_patch_indexes()
+            if random_patches > 0:
+                self._random_patches = True
+                self._patch_perslice = random_patches
+                self._calculate_random_patch_indexes()
+            else:
+                self._calculate_patch_indexes()
             pass
         else:
             assert isinstance(reference_dataset, ImagePatchesLoader)
@@ -45,7 +61,18 @@ class ImagePatchesLoader(Dataset):
             np.random.shuffle(self._shuffle_index_arr)
             self._inverse_shuffle_arr = self._shuffle_index_arr.argsort()
 
-    def _calculate_corner_range(self):
+    def _calculate_random_patch_indexes(self):
+        X, Y = self._axis
+        corner_range = [self._unit_dimension[X] - self._patch_size[0],
+                        self._unit_dimension[Y] - self._patch_size[1]]
+
+        patch_indexes = np.stack([np.random.randint(0, corner_range[0], size=[self._patch_perslice * len(self._base_dataset)]),
+                                  np.random.randint(0, corner_range[1], size=[self._patch_perslice * len(self._base_dataset)])])
+
+        try:
+            self._patch_indexes.copy(patch_indexes)
+        except:
+            self._patch_indexes = patch_indexes
         pass
 
     def _calculate_patch_indexes(self):
@@ -76,6 +103,7 @@ class ImagePatchesLoader(Dataset):
                     self._patch_indexes.append([i * Xstr + resX, k * Ystr])
             if resX != 0 and resY != 0 and i == nX and j == nY and self._include_last_patch:
                 self._patch_indexes.append([i * Xstr + resX, j * Ystr + resY])
+        self._patch_indexes = np.array(self._patch_indexes)
 
     def size(self, val=None):
         newsize = list(self._unit_dimension)
@@ -132,8 +160,12 @@ class ImagePatchesLoader(Dataset):
             if self._pre_shuffle:
                 item = self._shuffle_index_arr[item]
 
-            slice_index = item / len(self._patch_indexes)
-            patch_index = item % len(self._patch_indexes)
+            if self._random_patches:
+                slice_index = item / self._patch_perslice
+                patch_index = item
+            else:
+                slice_index = item / len(self._patch_indexes)
+                patch_index = item % len(self._patch_indexes)
 
             p = self._patch_indexes[patch_index]
             s = self._base_dataset[slice_index]
