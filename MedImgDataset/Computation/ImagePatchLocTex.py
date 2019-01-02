@@ -30,7 +30,10 @@ class ImagePatchLocTex(ImagePatchesLoader):
 
     def _getpos(self, item):
         # locate slice number of the patch
-        slice_index = item / len(self._patch_indexes)
+        if self._random_patches:
+            slice_index = item / self._patch_perslice
+        else:
+            slice_index = item / len(self._patch_indexes)
 
         # locate item position
         n = np.argmax(self._base_dataset._itemindexes > slice_index)
@@ -41,7 +44,7 @@ class ImagePatchLocTex(ImagePatchesLoader):
 
     def _calculate_patch_pos(self, item):
         pos = self._getpos(item)
-        patch_index = item % len(self._patch_indexes)
+        patch_index = item if self._random_patches else item % len(self._patch_indexes)
         p = self._patch_indexes[patch_index]
         return p[0], p[1], pos
 

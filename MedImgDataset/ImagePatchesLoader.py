@@ -35,6 +35,8 @@ class ImagePatchesLoader(Dataset):
         self._axis = axis if not axis is None else [-2, -1]
         self._include_last_patch= include_last_patch
         self._patch_indexes = []      # [(xmin, ymin), ... ], patches has
+        self._random_patches = False
+        self._random_counter = 0
         self.data = self._base_dataset.data
 
         # check axis
@@ -55,6 +57,8 @@ class ImagePatchesLoader(Dataset):
         else:
             assert isinstance(reference_dataset, ImagePatchesLoader)
             self._patch_indexes = reference_dataset._patch_indexes
+            self._random_patches = reference_dataset._random_patches
+            self._patch_perslice = reference_dataset._patch_perslice
 
         if self._pre_shuffle:
             self._shuffle_index_arr = np.arange(self.__len__())
@@ -67,11 +71,12 @@ class ImagePatchesLoader(Dataset):
                         self._unit_dimension[Y] - self._patch_size[1]]
 
         patch_indexes = np.stack([np.random.randint(0, corner_range[0], size=[self._patch_perslice * len(self._base_dataset)]),
-                                  np.random.randint(0, corner_range[1], size=[self._patch_perslice * len(self._base_dataset)])])
+                                  np.random.randint(0, corner_range[1], size=[self._patch_perslice * len(self._base_dataset)])],
+                                 -1)
 
         try:
-            self._patch_indexes.copy(patch_indexes)
-        except:
+            np.copyto(self._patch_indexes, patch_indexes)
+        except Exception, e:
             self._patch_indexes = patch_indexes
         pass
 
@@ -108,9 +113,9 @@ class ImagePatchesLoader(Dataset):
     def size(self, val=None):
         newsize = list(self._unit_dimension)
         for i in xrange(len(newsize)):
-            if i == self._axis[0]:
+            if i == self._axis[0] % self._slice_dim:
                 newsize[i] = self._patch_size[0]
-            elif i == self._axis[1]:
+            elif i == self._axis[1] % self._slice_dim:
                 newsize[i] = self._patch_size[1]
         size = [self.__len__()] + newsize
         if val is None:
@@ -147,7 +152,8 @@ class ImagePatchesLoader(Dataset):
 
 
     def __len__(self):
-        return len(self._patch_indexes) * len(self._base_dataset)
+        return len(self._patch_indexes) * len(self._base_dataset) if not self._random_patches \
+            else len(self._patch_indexes)
 
     def __getitem__(self, item):
         if isinstance(item, slice):
@@ -163,6 +169,11 @@ class ImagePatchesLoader(Dataset):
             if self._random_patches:
                 slice_index = item / self._patch_perslice
                 patch_index = item
+
+                # simple trick to update patch indexes after each epoch
+                self._random_counter += 1
+                if self._random_counter == self.__len__():
+                    self._calculate_random_patch_indexes()
             else:
                 slice_index = item / len(self._patch_indexes)
                 patch_index = item % len(self._patch_indexes)
