@@ -26,7 +26,7 @@ class ImagePatchLocTex(ImagePatchesLoader):
         temp = np.zeros(self._base_dataset.data.shape).squeeze()
         for i, dat in enumerate(self._base_dataset.data):
             temp[i] = LBP(dat.numpy().squeeze())
-        temp = torch.tensor(temp).unsqueeze(1)
+        temp = torch.tensor(temp).unsqueeze(1).type_as(self._base_dataset.data)
         self._base_dataset.data = torch.cat([self._base_dataset.data, temp], dim=1)
 
     def _getpos(self, item):
