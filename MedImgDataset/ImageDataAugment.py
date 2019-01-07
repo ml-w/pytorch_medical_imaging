@@ -31,8 +31,11 @@ class ImageDataSetAugment(ImageDataSet):
         # Build augmentator
         self._augmentator = iaa.Sequential(
             [iaa.Affine(rotate=[-10, 10], scale=[0.9, 1.1]),
-             iaa.AdditiveGaussianNoise(scale=(0,5), per_channel=False),
-             iaa.LinearContrast(alpha=(0.5, 1.5), per_channel=False)],
+             iaa.WithChannels(channels=[0], # TODO: this is temp solution to LBP channel
+                              children=iaa.AdditiveGaussianNoise(scale=(0,5), per_channel=False)),
+             iaa.WithChannels(channels=[0],
+                              children=iaa.LinearContrast(alpha=(0.5, 1.5), per_channel=False)),
+             ],
             random_order=False
         )
         self._update_augmentators()
