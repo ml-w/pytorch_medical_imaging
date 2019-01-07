@@ -9,11 +9,10 @@ import numpy as np
 class ImageDataSetAugment(ImageDataSet):
     def __init__(self, *args, **kwargs):
         # TODO: Allow reading augmentation parameters
-        self._augment_factor = 5
-        if kwargs.has_key('is_seg'):
-            self._is_segment = kwargs.pop('is_seg')
-        else:
-            self._is_segment = False
+        self._augment_factor = kwargs.pop('aug_factor') if kwargs.has_key('aug_factor') else 5
+        self._is_segment = kwargs.pop('is_seg') if kwargs.has_key('is_seg') else False
+        self._references_dataset = kwargs.pop('reference_dataset') if kwargs.has_key('reference_dataset') \
+            else None
 
         super(ImageDataSetAugment, self).__init__(*args, **kwargs)
         assert self._byslices >= 0, "Currently only support slices augmentation."
@@ -41,10 +40,14 @@ class ImageDataSetAugment(ImageDataSet):
 
         # Augment dtype
         self._augdtype = None
-        if self.dtype == float or self.dtype == 'float':
+        if self.dtype == float or self.dtype == 'float' or np.issubdtype(self.dtype, np.float):
             self._augdtype = 'float32'
-        elif self.dtype == int or self.dtype == 'int':
+        elif self.dtype == int or self.dtype == 'int' or np.issubdtype(self.dtype, np.integer):
             self._augdtype = 'int'
+
+
+        if not self._references_dataset is None:
+            self.set_reference_augment_dataset(self._references_dataset)
 
     def _update_augmentators(self):
         self._augmentators = self._augmentator.to_deterministic(n=self._base_length*self._augment_factor)
@@ -94,7 +97,7 @@ class ImageDataSetAugment(ImageDataSet):
                 augmented = augmented.get_arr_int()
             else:
                 augmented = self._augmentators[item - self._base_length].augment_image(
-                baseim.squeeze().numpy().astype(self._augdtype))
+                    baseim.squeeze().numpy().astype(self._augdtype))
 
             # convert back into pytorch tensor convention (B, C, H, W)
             if baseim.squeeze().ndimension() == 3:
