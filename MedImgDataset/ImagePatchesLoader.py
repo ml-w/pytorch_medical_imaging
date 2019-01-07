@@ -20,7 +20,7 @@ class ImagePatchesLoader(Dataset):
         super(ImagePatchesLoader, self).__init__()
 
         assert axis is None or len(axis) == 2, "Axis argument should contain the two axises that forms the base image."
-        assert isinstance(base_dataset, Dataset)
+        assert isinstance(base_dataset, ImageDataSet)
         assert reference_dataset is None or isinstance(reference_dataset, ImagePatchesLoader)
 
         if isinstance(patch_size, int):
@@ -28,15 +28,15 @@ class ImagePatchesLoader(Dataset):
         if isinstance(patch_stride, int):
             patch_stride = [patch_stride, patch_stride]
 
-        self._pre_shuffle = pre_shuffle
-        self._base_dataset = base_dataset
-        self._patch_size = patch_size
-        self._patch_stride = patch_stride
-        self._axis = axis if not axis is None else [-2, -1]
+        self._pre_shuffle = pre_shuffle     # If pre-shuffle is True, patch indexes will be shuffled.
+        self._base_dataset = base_dataset   # Base ImageDataSet.
+        self._patch_size = patch_size       # Dimension of each patches.
+        self._patch_stride = patch_stride   # Stide of patch extraction windows, ignored if random_patches is True.
+        self._axis = axis if not axis is None else [-2, -1] # Default to the last two axes.
         self._include_last_patch= include_last_patch
-        self._patch_indexes = []      # [(xmin, ymin), ... ], patches has
+        self._patch_indexes = []            # [(xmin, ymin), ... ], corners of the patches.
         self._random_patches = False
-        self._random_counter = 0
+        self._random_counter = 0            # This counter is used to re-calculate patch corner after each epoch
         self.data = self._base_dataset.data
 
         # check axis
@@ -60,7 +60,9 @@ class ImagePatchesLoader(Dataset):
             self._random_patches = reference_dataset._random_patches
             self._patch_perslice = reference_dataset._patch_perslice
 
+        # Pre-shuffle the patch indexes so that each mini-batch would have similar data-statistics as the training input
         if self._pre_shuffle:
+            assert self._random_patches == 0, "Pre-shuffle cannot be used with random patches."
             self._shuffle_index_arr = np.arange(self.__len__())
             np.random.shuffle(self._shuffle_index_arr)
             self._inverse_shuffle_arr = self._shuffle_index_arr.argsort()
@@ -81,6 +83,10 @@ class ImagePatchesLoader(Dataset):
         pass
 
     def _calculate_patch_indexes(self):
+        # Clear existing indexes first
+        self._patch_indexes = []
+
+        # Set up corner indexes based on selected axes
         X, Y = self._axis
 
         Xlen, Ylen = self._unit_dimension[X], self._unit_dimension[Y]
@@ -125,7 +131,6 @@ class ImagePatchesLoader(Dataset):
 
     def piece_patches(self, inpatches):
         assert inpatches.shape[0] == self.__len__(), "Size mismatch." + str(inpatches.shape[0]) + str(self.__len__())
-        inpatches = inpatches[self._inverse_shuffle_arr]
 
         count = np.zeros(self._base_dataset.data.shape, dtype=np.uint16)
         temp_slice = np.zeros(self._base_dataset.data.shape, dtype=np.float64)
@@ -141,7 +146,11 @@ class ImagePatchesLoader(Dataset):
                         indexes.append(slice(i, i+1))
                     else:
                         indexes.append(slice(None))
-                temp_slice[indexes] += inpatches[i * len(self._patch_indexes) + j]
+                if self._pre_shuffle:
+                    inpatches_index = self._inverse_shuffle_arr[i * len(self._patch_indexes) + j]
+                    temp_slice[indexes] += inpatches[inpatches_index]
+                else:
+                    temp_slice[indexes] += inpatches[i * len(self._patch_indexes) + j]
                 count[indexes] += 1
         temp_slice /= count.astype('float')
         return tensor(temp_slice)

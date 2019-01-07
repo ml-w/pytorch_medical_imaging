@@ -22,9 +22,10 @@ class ImagePatchLocTex(ImagePatchesLoader):
 
 
 
-        temp = self._base_dataset.data.squeeze().numpy()
-        for i in xrange(len(self._base_dataset)):
-            temp[i] = LBP(temp[i])
+        # temp = self._base_dataset.data.squeeze().numpy()
+        temp = np.zeros(self._base_dataset.data.shape).squeeze()
+        for i, dat in enumerate(self._base_dataset.data):
+            temp[i] = LBP(dat.numpy().squeeze())
         temp = torch.tensor(temp).unsqueeze(1)
         self._base_dataset.data = torch.cat([self._base_dataset.data, temp], dim=1)
 

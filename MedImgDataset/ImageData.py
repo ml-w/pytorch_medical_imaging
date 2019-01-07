@@ -151,8 +151,11 @@ class ImageDataSet(Dataset):
                 self.length = len(self.dataSourcePath)
 
 
-    def size(self, int):
-        return self.length
+    def size(self, int=None):
+        if int is None:
+            return self.length
+        else:
+            return self.data.shape
 
     def __len__(self):
         return self.length
@@ -238,28 +241,3 @@ class ImageDataSet(Dataset):
             im.SetSpacing(spacing)
             return im
 
-
-class MaskedTensorDataset(Dataset):
-    """
-    Data set wrapping like Tensor Dataset, except this also accept a mask.
-    """
-
-    def __init__(self, data_tensor, target_tensor, mask_tensor):
-        """
-
-        :param ImageDataSet data_tensor:
-        :param ImageDataSet target_tensor:
-        :param ImageDataSet mask_tensor:
-        """
-        assert data_tensor.size(0) == target_tensor.size(0) == mask_tensor.size(0)
-        assert mask_tensor.dtype == np.uint8, "Mask has to be of dtype np.uint8"
-
-        self.data_tensor = data_tensor
-        self.target_tensor = target_tensor
-        self.mask_tensor = mask_tensor
-
-    def __getitem__(self, index):
-        return self.data_tensor[index], self.target_tensor[index], self.mask_tensor[index]
-
-    def __len__(self):
-        return self.data_tensor.size(0)

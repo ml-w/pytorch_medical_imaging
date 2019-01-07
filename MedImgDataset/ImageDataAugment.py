@@ -1,0 +1,110 @@
+from ImageData import ImageDataSet
+from torchvision import transforms as tr
+from imgaug import augmenters as iaa
+
+import imgaug as ia
+import torch
+import numpy as np
+
+class ImageDataSetAugment(ImageDataSet):
+    def __init__(self, *args, **kwargs):
+        # TODO: Allow reading augmentation parameters
+        self._augment_factor = 5
+        if kwargs.has_key('is_seg'):
+            self._is_segment = kwargs.pop('is_seg')
+        else:
+            self._is_segment = False
+
+        super(ImageDataSetAugment, self).__init__(*args, **kwargs)
+        assert self._byslices >= 0, "Currently only support slices augmentation."
+
+        # Change the length of the dataset
+        self._base_length = self.length
+        self.length = self.length * (self._augment_factor + 1)
+        self._nb_of_classes = len(np.unique(self.data.numpy()))
+        for i in xrange(self._augment_factor):
+            self._itemindexes = np.concatenate([self._itemindexes, self._itemindexes[1:] + self._itemindexes[-1]])
+        self._update_each_epoch= False
+        self._is_referenced = False
+        self._referencees = []
+        self._call_count = 0
+
+        # Build augmentator
+        self._augmentator = iaa.Sequential(
+            [iaa.Affine(rotate=[-10, 10], scale=[0.9, 1.1]),
+             iaa.AdditiveGaussianNoise(scale=(0,5), per_channel=False),
+             iaa.LinearContrast(alpha=(0.5, 1.5), per_channel=False)],
+            random_order=False
+        )
+        self._update_augmentators()
+
+
+        # Augment dtype
+        self._augdtype = None
+        if self.dtype == float or self.dtype == 'float':
+            self._augdtype = 'float32'
+        elif self.dtype == int or self.dtype == 'int':
+            self._augdtype = 'int'
+
+    def _update_augmentators(self):
+        self._augmentators = self._augmentator.to_deterministic(n=self._base_length*self._augment_factor)
+
+        for _referencee in self._referencees:
+            _referencee._augmentators = self._augmentators
+
+
+    def set_reference_augment_dataset(self, dataset):
+        assert isinstance(dataset, ImageDataSetAugment)
+        assert not dataset in self._referencees,"Assigned dataset is already referenced."
+        assert len(self) == len(dataset), "Datasets have different length!"
+
+        self._is_referenced=False
+        self._augmentators = dataset._augmentators
+        self._augmentator = dataset._augmentators
+        self._augment_factor = dataset._augment_factor
+        dataset._is_referenced=True
+
+    def size(self, int=None):
+        if int is None:
+            return [self.__len__()] + list(self.data[0].shape)
+        else:
+            return super(ImageDataSetAugment, self).size(int)
+
+    def __getitem__(self, item):
+        self._call_count += 1
+
+        # if item is within original length, return the original image
+        if item < self._base_length:
+            out = super(ImageDataSetAugment, self).__getitem__(item)
+        else:
+            # else return the augment image
+            slice_index = item % self._base_length
+            baseim = super(ImageDataSetAugment, self).__getitem__(slice_index)
+
+            # because imgaug convention is (B, H, W, C), we have to permute it before actual augmentation
+            if baseim.squeeze().ndimension() == 3:
+                baseim = baseim.permute(1, 2, 0)
+
+            if self._is_segment:
+                # segmentation maps requires speacial treatments
+                segim = ia.SegmentationMapOnImage(baseim.squeeze().numpy().astype(self._augdtype),
+                                                  baseim.squeeze().shape,
+                                                  self._nb_of_classes)
+                augmented = self._augmentators[item - self._base_length].augment_segmentation_maps([segim])[0]
+                augmented = augmented.get_arr_int()
+            else:
+                augmented = self._augmentators[item - self._base_length].augment_image(
+                baseim.squeeze().numpy().astype(self._augdtype))
+
+            # convert back into pytorch tensor convention (B, C, H, W)
+            if baseim.squeeze().ndimension() == 3:
+                baseim = baseim.permute(2, 0, 1)
+                augmented = augmented.transpose(2, 0, 1)
+            out = torch.from_numpy(augmented).view_as(baseim).to(baseim.dtype)
+
+        if self._call_count == self.__len__() and self._update_each_epoch:
+            self._augmentators = self._augmentator.to_deterministic(n=())
+            self._update_augmentators()
+            self._call_count = 0
+
+        return out

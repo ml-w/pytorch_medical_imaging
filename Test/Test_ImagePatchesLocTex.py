@@ -1,26 +1,31 @@
 from MedImgDataset.Computation import ImagePatchLocTex, ImageDataSet
+from MedImgDataset import ImagePatchesLoader
 from torchvision.utils import make_grid
 import matplotlib.pyplot as plt
 
+from torch.utils.data import DataLoader, TensorDataset
 import numpy as np
 
 if __name__ == '__main__':
     imset = ImageDataSet('../NPC_Segmentation/01.NPC_dx', verbose=True, debugmode=True,
                          loadBySlices=0)
 
-    patch = ImagePatchLocTex(imset, 128, 128)
+    segset = ImageDataSet('../NPC_Segmentation/02.NPC_seg', verbose=True, debugmode=True,
+                         loadBySlices=0)
 
-    lbp = patch[0:50][0].numpy()
-    lbp = lbp.reshape(lbp.shape[0], -1)
-    print lbp.shape
-    # img = patch[0:50][0]
+    print len(imset), len(segset)
 
-    # ims1 = make_grid(lbp.unsqueeze(1), nrow=5, normalize=False)
-    # ims2 = make_grid(img.unsqueeze(1), nrow=5, normalize=True)
-    #
-    # plt.imshow(ims1[0])
-    # plt.show()
-    hist = np.array([np.histogram(lbp[i][lbp[i] != 0], bins=100, range=[0, 255.]) for i in xrange(lbp.shape[0])])
-    for i in range(len(hist)):
-        plt.plot(hist[i][0])
-    plt.show()
+    patch = ImagePatchLocTex(imset, 128, 128, mode='as_histograms', random_patches=80)
+    segpa = ImagePatchesLoader(segset, 128, 32, reference_dataset=patch)
+
+    print len(patch), len(segpa)
+    dataset = TensorDataset(patch, segpa)
+    dataloader = DataLoader(dataset, shuffle=True, drop_last=False, batch_size=20)
+
+    try:
+        for i, row in enumerate(dataloader):
+            s = row[0]
+            g = row[1]
+            print s[0].shape, g.shape
+    except Exception, e:
+        print e
