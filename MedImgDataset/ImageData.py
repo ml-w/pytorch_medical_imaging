@@ -1,5 +1,5 @@
 from torch.utils.data import Dataset
-from torch import from_numpy, cat, tensor
+from torch import from_numpy, cat, tensor, stack
 from tqdm import *
 import fnmatch
 import os
@@ -149,13 +149,18 @@ class ImageDataSet(Dataset):
             except IndexError:
                 print "Wrong Index is used!"
                 self.length = len(self.dataSourcePath)
+        else:
+            self.data = stack(self.data, dim=0).unsqueeze(1)
 
 
     def size(self, int=None):
         if int is None:
-            return self.length
+            try:
+                return self.data.shape
+            except:
+                return self.length
         else:
-            return self.data.shape
+            return self.length
 
     def __len__(self):
         return self.length

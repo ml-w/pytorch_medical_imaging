@@ -3,6 +3,7 @@ from ImageData2D import ImageDataSet2D
 from ImageFeaturePair import ImageFeaturePair
 from ImageData import ImageDataSet
 from ImageDataAugment import ImageDataSetAugment
+from ImageDataMultiChannel import ImageDataSetMultiChannel
 from Computation import *
 from Subbands import Subbands
 from Landmarks import Landmarks
@@ -22,4 +23,4 @@ for row in f.readlines():
 
 __all__ = ['ImageDataSet2D', 'ImageFeaturePair', 'Landmarks', 'ImageDataSet',
            'Projection', 'Subbands', 'ImagePatchesLoader', 'ImageDataSetWithPos',
-           'ImageDataSetAugment']
+           'ImageDataSetAugment', 'ImageDataSetMultiChannel']
