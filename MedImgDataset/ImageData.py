@@ -123,7 +123,6 @@ class ImageDataSet(Dataset):
             im = sitk.ReadImage(self.rootdir + "/" + f)
             self.dataSourcePath.append(self.rootdir + "/" + f)
             imarr = sitk.GetArrayFromImage(im).astype(self.dtype)
-            imarr[imarr <= -1000] = -1000
             self.data.append(from_numpy(imarr))
             self._itemindexes.append(self.data[i].size()[0])
             metadata = {}
@@ -150,7 +149,8 @@ class ImageDataSet(Dataset):
                 print "Wrong Index is used!"
                 self.length = len(self.dataSourcePath)
         else:
-            self.data = stack(self.data, dim=0).unsqueeze(1)
+            if np.all([dat.shape[0] for dat in self.data] == self.data[0].shape[0]):
+                self.data = stack(self.data, dim=0).unsqueeze(1)
 
 
     def size(self, int=None):

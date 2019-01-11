@@ -1,4 +1,5 @@
-from torch import cat, stack, tensor
+import torch
+from torch import cat, stack, tensor, zeros
 from torch.utils.data import Dataset
 from ImageData import ImageDataSet
 import numpy as np
@@ -132,17 +133,17 @@ class ImagePatchesLoader(Dataset):
     def piece_patches(self, inpatches):
         assert inpatches.shape[0] == self.__len__(), "Size mismatch." + str(inpatches.shape[0]) + str(self.__len__())
 
-        count = np.zeros(self._base_dataset.data.shape, dtype=np.uint16)
-        temp_slice = np.zeros(self._base_dataset.data.shape, dtype=np.float64)
+        count = torch.zeros(self._base_dataset.data.shape, dtype=torch.int16)
+        temp_slice = torch.zeros(self._base_dataset.data.shape, dtype=torch.float)
         for i in xrange(len(self._base_dataset)):
             for j, p in enumerate(self._patch_indexes):
                 indexes = []
-                for k in xrange(count.ndim):
-                    if k == self._axis[0] % count.ndim:
+                for k in xrange(count.ndimension()):
+                    if k == self._axis[0] % count.ndimension():
                         indexes.append(slice(p[0], p[0] + self._patch_size[0]))
-                    elif k == self._axis[1] % count.ndim:
+                    elif k == self._axis[1] % count.ndimension():
                         indexes.append(slice(p[1], p[1] + self._patch_size[1]))
-                    elif k == 0 and count.ndim == 4: # Batch dimension
+                    elif k == 0 and count.ndimension() == 4: # Batch dimension
                         indexes.append(slice(i, i+1))
                     else:
                         indexes.append(slice(None))
@@ -152,7 +153,7 @@ class ImagePatchesLoader(Dataset):
                 else:
                     temp_slice[indexes] += inpatches[i * len(self._patch_indexes) + j]
                 count[indexes] += 1
-        temp_slice /= count.astype('float')
+        temp_slice /= count.float()
         return tensor(temp_slice)
 
 

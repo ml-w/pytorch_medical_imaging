@@ -72,7 +72,7 @@ def LoadSegmentationImageDataset(a, debug=False):
 
 
 def LoadSegmentationImageDatasetWithPos(a, debug=False):
-    imagewifpos = lambda input, fsuffix, filelist, dtype: ImageDataSetWithPos(input,
+    imagewifpos = lambda input, fsuffix, filelist, dtype: ImageDataSet(input,
                                                           dtype=dtype,
                                                           verbose=True,
                                                           debugmode=debug,
@@ -90,14 +90,16 @@ def LoadSegmentationImageDatasetWithPos(a, debug=False):
     if a.train is None:
         assert os.path.isfile(a.loadbyfilelist), "Cannot open filelist!"
         # Eval mode
-        return imagewifpos(a.input, a.lsuffix, a.loadbyfilelist, np.float32)
+        return ImageDataSetWithPos(imagewifpos(a.input, a.lsuffix, a.loadbyfilelist, np.float32))
     else:
         # Training Mode
         if a.loadbyfilelist is None:
-            return imagewifpos(a.input, a.lsuffix, None, np.float32), image(a.train, None, None, np.uint8)
+            return ImageDataSetWithPos(imagewifpos(a.input, a.lsuffix, None, np.float32)), \
+                   image(a.train, None, None, np.uint8)
         else:
             gt_filelist, input_filelist = a.loadbyfilelist.split(',')
-            return imagewifpos(a.input, a.lsuffix, input_filelist, np.float32), image(a.train, None, gt_filelist, np.uint8)
+            return ImageDataSetWithPos(imagewifpos(a.input, a.lsuffix, input_filelist, np.float32)), \
+                   image(a.train, None, gt_filelist, np.uint8)
 
 
 def LoadSegmentationPatchLocTex(a, debug=False):
@@ -157,30 +159,194 @@ def LoadSegmentationPatchLocTexHist(a, debug=False):
     stride = 32
 
     if a.train is None:
-        assert os.path.isfile(a.loadbyfilelist), "Cannot open filelist!"
+        # assert os.path.isfile(a.loadbyfilelist), "Cannot open filelist!"
         # Eval mode
         return ImagePatchLocTex(imset(a.input, a.lsuffix, a.loadbyfilelist, np.float32),
                                 patchsize, patch_stride=stride * 2, pre_shuffle=True, mode='as_histograms')
     else:
         # Training Mode
         if a.loadbyfilelist is None:
-            return ImagePatchLocTex(imset(a.input, a.lsuffix, None, np.float32), patchsize, stride, mode='as_histograms'), \
-                   ImagePatchesLoader(imseg(a.train, None, None, np.uint8), patchsize, stride)
+            invars = ImagePatchLocTex(imset(a.input,
+                                            a.lsuffix,
+                                            None,
+                                            np.float32),
+                                      patchsize,
+                                      stride,
+                                      mode='as_histograms',
+                                      random_patches=80)
+            gtvars = ImagePatchesLoader(imseg(a.train,
+                                              None,
+                                              None,
+                                              np.uint8),
+                                        patchsize,
+                                        stride,
+                                        reference_dataset=invars)
+            return invars, gtvars
+
         else:
             gt_filelist, input_filelist = a.loadbyfilelist.split(',')
-            return ImagePatchLocTex(imset(a.input, a.lsuffix, input_filelist, np.float32), patchsize, stride, mode='as_histograms'), \
-                   ImagePatchesLoader(imseg(a.train, None, gt_filelist, np.uint8), patchsize, stride)
+            invars = ImagePatchLocTex(imset(a.input,
+                                            a.lsuffix,
+                                            input_filelist,
+                                            np.float32),
+                                      patchsize,
+                                      stride,
+                                      mode='as_histograms',
+                                      random_patches=80)
+            gtvars = ImagePatchesLoader(imseg(a.train,
+                                              None,
+                                              gt_filelist,
+                                              np.uint8),
+                                        patchsize,
+                                        stride,
+                                        reference_dataset=invars)
+            return invars, gtvars
+
+
+def LoadSegmentationPatchLocTexHist_Aug(a, debug=False):
+    imset = lambda input, fsuffix, filelist, dtype: ImageDataSetAugment(input,
+                                                                        dtype=dtype,
+                                                                        verbose=True,
+                                                                        debugmode=debug,
+                                                                        filesuffix=fsuffix,
+                                                                        loadBySlices=0,
+                                                                        filelist=filelist,
+                                                                        aug_factor=5)
+    imseg = lambda input, fsuffix, filelist, dtype: ImageDataSetAugment(input,
+                                                                        dtype=dtype,
+                                                                        verbose=True,
+                                                                        debugmode=debug,
+                                                                        filesuffix=fsuffix,
+                                                                        loadBySlices=0,
+                                                                        filelist=filelist,
+                                                                        is_seg=True)
+
+
+    patchsize = 128
+    stride = 32
+
+    if a.train is None:
+        # Eval mode
+        imset = lambda input, fsuffix, filelist, dtype: ImageDataSet(input,
+                                                                     dtype=dtype,
+                                                                     verbose=True,
+                                                                     debugmode=debug,
+                                                                     filesuffix=fsuffix,
+                                                                     loadBySlices=0,
+                                                                     filelist=filelist)
+        return ImagePatchLocTex(imset(a.input,
+                                      a.lsuffix,
+                                      a.loadbyfilelist,
+                                      np.float32),
+                                patchsize, patch_stride=stride, pre_shuffle=True, mode='as_histograms')
+    else:
+        # Training Mode
+        if a.loadbyfilelist is None:
+            invars = ImagePatchLocTex(imset(a.input,
+                                            a.lsuffix,
+                                            None,
+                                            np.float32),
+                                      patchsize,
+                                      stride,
+                                      mode='as_histograms',
+                                      random_patches=20)
+            seg = imseg(a.train, None, None, np.uint8)
+            seg.set_reference_augment_dataset(invars._base_dataset)
+            gtvars = ImagePatchesLoader(seg,
+                                        patchsize,
+                                        stride,
+                                        reference_dataset=invars)
+            return invars, gtvars
+
+        else:
+            gt_filelist, input_filelist = a.loadbyfilelist.split(',')
+            invars = ImagePatchLocTex(imset(a.input,
+                                            a.lsuffix,
+                                            input_filelist,
+                                            np.float32),
+                                      patchsize,
+                                      stride,
+                                      mode='as_histograms',
+                                      random_patches=20)
+            seg = imseg(a.train, None, gt_filelist, np.uint8)
+            seg.set_reference_augment_dataset(invars._base_dataset)
+            gtvars = ImagePatchesLoader(seg,
+                                        patchsize,
+                                        stride,
+                                        reference_dataset=invars)
+            return invars, gtvars
+
+
+def LoadSegmentationImageDatasetMMPos_Aug(a, debug=False):
+    imset = lambda input, fsuffix, filelist, dtype: ImageDataSetAugment(input,
+                                                                        dtype=dtype,
+                                                                        verbose=True,
+                                                                        debugmode=debug,
+                                                                        filesuffix=fsuffix,
+                                                                        loadBySlices=0,
+                                                                        filelist=filelist,
+                                                                        aug_factor=5)
+
+    imseg = lambda input, fsuffix, filelist, dtype: ImageDataSetAugment(input,
+                                                                        dtype=dtype,
+                                                                        verbose=True,
+                                                                        debugmode=debug,
+                                                                        filesuffix=fsuffix,
+                                                                        loadBySlices=0,
+                                                                        filelist=filelist,
+                                                                        is_seg=True)
+    assert len(a.lsuffix.split(',')) == 2, "Loader suffix should be seperated by commas without spaces."
+    suf1, suf2 = a.lsuffix.split(',')
+    if a.train is None:
+        # Eval mode
+        imset = lambda input, fsuffix, filelist, dtype: ImageDataSet(input,
+                                                                     dtype=dtype,
+                                                                     verbose=True,
+                                                                     debugmode=debug,
+                                                                     filesuffix=fsuffix,
+                                                                     loadBySlices=0,
+                                                                     filelist=filelist)
+
+        invars1 = imset(a.input,suf1,a.loadbyfilelist,np.float32)
+        invars2 = imset(a.input,suf2,a.loadbyfilelist,np.float32)
+
+        return ImageDataSetWithPos(ImageDataSetMultiChannel(invars1, invars2))
+    else:
+
+        # Training Mode
+        if a.loadbyfilelist is None:
+            invars1 = imset(a.input, suf1, None, np.float32)
+            invars2 = imset(a.input, suf2, None, np.float32)
+            invars2.set_reference_augment_dataset(invars1)
+            invars  = ImageDataSetWithPos(ImageDataSetMultiChannel(invars1, invars2))
+            gtvars = imseg(a.train, None, None, np.uint8)
+            gtvars.set_reference_augment_dataset(invars1)
+            return invars, gtvars
+        else:
+            gt_filelist, input_filelist = a.loadbyfilelist.split(',')
+            invars1 = imset(a.input, suf1, input_filelist, np.float32)
+            invars2 = imset(a.input, suf2, input_filelist, np.float32)
+            invars2.set_reference_augment_dataset(invars1)
+            invars = ImageDataSetWithPos(ImageDataSetMultiChannel(invars1, invars2))
+            gtvars = imseg(a.train, None, gt_filelist, np.uint8)
+            gtvars.set_reference_augment_dataset(invars1)
+            return invars, gtvars
+
 
 datamap = {'subband':LoadSubbandDataset,
            'image2D':LoadImageDataset,
            'seg2D': LoadSegmentationImageDataset,
            'seg2DwifPos': LoadSegmentationImageDatasetWithPos,
+           'seg2DMMwifPos_aug': LoadSegmentationImageDatasetMMPos_Aug,
            'seg2Dloctex': LoadSegmentationPatchLocTex,
            'seg2Dloctexhist': LoadSegmentationPatchLocTexHist,
+           'seg2Dloctexhist_aug': LoadSegmentationPatchLocTexHist_Aug,
            'subband_debug': partial(LoadSubbandDataset, debug=True),
            'image2D_debug': partial(LoadImageDataset, debug=True),
            'seg2D_debug': partial(LoadSegmentationImageDataset, debug=True),
            'seg2DwifPos_debug': partial(LoadSegmentationImageDatasetWithPos, debug=True),
            'seg2Dloctex_debug': partial(LoadSegmentationPatchLocTex, debug=True),
-           'seg2Dloctexhist_debug': partial(LoadSegmentationPatchLocTexHist, debug=True)
+           'seg2Dloctexhist_debug': partial(LoadSegmentationPatchLocTexHist, debug=True),
+           'seg2Dloctexhist_aug_debug': partial(LoadSegmentationPatchLocTexHist_Aug, debug=True),
+           'seg2DMMwifPos_aug_debug': partial(LoadSegmentationImageDatasetMMPos_Aug, debug=True)
            }

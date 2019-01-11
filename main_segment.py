@@ -63,8 +63,15 @@ def main(a):
         numOfClasses = len(np.unique(gtDataset.data.numpy()))
 
         # calculate empty label ratio
-        r = 1. - np.sum(gtDataset.data.numpy().flatten() == 0) / float(np.prod(gtDataset.data.numpy().shape))
-        weights = torch.tensor([r] + [1.] * (numOfClasses - 1))
+        r = []
+        for c in xrange(numOfClasses):
+            factor = float(np.prod(np.array(gtDataset.size())))/float(np.sum(gtDataset.data.numpy().flatten() == c))
+            factor *= 1 if c != 0 or a.initialweight is None else a.initialweight
+            r.append(factor)
+        r = np.array(r)
+        r = r / r.max()
+        weights = torch.tensor(r.tolist())
+        LogPrint("Initial weight factor: " + str(weights))
 
         # if the input datatyle is not standard, retreat to 1
         try:
@@ -176,7 +183,7 @@ def main(a):
                         val, ar = torch.max(out, 1)
                         poolim = make_grid(out[:Zrange, numOfClasses-1].unsqueeze(1).data, nrow=4, padding=1, normalize=True)
                         poolgt = make_grid(g[:Zrange].data, nrow=4, padding=1, normalize=True)
-                        poolseg = make_grid(ar[:Zrange].unsqueeze(1).float().data, nrow=4, padding=1, normalize=True)
+                        poolseg = make_grid(ar[:Zrange].unsqueeze(1).float().data, nrow=4, padding=1, range=[0, 1])
                         writer.add_image('Image/Image', poolim, writerindex)
                         writer.add_image('Image/Groundtruth', poolgt, writerindex)
                         writer.add_image('Image/Segmentation', poolseg, writerindex)
@@ -209,12 +216,12 @@ def main(a):
                 for pg in optimizer.param_groups:
                     pg['lr'] = pg['lr'] * np.exp(-i * a.decay / float(a.epoch))
                 # update loss function weight
-                sigmoid = lambda x: 1. / (1. + np.exp(-x * 0.05 + 6))
+                sigmoid_plus = lambda x: 1. / (1. + np.exp(-x * 0.05 + 2))
                 #
                 if isinstance(criterion, nn.CrossEntropyLoss):
                     LogPrint('Current weight: ' + str(criterion.weight), logging.INFO)
-                    weights = torch.tensor([r * sigmoid(i)*100] + [1.] * (numOfClasses - 1))
-                    criterion.weight.copy_(weights)
+                    factor =  sigmoid_plus(i + 1) * 100
+                    criterion.weight.copy_(torch.tensor([r[0] * factor] + r[1:].tolist()))
                     LogPrint('New weight: ' + str(criterion.weight), logging.INFO)
 
 
@@ -225,8 +232,9 @@ def main(a):
     # Evaluation mode
     else:
         LogPrint("Starting evaluation...")
-        if not os.path.isfile(a.loadbyfilelist):
-            LogPrint("Cannot open input file list!", logging.WARNING)
+        if not a.loadbyfilelist is None:
+            if not os.path.isfile(a.loadbyfilelist):
+                LogPrint("Cannot open input file list!", logging.WARNING)
 
         inputDataset= ml.datamap[a.datatype](a)
         loader = DataLoader(inputDataset, batch_size=a.batchsize, shuffle=False, num_workers=4)
@@ -308,6 +316,7 @@ if __name__ == '__main__':
                           'UNetPosAware': UNetPosAware,
                           'UNetLocTexAware': UNetLocTexAware,
                           'UNetLocTexHist': UNetLocTexAware2,
+                          'UNetLocTexHistDeeper': UNetLocTexAwareDeeper,
                           'DenseUNet': DenseUNet2D,
                           'AttentionUNet': AttentionUNet,
                           'AttentionDenseUNet': AttentionDenseUNet2D,
