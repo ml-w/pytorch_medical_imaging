@@ -177,3 +177,55 @@ class AttentionUNetLocTexAware(AttentionUNet):
         else:
             self.att = [att1, att2, att3, att4]
             return x
+
+class AttentionUNetPosAwareMultMod(AttentionUNet):
+    def __init__(self, *args, **kwargs):
+        super(AttentionUNetPosAwareMultMod, self).__init__(*args, **kwargs)
+
+        self.fc = nn.Sequential(
+            nn.Linear(1, 256),
+            nn.Linear(256, 256),
+            nn.ReLU(256, True),
+            nn.BatchNorm1d(256),
+            nn.Linear(256, 2)
+        )
+        self.outc = nn.Conv2d(64, 2, 1)
+
+    def forward(self, x, pos):
+        x1 = self.inc(x)
+        x2 = self.down1(x1)
+        x3 = self.down2(x2)
+        x4 = self.down3(x3)
+        x5 = self.down4(x4)
+
+        g1 = self.gating1(x5)
+        g2 = self.gating2(x4)
+        g3 = self.gating3(x3)
+        g4 = self.gating4(x2)
+
+        x = self.up1(x5, x4)
+        x, att1 = self.att1(x, g1)
+
+        x = self.up2(x, x3)
+        x, att2 = self.att2(x, g2)
+
+        x = self.up3(x, x2)
+        x, att3 = self.att3(x, g3)
+
+        x = self.up4(x, x1)
+        x, att4 = self.att4(x, g4)
+
+        x = self.outc(x)
+
+        # expand pos
+        pos = self.fc(pos.view(len(pos), 1))
+        pos = pos.expand_as(x.permute(2, 3, 0, 1)).permute(2, 3, 0, 1)
+        x = x * pos
+
+        if not self.attmap:
+            del att1, att2, att3, att4
+            self.att = None
+            return x
+        else:
+            self.att = [att1, att2, att3, att4]
+            return x

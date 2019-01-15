@@ -29,6 +29,14 @@ class ImageDataSetWithPos(Dataset):
         pos = loc / float(range[1] - range[0]) - 0.5                # anatomy normalized by ratio
         return pos
 
+
+    def Write(self, *args):
+        try:
+            self._basedataset.Write(*args)
+        except Exception, e:
+            print e
+            raise NotImplementedError("Base data have no Write() method")
+
     def __len__(self):
         return len(self._basedataset)
 

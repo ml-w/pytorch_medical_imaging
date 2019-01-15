@@ -290,7 +290,7 @@ def main(a):
             else:
                 out = net.forward(s).squeeze()
 
-            while out.dim() <= indim:
+            while out.dim() < indim:
                 out = out.unsqueeze(0)
                 LogPrint('Unsqueezing last batch.' + str(out.shape))
             # out = F.log_softmax(out, dim=1)

@@ -26,6 +26,13 @@ class ImageDataSetMultiChannel(Dataset):
     def size(self, int=None):
         return self._size
 
+    def Write(self, *args):
+        try:
+            self._basedata[0].Write(*args)
+        except Exception, e:
+            print e
+            raise NotImplementedError("Base data have no Write() method")
+
     def __len__(self):
         return self.size()[0]
 

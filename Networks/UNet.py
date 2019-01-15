@@ -37,7 +37,10 @@ class up(nn.Module):
         #  would be a nice idea if the upsampling could be learned too,
         #  but my machine do not have enough memory to handle all those weights
         if bilinear:
-            self.up = nn.Upsample(scale_factor=2, mode='bilinear', align_corners=False)
+            self.up = lambda input: nn.functional.interpolate(input,
+                                                              scale_factor=2,
+                                                              mode='bilinear',
+                                                              align_corners=False)
         else:
             self.up = nn.ConvTranspose2d(in_ch//2, in_ch//2, 2, stride=2)
 
