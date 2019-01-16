@@ -1,9 +1,11 @@
 """
-Implementation follows [1], interpolation extracted from skimage package [2]
+Implementation follows [1], part of the code extracted from skimage package [2]
 
 [1] Manisha Verma, Balasubramanian Raman, Local neighborhood difference pattern: A new feature
     descriptor for natural and texture image retrieval, 10.1007/s11042-017-4834-3, Multimed
     Tools Appl 77:11843-11866 (2018)
+
+[2] https://github.com/scikit-image/scikit-image/blob/master/skimage/feature/texture.py
 """
 #cython: cdivision=True
 #cython: boundscheck=False
@@ -59,24 +61,19 @@ def LNDP(double[:,::1] image, int P, float R):
                     for i in range(P):
                         texture[i] = image[(r + rp[i]) % hmax, (c + cp[i]) % wmax]
 
-                    # signed / thresholded texture
+                    # calculate neighbor difference
                     for i in range(P):
-                        if texture[i] - image[r, c] >= 0:
-                            signed_texture[i] = 1
-                        else:
-                            signed_texture[i] = 0
-
-                    for i in range(P):
-                        # printf("(%i,%i)", (i+1) %P, (i-1)%P)
                         dtexture1[i] =  texture[(i + 1) % P] - texture[i]
                         dtexture2[i] =  texture[(i - 1) % P] - texture[i]
 
+                    # same-sign = 0, opposite-sign = 1
                     for i in range(P):
                         if dtexture1[i] * dtexture2[i] < 0:
                             texture_b[i] = 0
                         else:
                             texture_b[i] = 1
 
+                    # construct values from results
                     for i in range(P):
                         lndp += texture_b[i] * 2**i
 
