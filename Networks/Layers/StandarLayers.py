@@ -103,3 +103,35 @@ class CircularDoubleConv(nn.Module):
         x = self.pad_circular(x, 1)
         x = self.conv1(x)
         return x
+
+
+class ReflectiveDoubleConv(nn.Module):
+    def __init__(self, in_ch, out_ch, kernsize=3, linear=False):
+        super(ReflectiveDoubleConv, self).__init__()
+
+        pad = kernsize // 2
+
+        if linear:
+            self.conv = nn.Sequential(
+                nn.ReflectionPad2d(pad),
+                nn.Conv2d(in_ch, out_ch, kernsize),
+                nn.BatchNorm2d(out_ch),
+                nn.ReflectionPad2d(pad),
+                nn.Conv2d(out_ch, out_ch, kernsize),
+                nn.BatchNorm2d(out_ch)
+            )
+        else:
+            self.conv = nn.Sequential(
+                nn.ReflectionPad2d(pad),
+                nn.Conv2d(in_ch, out_ch, kernsize),
+                nn.BatchNorm2d(out_ch),
+                nn.ReLU(inplace=True),
+                nn.ReflectionPad2d(pad),
+                nn.Conv2d(out_ch, out_ch, kernsize),
+                nn.BatchNorm2d(out_ch),
+                nn.ReLU(inplace=True)
+            )
+
+
+    def forward(self, x):
+        return self.conv(x)

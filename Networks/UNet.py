@@ -5,7 +5,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
-from Layers import DoubleConv as double_conv
+from Layers import ReflectiveDoubleConv as double_conv
 
 class inconv(nn.Module):
     def __init__(self, in_ch, out_ch):
