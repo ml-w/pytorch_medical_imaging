@@ -64,13 +64,20 @@ def main(a):
 
         # calculate empty label ratio
         r = []
-        for c in xrange(numOfClasses):
+        # for updating loss function weight
+        sigmoid_plus = lambda x: 1. / (1. + np.exp(-x * 0.05 + 2))
+        for c in np.unique(gtDataset.data.numpy()):
             factor = float(np.prod(np.array(gtDataset.size())))/float(np.sum(gtDataset.data.numpy().flatten() == c))
-            factor *= 1 if c != 0 or a.initialweight is None else a.initialweight
             r.append(factor)
         r = np.array(r)
         r = r / r.max()
-        weights = torch.tensor(r.tolist())
+
+        # calculate init-factor
+        if not a.initialweight is None:
+            factor =  sigmoid_plus(a.initialweight + 1) * 100
+        else:
+            factor = 1
+        weights = torch.tensor([r[0] * factor] + r[1:].tolist())
         LogPrint("Initial weight factor: " + str(weights))
 
         # if the input datatyle is not standard, retreat to 1
@@ -100,8 +107,8 @@ def main(a):
                              logging.WARNING)
                     tensorboard_rootdir = "/media/storage/PytorchRuns"
                 writer = SummaryWriter(tensorboard_rootdir + "/%s_%s_%s"%(a.network,
-                                                                       a.lsuffix,
-                                                                       datetime.datetime.now().strftime("%Y%m%d_%H%M")))
+                                                                          a.lsuffix,
+                                                                          datetime.datetime.now().strftime("%Y%m%d_%H%M")))
             except OSError:
                 writer = None
                 a.plot = False
@@ -133,7 +140,7 @@ def main(a):
 
         criterion = nn.CrossEntropyLoss(weight=weights)
         optimizer = optim.SGD([{'params': net.parameters(),
-                                 'lr': lr, 'momentum': mm}])
+                                'lr': lr, 'momentum': mm}])
         if a.usecuda:
             criterion = criterion.cuda()
             # normfactor = normfactor.cuda()
@@ -215,12 +222,12 @@ def main(a):
             if a.decay != 0:
                 for pg in optimizer.param_groups:
                     pg['lr'] = pg['lr'] * np.exp(-i * a.decay / float(a.epoch))
-                # update loss function weight
-                sigmoid_plus = lambda x: 1. / (1. + np.exp(-x * 0.05 + 2))
+
                 #
                 if isinstance(criterion, nn.CrossEntropyLoss):
                     LogPrint('Current weight: ' + str(criterion.weight), logging.INFO)
-                    factor =  sigmoid_plus(i + 1) * 100
+                    offsetfactor = i + a.initialweight if not a.initialweight is None else i
+                    factor =  sigmoid_plus(offsetfactor + 1) * 100
                     criterion.weight.copy_(torch.tensor([r[0] * factor] + r[1:].tolist()))
                     LogPrint('New weight: ' + str(criterion.weight), logging.INFO)
 
@@ -369,7 +376,7 @@ if __name__ == '__main__':
                         help="Select input datatype.")
     parser.add_argument('--initial-weight', dest='initialweight', action='store', type=float, default=None,
                         help="(Optional) Choose initial training weight factor of the loss function. The weight of "
-                             "the loss function is initially assigned to be the ratio of ")
+                             "the loss function is initially assigned to be the portion of labeled pixels.")
     a = parser.parse_args()
 
     # Parameters check
