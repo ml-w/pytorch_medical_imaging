@@ -7,16 +7,8 @@ import numpy as np
 class ImagePatchesLoader(Dataset):
     def __init__(self, base_dataset, patch_size, patch_stride, include_last_patch=True,
                  axis=None, reference_dataset=None, pre_shuffle=False, random_patches=-1):
-        """
-
-        :param base_dataset:
-        :param patch_size:
-        :param patch_stride:
-        :param include_last_patch:
-        :param axis:
-        :param reference_dataset:
-        :param pre_shuffle:
-        :param random_patches:
+        """ImagePatchesLoader(self, base_dataset, patch_size, patch_stride, include_last_patch=True,
+                 axis=None, reference_dataset=None, pre_shuffle=False, random_patches=-1) --> ImagePatchesLoader
         """
         super(ImagePatchesLoader, self).__init__()
 
@@ -131,7 +123,7 @@ class ImagePatchesLoader(Dataset):
             return size[val]
 
     def piece_patches(self, inpatches):
-        assert inpatches.shape[0] == self.__len__(), "Size mismatch." + str(inpatches.shape[0]) + str(self.__len__())
+        assert inpatches.shape[0] == self.__len__(), "Size mismatch." + str(inpatches.shape[0]) + ',' + str(self.__len__())
 
         count = torch.zeros(self._base_dataset.data.shape, dtype=torch.int16)
         temp_slice = torch.zeros(self._base_dataset.data.shape, dtype=torch.float)
