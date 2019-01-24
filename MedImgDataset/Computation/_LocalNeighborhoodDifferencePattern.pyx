@@ -37,8 +37,6 @@ def LNDP(double[:,::1] image, int P, float R):
     cdef double[::1] dtexture1 = np.zeros(P, dtype=np.double)
     cdef double[::1] dtexture2 = np.zeros(P, dtype=np.double)
     cdef unsigned char[::1] texture_b = np.zeros(P, dtype=np.uint8)
-    cdef signed char[::1] signed_texture = np.zeros(P, dtype=np.int8)
-    cdef int[::1] rotation_chain = np.zeros(P, dtype=np.int32)
 
     cdef Py_ssize_t rows = image.shape[0]
     cdef Py_ssize_t cols = image.shape[1]
@@ -46,10 +44,6 @@ def LNDP(double[:,::1] image, int P, float R):
 
     cdef int lndp
     cdef Py_ssize_t r, c, changes, i
-    cdef Py_ssize_t rot_index, n_ones
-
-    # To compute the variance features
-    cdef double sum_, var_, texture_i
 
     with nogil:
         with cython.boundscheck(False):
