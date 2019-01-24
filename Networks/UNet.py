@@ -18,12 +18,19 @@ class inconv(nn.Module):
 
 
 class down(nn.Module):
-    def __init__(self, in_ch, out_ch):
+    def __init__(self, in_ch, out_ch, max_pool=False):
         super(down, self).__init__()
-        self.mpconv = nn.Sequential(
-            nn.AvgPool2d(2),
-            double_conv(in_ch, out_ch)
-        )
+
+        if max_pool:
+            self.mpconv = nn.Sequential(
+                nn.MaxPool2d(2),
+                double_conv(in_ch, out_ch)
+            )
+        else:
+            self.mpconv = nn.Sequential(
+                nn.AvgPool2d(2),
+                double_conv(in_ch, out_ch)
+            )
 
     def forward(self, x):
         x = self.mpconv(x)
@@ -240,8 +247,8 @@ class UNetLocTexAwareDeeper(UNet):
             nn.ReLU(inplace=True)
         )
 
-        self.down4 = down(512, 1024)
-        self.down5 = down(1024, 1024)
+        self.down4 = down(512, 1024, max_pool=True)
+        self.down5 = down(1024, 1024, max_pool=True)
 
         self.up0 = up(2048, 512, True)
 
