@@ -5,7 +5,11 @@ import numpy as np
 import os
 import SimpleITK as sitk
 import pandas as pd
+
+from MedImgDataset import ImageDataSet
+
 from tqdm import *
+
 
 #========================================
 # Similarity functions
@@ -122,6 +126,77 @@ def MSE(x, y):
     return RMSE(x,y)**2
 
 
+#========================================
+# Segmentation
+#========================================
+
+def perf_measure(y_actual, y_guess):
+    y = y_actual.flatten()
+    x = y_guess.flatten()
+
+    TP = np.sum((y == True) & (x == True))
+    TN = np.sum((y == False) & (x == False))
+    FP = np.sum((y == False) & (x == True))
+    FN = np.sum((y == True) & (x == False))
+    return TP, FP, TN, FN
+
+def JAC(TP, FP, TN, FN):
+    return TP / (TP + FP + FN)
+
+def GCE(TP, FP, TN, FN):
+    n = float(np.sum(TP + FP + TN + FN))
+
+    val = np.min([FN * (FN + 2*TP) / (TP + FN) + FP * (FP + 2*TN)/(TN+FP),
+                FP * (FP + 2*TP) / (TP + FP) + FN * (FN + 2*TN)/(TN+FN)]) / n
+    # if np.sum(actual) == 0 or  np.sum(guess) == 0:
+    #     print TP, FP, TN, FN, np.sum(actual) == 0, np.sum(guess) == 0
+    return val
+
+def DICE(TP, FP, TN, FN):
+    if np.isclose(2*TP+FP+FN, 0):
+        return 1
+    else:
+        return 2*TP / (2*TP+FP+FN)
+
+def VS(TP, FP, TN, FN):
+
+    return 1 - abs(FN - FP) / (2*TP + FP + FN)
+
+def VD(TP, FP, TN, FN):
+    return 1 - VS(TP, FP, TN, FN)
+
+def PercentMatch(TP, FP, TN, FN):
+    return TP / float(TP+FN)
+
+def CorrespondenceRatio(TP, FP, TN, FN):
+    return (1.*TP - 0.5*FP) / float(TP + FN)
+
+def EVAL(seg, gt):
+    vars = {'GCE': GCE,
+            'JAC': JAC,
+            'DICE': DICE,
+            'VD': VD,
+            'PM': PercentMatch,
+            'CR': CorrespondenceRatio}
+
+    df = pd.DataFrame(columns=['filename','ImageIndex'] + vars.keys())
+
+    for i, row in enumerate(tqdm(zip(seg, gt))):
+        ss = row[0]
+        gg = row[1]
+        if not isinstance(ss, np.ndarray):
+            ss = ss.numpy().flatten().astype('bool')
+        if not isinstance(gg, np.ndarray):
+            gg = gg.numpy().flatten().astype('bool')
+
+        TP, FP, TN, FN = np.array(perf_measure(gg, ss), dtype=float)
+        values = [vars[keys](TP, FP, TN, FN ) for keys in vars]
+        data = pd.DataFrame([[os.path.basename(seg.dataSourcePath[i]), i] + values],
+                            columns=['filename','ImageIndex'] + vars.keys())
+        df = df.append(data)
+    return df
+
+
 #=========================================
 # General batch analysis
 #=========================================
@@ -194,23 +269,33 @@ def BatchAnalysis(targetfiles, testfiles, func, mask=None, outputcsvdir=None):
 
 
 
-
+from skimage.transform import resize
 
 if __name__ == '__main__':
     import fnmatch
 
-    inputdict = {}
-    dir = "/home/lwong/Source/Repos/dfb_sparse_view_reconstruction/DFB_Recon/99.Testing/Batch/B01"
-    files = os.listdir(dir)
-    files.remove('target_files.txt')
-    files.remove('mask_files.txt')
-    files = fnmatch.filter(files, "*txt")
-    for k in files:
-        kdir = dir + '/' + k
-        inputdict[k.split('_')[-1].replace('.txt', '')] = [f.rstrip() for f in open(kdir).readlines()]
+    # output = ImageDataSet('../NPC_Segmentation/98.Output/UNetLocTexHist', verbose=True,
+    #                       filelist='../NPC_Segmentation/99.Testing/B01_Testing_Input.txt',
+    #                       filesuffix='T1*C*')
+    # seg = ImageDataSet('../NPC_Segmentation/02.NPC_seg', verbose=True,
+    #                    filelist='../NPC_Segmentation/99.Testing/B01_Testing_GT.txt')
+    # output = ImageDataSet('../NPC_Segmentation/98.Output/UNetLocTexHist2', verbose=True)
+    output = ImageDataSet('../NPC_Segmentation/98.Output/UNetLocHist_Aug_4', verbose=True)
+    seg = ImageDataSet('../NPC_Segmentation/03.NPC_seg_1stRedraw', verbose=True,
+                       filelist='../NPC_Segmentation/99.Testing/B00/B00_Testing_GT.txt')
 
-    tarfiles = [f.rstrip() for f in open(dir + '/target_files.txt').readlines()]
-    maskfiles = [f.strip() for f in open(dir + '/mask_files.txt').readlines()]
+    # # Resize to 144x144
+    # t1, t2 = [], []
+    # for i in xrange(len(output)):
+    #     t1.append(resize(output[i].numpy(), (len(output[i]), 144, 144), clip=False, preserve_range=True))
+    #     t2.append(resize(seg[i].numpy(), (len(output[i]), 144, 144), clip=False, preserve_range=True))
+    #
+    # output.data = t1
+    # seg.data = t2
 
-    BatchAnalysis(tarfiles, inputdict, [PSNR, SSIM, RMSE], outputcsvdir=dir+'/newresult_mask.csv',
-                  mask=maskfiles)
+    results = EVAL(output, seg)
+    results = results.sort_values('DICE')
+    print results.to_string()
+    print results['DICE'].mean()
+    print results['PM'].mean()
+    print results['CR'].mean()
