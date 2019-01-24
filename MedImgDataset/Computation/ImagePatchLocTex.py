@@ -7,6 +7,11 @@ from .LocalBinaryPattern import LBP
 
 class ImagePatchLocTex(ImagePatchesLoader):
     def __init__(self, *args, **kwargs):
+        """ImagePatchLocTex(self, base_dataset, patch_size, patch_stride, include_last_patch=True,
+                 axis=None, reference_dataset=None, pre_shuffle=False, random_patches=-1, mode='as_channels')
+
+        :param str mode: ['as_channel'|'as_histograms']
+        """
         try:
             self._mode=kwargs['mode']
             kwargs.pop('mode')
