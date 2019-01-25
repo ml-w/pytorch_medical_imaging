@@ -165,6 +165,14 @@ class ImageDataSet(Dataset):
     def type(self):
         return self.data[0].type()
 
+    def as_type(self, t):
+        try:
+            self.data = self.data.type(t)
+            self.dtype = t
+        except Exception, e:
+            print e
+
+
     def __len__(self):
         return self.length
 
