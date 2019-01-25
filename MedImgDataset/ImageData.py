@@ -162,6 +162,9 @@ class ImageDataSet(Dataset):
         else:
             return self.length
 
+    def type(self):
+        return self.data[0].type()
+
     def __len__(self):
         return self.length
 
