@@ -1,4 +1,4 @@
-from MedImgDataset import ImageDataSet
+from ImageData import ImageDataSet
 from torch.utils.data import Dataset
 from torch import cat, stack
 import numpy as np
@@ -12,6 +12,7 @@ class ImageDataSetMultiChannel(Dataset):
                 "Sizes of all input must be the same"
 
         self._basedata = args
+        self.data = self._basedata
 
         # Inherit some of the properties of the inputs
         self._itemindexes = args[0]._itemindexes
@@ -22,6 +23,9 @@ class ImageDataSetMultiChannel(Dataset):
         s = list(self._basedata[0].size())
         s[1] = c
         self._size = tuple(s)
+
+        # Check if dtype are the same
+        self._UNIQUE_DTYPE = np.all([dat.type() == self._basedata[0].type() for dat in self._basedata])
 
     def size(self, int=None):
         return self._size
@@ -45,4 +49,8 @@ class ImageDataSetMultiChannel(Dataset):
 
             return stack([self.__getitem__(i) for i in xrange(start, stop, step)])
         else:
-            return cat([dat[item] for dat in self._basedata])
+            # output datatype will follow the dtype of the first constructor argument
+            if self._UNIQUE_DTYPE:
+                return cat([dat[item] for dat in self._basedata])
+            else:
+                return cat([dat[item].type_as(self._basedata[0][item]) for dat in self._basedata])

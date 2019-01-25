@@ -2,6 +2,7 @@ import torch
 from torch import cat, stack, tensor, zeros
 from torch.utils.data import Dataset
 from ImageData import ImageDataSet
+from ImageDataMultiChannel import ImageDataSetMultiChannel
 import numpy as np
 
 class ImagePatchesLoader(Dataset):
@@ -13,7 +14,7 @@ class ImagePatchesLoader(Dataset):
         super(ImagePatchesLoader, self).__init__()
 
         assert axis is None or len(axis) == 2, "Axis argument should contain the two axises that forms the base image."
-        assert isinstance(base_dataset, ImageDataSet)
+        assert isinstance(base_dataset, ImageDataSet) or isinstance(base_dataset, ImageDataSetMultiChannel)
         assert reference_dataset is None or isinstance(reference_dataset, ImagePatchesLoader)
 
         if isinstance(patch_size, int):
@@ -123,7 +124,7 @@ class ImagePatchesLoader(Dataset):
             return size[val]
 
     def piece_patches(self, inpatches):
-        assert inpatches.shape[0] == self.__len__(), "Size mismatch." + str(inpatches.shape[0]) + ',' + str(self.__len__())
+        assert len(inpatches) == self.__len__(), "Size mismatch." + str(inpatches.shape[0]) + ',' + str(self.__len__())
 
         count = torch.zeros(self._base_dataset.data.shape, dtype=torch.int16)
         temp_slice = torch.zeros(self._base_dataset.data.shape, dtype=torch.float)

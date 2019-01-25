@@ -21,8 +21,6 @@ class ImagePatchLocTex(ImagePatchesLoader):
             self._mode='as_channels'
 
         super(ImagePatchLocTex, self).__init__(*args, **kwargs)
-
-        assert isinstance(self._base_dataset, ImageDataSet), "Currently only supports ImageDataset"
         assert self._base_dataset._byslices >= 0, "Currently only support load by slices."
 
 
