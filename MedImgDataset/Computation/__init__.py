@@ -1,7 +1,9 @@
 from ImageDataSetWithPos import *
 from ImagePatchLocTex import *
 from ImagePatchLocMMTex import *
-from LocalBinaryPattern import LBP
+from ImageDataSetFilter import *
+from LocalBinaryPattern import lbp
 from LocalNeighborhoodDifferencePattern import lndp
 
-__all__ = ['ImageDataSetWithPos', 'ImagePatchLocTex', 'LBP', 'lndp', 'ImagePatchLocMMTex']
+__all__ = ['ImageDataSetWithPos', 'ImagePatchLocTex', 'lbp', 'lndp', 'ImagePatchLocMMTex',
+           ImageDataSetFilter]

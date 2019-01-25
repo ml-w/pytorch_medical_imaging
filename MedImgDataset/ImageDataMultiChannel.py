@@ -12,7 +12,7 @@ class ImageDataSetMultiChannel(Dataset):
                 "Sizes of all input must be the same"
 
         self._basedata = args
-        self.data = self._basedata
+        self.data = self._basedata[0]       # For competibility
 
         # Inherit some of the properties of the inputs
         self._itemindexes = args[0]._itemindexes

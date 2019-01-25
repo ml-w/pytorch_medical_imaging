@@ -4,7 +4,7 @@ import torch.nn as nn
 import numpy as np
 from .. import ImageDataSet, ImagePatchesLoader
 from .LocalNeighborhoodDifferencePattern import lndp
-from .LocalBinaryPattern import LBP
+from .LocalBinaryPattern import lbp
 
 class ImagePatchLocMMTex(ImagePatchesLoader):
     def __init__(self, *args, **kwargs):
@@ -72,7 +72,7 @@ class ImagePatchLocMMTex(ImagePatchesLoader):
                 s_item = item
             patch = super(ImagePatchLocMMTex, self).__getitem__(item)
             texture_lndp= torch.tensor(lndp(patch.data.squeeze().numpy(), 1)).view_as(patch).type_as(patch)
-            texture_lbp = torch.tensor(LBP(patch.data.squeeze().numpy(), 1)).view_as(patch).type_as(patch)
+            texture_lbp = torch.tensor(lbp(patch.data.squeeze().numpy(), 1)).view_as(patch).type_as(patch)
             patch = torch.cat([patch, texture_lbp, texture_lndp], dim=1)
             feats = torch.cat([torch.tensor(self._calculate_patch_pos(s_item)).float(),
                                torch.tensor([self._calculate_patch_dist(s_item)]).float()])
@@ -96,7 +96,7 @@ class ImagePatchLocMMTex(ImagePatchesLoader):
                 s_item = item
             patch = super(ImagePatchLocMMTex, self).__getitem__(item)
             texture_lndp= torch.tensor(lndp(patch.data.squeeze().numpy(), 1)).view_as(patch).type_as(patch)
-            texture_lbp = torch.tensor(LBP(patch.data.squeeze().numpy(), 1)).view_as(patch).type_as(patch)
+            texture_lbp = torch.tensor(lbp(patch.data.squeeze().numpy(), 1)).view_as(patch).type_as(patch)
             hist_lbp = np.histogram(texture_lbp, bins=100, range=(0, 255.), density=True)
             hist_lndp = np.histogram(texture_lndp, bins=100, range=(0, 255.), density=True)
             hist_lbp = hist_lbp[0]

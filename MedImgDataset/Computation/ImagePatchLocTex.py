@@ -3,7 +3,7 @@ import torch.nn as nn
 
 import numpy as np
 from .. import ImageDataSet, ImagePatchesLoader
-from .LocalBinaryPattern import LBP
+from .LocalBinaryPattern import lbp
 
 class ImagePatchLocTex(ImagePatchesLoader):
     def __init__(self, *args, **kwargs):
@@ -28,7 +28,7 @@ class ImagePatchLocTex(ImagePatchesLoader):
         # temp = self._base_dataset.data.squeeze().numpy()
         temp = np.zeros(self._base_dataset.data.shape).squeeze()
         for i, dat in enumerate(self._base_dataset.data):
-            temp[i] = LBP(dat.numpy().squeeze())
+            temp[i] = lbp(dat.numpy().squeeze())
         temp = torch.tensor(temp).unsqueeze(1).type_as(self._base_dataset.data)
         self._base_dataset.data = torch.cat([self._base_dataset.data, temp], dim=1)
 
