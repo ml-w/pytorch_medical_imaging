@@ -124,7 +124,14 @@ class ImagePatchesLoader(Dataset):
             return size[val]
 
     def piece_patches(self, inpatches):
-        assert len(inpatches) == self.__len__(), "Size mismatch." + str(inpatches.shape[0]) + ',' + str(self.__len__())
+        if isinstance(inpatches, list):
+            length = np.sum([len(x) for x in inpatches])
+            LIST_MODE = True
+        else:
+            LIST_MODE = False
+            length = len(inpatches)
+        if length != self.__len__():
+            print "Warning! Size mismatch: " + str(len(inpatches)) + ',' + str(self.__len__())
 
         count = torch.zeros(self._base_dataset.data.shape, dtype=torch.int16)
         temp_slice = torch.zeros(self._base_dataset.data.shape, dtype=torch.float)
@@ -142,7 +149,13 @@ class ImagePatchesLoader(Dataset):
                         indexes.append(slice(None))
                 if self._pre_shuffle:
                     inpatches_index = self._inverse_shuffle_arr[i * len(self._patch_indexes) + j]
-                    temp_slice[indexes] += inpatches[inpatches_index]
+                    if LIST_MODE:
+                        index_1 = inpatches_index % len(inpatches[0])
+                        index_2 = inpatches_index // len(inpatches[0])
+                        temp_slice[indexes] += inpatches[index_2][index_1]
+                        pass
+                    else:
+                        temp_slice[indexes] += inpatches[inpatches_index]
                 else:
                     temp_slice[indexes] += inpatches[i * len(self._patch_indexes) + j]
                 count[indexes] += 1
