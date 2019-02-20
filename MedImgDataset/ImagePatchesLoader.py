@@ -159,6 +159,7 @@ class ImagePatchesLoader(Dataset):
                 else:
                     temp_slice[indexes] += inpatches[i * len(self._patch_indexes) + j]
                 count[indexes] += 1
+        count[count == 0] = 1   # Prevent division by zero
         temp_slice /= count.float()
         return tensor(temp_slice)
 
