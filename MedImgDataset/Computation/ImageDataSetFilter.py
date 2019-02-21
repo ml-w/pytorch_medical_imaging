@@ -3,6 +3,15 @@ from ..ImageData import ImageDataSet
 
 
 class ImageDataSetFilter(ImageDataSet):
+    """ImageDataSetFilter
+    This class will process images with the provided function.  Note that the input function
+    must return tensor results.
+
+    Examples:
+    >>> f = lambda x: x + x.mean()
+    >>> dataset = ImageDataSetFilter('dir', verbose=True, filter=f)
+    >>> print dataset[0]
+    """
     def __init__(self, *args, **kwargs):
         try:
             self._filter_func = kwargs.pop('filter')
