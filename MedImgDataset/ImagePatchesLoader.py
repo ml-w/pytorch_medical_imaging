@@ -6,7 +6,7 @@ from ImageDataMultiChannel import ImageDataSetMultiChannel
 import numpy as np
 
 class ImagePatchesLoader(Dataset):
-    def __init__(self, base_dataset, patch_size, patch_stride=None, include_last_patch=True,
+    def __init__(self, base_dataset, patch_size, patch_stride=-1, include_last_patch=True,
                  axis=None, reference_dataset=None, pre_shuffle=False, random_patches=-1,
                  random_from_distribution=None):
         """ImagePatchesLoader(self, base_dataset, patch_size, patch_stride, include_last_patch=True,
@@ -19,7 +19,7 @@ class ImagePatchesLoader(Dataset):
             "Axis argument should contain the two axises that forms the base image."
         assert isinstance(base_dataset, ImageDataSet) or isinstance(base_dataset, ImageDataSetMultiChannel)
         assert reference_dataset is None or isinstance(reference_dataset, ImagePatchesLoader)
-        assert not patch_stride is None and random_patches == -1, \
+        assert not (patch_stride == -1 and random_patches == -1), \
             "You must select a patch stride if not using random patches."
 
         if isinstance(patch_size, int):
