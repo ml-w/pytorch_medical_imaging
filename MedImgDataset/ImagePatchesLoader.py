@@ -6,16 +6,21 @@ from ImageDataMultiChannel import ImageDataSetMultiChannel
 import numpy as np
 
 class ImagePatchesLoader(Dataset):
-    def __init__(self, base_dataset, patch_size, patch_stride, include_last_patch=True,
-                 axis=None, reference_dataset=None, pre_shuffle=False, random_patches=-1):
+    def __init__(self, base_dataset, patch_size, patch_stride=None, include_last_patch=True,
+                 axis=None, reference_dataset=None, pre_shuffle=False, random_patches=-1,
+                 random_from_distribution=None):
         """ImagePatchesLoader(self, base_dataset, patch_size, patch_stride, include_last_patch=True,
-                 axis=None, reference_dataset=None, pre_shuffle=False, random_patches=-1) --> ImagePatchesLoader
+                 axis=None, reference_dataset=None, pre_shuffle=False, random_patches=-1,
+                 random_from_distribution=None) --> ImagePatchesLoader
         """
         super(ImagePatchesLoader, self).__init__()
 
-        assert axis is None or len(axis) == 2, "Axis argument should contain the two axises that forms the base image."
+        assert axis is None or len(axis) == 2, \
+            "Axis argument should contain the two axises that forms the base image."
         assert isinstance(base_dataset, ImageDataSet) or isinstance(base_dataset, ImageDataSetMultiChannel)
         assert reference_dataset is None or isinstance(reference_dataset, ImagePatchesLoader)
+        assert not patch_stride is None and random_patches == -1, \
+            "You must select a patch stride if not using random patches."
 
         if isinstance(patch_size, int):
             patch_size = [patch_size, patch_size]
@@ -31,6 +36,9 @@ class ImagePatchesLoader(Dataset):
         self._patch_indexes = []            # [(xmin, ymin), ... ], corners of the patches.
         self._random_patches = False
         self._random_counter = 0            # This counter is used to re-calculate patch corner after each epoch
+        self._random_from_distrib = \
+            random_from_distribution        # This is a function to covert a region of an image to a
+                                            # probability map
         self.data = self._base_dataset.data
 
         # check axis
@@ -44,7 +52,12 @@ class ImagePatchesLoader(Dataset):
             if random_patches > 0:
                 self._random_patches = True
                 self._patch_perslice = random_patches
-                self._calculate_random_patch_indexes()
+                if callable(random_from_distribution):
+                    # input argument `random_from_distribution` should return 2D numpy array denoting
+                    # probability map of index selection.
+                    self._sample_patches_from_distribution()
+                else:
+                    self._calculate_random_patch_indexes()
             else:
                 self._calculate_patch_indexes()
             pass
@@ -75,6 +88,57 @@ class ImagePatchesLoader(Dataset):
         except Exception, e:
             self._patch_indexes = patch_indexes
         pass
+
+    def _sample_patches_from_distribution(self):
+        X, Y = self._axis
+        corner_range = [self._unit_dimension[X] - self._patch_size[0],
+                        self._unit_dimension[Y] - self._patch_size[1]]
+        func = self._random_from_distrib
+
+        indexes = []
+        for j in xrange(self._slice_dim):
+            if j == self._axis[0] % self._slice_dim:    # in case user use negative index
+                indexes.append(slice(self._patch_size[0] // 2,
+                                     corner_range[0] + self._patch_size[0] - self._patch_size[0] // 2))
+            elif j == self._axis[1] % self._slice_dim:
+                indexes.append(slice(self._patch_size[1] // 2,
+                                     corner_range[1] + self._patch_size[1] - self._patch_size[1] // 2))
+            else:
+                indexes.append(slice(None))
+
+        patch_indexes = []
+        for i, dat in enumerate(self._base_dataset):
+            # extract target region
+            roi = dat[indexes].squeeze()
+
+            # convert to numpy
+            if isinstance(roi, torch.Tensor):
+                roi = roi.data.numpy()
+            elif not isinstance(roi, np.ndarray):
+                roi = np.array(roi)
+
+            # if result is 3D collapse it into 2D by averaging
+            while roi.ndim > 2:
+                roi = np.mean(roi, axis=np.argmin(roi.shape))
+
+            # Calculate probability by input function
+            prob = func(roi)
+
+            # Sample accordingly
+            xy = np.meshgrid(np.arange(prob.shape[0]), np.arange(prob.shape[1]))
+            xy = zip(xy[0].flatten(), xy[1].flatten())
+
+            prob = prob / prob.sum()
+
+            choices = np.random.choice(len(xy), p=prob.flatten(), size=self._patch_perslice)
+            patch_indexes.extend([xy[c] for c in choices])
+
+        patch_indexes = np.array(patch_indexes)
+        # patch_indexes[:,0] -= self._patch_size[0] // 2
+        # patch_indexes[:,1] -= self._patch_size[1] // 2
+        self._patch_indexes = patch_indexes
+
+
 
     def _calculate_patch_indexes(self):
         # Clear existing indexes first
@@ -200,7 +264,7 @@ class ImagePatchesLoader(Dataset):
 
             indexes = []
             for i in xrange(self._slice_dim):
-                if i == self._axis[0] % self._slice_dim:
+                if i == self._axis[0] % self._slice_dim:    # in case user use negative index
                     indexes.append(slice(p[0], p[0] + self._patch_size[0]))
                 elif i == self._axis[1] % self._slice_dim:
                     indexes.append(slice(p[1], p[1] + self._patch_size[1]))
