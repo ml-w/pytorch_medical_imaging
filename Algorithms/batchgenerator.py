@@ -3,7 +3,7 @@ import numpy as np
 
 
 
-def GenerateTestBatch(gt_files, input_files, numOfTestSamples, outdir, prefix="Batch_"):
+def GenerateTestBatch(gt_files, input_files, numOfTestSamples, outdir, prefix="Batch_", exclude_list=None):
     # assert len(gt_files) == len(input_files)
     # assert len(gt_files) > numOfTestSamples
 
@@ -14,6 +14,26 @@ def GenerateTestBatch(gt_files, input_files, numOfTestSamples, outdir, prefix="B
     if not os.path.isdir(outdir):
         os.mkdir(outdir)
         assert os.path.isdir(outdir), "Cannot create director!"
+
+    # Load list to exclude
+    exclude = []
+    if not exclude_list is None:
+        if isinstance(exclude_list, list) or isinstance(exclude_list, tuple):
+            for row in exclude_list:
+                assert isinstance(row, str), "Must be list or tuple of string!"
+                exclude.append(row.rstrip())
+        elif isinstance(exclude_list, file):
+            for row in exclude_list.readlines():
+                if row[0] == '#':
+                    continue
+                exclude.append(row.rstrip())
+        elif isinstance(exclude_list, str) and os.path.isfile(exclude_list):
+            with open(exclude_list, 'r') as f:
+                for row in f.readlines():
+                    if row[0] == '#':
+                        continue
+                    exclude.append(row.rstrip())
+
 
     # Testing batch files
     testing_gt = open(outdir + '/' + prefix + "Testing_GT.txt", "w")
@@ -31,7 +51,20 @@ def GenerateTestBatch(gt_files, input_files, numOfTestSamples, outdir, prefix="B
         else:
             target = training_samples
 
-        target['input'].extend(fnmatch.filter(input_files, gt_files[indexes[i]].split('_')[0] + "*"))
+        # each case should be named "[ID]_details.nii.gz"
+        case_id = gt_files[indexes[i]].split('_')[0]
+
+        # skip if this case is not to be included
+        if case_id in exclude:
+            print "Skipping case: %s"%case_id
+            continue
+
+        in_tar = fnmatch.filter(input_files, case_id + "*")
+        if len(in_tar) < 1:
+            print "Cannot find input files for case: %s"%case_id
+            continue
+
+        target['input'].extend(in_tar)
         target['gt'].append(gt_files[indexes[i]])
 
     testing_gt.writelines([f + '\n' for f in testing_samples['gt']])
@@ -47,10 +80,11 @@ def GenerateTestBatch(gt_files, input_files, numOfTestSamples, outdir, prefix="B
 if __name__ == '__main__':
     import os, fnmatch
     # GenerateKFoldBatch("./BrainVessel/01.BatchSource", "./BrainVessel/10.K_Fold_Batches", 10)
-    GenerateTestBatch(os.listdir('../NPC_Segmentation/02.NPC_seg'),
+    GenerateTestBatch(os.listdir('../NPC_Segmentation/03.NPC_seg_1stRedraw'),
                       os.listdir('../NPC_Segmentation/01.NPC_dx'),
-                      20,
+                      50,
                       '../NPC_Segmentation/99.Testing',
-                      prefix="B01_"
+                      prefix="B01/B01_",
+                      exclude_list='../NPC_Segmentation/99.Testing/B01/exclude.txt'
                       )
 
