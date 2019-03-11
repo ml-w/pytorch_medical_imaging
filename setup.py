@@ -1,3 +1,5 @@
+# python setup.py build_ext --inplace
+
 from setuptools import setup
 from setuptools.extension import Extension
 import numpy
@@ -21,6 +23,11 @@ if use_cython:
     ext_modules += [
         Extension("MedImgDataset.Computation._interpolation",
                   ["MedImgDataset/Computation/_interpolation.pxd"],
+                  include_dirs=[numpy.get_include()]),
+    ]
+    ext_modules += [
+        Extension("MedImgDataset.Computation._prob_func",
+                  ["MedImgDataset/Computation/_prob_func.pyx"],
                   include_dirs=[numpy.get_include()]),
     ]
     cmdclass.update({'build_ext': build_ext})

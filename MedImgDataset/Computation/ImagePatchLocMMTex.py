@@ -26,6 +26,12 @@ class ImagePatchLocMMTex(ImagePatchesLoader):
         assert isinstance(self._base_dataset, ImageDataSet), "Currently only supports ImageDataset"
         assert self._base_dataset._byslices >= 0, "Currently only support load by slices."
 
+        # LBP = lambda x: torch.tensor(lbp(x.data.squeeze().numpy().astype('float')))
+        # LNDP = lambda x: torch.tensor(lndp(x.data.squeeze().numpy().astype('float')))
+
+        kwargs['dtype'] = torch.uint8
+        # lbpset = I
+
     def _getpos(self, item):
         # locate slice number of the patch
         if self._random_patches:
