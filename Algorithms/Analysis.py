@@ -138,6 +138,7 @@ def perf_measure(y_actual, y_guess):
     TN = np.sum((y == False) & (x == False))
     FP = np.sum((y == False) & (x == True))
     FN = np.sum((y == True) & (x == False))
+    TP, TN, FP, FN = [float(v) for v in [TP, TN, FP, FN]]
     return TP, FP, TN, FN
 
 def JAC(TP, FP, TN, FN):
@@ -168,8 +169,14 @@ def VD(TP, FP, TN, FN):
 def PercentMatch(TP, FP, TN, FN):
     return TP / float(TP+FN)
 
+def PrecisionRate(TP, FP, TN, FN):
+    return TP / float(TP+FP)
+
 def CorrespondenceRatio(TP, FP, TN, FN):
     return (1.*TP - 0.5*FP) / float(TP + FN)
+
+def Volume(TP, FP, TN, FN):
+    return (TP + FN)
 
 def EVAL(seg, gt):
     vars = {'GCE': GCE,
@@ -177,7 +184,9 @@ def EVAL(seg, gt):
             'DICE': DICE,
             'VD': VD,
             'PM': PercentMatch,
-            'CR': CorrespondenceRatio}
+            'CR': CorrespondenceRatio,
+            'Volume Ratio': Volume,
+            'PR': PrecisionRate}
 
     df = pd.DataFrame(columns=['filename','ImageIndex'] + vars.keys())
 
@@ -190,8 +199,10 @@ def EVAL(seg, gt):
             gg = gg.numpy().flatten().astype('bool')
 
         TP, FP, TN, FN = np.array(perf_measure(gg, ss), dtype=float)
+        if TP == 0:
+            continue
         values = [vars[keys](TP, FP, TN, FN ) for keys in vars]
-        data = pd.DataFrame([[os.path.basename(seg.dataSourcePath[i]), i] + values],
+        data = pd.DataFrame([[os.path.basename(seg.get_data_source(i)), seg.get_internal_index(i)] + values],
                             columns=['filename','ImageIndex'] + vars.keys())
         df = df.append(data)
     return df
@@ -280,22 +291,30 @@ if __name__ == '__main__':
     # seg = ImageDataSet('../NPC_Segmentation/02.NPC_seg', verbose=True,
     #                    filelist='../NPC_Segmentation/99.Testing/B01_Testing_GT.txt')
     # output = ImageDataSet('../NPC_Segmentation/98.Output/UNetLocTexHist2', verbose=True)
-    output = ImageDataSet('../NPC_Segmentation/98.Output/UNetLocHist_Aug_4', verbose=True)
+    output = ImageDataSet('../NPC_Segmentation/98.Output/UNetLocTexHistDeepear_Aug', verbose=True, dtype='uint8')
     seg = ImageDataSet('../NPC_Segmentation/03.NPC_seg_1stRedraw', verbose=True,
-                       filelist='../NPC_Segmentation/99.Testing/B00/B00_Testing_GT.txt')
+                       filelist='../NPC_Segmentation/99.Testing/B01/B01_Testing_GT.txt', dtype='uint8')
+    # seg = ImageDataSet('../NPC_Segmentation/04.NPC_seg_clinical', verbose=True,
+    #                    filelist='../NPC_Segmentation/99.Testing/B01/B01_Testing_GT.txt', dtype='uint8')
 
-    # # Resize to 144x144
-    # t1, t2 = [], []
-    # for i in xrange(len(output)):
-    #     t1.append(resize(output[i].numpy(), (len(output[i]), 144, 144), clip=False, preserve_range=True))
-    #     t2.append(resize(seg[i].numpy(), (len(output[i]), 144, 144), clip=False, preserve_range=True))
+
+    # print os.path.isdir("/home/lwong/Storage/Data/ERA_Segmentation/03_TEST/true_postprocessed")
+    # output = ImageDataSet('/home/lwong/Storage/Data/ERA_Segmentation/03_TEST/true_postprocessed',
+    #                       verbose=True, dtype='uint8')
+    # seg = ImageDataSet('/home/lwong/Storage/Data/ERA_Segmentation/03_TEST/gt',
+    #                       verbose=True, dtype='uint8')
+    # Resize to 144x144
+    t1, t2 = [], []
+    for i in xrange(len(output)):
+        t1.append(resize(output[i].numpy(), (len(output[i]), 144, 144), clip=False, preserve_range=True))
+        t2.append(resize(seg[i].numpy(), (len(output[i]), 144, 144), clip=False, preserve_range=True))
+
+    output.data = t1
+    seg.data = t2
     #
-    # output.data = t1
-    # seg.data = t2
-
     results = EVAL(output, seg)
     results = results.sort_values('DICE')
-    print results.to_string()
+    print results.to_csv('~/FTP/temp/temp.csv')
     print results['DICE'].mean()
-    print results['PM'].mean()
-    print results['CR'].mean()
+    print results['PM'].mean(), results['PM'].std()
+    print results['PR'].mean(), results['PR'].std()
