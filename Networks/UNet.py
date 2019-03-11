@@ -187,9 +187,9 @@ class UNetLocTexAware(UNet):
         return x
 
 
-class UNetLocTexAware2(UNet):
+class UNetLocTexHist(UNet):
     def __init__(self, *args, **kwargs):
-        super(UNetLocTexAware2, self).__init__(*args, **kwargs)
+        super(UNetLocTexHist, self).__init__(*args, **kwargs)
 
         self.fc = nn.Sequential(
             nn.Linear(104, 300),
@@ -234,9 +234,9 @@ class UNetLocTexAware2(UNet):
         x = self.outc(x)
         return x
 
-class UNetLocTexAwareDeeper(UNet):
+class UNetLocTexHistDeeper(UNet):
     def __init__(self, *args, **kwargs):
-        super(UNetLocTexAwareDeeper, self).__init__(*args, **kwargs)
+        super(UNetLocTexHistDeeper, self).__init__(*args, **kwargs)
 
         self.fc = nn.Sequential(
             nn.Linear(104, 300),
