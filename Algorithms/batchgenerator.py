@@ -13,7 +13,7 @@ def GenerateTestBatch(gt_files, input_files, numOfTestSamples, outdir, prefix="B
     # check if outdir exist
     if not os.path.isdir(outdir):
         os.mkdir(outdir)
-        assert os.path.isdir(outdir), "Cannot create director!"
+        assert os.path.isdir(outdir), "Cannot create directory!"
 
     # Load list to exclude
     exclude = []
@@ -33,7 +33,6 @@ def GenerateTestBatch(gt_files, input_files, numOfTestSamples, outdir, prefix="B
                     if row[0] == '#':
                         continue
                     exclude.append(row.rstrip())
-
 
     # Testing batch files
     testing_gt = open(outdir + '/' + prefix + "Testing_GT.txt", "w")
@@ -80,11 +79,11 @@ def GenerateTestBatch(gt_files, input_files, numOfTestSamples, outdir, prefix="B
 if __name__ == '__main__':
     import os, fnmatch
     # GenerateKFoldBatch("./BrainVessel/01.BatchSource", "./BrainVessel/10.K_Fold_Batches", 10)
-    GenerateTestBatch(os.listdir('../NPC_Segmentation/03.NPC_seg_1stRedraw'),
+    GenerateTestBatch(os.listdir('../NPC_Segmentation/05.NPC_seg_T2'),
                       os.listdir('../NPC_Segmentation/01.NPC_dx'),
                       50,
                       '../NPC_Segmentation/99.Testing',
-                      prefix="B01/B01_",
-                      exclude_list='../NPC_Segmentation/99.Testing/B01/exclude.txt'
+                      prefix="B02/B02_",
+                      exclude_list='../NPC_Segmentation/99.Testing/B02/exclude.txt'
                       )
 

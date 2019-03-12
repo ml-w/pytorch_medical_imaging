@@ -12,7 +12,7 @@ def clip_5_percentile(double[:,:] image):
     npmin, npmax = np.percentile(image, [5, 95])
     cdef double nmin = npmin
     cdef double nmax = npmax
-    cdef double[:,:] output = np.zeros(output_shape)
+    cdef double[:,:] output = np.zeros(output_shape, dtype=np.double)
     # cdef double[:,:] output = np.clip(image, nmin, nmax)
     cdef int hmax = output_shape[0]
     cdef int wmax = output_shape[1]

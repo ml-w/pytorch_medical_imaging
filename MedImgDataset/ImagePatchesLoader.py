@@ -3,12 +3,13 @@ from torch import cat, stack, tensor, zeros
 from torch.utils.data import Dataset
 from ImageData import ImageDataSet
 from ImageDataMultiChannel import ImageDataSetMultiChannel
+from ImageDataAugment import ImageDataSetAugment
 import numpy as np
 
 class ImagePatchesLoader(Dataset):
     def __init__(self, base_dataset, patch_size, patch_stride=-1, include_last_patch=True,
                  axis=None, reference_dataset=None, pre_shuffle=False, random_patches=-1,
-                 random_from_distribution=None):
+                 random_from_distribution=None, renew_index=True):
         """ImagePatchesLoader(self, base_dataset, patch_size, patch_stride, include_last_patch=True,
                  axis=None, reference_dataset=None, pre_shuffle=False, random_patches=-1,
                  random_from_distribution=None) --> ImagePatchesLoader
@@ -39,6 +40,7 @@ class ImagePatchesLoader(Dataset):
         self._random_from_distrib = \
             random_from_distribution        # This is a function to covert a region of an image to a
                                             # probability map
+        self._renew_index = renew_index     # If this is true, index will be renewed after each epoch
         self.data = self._base_dataset.data
 
         # check axis
@@ -106,16 +108,23 @@ class ImagePatchesLoader(Dataset):
             else:
                 indexes.append(slice(None))
 
+        # speacial treatment required if baseclass has augmentator
+        if isinstance(self._base_dataset, ImageDataSetAugment):
+            temp_flag = self._base_dataset._update_each_epoch
+            self._base_dataset._update_each_epoch = False
+
         patch_indexes = []
         for i, dat in enumerate(self._base_dataset):
             # extract target region
-            roi = dat[indexes].squeeze()
+            ori_roi = torch.clone(dat[indexes])
 
             # convert to numpy
-            if isinstance(roi, torch.Tensor):
-                roi = roi.data.numpy()
-            elif not isinstance(roi, np.ndarray):
-                roi = np.array(roi)
+            if isinstance(ori_roi, torch.Tensor):
+                roi = ori_roi.data.squeeze().numpy()
+            elif not isinstance(ori_roi, np.ndarray):
+                roi = np.array(ori_roi)
+            else:
+                roi = np.copy(ori_roi)
 
             # if result is 3D collapse it into 2D by averaging
             while roi.ndim > 2:
@@ -132,11 +141,14 @@ class ImagePatchesLoader(Dataset):
 
             choices = np.random.choice(len(xy), p=prob.flatten(), size=self._patch_perslice)
             patch_indexes.extend([xy[c] for c in choices])
+            del ori_roi, prob, xy, roi
 
-        patch_indexes = np.array(patch_indexes)
-        # patch_indexes[:,0] -= self._patch_size[0] // 2
-        # patch_indexes[:,1] -= self._patch_size[1] // 2
-        self._patch_indexes = patch_indexes
+        # speacial treatment required if baseclass has augmentator
+        if isinstance(self._base_dataset, ImageDataSetAugment):
+            self._base_dataset._update_each_epoch = temp_flag
+            self._base_dataset._call_count = 0
+
+        self._patch_indexes = np.array(patch_indexes)
 
 
 
@@ -199,8 +211,11 @@ class ImagePatchesLoader(Dataset):
 
         count = torch.zeros(self._base_dataset.data.shape, dtype=torch.int16)
         temp_slice = torch.zeros(self._base_dataset.data.shape, dtype=torch.float)
-        for i in xrange(len(self._base_dataset)):
+
+        if self._random_patches:
             for j, p in enumerate(self._patch_indexes):
+                i = j // self._patch_perslice
+                print i
                 indexes = []
                 for k in xrange(count.ndimension()):
                     if k == self._axis[0] % count.ndimension():
@@ -211,18 +226,34 @@ class ImagePatchesLoader(Dataset):
                         indexes.append(slice(i, i+1))
                     else:
                         indexes.append(slice(None))
-                if self._pre_shuffle:
-                    inpatches_index = self._inverse_shuffle_arr[i * len(self._patch_indexes) + j]
-                    if LIST_MODE:
-                        index_1 = inpatches_index % len(inpatches[0])
-                        index_2 = inpatches_index // len(inpatches[0])
-                        temp_slice[indexes] += inpatches[index_2][index_1]
-                        pass
-                    else:
-                        temp_slice[indexes] += inpatches[inpatches_index]
-                else:
-                    temp_slice[indexes] += inpatches[i * len(self._patch_indexes) + j]
+
+                temp_slice[indexes] += inpatches[j]
                 count[indexes] += 1
+        else:
+            for i in xrange(len(self._base_dataset)):
+                for j, p in enumerate(self._patch_indexes):
+                    indexes = []
+                    for k in xrange(count.ndimension()):
+                        if k == self._axis[0] % count.ndimension():
+                            indexes.append(slice(p[0], p[0] + self._patch_size[0]))
+                        elif k == self._axis[1] % count.ndimension():
+                            indexes.append(slice(p[1], p[1] + self._patch_size[1]))
+                        elif k == 0 and count.ndimension() == 4: # Batch dimension
+                            indexes.append(slice(i, i+1))
+                        else:
+                            indexes.append(slice(None))
+                    if self._pre_shuffle:
+                        inpatches_index = self._inverse_shuffle_arr[i * len(self._patch_indexes) + j]
+                        if LIST_MODE:
+                            index_1 = inpatches_index % len(inpatches[0])
+                            index_2 = inpatches_index // len(inpatches[0])
+                            temp_slice[indexes] += inpatches[index_2][index_1]
+                            pass
+                        else:
+                            temp_slice[indexes] += inpatches[inpatches_index]
+                    else:
+                        temp_slice[indexes] += inpatches[i * len(self._patch_indexes) + j]
+                    count[indexes] += 1
         count[count == 0] = 1   # Prevent division by zero
         temp_slice /= count.float()
         return tensor(temp_slice)
@@ -248,13 +279,16 @@ class ImagePatchesLoader(Dataset):
                 item = self._shuffle_index_arr[item]
 
             if self._random_patches:
-                slice_index = item / self._patch_perslice
+                slice_index = item // self._patch_perslice
                 patch_index = item
 
                 # simple trick to update patch indexes after each epoch
                 self._random_counter += 1
-                if self._random_counter == self.__len__():
-                    self._calculate_random_patch_indexes()
+                if self._random_counter == self.__len__() and self._renew_index:
+                    if callable(self._random_from_distrib):
+                        self._sample_patches_from_distribution()
+                    else:
+                        self._calculate_random_patch_indexes()
             else:
                 slice_index = item / len(self._patch_indexes)
                 patch_index = item % len(self._patch_indexes)

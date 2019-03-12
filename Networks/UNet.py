@@ -189,10 +189,14 @@ class UNetLocTexAware(UNet):
 
 class UNetLocTexHist(UNet):
     def __init__(self, *args, **kwargs):
+        try:
+            fc_inchan = kwargs.pop('fc_inchan')
+        except:
+            fc_inchan = 104
         super(UNetLocTexHist, self).__init__(*args, **kwargs)
 
         self.fc = nn.Sequential(
-            nn.Linear(104, 300),
+            nn.Linear(fc_inchan, 300),
             nn.LayerNorm(300),
             nn.ReLU(inplace=True),
             nn.Linear(300, 600),
@@ -236,10 +240,14 @@ class UNetLocTexHist(UNet):
 
 class UNetLocTexHistDeeper(UNet):
     def __init__(self, *args, **kwargs):
+        try:
+            fc_inchan = kwargs.pop('fc_inchan')
+        except:
+            fc_inchan = 104
         super(UNetLocTexHistDeeper, self).__init__(*args, **kwargs)
 
         self.fc = nn.Sequential(
-            nn.Linear(104, 300),
+            nn.Linear(fc_inchan, 300),
             nn.LayerNorm(300),
             nn.ReLU(inplace=True),
             nn.Linear(300, 600),

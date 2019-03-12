@@ -8,6 +8,7 @@ from MedImgDataset import ImagePatchesLoader
 from torch.utils.data import DataLoader, TensorDataset
 from torch.autograd import Variable
 from tqdm import *
+from functools import partial
 import torch
 import torch.nn as nn
 import torch.optim as optim
@@ -71,7 +72,6 @@ def main(a):
             r.append(factor)
         r = np.array(r)
         r = r / r.max()
-
         # calculate init-factor
         if not a.initialweight is None:
             factor =  sigmoid_plus(a.initialweight + 1) * 100
@@ -94,10 +94,8 @@ def main(a):
             LogPrint(str(e), logging.ERROR)
             LogPrint("Terminating", logging.ERROR)
             return
-
         trainingSet = TensorDataset(inputDataset, gtDataset)
-        loader      = DataLoader(trainingSet, batch_size=a.batchsize, shuffle=True, num_workers=4, drop_last=True)
-
+        loader      = DataLoader(trainingSet, batch_size=a.batchsize, shuffle=True, num_workers=4, drop_last=True, pin_memory=False)
         # Read tensorboard dir from env
         if a.plot:
             tensorboard_rootdir = os.environ['TENSORBOARD_LOGDIR']
@@ -128,7 +126,6 @@ def main(a):
         else:
             LogPrint("Checkpoint doesn't exist!")
         net = nn.DataParallel(net)
-
 
         trainparams = {}
         if not a.trainparams is None:
@@ -305,9 +302,10 @@ def main(a):
             out_tensor.append(out.data.cpu())
             del out
 
-        out_tensor = torch.cat(out_tensor, dim=0)
         if a.datatype.find('loctex') > -1:
             out_tensor = inputDataset.piece_patches(out_tensor)
+        else:
+            out_tensor = torch.cat(out_tensor, dim=0)
         out_tensor = F.log_softmax(out_tensor, dim=1)
         out_tensor = torch.argmax(out_tensor, dim=1)
         inputDataset.Write(out_tensor.squeeze().int(), a.output)
@@ -322,8 +320,9 @@ if __name__ == '__main__':
     available_networks = {'UNet':UNet,
                           'UNetPosAware': UNetPosAware,
                           'UNetLocTexAware': UNetLocTexAware,
-                          'UNetLocTexHist': UNetLocTexAware2,
-                          'UNetLocTexHistDeeper': UNetLocTexAwareDeeper,
+                          'UNetLocTexHist': UNetLocTexHist,
+                          'UNetLocTexHistDeeper': UNetLocTexHistDeeper,
+                          'UNetLocTexHist_MM': partial(UNetLocTexHist, fc_inchan=204),
                           'DenseUNet': DenseUNet2D,
                           'AttentionUNet': AttentionUNet,
                           'AttentionDenseUNet': AttentionDenseUNet2D,
@@ -336,7 +335,7 @@ if __name__ == '__main__':
     parser.add_argument("input", metavar='input', action='store',
                         help="Train/Target input", type=str)
     parser.add_argument("-t", "--train", metavar='train', action='store', type=str, default=None,
-                        help="Required directory with target data which serve as ground truth for training. Do no" 
+                        help="Required directory with target data which serve as ground truth for training." 
                              "Set this to enable training mode.")
     parser.add_argument("-o", metavar='output', dest='output', action='store', type=str, default=None,
                         help="Set where to store outputs for eval mode")
@@ -346,8 +345,6 @@ if __name__ == '__main__':
                         help="Set decay halflife of the learning rates.")
     parser.add_argument("-e", "--epoch", dest='epoch', action='store', type=int, default=0,
                         help="Select network epoch.")
-    parser.add_argument("-s", "--steps", dest='steps', action='store', type=int, default=1000,
-                        help="Specify how many steps to run per epoch.")
     parser.add_argument("-b", "--batchsize", dest='batchsize', action='store', type=int, default=5,
                         help="Specify batchsize in each iteration.")
     parser.add_argument("--usepatch", dest='usepatch', action='store', default=0, type=int,

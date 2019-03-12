@@ -2,6 +2,10 @@ from ImageData import ImageDataSet
 from torchvision import transforms as tr
 from imgaug import augmenters as iaa
 
+# This prevents DataLoader hangs up
+# import cv2
+# cv2.setNumThreads(0)
+
 import imgaug as ia
 import torch
 import numpy as np
@@ -43,7 +47,7 @@ class ImageDataSetAugment(ImageDataSet):
 
         # Augment dtype
         self._augdtype = None
-        if self.dtype == float or self.dtype == 'float' or np.issubdtype(self.dtype, np.float):
+        if self.dtype == float or self.dtype == 'float' or np.issubdtype(self.dtype, np.float32):
             self._augdtype = 'float32'
         elif self.dtype == int or self.dtype == 'int' or np.issubdtype(self.dtype, np.integer):
             self._augdtype = 'int'
@@ -108,9 +112,10 @@ class ImageDataSetAugment(ImageDataSet):
                 augmented = augmented.transpose(2, 0, 1)
             out = torch.from_numpy(augmented).view_as(baseim).to(baseim.dtype)
 
-        if self._call_count == self.__len__() and self._update_each_epoch:
-            self._augmentators = self._augmentator.to_deterministic(n=())
-            self._update_augmentators()
+        if self._call_count == self.__len__():
             self._call_count = 0
+            if self._update_each_epoch:
+                self._augmentators = self._augmentator.to_deterministic(n=())   # reset augmentor
+                self._update_augmentators()
 
         return out

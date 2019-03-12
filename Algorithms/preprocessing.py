@@ -59,7 +59,7 @@ def dicom2nii(folder, out_dir=None):
     folder = os.path.abspath(folder)
     f = folder.replace('\\', '/')
     # matchobj = re.search('NPC[0-9]+', f)
-    matchobj = re.search('[^sS][0-9]{3,4}', f)
+    matchobj = re.search('[^sS][0-9]{3,5}', f)
     # prefix1 = f.split('/')[-2]
     prefix1 = f[matchobj.start():matchobj.end()]
 
@@ -142,5 +142,6 @@ def make_mask_from_dir(indir, outdir):
 if __name__ == '__main__':
     # folders = RecursiveListDir(5, '../NPC_Segmentation/00.RAW/Benign NP')
     # batch_dicom2nii(folders, out_dir='../NPC_Segmentation/00.RAW/NIFTI/Benign')
-    folders = RecursiveListDir(5, '../NPC_Segmentation/00.RAW/NPC new dx cases')
-    batch_dicom2nii(folders, out_dir='../NPC_Segmentation/00.RAW/NIFTI/NPC_dx')
+    folders = RecursiveListDir(5, '../NPC_Segmentation/00.RAW/MMX/839')
+    batch_dicom2nii(folders, out_dir='../NPC_Segmentation/00.RAW/NIFTI/MMX')
+    # dicom2nii('../NPC_Segmentation/00.RAW/MMX/769/S', '../NPC_Segmentation/00.RAW/NIFTI/MMX')

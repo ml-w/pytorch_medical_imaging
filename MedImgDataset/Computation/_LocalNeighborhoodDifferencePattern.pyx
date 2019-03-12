@@ -28,7 +28,7 @@ def LNDP(double[:,::1] image, int P, float R):
     cc = R * np.cos(2 * np.pi * np.arange(P, dtype=np.double) / P)
 
 
-    # Roud this up so that the result is nearest indexes
+    # Round this up so that the result is nearest indexes
     cdef int[::1] rp = np.round(rr, 0).astype('int32')
     cdef int[::1] cp = np.round(cc, 0).astype('int32')
 
