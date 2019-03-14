@@ -6,6 +6,10 @@ from ImageDataMultiChannel import ImageDataSetMultiChannel
 from ImageDataAugment import ImageDataSetAugment
 import numpy as np
 
+def _mpi_wrapper(arg, **kwargs):
+    """This is required for mpi choose patches"""
+    return ImagePatchesLoader._choose_from_probability_map(arg, **kwargs)
+
 class ImagePatchesLoader(Dataset):
     def __init__(self, base_dataset, patch_size, patch_stride=-1, include_last_patch=True,
                  axis=None, reference_dataset=None, pre_shuffle=False, random_patches=-1,
@@ -76,6 +80,22 @@ class ImagePatchesLoader(Dataset):
             np.random.shuffle(self._shuffle_index_arr)
             self._inverse_shuffle_arr = self._shuffle_index_arr.argsort()
 
+    @staticmethod
+    def _choose_from_probability_map(roi, func=None, pps=None):
+        """This function written for parallel computation."""
+        # Calculate probability by input function
+        prob = func(roi)
+
+        # Sample accordingly
+        xy = np.meshgrid(np.arange(prob.shape[0]), np.arange(prob.shape[1]))
+        xy = zip(xy[0].flatten(), xy[1].flatten())
+
+        prob = prob / prob.sum()
+
+        choices = np.random.choice(len(xy), p=prob.flatten(), size=pps)
+        return [xy[c] for c in choices]
+
+
     def _calculate_random_patch_indexes(self):
         X, Y = self._axis
         corner_range = [self._unit_dimension[X] - self._patch_size[0],
@@ -92,6 +112,11 @@ class ImagePatchesLoader(Dataset):
         pass
 
     def _sample_patches_from_distribution(self):
+        # Use multiprocessing
+        import multiprocessing as mpi
+        from functools import partial
+
+        # Set up arguments
         X, Y = self._axis
         corner_range = [self._unit_dimension[X] - self._patch_size[0],
                         self._unit_dimension[Y] - self._patch_size[1]]
@@ -113,6 +138,9 @@ class ImagePatchesLoader(Dataset):
             temp_flag = self._base_dataset._update_each_epoch
             self._base_dataset._update_each_epoch = False
 
+
+        pool = mpi.Pool(mpi.cpu_count())
+        rois = []
         patch_indexes = []
         for i, dat in enumerate(self._base_dataset):
             # extract target region
@@ -130,18 +158,29 @@ class ImagePatchesLoader(Dataset):
             while roi.ndim > 2:
                 roi = np.mean(roi, axis=np.argmin(roi.shape))
 
+            rois.append(roi)
+
             # Calculate probability by input function
-            prob = func(roi)
+            # prob = func(roi)
+            #
+            # # Sample accordingly
+            # xy = np.meshgrid(np.arange(prob.shape[0]), np.arange(prob.shape[1]))
+            # xy = zip(xy[0].flatten(), xy[1].flatten())
+            #
+            # prob = prob / prob.sum()
+            #
+            # choices = np.random.choice(len(xy), p=prob.flatten(), size=self._patch_perslice)
+            # patch_indexes.extend([xy[c] for c in choices])
+            # del ori_roi
+        results = pool.map_async(partial(_mpi_wrapper,
+                                          func=func,
+                                         pps=self._patch_perslice),
+                                 rois)
+        pool.close()
+        pool.join()
 
-            # Sample accordingly
-            xy = np.meshgrid(np.arange(prob.shape[0]), np.arange(prob.shape[1]))
-            xy = zip(xy[0].flatten(), xy[1].flatten())
-
-            prob = prob / prob.sum()
-
-            choices = np.random.choice(len(xy), p=prob.flatten(), size=self._patch_perslice)
-            patch_indexes.extend([xy[c] for c in choices])
-            del ori_roi, prob, xy, roi
+        for r in results.get():
+            patch_indexes.extend(r)
 
         # speacial treatment required if baseclass has augmentator
         if isinstance(self._base_dataset, ImageDataSetAugment):
@@ -149,6 +188,7 @@ class ImagePatchesLoader(Dataset):
             self._base_dataset._call_count = 0
 
         self._patch_indexes = np.array(patch_indexes)
+        del rois
 
 
 
@@ -215,7 +255,6 @@ class ImagePatchesLoader(Dataset):
         if self._random_patches:
             for j, p in enumerate(self._patch_indexes):
                 i = j // self._patch_perslice
-                print i
                 indexes = []
                 for k in xrange(count.ndimension()):
                     if k == self._axis[0] % count.ndimension():
@@ -284,11 +323,12 @@ class ImagePatchesLoader(Dataset):
 
                 # simple trick to update patch indexes after each epoch
                 self._random_counter += 1
-                if self._random_counter == self.__len__() and self._renew_index:
+                if self._random_counter >= self.__len__() and self._renew_index:
                     if callable(self._random_from_distrib):
                         self._sample_patches_from_distribution()
                     else:
                         self._calculate_random_patch_indexes()
+                    self._random_counter = 0
             else:
                 slice_index = item / len(self._patch_indexes)
                 patch_index = item % len(self._patch_indexes)
