@@ -7,8 +7,8 @@ import SimpleITK as sitk
 import pandas as pd
 
 from MedImgDataset import ImageDataSet
-
 from tqdm import *
+import argparse
 
 
 #========================================
@@ -178,21 +178,25 @@ def CorrespondenceRatio(TP, FP, TN, FN):
 def Volume(TP, FP, TN, FN):
     return (TP + FN)
 
-def EVAL(seg, gt):
-    vars = {'GCE': GCE,
-            'JAC': JAC,
-            'DICE': DICE,
-            'VD': VD,
-            'PM': PercentMatch,
-            'CR': CorrespondenceRatio,
-            'Volume Ratio': Volume,
-            'PR': PrecisionRate}
-
+def EVAL(seg, gt, vars):
     df = pd.DataFrame(columns=['filename','ImageIndex'] + vars.keys())
 
-    for i, row in enumerate(tqdm(zip(seg, gt))):
-        ss = row[0]
-        gg = row[1]
+    # match input's ID
+    gtindexes = gt.get_unique_IDs()
+    segindexes = seg.get_unique_IDs()
+
+    for i, row in enumerate(tqdm(gtindexes)):
+        # check if both have same ID
+        try:
+            segindexes.index(gtindexes[i])
+        except ValueError:
+            data = pd.DataFrame([[os.path.basename(gt.get_data_source(i)), gt.get_internal_index(i)] + [np.nan] * len(vars)],
+                            columns=['filename','ImageIndex'] + vars.keys())
+            df = df.append(data)
+            continue
+
+        gg = gt[i]
+        ss = seg[segindexes.index(gtindexes[i])]
         if not isinstance(ss, np.ndarray):
             ss = ss.numpy().flatten().astype('bool')
         if not isinstance(gg, np.ndarray):
@@ -202,7 +206,7 @@ def EVAL(seg, gt):
         if TP == 0:
             continue
         values = [vars[keys](TP, FP, TN, FN ) for keys in vars]
-        data = pd.DataFrame([[os.path.basename(seg.get_data_source(i)), seg.get_internal_index(i)] + values],
+        data = pd.DataFrame([[os.path.basename(gt.get_data_source(i)), gt.get_internal_index(i)] + values],
                             columns=['filename','ImageIndex'] + vars.keys())
         df = df.append(data)
     return df
@@ -283,38 +287,56 @@ def BatchAnalysis(targetfiles, testfiles, func, mask=None, outputcsvdir=None):
 from skimage.transform import resize
 
 if __name__ == '__main__':
-    import fnmatch
+    parse = argparse.ArgumentParser()
+    parse.add_argument('-d', '--DICE', action='store_true', default=False, dest='dice', help="add DICE to analysis.")
+    parse.add_argument('-p', '--PM', action='store_true', default=False, dest='pm', help='add percentage match to analysis.')
+    parse.add_argument('-j', '--JAC', action='store_true', default=False, dest='jac', help='add percentage match to analysis.')
+    parse.add_argument('-v', '--VR', action='store_true', default=False, dest='vr', help='add percentage match to analysis.')
+    parse.add_argument('-r', '--PR', action='store_true', default=False, dest='pr', help='add percentage match to analysis.')
+    parse.add_argument('-vd', '--VD', action='store_true', default=False, dest='vd', help='add volume difference to analysis.')
+    parse.add_argument('-g', '--GCE', action='store_true', default=False, dest='gce', help='add global consistency error to analysis.')
+    parse.add_argument('-c', '--CR', action='store_true', default=False, dest='cr', help='add corresponding ratio to analysis.')
+    parse.add_argument('-a', '--all', action='store_true', default=False, dest='all', help='use all available analysis.')
+    parse.add_argument('--save', action='store', default=None, dest='save', help='save analysis results as csv')
+    parse.add_argument('--test-data', action='store', type=str, dest='testset', required=True)
+    parse.add_argument('--gt-data', action='store', type=str, dest='gtset', required=True)
+    args = parse.parse_args()
+    assert os.path.isdir(args.testset) and os.path.isdir(args.gtset), "Path error!"
 
-    # output = ImageDataSet('../NPC_Segmentation/98.Output/UNetLocTexHist', verbose=True,
-    #                       filelist='../NPC_Segmentation/99.Testing/B01_Testing_Input.txt',
-    #                       filesuffix='T1*C*')
-    # seg = ImageDataSet('../NPC_Segmentation/02.NPC_seg', verbose=True,
-    #                    filelist='../NPC_Segmentation/99.Testing/B01_Testing_GT.txt')
-    # output = ImageDataSet('../NPC_Segmentation/98.Output/UNetLocTexHist2', verbose=True)
-    output = ImageDataSet('../NPC_Segmentation/98.Output/UNetLocTexHistDeepear_Aug', verbose=True, dtype='uint8')
-    seg = ImageDataSet('../NPC_Segmentation/03.NPC_seg_1stRedraw', verbose=True,
-                       filelist='../NPC_Segmentation/99.Testing/B01/B01_Testing_GT.txt', dtype='uint8')
-    # seg = ImageDataSet('../NPC_Segmentation/04.NPC_seg_clinical', verbose=True,
-    #                    filelist='../NPC_Segmentation/99.Testing/B01/B01_Testing_GT.txt', dtype='uint8')
+    vars = {}
+    if args.dice:
+        vars['DICE'] = DICE
+    if args.jac:
+        vars['JAC'] = JAC
+    if args.pm:
+        vars['PM'] = PercentMatch
+    if args.vr:
+        vars['VR'] = Volume
+    if args.pr:
+        vars['PR'] = PrecisionRate
+    if args.gce:
+        vars['GCE'] = GCE
+    if args.cr:
+        vars['CR'] = CR
+    if args.all:
+        vars = {'GCE': GCE,
+                'JAC': JAC,
+                'DICE': DICE,
+                'VD': VD,
+                'PM': PercentMatch,
+                'CR': CorrespondenceRatio,
+                'Volume Ratio': Volume,
+                'PR': PrecisionRate}
 
+    output = ImageDataSet(args.testset, verbose=True, dtype='uint8')
+    seg = ImageDataSet(args.gtset, verbose=True, dtype='uint8')
 
-    # print os.path.isdir("/home/lwong/Storage/Data/ERA_Segmentation/03_TEST/true_postprocessed")
-    # output = ImageDataSet('/home/lwong/Storage/Data/ERA_Segmentation/03_TEST/true_postprocessed',
-    #                       verbose=True, dtype='uint8')
-    # seg = ImageDataSet('/home/lwong/Storage/Data/ERA_Segmentation/03_TEST/gt',
-    #                       verbose=True, dtype='uint8')
-    # Resize to 144x144
-    t1, t2 = [], []
-    for i in xrange(len(output)):
-        t1.append(resize(output[i].numpy(), (len(output[i]), 144, 144), clip=False, preserve_range=True))
-        t2.append(resize(seg[i].numpy(), (len(output[i]), 144, 144), clip=False, preserve_range=True))
-
-    output.data = t1
-    seg.data = t2
-    #
-    results = EVAL(output, seg)
+    results = EVAL(output, seg, vars)
     results = results.sort_values('DICE')
-    print results.to_csv('~/FTP/temp/temp.csv')
-    print results['DICE'].mean()
-    print results['PM'].mean(), results['PM'].std()
-    print results['PR'].mean(), results['PR'].std()
+
+    if not args.save is None:
+        try:
+            results.to_csv(args.save)
+        except:
+            print "Cannot save to: ", args.save
+    print results.to_string
