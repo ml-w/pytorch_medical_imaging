@@ -370,7 +370,7 @@ def LoadSegmentationPatchLocMMTexHist_Aug(a, debug=False):
                                         a.lsuffix,
                                         a.loadbyfilelist,
                                         np.float32),
-                                  patchsize, patch_stride=stride,
+                                  patchsize,
                                   random_patches=75,
                                   random_from_distribution=clip_5,
                                   renew_index=False,
@@ -416,9 +416,90 @@ def LoadSegmentationPatchLocMMTexHist_Aug(a, debug=False):
                                         reference_dataset=invars)
             return invars, gtvars
 
+def LoadSegmentationPatchRandom_Aug(a, debug=False):
+    from MedImgDataset.Computation import clip_5
+    imset = lambda input, fsuffix, filelist, dtype: ImageDataSetAugment(input,
+                                                                        dtype=dtype,
+                                                                        verbose=True,
+                                                                        debugmode=debug,
+                                                                        filesuffix=fsuffix,
+                                                                        loadBySlices=0,
+                                                                        filelist=filelist,
+                                                                        aug_factor=3)
+    imseg = lambda input, fsuffix, filelist, dtype: ImageDataSetAugment(input,
+                                                                        dtype=dtype,
+                                                                        verbose=True,
+                                                                        debugmode=debug,
+                                                                        filesuffix=fsuffix,
+                                                                        loadBySlices=0,
+                                                                        filelist=filelist,
+                                                                        is_seg=True,
+                                                                        aug_factor=3)
+
+
+    patchsize = 128
+    stride = 32
+
+    if a.train is None:
+        # Eval mode
+        imset = lambda input, fsuffix, filelist, dtype: ImageDataSet(input,
+                                                                     dtype=dtype,
+                                                                     verbose=True,
+                                                                     debugmode=debug,
+                                                                     filesuffix=fsuffix,
+                                                                     loadBySlices=0,
+                                                                     filelist=filelist)
+        return ImagePatchesLoader(imset(a.input,
+                                        a.lsuffix,
+                                        a.loadbyfilelist,
+                                        np.float32),
+                                  patchsize,
+                                  random_patches=75,
+                                  random_from_distribution=clip_5,
+                                  renew_index=False)
+    else:
+        # Training Mode
+        if a.loadbyfilelist is None:
+            invars = ImagePatchesLoader(imset(a.input,
+                                              a.lsuffix,
+                                              None,
+                                              np.float32),
+                                        patchsize,
+                                        stride,
+                                        random_patches=20,
+                                        random_from_distribution=clip_5
+                                        )
+            seg = imseg(a.train, None, None, np.uint8)
+            seg.set_reference_augment_dataset(invars._base_dataset)
+            gtvars = ImagePatchesLoader(seg,
+                                        patchsize,
+                                        stride,
+                                        reference_dataset=invars)
+            return invars, gtvars
+
+        else:
+            gt_filelist, input_filelist = a.loadbyfilelist.split(',')
+            invars = ImagePatchesLoader(imset(a.input,
+                                              a.lsuffix,
+                                              input_filelist,
+                                              np.float32),
+                                        patchsize,
+                                        stride,
+                                        random_patches=20,
+                                        random_from_distribution=clip_5
+                                        )
+            seg = imseg(a.train, None, gt_filelist, np.uint8)
+            seg.set_reference_augment_dataset(invars._base_dataset)
+            gtvars = ImagePatchesLoader(seg,
+                                        patchsize,
+                                        stride,
+                                        reference_dataset=invars)
+            return invars, gtvars
+
 datamap = {'subband':LoadSubbandDataset,
            'image2D':LoadImageDataset,
            'seg2D': LoadSegmentationImageDataset,
+           'seg2Drandompatch_aug': LoadSegmentationPatchRandom_Aug,
            'seg2DwifPos': LoadSegmentationImageDatasetWithPos,
            'seg2DMMwifPos_aug': LoadSegmentationImageDatasetMMPos_Aug,
            'seg2Dloctex': LoadSegmentationPatchLocTex,
@@ -428,6 +509,7 @@ datamap = {'subband':LoadSubbandDataset,
            'subband_debug': partial(LoadSubbandDataset, debug=True),
            'image2D_debug': partial(LoadImageDataset, debug=True),
            'seg2D_debug': partial(LoadSegmentationImageDataset, debug=True),
+           'seg2Drandompatch_aug_debug': partial(LoadSegmentationPatchRandom_Aug, debug=True),
            'seg2DwifPos_debug': partial(LoadSegmentationImageDatasetWithPos, debug=True),
            'seg2Dloctex_debug': partial(LoadSegmentationPatchLocTex, debug=True),
            'seg2Dloctexhist_debug': partial(LoadSegmentationPatchLocTexHist, debug=True),

@@ -147,6 +147,7 @@ def main(a):
         lastloss = 1e32
         writerindex = 0
         losses = []
+        LogPrint("Start training...")
         for i in range(a.epoch):
             E = []
             temploss = 1e32
@@ -219,6 +220,7 @@ def main(a):
             if a.decay != 0:
                 for pg in optimizer.param_groups:
                     pg['lr'] = pg['lr'] * np.exp(-i * a.decay / float(a.epoch))
+                    pg['momentum'] = np.max([pg['momentum'] * np.exp(-i * a.decay / float(a.epoch)), 0.2])
 
                 #
                 if isinstance(criterion, nn.CrossEntropyLoss):
@@ -227,7 +229,8 @@ def main(a):
                     factor =  sigmoid_plus(offsetfactor + 1) * 100
                     criterion.weight.copy_(torch.tensor([r[0] * factor] + r[1:].tolist()))
                     LogPrint('New weight: ' + str(criterion.weight), logging.INFO)
-
+            else:
+                pg = {'lr':lr}
 
 
             LogPrint("[Epoch %04d] Loss: %.010f LR: %.010f"%(i, np.array(E).mean(), pg['lr']))
@@ -302,7 +305,8 @@ def main(a):
             out_tensor.append(out.data.cpu())
             del out
 
-        if a.datatype.find('loctex') > -1:
+        # if a.datatype.find('loctex') > -1:
+        if isinstance(inputDataset, ImagePatchesLoader):
             out_tensor = inputDataset.piece_patches(out_tensor)
         else:
             out_tensor = torch.cat(out_tensor, dim=0)
@@ -323,6 +327,7 @@ if __name__ == '__main__':
                           'UNetLocTexHist': UNetLocTexHist,
                           'UNetLocTexHistDeeper': UNetLocTexHistDeeper,
                           'UNetLocTexHist_MM': partial(UNetLocTexHist, fc_inchan=204),
+                          'UNetLocTexHistDeeper_MM': partial(UNetLocTexHistDeeper, fc_inchan=204),
                           'DenseUNet': DenseUNet2D,
                           'AttentionUNet': AttentionUNet,
                           'AttentionDenseUNet': AttentionDenseUNet2D,

@@ -2,6 +2,7 @@ import SimpleITK as sitk
 import os
 import numpy as np
 import re
+import sys
 from tqdm import *
 sitk.ProcessObject_GlobalWarningDisplayOff()
 
@@ -47,12 +48,13 @@ def SmoothImages(root_dir, out_dir):
         sitk.WriteImage(out, out_dir + "/" + fs)
 
 
-def dicom2nii(folder, out_dir=None):
+def dicom2nii(folder, out_dir=None, seq_filters=None):
     if not os.path.isdir(out_dir):
         os.mkdir(out_dir)
         assert os.path.isdir(out_dir)
 
     if not os.path.isdir(folder):
+        print "Cannot locate specified folder! ", folder
         raise IOError("Cannot locate specified folder!")
 
     print "Handling: ", folder
@@ -80,19 +82,36 @@ def dicom2nii(folder, out_dir=None):
         headerreader.LoadPrivateTagsOn()
         headerreader.ReadImageInformation()
         outname = out_dir + '/%s-%s.nii.gz'%(prefix1, headerreader.GetMetaData('0008|103e').rstrip().replace(' ', '_'))
+        if not seq_filters is None:
+            if isinstance(seq_filters, list):
+                regex = "("
+                for i, fil in enumerate(seq_filters):
+                    regex += '(.*' + fil + '{1}.*)'
+                    if i != len(seq_filters) - 1:
+                        regex += '|'
+                regex += ')'
+                if re.match(regex, headerreader.GetMetaData('0008|103e')) is None:
+                    print "skipping ", headerreader.GetMetaData('0008|103e'), "from ", f
+                    continue
+            elif isinstance(seq_filters, str):
+                if re.match(seq_filters, headerreader.GetMetaData('0008|103e')) is None:
+                    print "skipping ", headerreader.GetMetaData('0008|103e'), "from ", f
+                    continue
 
         # Write image
         sitk.WriteImage(outimage, outname)
         del reader
 
 
-def batch_dicom2nii(folderlist, out_dir, workers=8):
+def batch_dicom2nii(folderlist, out_dir, workers=8, seq_fileters=None):
     import multiprocessing as mpi
     from functools import partial
 
     pool = mpi.Pool(workers)
-    pool.map_async(partial(dicom2nii, out_dir=out_dir),
-                   folderlist)
+    # pool.map_async(partial(dicom2nii, out_dir=out_dir, seq_fileters=seq_fileters),
+    #                folderlist)
+    for f in folderlist:
+        p = pool.apply_async(dicom2nii, args=[f, out_dir, seq_fileters])
     pool.close()
     pool.join()
 
@@ -139,9 +158,28 @@ def make_mask_from_dir(indir, outdir):
     p.close()
     p.join()
 
+
+def main(args):
+    try:
+        os.mkdir(args[2])
+    except:
+        print "Cannot mkdir."
+
+    assert os.path.isdir(args[1]) and os.path.isdir(args[2]), 'Cannot locate inputs directories or output directory.'
+
+    folders = RecursiveListDir(5, args[1])
+    folders = [os.path.abspath(f) for f in folders]
+
+    if isinstance(eval(args[3]), list):
+        batch_dicom2nii(folders, args[2], eval(args[3]) if len(args) > 4 else None)
+    else:
+        batch_dicom2nii(folders, args[2], args[3] if len(args) > 4 else None)
+
 if __name__ == '__main__':
     # folders = RecursiveListDir(5, '../NPC_Segmentation/00.RAW/Benign NP')
     # batch_dicom2nii(folders, out_dir='../NPC_Segmentation/00.RAW/NIFTI/Benign')
-    folders = RecursiveListDir(5, '../NPC_Segmentation/00.RAW/MMX/839')
-    batch_dicom2nii(folders, out_dir='../NPC_Segmentation/00.RAW/NIFTI/MMX')
+    # folders = RecursiveListDir(5, '../NPC_Segmentation/00.RAW/T1+C_Missing/t1c/')
+    # folders = RecursiveListDir(5, '../NPC_Segmentation/00.RAW/MMX/840/')
+    # batch_dicom2nii(folders, out_dir='../NPC_Segmentation/00.RAW/NIFTI/All')
     # dicom2nii('../NPC_Segmentation/00.RAW/MMX/769/S', '../NPC_Segmentation/00.RAW/NIFTI/MMX')
+    main(sys.argv)

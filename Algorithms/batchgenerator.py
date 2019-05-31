@@ -3,7 +3,7 @@ import numpy as np
 
 
 
-def GenerateTestBatch(gt_files, input_files, numOfTestSamples, outdir, prefix="Batch_", exclude_list=None):
+def GenerateTestBatch(gt_files, input_files, numOfTestSamples, outdir, prefix="Batch_", exclude_list=None, k_fold=None):
     # assert len(gt_files) == len(input_files)
     # assert len(gt_files) > numOfTestSamples
 
@@ -34,56 +34,66 @@ def GenerateTestBatch(gt_files, input_files, numOfTestSamples, outdir, prefix="B
                         continue
                     exclude.append(row.rstrip())
 
-    # Testing batch files
-    testing_gt = open(outdir + '/' + prefix + "Testing_GT.txt", "w")
-    testing_input = open(outdir + '/' + prefix + "Testing_Input.txt", "w")
 
-    # Training batch files
-    training_gt = open(outdir + '/' + prefix + "Training_GT.txt", 'w')
-    training_input = open(outdir + '/' + prefix + "Training_Input.txt", 'w')
+    if k_fold is None:
+        k_fold = 1
+    else:
+        numOfTestSamples = len(indexes) // k_fold
 
-    training_samples = {'input': [], 'gt':  []}
-    testing_samples = {'input': [], 'gt': []}
-    for i in xrange(len(indexes)):
-        if i < numOfTestSamples:
-            target = testing_samples
-        else:
-            target = training_samples
+    for k in xrange(k_fold):
+        fold_number = "_%03d_"%k
+        # Testing batch files
+        testing_gt = open(outdir + '/' + prefix + fold_number + "Testing_GT.txt", "w")
+        testing_input = open(outdir + '/' + prefix + fold_number + "Testing_Input.txt", "w")
 
-        # each case should be named "[ID]_details.nii.gz"
-        case_id = gt_files[indexes[i]].split('_')[0]
+        # Training batch files
+        training_gt = open(outdir + '/' + prefix + fold_number +  "Training_GT.txt", 'w')
+        training_input = open(outdir + '/' + prefix + fold_number + "Training_Input.txt", 'w')
 
-        # skip if this case is not to be included
-        if case_id in exclude:
-            print "Skipping case: %s"%case_id
-            continue
+        training_samples = {'input': [], 'gt':  []}
+        testing_samples = {'input': [], 'gt': []}
+        for i in xrange(len(indexes)):
+            if (i > k * numOfTestSamples and i < (k+1) * numOfTestSamples) or i > k_fold * numOfTestSamples:
+                target = testing_samples
+            else:
+                target = training_samples
 
-        in_tar = fnmatch.filter(input_files, case_id + "*")
-        if len(in_tar) < 1:
-            print "Cannot find input files for case: %s"%case_id
-            continue
+            # each case should be named "[ID]_details.nii.gz"
+            case_id = gt_files[indexes[i]].split('_')[0]
 
-        target['input'].extend(in_tar)
-        target['gt'].append(gt_files[indexes[i]])
+            # skip if this case is not to be included
+            if case_id in exclude:
+                print "Skipping case: %s"%case_id
+                continue
 
-    testing_gt.writelines([f + '\n' for f in testing_samples['gt']])
-    testing_input.writelines([f + '\n' for f in testing_samples['input']])
+            in_tar = fnmatch.filter(input_files, case_id + "*")
+            if len(in_tar) < 1:
+                print "Cannot find input files for case: %s"%case_id
+                continue
 
-    training_gt.writelines([f + '\n' for f in training_samples['gt']])
-    training_input.writelines([f + '\n' for f in training_samples['input']])
+            target['input'].extend(in_tar)
+            target['gt'].append(gt_files[indexes[i]])
 
-    [f.close() for f in [testing_gt, testing_input, training_input, training_gt]]
+        testing_gt.writelines([f + '\n' for f in testing_samples['gt']])
+        testing_input.writelines([f + '\n' for f in testing_samples['input']])
+
+        training_gt.writelines([f + '\n' for f in training_samples['gt']])
+        training_input.writelines([f + '\n' for f in training_samples['input']])
+
+        [f.close() for f in [testing_gt, testing_input, training_input, training_gt]]
+
 
 
 
 if __name__ == '__main__':
     import os, fnmatch
     # GenerateKFoldBatch("./BrainVessel/01.BatchSource", "./BrainVessel/10.K_Fold_Batches", 10)
-    GenerateTestBatch(os.listdir('../NPC_Segmentation/05.NPC_seg_T2'),
+    GenerateTestBatch(os.listdir('../NPC_Segmentation/05.NPC_seg_T2_redraw'),
                       os.listdir('../NPC_Segmentation/01.NPC_dx'),
                       50,
                       '../NPC_Segmentation/99.Testing',
-                      prefix="B02/B02_",
-                      exclude_list='../NPC_Segmentation/99.Testing/B02/exclude.txt'
+                      prefix="B04/B04",
+                      exclude_list='../NPC_Segmentation/99.Testing/B02/exclude.txt',
+                      k_fold=4
                       )
 

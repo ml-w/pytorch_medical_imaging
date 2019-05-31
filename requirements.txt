@@ -6,3 +6,10 @@ cython
 torch>=1.0
 scipy
 setuptools
+pydicom
+pandas
+SimpleITK
+tqdm
+scikit-learn
+scikit-image
+

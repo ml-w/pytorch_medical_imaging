@@ -59,7 +59,7 @@ class ImageDataSet(Dataset):
     This dataset automatically load all the nii files in the specific directory to
     generate a 3D dataset
     """
-    def __init__(self, rootdir, filelist=None, filesuffix=None, loadBySlices=-1, verbose=False, dtype=float, debugmode=False):
+    def __init__(self, rootdir, filelist=None, filesuffix=None, idlist=None, loadBySlices=-1, verbose=False, dtype=float, debugmode=False):
         """
 
         :param rootdir:
@@ -75,6 +75,7 @@ class ImageDataSet(Dataset):
         self.verbose = verbose
         self.dtype = dtype
         self.filelist = filelist
+        self.idlist = idlist
         self.filesuffix = filesuffix
         self._debug=debugmode
         self._byslices=loadBySlices
@@ -94,16 +95,22 @@ class ImageDataSet(Dataset):
             print "Parsing root path: ", self.rootdir
 
         # Load files written in filelist from the root_dir
-        if self.filelist is None:
-            filenames = os.listdir(self.rootdir)
-            filenames = fnmatch.filter(filenames, "*.nii.gz")
-        else:
+        if not self.filelist is None:
             filelist = open(self.filelist, 'r')
             filenames = [fs.rstrip() for fs in filelist.readlines()]
             for fs in filenames:
                 if not os.path.isfile(self.rootdir + '/' + fs):
                     filenames.remove(fs)
                     print "Cannot find " + fs + " in " + self.rootdir
+        elif not self.idlist is None:
+            tmp_filenames = os.listdir(self.rootdir)
+            tmp_filenames = fnmatch.filter(tmp_filenames, "*.nii.gz")
+            filenames = []
+            for id in self.idlist:
+                filenames.extend(fnmatch.filter(tmp_filenames, str(id)+"*"))
+        else:
+            filenames = os.listdir(self.rootdir)
+            filenames = fnmatch.filter(filenames, "*.nii.gz")
 
         if not self.filesuffix is None:
             filenames = fnmatch.filter(filenames, "*" + self.filesuffix + "*")
@@ -183,6 +190,22 @@ class ImageDataSet(Dataset):
             return i - self._itemindexes[int(np.argmax(self._itemindexes >= i)) - 1]
         else:
             return i
+
+    def get_unique_IDs(self, globber=None):
+        import re
+        if globber is None:
+            globber = "[^T][0-9]+"
+
+        filenames = [os.path.basename(f) for f in self.dataSourcePath]
+
+
+        outlist = []
+        for f in filenames:
+            matchobj = re.search(globber, f)
+
+            if not matchobj is None:
+                outlist.append(int(f[matchobj.start():matchobj.end()]))
+        return outlist
 
     def __len__(self):
         return self.length
