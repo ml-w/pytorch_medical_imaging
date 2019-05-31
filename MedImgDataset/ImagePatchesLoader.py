@@ -4,7 +4,9 @@ from torch.utils.data import Dataset
 from ImageData import ImageDataSet
 from ImageDataMultiChannel import ImageDataSetMultiChannel
 from ImageDataAugment import ImageDataSetAugment
+from tqdm import *
 import numpy as np
+
 
 def _mpi_wrapper(arg, **kwargs):
     """This is required for mpi choose patches"""
@@ -90,11 +92,15 @@ class ImagePatchesLoader(Dataset):
         xy = np.meshgrid(np.arange(prob.shape[0]), np.arange(prob.shape[1]))
         xy = zip(xy[0].flatten(), xy[1].flatten())
 
+        if np.isclose(prob.sum(), 0.):
+            prob = np.ones_like(prob)
         prob = prob / prob.sum()
 
-        choices = np.random.choice(len(xy), p=prob.flatten(), size=pps)
+        try:
+            choices = np.random.choice(len(xy), p=prob.flatten(), size=pps)
+        except Exception as e:
+            print roi, len(xy), prob.flatten(), e.message
         return [xy[c] for c in choices]
-
 
     def _calculate_random_patch_indexes(self):
         X, Y = self._axis
@@ -142,7 +148,7 @@ class ImagePatchesLoader(Dataset):
         pool = mpi.Pool(mpi.cpu_count())
         rois = []
         patch_indexes = []
-        for i, dat in enumerate(self._base_dataset):
+        for i, dat in tqdm(enumerate(self._base_dataset), desc="Sampling jobs", disable=False):
             # extract target region
             ori_roi = torch.clone(dat[indexes])
 
@@ -160,18 +166,11 @@ class ImagePatchesLoader(Dataset):
 
             rois.append(roi)
 
-            # Calculate probability by input function
-            # prob = func(roi)
-            #
-            # # Sample accordingly
-            # xy = np.meshgrid(np.arange(prob.shape[0]), np.arange(prob.shape[1]))
-            # xy = zip(xy[0].flatten(), xy[1].flatten())
-            #
-            # prob = prob / prob.sum()
-            #
-            # choices = np.random.choice(len(xy), p=prob.flatten(), size=self._patch_perslice)
-            # patch_indexes.extend([xy[c] for c in choices])
-            # del ori_roi
+        # Non-MPI
+        # for roi in tqdm(rois, desc="ROI sampling"):
+        #     patch_indexes.extend(_mpi_wrapper(roi, func=func, pps=self._patch_perslice))
+
+        # # MPI
         results = pool.map_async(partial(_mpi_wrapper,
                                           func=func,
                                          pps=self._patch_perslice),
@@ -179,7 +178,7 @@ class ImagePatchesLoader(Dataset):
         pool.close()
         pool.join()
 
-        for r in results.get():
+        for r in tqdm(results.get(), desc="Sample from distribution"):
             patch_indexes.extend(r)
 
         # speacial treatment required if baseclass has augmentator
@@ -242,15 +241,20 @@ class ImagePatchesLoader(Dataset):
     def piece_patches(self, inpatches):
         if isinstance(inpatches, list):
             length = np.sum([len(x) for x in inpatches])
+            channels = inpatches[0].size()[1]
+            batch_size = len(inpatches[0])
             LIST_MODE = True
         else:
             LIST_MODE = False
             length = len(inpatches)
+            channels = inpatches.size()[1]
         if length != self.__len__():
             print "Warning! Size mismatch: " + str(len(inpatches)) + ',' + str(self.__len__())
 
-        count = torch.zeros(self._base_dataset.data.shape, dtype=torch.int16)
-        temp_slice = torch.zeros(self._base_dataset.data.shape, dtype=torch.float)
+        temp_slice = torch.cat([torch.zeros(self._base_dataset.data.shape, dtype=torch.float)
+                                  for i in xrange(channels)], dim=1)
+        temp_slice[:,0] = 1E-6 # This forces all the un processed slices to have null label.
+        count = torch.zeros(temp_slice.size(), dtype=torch.int16)
 
         if self._random_patches:
             for j, p in enumerate(self._patch_indexes):
@@ -266,7 +270,12 @@ class ImagePatchesLoader(Dataset):
                     else:
                         indexes.append(slice(None))
 
-                temp_slice[indexes] += inpatches[j]
+                if LIST_MODE:
+                    index_1 = j % len(inpatches[0])
+                    index_2 = j // len(inpatches[0])
+                    temp_slice[indexes] += inpatches[index_2][index_1]
+                else:
+                    temp_slice[indexes] += inpatches[j]
                 count[indexes] += 1
         else:
             for i in xrange(len(self._base_dataset)):
@@ -287,12 +296,18 @@ class ImagePatchesLoader(Dataset):
                             index_1 = inpatches_index % len(inpatches[0])
                             index_2 = inpatches_index // len(inpatches[0])
                             temp_slice[indexes] += inpatches[index_2][index_1]
-                            pass
                         else:
                             temp_slice[indexes] += inpatches[inpatches_index]
                     else:
-                        temp_slice[indexes] += inpatches[i * len(self._patch_indexes) + j]
+                        inpatches_index = i * len(self._patch_indexes) + j
+                        if LIST_MODE:
+                            index_1 = inpatches_index % len(inpatches[0])
+                            index_2 = inpatches_index // len(inpatches[0])
+                            temp_slice[indexes] += inpatches[index_2][index_1]
+                        else:
+                            temp_slice[indexes] += inpatches[inpatches_index]
                     count[indexes] += 1
+
         count[count == 0] = 1   # Prevent division by zero
         temp_slice /= count.float()
         return tensor(temp_slice)
