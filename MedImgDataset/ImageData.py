@@ -181,13 +181,13 @@ class ImageDataSet(Dataset):
 
     def get_data_source(self, i):
         if self._byslices >=0:
-            return self.dataSourcePath[int(np.argmax(self._itemindexes >= i)) - 1]
+            return self.dataSourcePath[int(np.argmax(self._itemindexes > i)) - 1]
         else:
             return self.dataSourcePath[i]
 
     def get_internal_index(self, i):
         if self._byslices >= 0:
-            return i - self._itemindexes[int(np.argmax(self._itemindexes >= i)) - 1]
+            return i - self._itemindexes[int(np.argmax(self._itemindexes > i)) - 1]
         else:
             return i
 
