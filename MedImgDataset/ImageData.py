@@ -1,11 +1,12 @@
 from torch.utils.data import Dataset
 from torch import from_numpy, cat, tensor, stack
 from tqdm import *
-import fnmatch
+import fnmatch, re
 import os
 import numpy as np
 import SimpleITK as sitk
 
+import logging
 
 
 NIFTI_DICT = {
@@ -95,13 +96,14 @@ class ImageDataSet(Dataset):
             print "Parsing root path: ", self.rootdir
 
         # Load files written in filelist from the root_dir
+        removed_fnames = []
         if not self.filelist is None:
             filelist = open(self.filelist, 'r')
             filenames = [fs.rstrip() for fs in filelist.readlines()]
             for fs in filenames:
                 if not os.path.isfile(self.rootdir + '/' + fs):
                     filenames.remove(fs)
-                    print "Cannot find " + fs + " in " + self.rootdir
+                    removed_fnames.append(fs)
         elif not self.idlist is None:
             tmp_filenames = os.listdir(self.rootdir)
             tmp_filenames = fnmatch.filter(tmp_filenames, "*.nii.gz")
@@ -113,7 +115,22 @@ class ImageDataSet(Dataset):
             filenames = fnmatch.filter(filenames, "*.nii.gz")
 
         if not self.filesuffix is None:
-            filenames = fnmatch.filter(filenames, "*" + self.filesuffix + "*")
+            # use REGEX if find paranthesis
+            if self.filesuffix[0] == '(':
+                tmp = []
+                for f in filenames:
+                    if not re.match(self.filesuffix, f) is None:
+                        tmp.append(f)
+                filenames = tmp
+            else:
+                # Else use bash-style wild card
+                filenames = fnmatch.filter(filenames, "*" + self.filesuffix + "*")
+
+        if len(removed_fnames) > 0:
+            removed_fnames.sort()
+            for fs in removed_fnames:
+                logging.getLogger('__main__').log(logging.WARNING, "Cannot find " + fs + " in " + self.rootdir)
+                print "Cannot find " + fs + " in " + self.rootdir
         filenames.sort()
 
 
@@ -206,6 +223,12 @@ class ImageDataSet(Dataset):
             if not matchobj is None:
                 outlist.append(int(f[matchobj.start():matchobj.end()]))
         return outlist
+
+    def get_spacing(self, id):
+        if self._byslices >= 0:
+            return [round(self.metadata[self.get_internal_index(id)]['pixdim[%d]'%(i+1)], 5) for i in xrange(3)]
+        else:
+            return [round(self.metadata[id]['pixdim[%d]'%(i+1)], 5) for i in xrange(3)]
 
     def __len__(self):
         return self.length
