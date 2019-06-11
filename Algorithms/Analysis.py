@@ -8,12 +8,20 @@ import pandas as pd
 
 from MedImgDataset import ImageDataSet
 from tqdm import *
+from surface_distance import compute_surface_distances, compute_average_surface_distance
 import argparse
+
+
 
 
 #========================================
 # Similarity functions
 #========================================
+def ASD(seg, test, spacing):
+    return np.sum(compute_average_surface_distance(
+        compute_surface_distances(seg, test, spacing))) / 2.
+
+
 def SSIM(x,y, axis=None):
     """
     Description
@@ -198,14 +206,24 @@ def EVAL(seg, gt, vars):
         gg = gt[i]
         ss = seg[segindexes.index(gtindexes[i])]
         if not isinstance(ss, np.ndarray):
-            ss = ss.numpy().flatten().astype('bool')
+            ss = ss.numpy().astype('bool')
         if not isinstance(gg, np.ndarray):
-            gg = gg.numpy().flatten().astype('bool')
+            gg = gg.numpy().astype('bool')
 
-        TP, FP, TN, FN = np.array(perf_measure(gg, ss), dtype=float)
+        TP, FP, TN, FN = np.array(perf_measure(gg.flatten(), ss.flatten()), dtype=float)
         if TP == 0:
             continue
-        values = [vars[keys](TP, FP, TN, FN ) for keys in vars]
+        values = []
+        for keys in vars:
+            try:
+                values.append(vars[keys](TP, FP, TN, FN))
+            except:
+                try:
+                    values.append(vars[keys](gg, ss, gt.get_spacing(i)))
+                except Exception as e:
+                    values.append(np.nan)
+                    print e.message
+
         data = pd.DataFrame([[os.path.basename(gt.get_data_source(i)), gt.get_internal_index(i)] + values],
                             columns=['filename','ImageIndex'] + vars.keys())
         df = df.append(data)
@@ -289,13 +307,22 @@ from skimage.transform import resize
 if __name__ == '__main__':
     parse = argparse.ArgumentParser()
     parse.add_argument('-d', '--DICE', action='store_true', default=False, dest='dice', help="add DICE to analysis.")
-    parse.add_argument('-p', '--PM', action='store_true', default=False, dest='pm', help='add percentage match to analysis.')
-    parse.add_argument('-j', '--JAC', action='store_true', default=False, dest='jac', help='add percentage match to analysis.')
-    parse.add_argument('-v', '--VR', action='store_true', default=False, dest='vr', help='add percentage match to analysis.')
-    parse.add_argument('-r', '--PR', action='store_true', default=False, dest='pr', help='add percentage match to analysis.')
-    parse.add_argument('-vd', '--VD', action='store_true', default=False, dest='vd', help='add volume difference to analysis.')
-    parse.add_argument('-g', '--GCE', action='store_true', default=False, dest='gce', help='add global consistency error to analysis.')
-    parse.add_argument('-c', '--CR', action='store_true', default=False, dest='cr', help='add corresponding ratio to analysis.')
+    parse.add_argument('-p', '--PM', action='store_true', default=False, dest='pm',
+                       help='add percentage match to analysis.')
+    parse.add_argument('-j', '--JAC', action='store_true', default=False, dest='jac',
+                       help='add percentage match to analysis.')
+    parse.add_argument('-v', '--VR', action='store_true', default=False, dest='vr',
+                       help='add percentage match to analysis.')
+    parse.add_argument('-r', '--PR', action='store_true', default=False, dest='pr',
+                       help='add percentage match to analysis.')
+    parse.add_argument('-vd', '--VD', action='store_true', default=False, dest='vd',
+                       help='add volume difference to analysis.')
+    parse.add_argument('-g', '--GCE', action='store_true', default=False, dest='gce',
+                       help='add global consistency error to analysis.')
+    parse.add_argument('-c', '--CR', action='store_true', default=False, dest='cr',
+                       help='add corresponding ratio to analysis.')
+    parse.add_argument('--asd', action='store', default=False, dest='asd',
+                       help='add average surface distance to analysis.')
     parse.add_argument('-a', '--all', action='store_true', default=False, dest='all', help='use all available analysis.')
     parse.add_argument('--save', action='store', default=None, dest='save', help='save analysis results as csv')
     parse.add_argument('--test-data', action='store', type=str, dest='testset', required=True)
@@ -318,6 +345,8 @@ if __name__ == '__main__':
         vars['GCE'] = GCE
     if args.cr:
         vars['CR'] = CR
+    if args.asd:
+        vars['ASD'] = ASD
     if args.all:
         vars = {'GCE': GCE,
                 'JAC': JAC,
@@ -326,7 +355,8 @@ if __name__ == '__main__':
                 'PM': PercentMatch,
                 'CR': CorrespondenceRatio,
                 'Volume Ratio': Volume,
-                'PR': PrecisionRate}
+                'PR': PrecisionRate,
+                'ASD': ASD}
 
     output = ImageDataSet(args.testset, verbose=True, dtype='uint8')
     seg = ImageDataSet(args.gtset, verbose=True, dtype='uint8')
@@ -339,4 +369,4 @@ if __name__ == '__main__':
             results.to_csv(args.save)
         except:
             print "Cannot save to: ", args.save
-    print results.to_string
+    print results.to_string()
