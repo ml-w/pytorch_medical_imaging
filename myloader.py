@@ -341,15 +341,15 @@ def LoadSegmentationPatchLocMMTexHist_Aug(a, debug=False):
                                                                         debugmode=debug,
                                                                         filesuffix=fsuffix,
                                                                         loadBySlices=0,
-                                                                        filelist=filelist,
+                                                                        idlist=filelist,
                                                                         aug_factor=3)
     imseg = lambda input, fsuffix, filelist, dtype: ImageDataSetAugment(input,
                                                                         dtype=dtype,
                                                                         verbose=True,
                                                                         debugmode=debug,
-                                                                        filesuffix=fsuffix,
+                                                                        # filesuffix=fsuffix,
                                                                         loadBySlices=0,
-                                                                        filelist=filelist,
+                                                                        idlist=filelist,
                                                                         is_seg=True,
                                                                         aug_factor=3)
 
@@ -365,7 +365,7 @@ def LoadSegmentationPatchLocMMTexHist_Aug(a, debug=False):
                                                                      debugmode=debug,
                                                                      filesuffix=fsuffix,
                                                                      loadBySlices=0,
-                                                                     filelist=filelist)
+                                                                     idlist=filelist)
         return ImagePatchLocMMTex(imset(a.input,
                                         a.lsuffix,
                                         a.loadbyfilelist,
