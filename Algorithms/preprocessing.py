@@ -3,6 +3,7 @@ import os
 import numpy as np
 import re
 import sys
+import multiprocessing as mpi
 from tqdm import *
 sitk.ProcessObject_GlobalWarningDisplayOff()
 
@@ -116,45 +117,52 @@ def batch_dicom2nii(folderlist, out_dir, workers=8, seq_fileters=None):
     pool.join()
 
 
-def make_mask(inimage, outdir, pos=0):
-    np2sitk = lambda x: sitk.GetImageFromArray(x)
-    sitk2np = lambda x: sitk.GetArrayFromImage(x)
+def make_mask(inimage, outdir, pos=-1):
     if isinstance(inimage, str):
+        # tqdm.write("Reading " + inimage)
         inimage = sitk.ReadImage(inimage)
 
-    gttest = sitk.BinaryThreshold(inimage, upperThreshold=65535, lowerThreshold=-400)
-    gttest = sitk.BinaryMorphologicalOpening(gttest, [0, 7, 7], sitk.BinaryMorphologicalOpeningImageFilter.Ball)
+    gttest = sitk.BinaryThreshold(inimage, upperThreshold=65535, lowerThreshold=200)
+    gttest = sitk.BinaryDilate(gttest, [15, 15, 0], sitk.BinaryMorphologicalOpeningImageFilter.Ball)
+    gttest = sitk.BinaryErode(gttest, [15, 15, 0], sitk.BinaryMorphologicalOpeningImageFilter.Ball)
+    # gttest = sitk.BinaryMorphologicalClosing(gttest, [0, 25, 25], sitk.BinaryMorphologicalOpeningImageFilter.Ball)
     ss = []
-    for i in trange(gttest.GetSize()[-1], position=pos):
-        ss.append(sitk2np(sitk.BinaryFillhole(gttest[:,:,i])))
-    gttest = np2sitk(np.stack(ss))
 
-    gttest = sitk.BinaryDilate(gttest, [0, 3, 3], sitk.BinaryDilateImageFilter.Ball)
-    gttest.CopyInformation(inimage)
+    if pos == -1:
+        try:
+            pos = int(mpi.current_process().name.split('-')[-1])
+        except Exception as e:
+            tqdm.write(e.message)
 
-    sitk.WriteImage(gttest, outdir)
+    try:
+        for i in trange(gttest.GetSize()[-1], position=pos, desc=mpi.current_process().name):
+            ss.append(sitk.GetArrayFromImage(sitk.BinaryFillhole(gttest[:,:,i])))
+        gttest = sitk.GetImageFromArray(np.stack(ss))
+        # gttest = sitk.BinaryDilate(gttest, [0, 3, 3], sitk.BinaryDilateImageFilter.Ball)
+        gttest.CopyInformation(inimage)
+        sitk.WriteImage(gttest, outdir)
+        return 0
+    except Exception as e:
+        print e.message
+
 
 def make_mask_from_dir(indir, outdir):
-    import multiprocessing as mpi
-
     if not os.path.isdir(outdir):
         os.mkdir(outdir)
 
     p = mpi.Pool(10)
     processes = []
-
     filelist = os.listdir(indir)
     filelist = [indir + '/' + f for f in filelist]
 
     for i, f in enumerate(filelist):
-        print i, f
         outname = f.replace(indir, outdir)
-        # make_mask(sitk.ReadImage(f), outname, i)
-        subp = p.apply_async(make_mask, (f, outname, i))
+        # make_mask(sitk.ReadImage(f), outname, 0)
+        subp = p.apply_async(make_mask, (f, outname, -1))
         processes.append(subp)
 
     for pp in processes:
-        print pp.wait(10)
+        pp.wait(50)
     p.close()
     p.join()
 
@@ -182,4 +190,5 @@ if __name__ == '__main__':
     # folders = RecursiveListDir(5, '../NPC_Segmentation/00.RAW/MMX/840/')
     # batch_dicom2nii(folders, out_dir='../NPC_Segmentation/00.RAW/NIFTI/All')
     # dicom2nii('../NPC_Segmentation/00.RAW/MMX/769/S', '../NPC_Segmentation/00.RAW/NIFTI/MMX')
-    main(sys.argv)
+    # main(sys.argv)
+    make_mask_from_dir('../NPC_Segmentation/06.NPC_Perfect/temp_t2/', '../NPC_Segmentation/06.NPC_Perfect/temp_mask')
