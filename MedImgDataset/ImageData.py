@@ -105,6 +105,8 @@ class ImageDataSet(Dataset):
                     filenames.remove(fs)
                     removed_fnames.append(fs)
         elif not self.idlist is None:
+            if isinstance(self.idlist, str):
+                self.idlist = [r.strip() for r in file(self.idlist, 'r').readlines()]
             tmp_filenames = os.listdir(self.rootdir)
             tmp_filenames = fnmatch.filter(tmp_filenames, "*.nii.gz")
             filenames = []
