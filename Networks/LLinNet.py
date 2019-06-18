@@ -28,7 +28,7 @@ class LLinResidualBlock(nn.Module):
 
 
 class LLinNet(nn.Module):
-    def __init__(self, in_ch):
+    def __init__(self, in_ch, num_of_class):
         super(LLinNet, self).__init__()
         self.inconv = nn.Conv3d(in_ch, 64)
 
@@ -42,7 +42,14 @@ class LLinNet(nn.Module):
 
         self.out1 = LLinDoubleConv(64, 64)
         self.out2 = LLinDoubleConv(64, 64)
-        self.out3 = LLinDoubleConv(64, 64)
+        self.out3 = nn.Sequential(
+            nn.BatchNorm3d(64),
+            nn.ReLU(inplace=True),
+            nn.Conv3d(64, 64),
+            nn.BatchNorm3d(64),
+            nn.ReLU(inplace=True),
+            nn.Conv3d(64, num_of_class)
+        )
 
     def forward(self, x):
 
