@@ -148,7 +148,7 @@ class ImagePatchesLoader(Dataset):
         pool = mpi.Pool(mpi.cpu_count())
         rois = []
         patch_indexes = []
-        for i, dat in tqdm(enumerate(self._base_dataset), desc="Sampling jobs", disable=False):
+        for i, dat in tqdm(enumerate(self._base_dataset), desc="Sampling jobs", total=len(self._base_dataset)):
             # extract target region
             ori_roi = torch.clone(dat[indexes])
 
