@@ -45,10 +45,10 @@ class LLinNet(nn.Module):
         self.out3 = nn.Sequential(
             nn.BatchNorm3d(64),
             nn.ReLU(inplace=True),
-            nn.Conv3d(64, 64),
+            nn.Conv3d(64, 64, 3),
             nn.BatchNorm3d(64),
             nn.ReLU(inplace=True),
-            nn.Conv3d(64, num_of_class)
+            nn.Conv3d(64, num_of_class, 3)
         )
 
     def forward(self, x):
