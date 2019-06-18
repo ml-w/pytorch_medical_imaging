@@ -1,8 +1,11 @@
+import os
+from functools import partial
+
+import numpy as np
+
 from MedImgDataset import *
 from MedImgDataset.Computation import *
-from functools import partial
-import os
-import numpy as np
+
 
 # DataLoaders
 def LoadSubbandDataset(a, debug=False):
@@ -496,6 +499,44 @@ def LoadSegmentationPatchRandom_Aug(a, debug=False):
                                         reference_dataset=invars)
             return invars, gtvars
 
+
+def LoadSegmentationImageDatasetByPatches(a, debug=False):
+    image = lambda input, fsuffix, filelist, dtype: ImageDataSet(input,
+                                                          dtype=dtype,
+                                                          verbose=True,
+                                                          debugmode=debug,
+                                                          filesuffix=fsuffix,
+                                                          idlist=filelist)
+    image = lambda input, fsuffix, filelist, dtype: ImageDataSet(input,
+                                                          dtype=dtype,
+                                                          verbose=True,
+                                                          debugmode=debug,
+                                                          filesuffix=fsuffix,
+                                                          idlist=filelist)
+
+    patchsize = [16, 48, 48]
+    stride = [16, 48, 48]
+
+    if a.train is None:
+        assert os.path.isfile(a.loadbyfilelist), "Cannot open filelist!"
+        # Eval mode
+        return ImagePatchesLoader3D(image(a.input, a.lsuffix, a.loadbyfilelist, np.float32),
+                                    patch_size=patchsize, patch_stride=strid, pre_shuffle=True)
+    else:
+        # Training Mode
+        if a.loadbyfilelist is None:
+            return ImagePatchesLoader3D(image(a.input, a.lsuffix, None, np.float32),
+                                        patch_size=patchsize, patch_stride=stride), \
+                   ImagePatchesLoader3D(image(a.train, None, None, np.uint8),
+                                        patch_size=patchsize, patch_stride=stride)
+
+        else:
+            gt_filelist, input_filelist = a.loadbyfilelist.split(',')
+            return ImagePatchesLoader3D(image(a.input, a.lsuffix, input_filelist, np.float32),
+                                        patch_size=patchsize, patch_stride=stride), \
+                   ImagePatchesLoader3D(image(a.train, None, gt_filelist, np.uint8),
+                                        patch_size=patchsize, patch_stride=stride)
+
 datamap = {'subband':LoadSubbandDataset,
            'image2D':LoadImageDataset,
            'seg2D': LoadSegmentationImageDataset,
@@ -506,6 +547,7 @@ datamap = {'subband':LoadSubbandDataset,
            'seg2Dloctexhist': LoadSegmentationPatchLocTexHist,
            'seg2Dloctexhist_aug': LoadSegmentationPatchLocTexHist_Aug,
            'seg2DlocMMtexhist_aug': LoadSegmentationPatchLocMMTexHist_Aug,
+           'seg3DPatches': LoadSegmentationImageDatasetByPatches,
            'subband_debug': partial(LoadSubbandDataset, debug=True),
            'image2D_debug': partial(LoadImageDataset, debug=True),
            'seg2D_debug': partial(LoadSegmentationImageDataset, debug=True),
@@ -515,5 +557,6 @@ datamap = {'subband':LoadSubbandDataset,
            'seg2Dloctexhist_debug': partial(LoadSegmentationPatchLocTexHist, debug=True),
            'seg2Dloctexhist_aug_debug': partial(LoadSegmentationPatchLocTexHist_Aug, debug=True),
            'seg2DMMwifPos_aug_debug': partial(LoadSegmentationImageDatasetMMPos_Aug, debug=True),
-           'seg2DlocMMtexhist_aug_debug': partial(LoadSegmentationPatchLocMMTexHist_Aug, debug=True)
+           'seg2DlocMMtexhist_aug_debug': partial(LoadSegmentationPatchLocMMTexHist_Aug, debug=True),
+           'seg3DPatches_debug': partial(LoadSegmentationImageDatasetByPatches, debug=True)
            }

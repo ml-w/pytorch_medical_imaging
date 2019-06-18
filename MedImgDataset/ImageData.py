@@ -135,10 +135,8 @@ class ImageDataSet(Dataset):
                 print "Cannot find " + fs + " in " + self.rootdir
         filenames.sort()
 
-
-        self.length = len(filenames)
         if self.verbose:
-            print "Found %s nii.gz files..."%self.length
+            print "Found %s nii.gz files..."%len(filenames)
             print "Start Loading"
 
         self._itemindexes = [0] # [image index of start slice]
@@ -165,6 +163,7 @@ class ImageDataSet(Dataset):
                 except:
                     metadata[key] = im.GetMetaData(key)
             self.metadata.append(metadata)
+        self.length = len(self.dataSourcePath)
 
         if self._byslices >= 0:
             try:
@@ -175,8 +174,12 @@ class ImageDataSet(Dataset):
                 print "Wrong Index is used!"
                 self.length = len(self.dataSourcePath)
         else:
-            if np.all([dat.shape[0] for dat in self.data] == self.data[0].shape[0]):
+            try:
                 self.data = stack(self.data, dim=0).unsqueeze(1)
+            except:
+                logging.log(logging.WARNING, "Cannot stack data due to non-uniform shapes.")
+                logging.log(logging.INFO, "%s"%[d.shape for d in self.data])
+                print "Cannot stack data due to non-uniform shapes. Some function might be impaired."
 
 
     def size(self, int=None):
