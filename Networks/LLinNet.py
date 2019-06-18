@@ -4,15 +4,15 @@ import torch.nn as nn
 import torch.nn.functional as F
 
 class LLinDoubleConv(nn.Module):
-    def __init__(self, in_ch, out_ch):
+    def __init__(self, in_ch, out_ch, kernsize):
         super(LLinDoubleConv, self).__init__()
         nn.Sequential(
             nn.BatchNorm3d(in_ch),
             nn.ReLU(inplace=True),
-            nn.Conv3d(in_ch, out_ch),
+            nn.Conv3d(in_ch, out_ch, kernsize),
             nn.BatchNorm3d(out_ch),
             nn.ReLU(inplace=True),
-            nn.Conv3d(out_ch, out_ch)
+            nn.Conv3d(out_ch, out_ch, kernsize)
         )
 
     def forward(self, x):
@@ -21,7 +21,7 @@ class LLinDoubleConv(nn.Module):
 class LLinResidualBlock(nn.Module):
     def __init__(self, in_ch, out_ch):
         super(LLinResidualBlock, self).__init__()
-        self.conv = LLinDoubleConv(in_ch, out_ch)
+        self.conv = LLinDoubleConv(in_ch, out_ch, 3)
 
     def forward(self, x):
         return self.conv(x) + x
@@ -30,7 +30,7 @@ class LLinResidualBlock(nn.Module):
 class LLinNet(nn.Module):
     def __init__(self, in_ch, num_of_class):
         super(LLinNet, self).__init__()
-        self.inconv = nn.Conv3d(in_ch, 64)
+        self.inconv = nn.Conv3d(in_ch, 64, 3)
 
 
         self.res1 = LLinResidualBlock(64, 64)
@@ -40,8 +40,8 @@ class LLinNet(nn.Module):
         self.res5 = LLinResidualBlock(64, 64)
         self.res6 = LLinResidualBlock(64, 64)
 
-        self.out1 = LLinDoubleConv(64, 64)
-        self.out2 = LLinDoubleConv(64, 64)
+        self.out1 = LLinDoubleConv(64, 64, 3)
+        self.out2 = LLinDoubleConv(64, 64, 3)
         self.out3 = nn.Sequential(
             nn.BatchNorm3d(64),
             nn.ReLU(inplace=True),
