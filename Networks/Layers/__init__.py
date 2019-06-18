@@ -1,6 +1,7 @@
 from DenseLayer import *
 from StandardLayers import *
 from AttentionGates import *
+from StandardLayers3D import *
 
 __all__ = ['DoubleConv', 'CircularDoubleConv', 'DenseBlock', 'DenseLayer', 'AttentionBlock', 'DenseConv',
-           'AttentionGating', 'ReflectiveDoubleConv']
+           'AttentionGating', 'ReflectiveDoubleConv', 'DoubleConv3d', 'Conv3d']

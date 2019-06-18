@@ -333,6 +333,7 @@ if __name__ == '__main__':
                           'AttentionDenseUNet': AttentionDenseUNet2D,
                           'AttentionUNetPosAware': AttentionUNetPosAware,
                           'AttentionUNetLocTexAware': AttentionUNetLocTexAware,
+                          'LLinNet': LLinNet
                           }
 
 
