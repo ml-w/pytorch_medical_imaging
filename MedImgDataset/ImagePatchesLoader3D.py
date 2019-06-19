@@ -133,12 +133,8 @@ class ImagePatchesLoader3D(Dataset):
         temp_slice[:,0] = 1E-12 # This forces all the un processed slices to have null label.
         count = torch.zeros(temp_slice.size(), dtype=torch.int16)
 
-        for i, dat in enumerate(inpatches):
-            if self._pre_shuffle:
-                inpatches_index = self._inverse_shuffle_arr[i]
-            else:
-                inpatches_index = i
-
+        for inpatches_index, dat in enumerate(inpatches):
+            # note that the shuffled index is handled in the function
             slice_index, patch_index = self.get_internal_indexes(inpatches_index)
             p = self._patch_indexes[slice_index][patch_index]
 
