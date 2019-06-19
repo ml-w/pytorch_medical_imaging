@@ -521,7 +521,7 @@ def LoadSegmentationImageDatasetByPatches(a, debug=False):
         assert os.path.isfile(a.loadbyfilelist), "Cannot open filelist!"
         # Eval mode
         return ImagePatchesLoader3D(image(a.input, a.lsuffix, a.loadbyfilelist, np.float32),
-                                    patch_size=patchsize, patch_stride=strid, pre_shuffle=True)
+                                    patch_size=patchsize, patch_stride=stride, pre_shuffle=True)
     else:
         # Training Mode
         if a.loadbyfilelist is None:

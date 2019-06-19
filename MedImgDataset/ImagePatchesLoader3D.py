@@ -245,5 +245,9 @@ class ImagePatchesLoader3D(Dataset):
                     indexes.append(slice(p[2], p[2] + self._patch_size[2]))
                 else:
                     indexes.append(slice(None))
-            return s[indexes]
+
+            out = s[indexes]
+            while out.dim() < 4:
+                out = out.unsqueeze(0)
+            return out
 

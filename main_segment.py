@@ -61,17 +61,20 @@ def main(a):
             gtDataset = ImagePatchesLoader(gtDataset, patch_stride=a.usepatch/2, patch_size=a.usepatch)
 
         #check max class in gt
-        numOfClasses = len(np.unique(gtDataset.data.numpy()))
+        np_all_labels = np.stack([gtDataset[i].numpy() for i in xrange(len(gtDataset))])
+        classes = np.unique(np_all_labels)
+        numOfClasses = len(classes)
 
-        # calculate empty label ratio
+        # calculate empty label ratio for updating loss function weight
         r = []
-        # for updating loss function weight
         sigmoid_plus = lambda x: 1. / (1. + np.exp(-x * 0.05 + 2))
-        for c in np.unique(gtDataset.data.numpy()):
-            factor = float(np.prod(np.array(gtDataset.size())))/float(np.sum(gtDataset.data.numpy().flatten() == c))
+        for c in classes:
+            factor = float(np.prod(np.array(gtDataset.size())))/float(np.sum(np_all_labels.flatten() == c))
             r.append(factor)
         r = np.array(r)
         r = r / r.max()
+        del np_all_labels # free RAM
+
         # calculate init-factor
         if not a.initialweight is None:
             factor =  sigmoid_plus(a.initialweight + 1) * 100
@@ -80,7 +83,7 @@ def main(a):
         weights = torch.tensor([r[0] * factor] + r[1:].tolist())
         LogPrint("Initial weight factor: " + str(weights))
 
-        # if the input datatyle is not standard, retreat to 1
+        # if the input datatyp  e is not standard, retreat to 1
         try:
             if isinstance(inputDataset[0], tuple) or isinstance(inputDataset[0], list):
                 inchan = inputDataset[0][0].shape[0]
