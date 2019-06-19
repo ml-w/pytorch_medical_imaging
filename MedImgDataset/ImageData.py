@@ -273,18 +273,29 @@ class ImageDataSet(Dataset):
         return s
 
     def Write(self, tensor_data, outputdirectory, prefix=''):
-        assert self._itemindexes[-1] == tensor_data.size()[0], "Dimension mismatch!"
+        if self._byslices > -1:
+            assert self._itemindexes[-1] == tensor_data.size()[0], "Dimension mismatch!"
+            td=tensor_data.numpy()
+            for i in xrange(len(self.dataSourcePath)):
+                start=self._itemindexes[i]
+                end=self._itemindexes[i+1]
+                # image=sitk.GetImageFromArray(td[start:end])
+                templateim = sitk.ReadImage(self.dataSourcePath[i])
+                image = sitk.GetImageFromArray(td[start:end])
+                image.CopyInformation(templateim)
+                # image=self.WrapImageWithMetaData(td[start:end], self.metadata[i])
+                sitk.WriteImage(image, outputdirectory+'/'+ prefix + os.path.basename(self.dataSourcePath[i]))
 
-        td=tensor_data.numpy()
-        for i in xrange(len(self.dataSourcePath)):
-            start=self._itemindexes[i]
-            end=self._itemindexes[i+1]
-            # image=sitk.GetImageFromArray(td[start:end])
-            templateim = sitk.ReadImage(self.dataSourcePath[i])
-            image = sitk.GetImageFromArray(td[start:end])
-            image.CopyInformation(templateim)
-            # image=self.WrapImageWithMetaData(td[start:end], self.metadata[i])
-            sitk.WriteImage(image, outputdirectory+'/'+ prefix + os.path.basename(self.dataSourcePath[i]))
+        else:
+            assert len(self) == len(tensor_data), "Length mismatch!"
+
+            for i in xrange(len(self)):
+                source_file = self.dataSourcePath[i]
+                templateim = sitk.ReadImage(source_file)
+                image = sitk.GetImageFromArray(tensor_data[i].squeeze().numpy())
+                image.CopyInformation(templateim)
+                sitk.WriteImage(image, outputdirectory+'/'+ prefix + os.path.basename(self.dataSourcePath[i]))
+
 
     @staticmethod
     def WrapImageWithMetaData(inImage, metadata):

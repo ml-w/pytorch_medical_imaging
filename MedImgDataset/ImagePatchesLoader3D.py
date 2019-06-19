@@ -82,9 +82,9 @@ class ImagePatchesLoader3D(Dataset):
             Xstr, Ystr, Zstr = self._patch_stride
 
             # Max partitions
-            nX = (Xlen - Xpat) // Xstr
-            nY = (Ylen - Ypat) // Ystr
-            nZ = (Zlen - Zpat) // Zstr
+            nX = Xlen // Xstr
+            nY = Ylen // Ystr
+            nZ = Zlen // Zstr
 
             # Division residual
             resX = (Xlen - Xpat) % Xstr
@@ -101,9 +101,9 @@ class ImagePatchesLoader3D(Dataset):
 
             # Transform the grid by scaling
             x, y, z = np.meshgrid(np.arange(nX), np.arange(nY), np.arange(nZ))
-            x, y, z = np.clip(x * Xpat, 0, Xlen - Xpat + 1), \
-                      np.clip(y * Ypat, 0, Ylen - Ypat + 1), \
-                      np.clip(z * Zpat, 0, Zlen - Zpat + 1)
+            x, y, z = np.clip(x * Xstr, 0, Xlen - Xpat), \
+                      np.clip(y * Ystr, 0, Ylen - Ypat), \
+                      np.clip(z * Zstr, 0, Zlen - Zpat)
 
             self._patch_indexes.append(zip(x.flatten(), y.flatten(), z.flatten()))
 
@@ -123,78 +123,29 @@ class ImagePatchesLoader3D(Dataset):
             return size[val]
 
     def piece_patches(self, inpatches):
-        if isinstance(inpatches, list):
-            length = np.sum([len(x) for x in inpatches])
-            channels = inpatches[0].size()[1]
-            batch_size = inpatches[0].size()[0]
-            LIST_MODE = True
-        else:
-            LIST_MODE = False
-            length = len(inpatches)
-            channels = inpatches.size()[1]
+        length = len(inpatches)
+        channels = inpatches.size()[1]
         if length != self.__len__():
             print "Warning! Size mismatch: " + str(len(inpatches)) + ',' + str(self.__len__())
 
         temp_slice = torch.cat([torch.zeros(self._base_dataset.data.shape, dtype=torch.float)
                                   for i in xrange(channels)], dim=1)
-        temp_slice[:,0] = 1E-6 # This forces all the un processed slices to have null label.
+        temp_slice[:,0] = 1E-12 # This forces all the un processed slices to have null label.
         count = torch.zeros(temp_slice.size(), dtype=torch.int16)
 
-        if self._random_patches:
-            for j, p in enumerate(self._patch_indexes):
-                i = j // self._patches_perslice
-                indexes = []
-                for k in xrange(count.ndimension()):
-                    if k == self._axis[0] % count.ndimension():
-                        indexes.append(slice(p[0], p[0] + self._patch_size[0]))
-                    elif k == self._axis[1] % count.ndimension():
-                        indexes.append(slice(p[1], p[1] + self._patch_size[1]))
-                    elif k == self._axis[2] % count.ndimension():
-                        indexes.append(slice(p[2], p[2] + self._patch_size[2]))
-                    elif k == 0 and count.ndimension() == 4: # Batch dimension
-                        indexes.append(slice(i, i+1))
-                    else:
-                        indexes.append(slice(None))
+        for i, dat in enumerate(inpatches):
+            if self._pre_shuffle:
+                inpatches_index = self._inverse_shuffle_arr[i]
+            else:
+                inpatches_index = i
 
-                if LIST_MODE:
-                    index_1 = j % len(inpatches[0])
-                    index_2 = j // len(inpatches[0])
-                    temp_slice[indexes] += inpatches[index_2][index_1]
-                else:
-                    temp_slice[indexes] += inpatches[j]
-                count[indexes] += 1
-        else:
-            for i in xrange(len(self._base_dataset)):
-                for j, p in enumerate(self._patch_indexes):
-                    indexes = []
-                    for k in xrange(count.ndimension()):
-                        if k == self._axis[0] % count.ndimension():
-                            indexes.append(slice(p[0], p[0] + self._patch_size[0]))
-                        elif k == self._axis[1] % count.ndimension():
-                            indexes.append(slice(p[1], p[1] + self._patch_size[1]))
-                        elif k == self._axis[2] % count.ndimension():
-                            indexes.append(slice(p[2], p[2] + self._patch_size[2]))
-                        elif k == 0 and count.ndimension() == 4: # Batch dimension
-                            indexes.append(slice(i, i+1))
-                        else:
-                            indexes.append(slice(None))
-                    if self._pre_shuffle:
-                        inpatches_index = self._inverse_shuffle_arr[i * len(self._patch_indexes) + j]
-                        if LIST_MODE:
-                            index_1 = inpatches_index % len(inpatches[0])
-                            index_2 = inpatches_index // len(inpatches[0])
-                            temp_slice[indexes] += inpatches[index_2][index_1]
-                        else:
-                            temp_slice[indexes] += inpatches[inpatches_index]
-                    else:
-                        inpatches_index = i * len(self._patch_indexes) + j
-                        if LIST_MODE:
-                            index_1 = inpatches_index % len(inpatches[0])
-                            index_2 = inpatches_index // len(inpatches[0])
-                            temp_slice[indexes] += inpatches[index_2][index_1]
-                        else:
-                            temp_slice[indexes] += inpatches[inpatches_index]
-                    count[indexes] += 1
+            slice_index, patch_index = self.get_internal_indexes(inpatches_index)
+            p = self._patch_indexes[slice_index][patch_index]
+
+            indexes = self.patch_index_to_slice(p, slice_index, count.ndimension())
+            temp_slice[indexes] += dat
+            count[indexes] += 1
+
 
         count[count == 0] = 1   # Prevent division by zero
         temp_slice /= count.float()
@@ -204,6 +155,45 @@ class ImagePatchesLoader3D(Dataset):
     def Write(self, slices, outputdir, prefix=''):
         self._base_dataset.Write(slices, outputdir, prefix)
 
+    def get_internal_indexes(self, item):
+        """
+        Return the internal slice/volume index and patch corner index
+        """
+        if item >= self.__len__():
+            raise IndexError("Index out of range! Requesting %s, length is %s"%(item, self.__len__()))
+
+        # prevent overflow when meeting negative numbers
+        item = item % self.__len__()
+
+        # map item to shuffled list
+        if self._pre_shuffle:
+            item = self._shuffle_index_arr[item]
+
+
+        slice_index = np.argmax(item < self._patches_perslice)
+        patch_index = item - self._patches_perslice[slice_index - 1] if slice_index > 0 else item
+
+        return slice_index, patch_index
+
+    def patch_index_to_slice(self, p, i, ndim=None):
+        """patch_index_to_slice(p, i, ndim=None) -> slice
+        Convert corner patch index into slice type for extraction of array from np/torch tensors.
+        """
+        if ndim is None:
+            ndim = self.data[0].ndim()
+        indexes = []
+        for k in xrange(ndim):
+            if k == self._axis[0] % ndim:
+                indexes.append(slice(p[0], p[0] + self._patch_size[0]))
+            elif k == self._axis[1] % ndim:
+                indexes.append(slice(p[1], p[1] + self._patch_size[1]))
+            elif k == self._axis[2] % ndim:
+                indexes.append(slice(p[2], p[2] + self._patch_size[2]))
+            elif k == 0: # Batch dimension
+                indexes.append(slice(i, i+1))
+            else:
+                indexes.append(slice(None))
+        return indexes
 
     def __len__(self):
         if not self._random_patches:
@@ -218,19 +208,7 @@ class ImagePatchesLoader3D(Dataset):
             step = item.step if not item.step is None else 1
             return stack([self.__getitem__(i) for i in xrange(start, stop, step)], 0)
         else:
-            if item >= self.__len__():
-                raise IndexError("Index out of range! Requesting %s, length is %s"%(item, self.__len__()))
-
-            # prevent overflow when meeting negative numbers
-            item = item % self.__len__()
-
-            # map item to shuffled list
-            if self._pre_shuffle:
-                item = self._shuffle_index_arr[item]
-
-
-            slice_index = np.argmax(item < self._patches_perslice)
-            patch_index = item - self._patches_perslice[slice_index - 1] if slice_index > 0 else item
+            slice_index, patch_index = self.get_internal_indexes(item)
 
             p = self._patch_indexes[slice_index][patch_index]
             s = self._base_dataset[slice_index]
