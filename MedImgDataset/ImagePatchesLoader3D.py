@@ -68,6 +68,28 @@ class ImagePatchesLoader3D(Dataset):
             np.random.shuffle(self._shuffle_index_arr)
             self._inverse_shuffle_arr = self._shuffle_index_arr.argsort()
 
+    def _calculate_random_patch_indexes(self):
+        # Set up corner indexes based on selected axes
+        X, Y, Z = self._axis
+
+        corner_range = [self._unit_dimension[X] - self._patch_size[0],
+                        self._unit_dimension[Y] - self._patch_size[1],
+                        self._unit_dimension[Z] - self._patch_size[2]]
+
+        patch_indexes = np.stack([np.random.randint(0, corner_range[0],
+                                                    size=[self._patch_perslice * len(self._base_dataset)]),
+                                  np.random.randint(0, corner_range[1],
+                                                    size=[self._patch_perslice * len(self._base_dataset)]),
+                                  np.random.randint(0, corner_range[2],
+                                                    size=[self._patch_perslice * len(self._base_dataset)]),],
+                                 -1)
+
+        try:
+            np.copyto(self._patch_indexes, patch_indexes)
+        except Exception, e:
+            print e.message
+            self._patch_indexes = patch_indexes
+        pass
 
     def _calculate_patch_indexes(self):
         # Clear existing indexes first
@@ -123,29 +145,57 @@ class ImagePatchesLoader3D(Dataset):
             return size[val]
 
     def piece_patches(self, inpatches):
+        if isinstance(inpatches, list):
+            inpatches = torch.cat(inpatches, 0)
+
         length = len(inpatches)
         channels = inpatches.size()[1]
         if length != self.__len__():
             print "Warning! Size mismatch: " + str(len(inpatches)) + ',' + str(self.__len__())
 
-        temp_slice = torch.cat([torch.zeros(self._base_dataset.data.shape, dtype=torch.float)
-                                  for i in xrange(channels)], dim=1)
-        temp_slice[:,0] = 1E-12 # This forces all the un processed slices to have null label.
-        count = torch.zeros(temp_slice.size(), dtype=torch.int16)
+        if isinstance(self._base_dataset.data, list):
+            # if list mode, [(C, H, W, Z)...]
+            temp_slice = [torch.stack([torch.zeros(d.shape, dtype=torch.float)
+                                     for i in xrange(channels)], dim=0) for d in self._base_dataset.data]
+            count =  [torch.stack([torch.zeros(d.shape, dtype=torch.int16)
+                                     for i in xrange(channels)], dim=0) for d in self._base_dataset.data]
+            for t in temp_slice:
+                t[0] += 1E-12
+            LIST_MODE=True
+        else:
+            # else (B, C, H, W, Z)
+            temp_slice = torch.cat([torch.zeros(self._base_dataset.data.shape, dtype=torch.float)
+                                    for i in xrange(channels)], dim=1)
+            temp_slice[:,0] = 1E-12 # This forces all the un processed slices to have null label.
+            count = torch.zeros(temp_slice.size(), dtype=torch.int16)
+            LIST_MODE=False
 
         for inpatches_index, dat in enumerate(inpatches):
-            # note that the shuffled index is handled in the function
-            slice_index, patch_index = self.get_internal_indexes(inpatches_index)
-            p = self._patch_indexes[slice_index][patch_index]
+            if LIST_MODE:
+                slice_index, patch_index = self.get_internal_indexes(inpatches_index)
+                p = self._patch_indexes[slice_index][patch_index]
+                indexes = self.patch_index_to_slice(p, slice_index, temp_slice[slice_index].ndimension())
+                indexes[0] = slice(None)
 
-            indexes = self.patch_index_to_slice(p, slice_index, count.ndimension())
-            temp_slice[indexes] += dat
-            count[indexes] += 1
+                temp_slice[slice_index][indexes] += dat
+                count[slice_index][indexes] += 1
+            else:
+                # note that the shuffled index is handled in the function
+                slice_index, patch_index = self.get_internal_indexes(inpatches_index)
+                p = self._patch_indexes[slice_index][patch_index]
 
+                indexes = self.patch_index_to_slice(p, slice_index, count.ndimension())
+                temp_slice[indexes] += dat
+                count[indexes] += 1
 
-        count[count == 0] = 1   # Prevent division by zero
-        temp_slice /= count.float()
-        return tensor(temp_slice)
+        if LIST_MODE:
+            for i, t in enumerate(temp_slice):
+                count[i][count[i] == 0] = 1
+                temp_slice[i] /= count[i].float()
+        else:
+            count[count == 0] = 1   # Prevent division by zero
+            temp_slice /= count.float()
+        return temp_slice
 
 
     def Write(self, slices, outputdir, prefix=''):
@@ -176,7 +226,7 @@ class ImagePatchesLoader3D(Dataset):
         Convert corner patch index into slice type for extraction of array from np/torch tensors.
         """
         if ndim is None:
-            ndim = self.data[0].ndim()
+            ndim = self._base_dataset.data[0].ndim()
         indexes = []
         for k in xrange(ndim):
             if k == self._axis[0] % ndim:
@@ -209,16 +259,17 @@ class ImagePatchesLoader3D(Dataset):
             p = self._patch_indexes[slice_index][patch_index]
             s = self._base_dataset[slice_index]
 
-            indexes = []
-            for i in xrange(self._patch_ndim):
-                if i == self._axis[0] % self._patch_ndim:    # in case user use negative index
-                    indexes.append(slice(p[0], p[0] + self._patch_size[0]))
-                elif i == self._axis[1] % self._patch_ndim:
-                    indexes.append(slice(p[1], p[1] + self._patch_size[1]))
-                elif i == self._axis[2] % self._patch_ndim:
-                    indexes.append(slice(p[2], p[2] + self._patch_size[2]))
-                else:
-                    indexes.append(slice(None))
+            indexes = self.patch_index_to_slice(p, s, self._patch_ndim)
+            indexes[0] = slice(None)
+            # for i in xrange(self._patch_ndim):
+            #     if i == self._axis[0] % self._patch_ndim:    # in case user use negative index
+            #         indexes.append(slice(p[0], p[0] + self._patch_size[0]))
+            #     elif i == self._axis[1] % self._patch_ndim:
+            #         indexes.append(slice(p[1], p[1] + self._patch_size[1]))
+            #     elif i == self._axis[2] % self._patch_ndim:
+            #         indexes.append(slice(p[2], p[2] + self._patch_size[2]))
+            #     else:
+            #         indexes.append(slice(None))
 
             out = s[indexes]
             while out.dim() < 4:
