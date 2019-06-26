@@ -197,9 +197,16 @@ class ImagePatchesLoader3D(Dataset):
             temp_slice /= count.float()
         return temp_slice
 
-
     def Write(self, slices, outputdir, prefix=''):
         self._base_dataset.Write(slices, outputdir, prefix)
+
+    def get_unique_values(self):
+        assert isinstance(self._base_dataset, ImageDataSet), "This class must be based on ImageDataSet to use this method."
+        return self._base_dataset.get_unique_values()
+
+    def get_unique_values_n_counts(self):
+        assert isinstance(self._base_dataset, ImageDataSet), "This class must be based on ImageDataSet to use this method."
+        return self._base_dataset.get_unique_values_n_counts()
 
     def get_internal_indexes(self, item):
         """
