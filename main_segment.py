@@ -4,7 +4,7 @@ import logging
 import numpy as np
 import datetime
 
-from MedImgDataset import ImagePatchesLoader
+from MedImgDataset import ImagePatchesLoader, ImagePatchesLoader3D
 from torch.utils.data import DataLoader, TensorDataset
 from torch.autograd import Variable
 from tqdm import *
@@ -33,7 +33,7 @@ def init_weights(m):
 
 def excepthook(*args):
     logging.getLogger().error('Uncaught exception:', exc_info=args)
-    traceback.print_tb(args)
+    traceback.print_tb(args[0])
 
 def main(a):
     LogPrint("Recieve arguments: %s"%a)
@@ -55,25 +55,22 @@ def main(a):
         LogPrint("Start training...")
         inputDataset, gtDataset = ml.datamap[a.datatype](a)
 
-        # Use image patches for training
-        if a.usepatch > 0:
-            inputDataset = ImagePatchesLoader(inputDataset, patch_stride=a.usepatch/2, patch_size=a.usepatch)
-            gtDataset = ImagePatchesLoader(gtDataset, patch_stride=a.usepatch/2, patch_size=a.usepatch)
-
         #check max class in gt
-        np_all_labels = np.stack([gtDataset[i].numpy() for i in xrange(len(gtDataset))])
-        classes = np.unique(np_all_labels)
+        LogPrint("Detecting number of classes...")
+        valcountpair = gtDataset.get_unique_values_n_counts()
+        classes = valcountpair.keys()
         numOfClasses = len(classes)
+        LogPrint("Find %i classes: %s"%(numOfClasses, classes))
 
         # calculate empty label ratio for updating loss function weight
         r = []
         sigmoid_plus = lambda x: 1. / (1. + np.exp(-x * 0.05 + 2))
         for c in classes:
-            factor = float(np.prod(np.array(gtDataset.size())))/float(np.sum(np_all_labels.flatten() == c))
+            factor = float(np.prod(np.array(gtDataset.size())))/float(valcountpair[c])
             r.append(factor)
         r = np.array(r)
         r = r / r.max()
-        del np_all_labels # free RAM
+        del valcountpair # free RAM
 
         # calculate init-factor
         if not a.initialweight is None:
@@ -308,14 +305,24 @@ def main(a):
             out_tensor.append(out.data.cpu())
             del out
 
-        # if a.datatype.find('loctex') > -1:
-        if isinstance(inputDataset, ImagePatchesLoader):
+        if isinstance(inputDataset, ImagePatchesLoader) or isinstance(inputDataset, ImagePatchesLoader3D):
             out_tensor = inputDataset.piece_patches(out_tensor)
         else:
             out_tensor = torch.cat(out_tensor, dim=0)
-        out_tensor = F.log_softmax(out_tensor, dim=1)
-        out_tensor = torch.argmax(out_tensor, dim=1)
-        inputDataset.Write(out_tensor.squeeze().int(), a.output)
+
+        if isinstance(out_tensor, list):
+            LogPrint("Writing with list mode", logging.INFO)
+            towrite = []
+            for i, out in enumerate(out_tensor):
+                out = F.log_softmax(out, dim=0)
+                out = torch.argmax(out, dim=0)
+                towrite.append(out.int())
+            inputDataset.Write(towrite, a.output)
+        else:
+            LogPrint("Writing with tensor mode", logging.INFO)
+            out_tensor = F.log_softmax(out_tensor, dim=1)
+            out_tensor = torch.argmax(out_tensor, dim=1)
+            inputDataset.Write(out_tensor.squeeze().int(), a.output)
         # inputDataset.Write(out_tensor[:,1].squeeze().float(), a.output)
         # inputDataset.Write(out_tensor[:,0].squeeze().float(), a.output, prefix='D_')
 

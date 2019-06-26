@@ -317,6 +317,14 @@ class ImagePatchesLoader(Dataset):
         self._base_dataset.Write(slices, outputdir, prefix)
 
 
+    def get_unique_values(self):
+        assert isinstance(self._base_dataset, ImageDataSet), "This class must be based on ImageDataSet to use this method."
+        return self._base_dataset.get_unique_values()
+
+    def get_unique_values_n_counts(self):
+        assert isinstance(self._base_dataset, ImageDataSet), "This class must be based on ImageDataSet to use this method."
+        return self._base_dataset.get_unique_values_n_counts()
+
     def __len__(self):
         return len(self._patch_indexes) * len(self._base_dataset) if not self._random_patches \
             else len(self._patch_indexes)

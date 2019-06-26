@@ -1,5 +1,5 @@
 from torch.utils.data import Dataset
-from torch import from_numpy, cat, tensor, stack
+from torch import from_numpy, cat, tensor, stack, unique
 from tqdm import *
 import fnmatch, re
 import os
@@ -287,7 +287,7 @@ class ImageDataSet(Dataset):
                 sitk.WriteImage(image, outputdirectory+'/'+ prefix + os.path.basename(self.dataSourcePath[i]))
 
         else:
-            assert len(self) == len(tensor_data), "Length mismatch!"
+            assert len(self) == len(tensor_data), "Length mismatch! %i vs %i"%(len(self), len(tensor_data))
 
             for i in xrange(len(self)):
                 source_file = self.dataSourcePath[i]
@@ -330,3 +330,25 @@ class ImageDataSet(Dataset):
             im.SetSpacing(spacing)
             return im
 
+    def get_unique_values(self):
+        """get_unique_values() -> torch.tensor
+        Get the tensor of all unique values in basedata. Only for integer tensors
+        :return: torch.tensor
+        """
+        assert self.data[0].is_floating_point() == False, "This function is for integer tensors. Current datatype is: %s"%(self.data[0].dtype)
+        vals = unique(cat([unique(d) for d in self.data]))
+        return vals
+
+    def get_unique_values_n_counts(self):
+        """get_unique_label_n_counts() -> dict
+        Get a dictionary of unique values as key and its counts as value.
+        """
+        assert self.data[0].is_floating_point() == False, "This function is for integer tensors. Current datatype is: %s"%(self.data[0].dtype)
+        out_dict = {}
+        for val, counts in [unique(d, return_counts=True) for d in self.data]:
+            for v, c in zip(val, counts):
+                if not out_dict.has_key(v.item()):
+                    out_dict[v.item()] = c.item()
+                else:
+                    out_dict[v.item()] += c.item()
+        return out_dict
