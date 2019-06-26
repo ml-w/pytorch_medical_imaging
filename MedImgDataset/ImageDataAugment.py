@@ -29,6 +29,7 @@ class ImageDataSetAugment(ImageDataSet):
             self._itemindexes = np.concatenate([self._itemindexes, self._itemindexes[1:] + self._itemindexes[-1]])
         self._update_each_epoch= False
         self._is_referenced = False
+        self._is_referencing = False
         self._referencees = []
         self._call_count = 0
 
@@ -57,6 +58,11 @@ class ImageDataSetAugment(ImageDataSet):
             self.set_reference_augment_dataset(self._references_dataset)
 
     def _update_augmentators(self):
+        # Don't touch anything if referencing others.
+        if self._is_referencing:
+            return
+
+        self._augmentators = self._augmentator.to_deterministic(n=1)   # reset augmentor
         self._augmentators = self._augmentator.to_deterministic(n=self._base_length*self._augment_factor)
 
         for _referencee in self._referencees:
@@ -73,12 +79,20 @@ class ImageDataSetAugment(ImageDataSet):
         self._augmentator = dataset._augmentators
         self._augment_factor = dataset._augment_factor
         dataset._is_referenced=True
+        self._is_referencing=True
 
     def size(self, int=None):
         if int is None:
             return [self.__len__()] + list(self.data[0].shape)
         else:
             return super(ImageDataSetAugment, self).size(int)
+
+    def batch_done_callback(self):
+        print self.__class__
+        if self._update_each_epoch:
+            self._update_augmentators()
+        self._call_count = 0
+
 
     def __getitem__(self, item):
         self._call_count += 1
@@ -112,10 +126,8 @@ class ImageDataSetAugment(ImageDataSet):
                 augmented = augmented.transpose(2, 0, 1)
             out = torch.from_numpy(augmented).view_as(baseim).to(baseim.dtype)
 
-        if self._call_count == self.__len__():
-            self._call_count = 0
+        if self._call_count >= self.__len__():
             if self._update_each_epoch:
-                self._augmentators = self._augmentator.to_deterministic(n=())   # reset augmentor
-                self._update_augmentators()
+                self.batch_done_callback()
 
         return out

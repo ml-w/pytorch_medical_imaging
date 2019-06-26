@@ -209,6 +209,13 @@ def main(a):
                     torch.save(net.module.state_dict(), backuppath)
                     temploss = loss.data.cpu()
 
+            # Call back after each epoch
+            try:
+                inputDataset.batch_done_callback()
+            except:
+                LogPrint("Input dataset has no batch done callback.")
+
+
             losses.append(E)
             if np.array(E).mean() <= lastloss:
                 backuppath = u"./Backup/cp_%s_%s.pt"%(a.datatype, a.network) \

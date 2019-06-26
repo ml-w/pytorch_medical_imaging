@@ -47,6 +47,7 @@ class ImagePatchesLoader(Dataset):
             random_from_distribution        # This is a function to covert a region of an image to a
                                             # probability map
         self._renew_index = renew_index     # If this is true, index will be renewed after each epoch
+        self._has_reference = False
         self.data = self._base_dataset.data
 
         # check axis
@@ -74,6 +75,7 @@ class ImagePatchesLoader(Dataset):
             self._patch_indexes = reference_dataset._patch_indexes
             self._random_patches = reference_dataset._random_patches
             self._patch_perslice = reference_dataset._patch_perslice
+            self._has_reference = True
 
         # Pre-shuffle the patch indexes so that each mini-batch would have similar data-statistics as the training input
         if self._pre_shuffle:
@@ -103,6 +105,10 @@ class ImagePatchesLoader(Dataset):
         return [xy[c] for c in choices]
 
     def _calculate_random_patch_indexes(self):
+        # Don't touch anything if this is referencing something
+        if self._has_reference:
+            return
+
         X, Y = self._axis
         corner_range = [self._unit_dimension[X] - self._patch_size[0],
                         self._unit_dimension[Y] - self._patch_size[1]]
@@ -178,7 +184,7 @@ class ImagePatchesLoader(Dataset):
         pool.close()
         pool.join()
 
-        for r in tqdm(results.get(), desc="Sample from distribution"):
+        for r in results.get():
             patch_indexes.extend(r)
 
         # speacial treatment required if baseclass has augmentator
@@ -192,6 +198,10 @@ class ImagePatchesLoader(Dataset):
 
 
     def _calculate_patch_indexes(self):
+        # Don't touch anything if this is referencing something
+        if self._has_reference:
+            return
+
         # Clear existing indexes first
         self._patch_indexes = []
 
@@ -325,6 +335,19 @@ class ImagePatchesLoader(Dataset):
         assert isinstance(self._base_dataset, ImageDataSet), "This class must be based on ImageDataSet to use this method."
         return self._base_dataset.get_unique_values_n_counts()
 
+    def batch_done_callback(self):
+        if self._renew_index:
+            if callable(self._random_from_distrib):
+                self._sample_patches_from_distribution()
+            else:
+                self._calculate_random_patch_indexes()
+            self._random_counter = 0
+
+        try:
+            self._base_dataset.batch_done_callback()
+        except:
+            pass
+
     def __len__(self):
         return len(self._patch_indexes) * len(self._base_dataset) if not self._random_patches \
             else len(self._patch_indexes)
@@ -341,17 +364,13 @@ class ImagePatchesLoader(Dataset):
                 item = self._shuffle_index_arr[item]
 
             if self._random_patches:
+                self._random_counter += 1
                 slice_index = item // self._patch_perslice
                 patch_index = item
 
                 # simple trick to update patch indexes after each epoch
-                self._random_counter += 1
                 if self._random_counter >= self.__len__() and self._renew_index:
-                    if callable(self._random_from_distrib):
-                        self._sample_patches_from_distribution()
-                    else:
-                        self._calculate_random_patch_indexes()
-                    self._random_counter = 0
+                    self.batch_done_callback()
             else:
                 slice_index = item / len(self._patch_indexes)
                 patch_index = item % len(self._patch_indexes)
