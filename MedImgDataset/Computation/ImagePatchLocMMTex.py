@@ -79,7 +79,7 @@ class ImagePatchLocMMTex(ImagePatchesLoader):
             patch = super(ImagePatchLocMMTex, self).__getitem__(item)
             texture_lndp= torch.tensor(lndp(patch.data.squeeze().numpy(), 1)).view_as(patch).type_as(patch)
             texture_lbp = torch.tensor(lbp(patch.data.squeeze().numpy(), 1)).view_as(patch).type_as(patch)
-            patch = torch.cat([patch, texture_lbp, texture_lndp], dim=1)
+            patch = torch.cat([patch, texture_lbp, texture_lndp], dim=0)
             feats = torch.cat([torch.tensor(self._calculate_patch_pos(s_item)).float(),
                                torch.tensor([self._calculate_patch_dist(s_item)]).float()])
             return patch, feats
