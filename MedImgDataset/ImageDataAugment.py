@@ -17,6 +17,7 @@ class ImageDataSetAugment(ImageDataSet):
         self._is_segment = kwargs.pop('is_seg') if kwargs.has_key('is_seg') else False
         self._references_dataset = kwargs.pop('reference_dataset') if kwargs.has_key('reference_dataset') \
             else None
+        self._update_each_epoch = kwargs.pop('renew') if kwargs.has_key('renew') else False
 
         super(ImageDataSetAugment, self).__init__(*args, **kwargs)
         assert self._byslices >= 0, "Currently only support slices augmentation."
@@ -27,7 +28,6 @@ class ImageDataSetAugment(ImageDataSet):
         self._nb_of_classes = len(np.unique(self.data.numpy()))
         for i in xrange(self._augment_factor):
             self._itemindexes = np.concatenate([self._itemindexes, self._itemindexes[1:] + self._itemindexes[-1]])
-        self._update_each_epoch= False
         self._is_referenced = False
         self._is_referencing = False
         self._referencees = []
@@ -35,7 +35,7 @@ class ImageDataSetAugment(ImageDataSet):
 
         # Build augmentator
         self._augmentator = iaa.Sequential(
-            [iaa.Affine(rotate=[-10, 10], scale=[0.9, 1.1]),
+            [iaa.Affine(rotate=(-10, 10), scale=(0.9, 1.1)),
              iaa.WithChannels(channels=[0], # TODO: this is temp solution to LBP channel
                               children=iaa.AdditiveGaussianNoise(scale=(0,5), per_channel=False)),
              iaa.WithChannels(channels=[0],
@@ -74,12 +74,18 @@ class ImageDataSetAugment(ImageDataSet):
         assert not dataset in self._referencees,"Assigned dataset is already referenced."
         assert len(self) == len(dataset), "Datasets have different length! [%i, %i]"%(len(self), len(dataset))
 
-        self._is_referenced=False
-        self._augmentators = dataset._augmentators
-        self._augmentator = dataset._augmentators
-        self._augment_factor = dataset._augment_factor
-        dataset._is_referenced=True
-        self._is_referencing=True
+        try:
+            self._is_referenced=False
+            self._augmentators = dataset._augmentators
+            self._augmentator = dataset._augmentators
+            self._augment_factor = dataset._augment_factor
+            self._is_referencing=True
+            dataset._is_referenced=True
+            dataset._referencees.append(self)
+        except:
+            print "Cannot reference target!"
+            self._is_referencing=False
+
 
     def size(self, int=None):
         if int is None:
@@ -88,7 +94,6 @@ class ImageDataSetAugment(ImageDataSet):
             return super(ImageDataSetAugment, self).size(int)
 
     def batch_done_callback(self):
-        print self.__class__
         if self._update_each_epoch:
             self._update_augmentators()
         self._call_count = 0
@@ -125,6 +130,7 @@ class ImageDataSetAugment(ImageDataSet):
                 baseim = baseim.permute(2, 0, 1)
                 augmented = augmented.transpose(2, 0, 1)
             out = torch.from_numpy(augmented).view_as(baseim).to(baseim.dtype)
+            del augmented, baseim
 
         if self._call_count >= self.__len__():
             if self._update_each_epoch:
