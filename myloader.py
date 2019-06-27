@@ -525,17 +525,21 @@ def LoadSegmentationImageDatasetByPatches(a, debug=False):
     else:
         # Training Mode
         if a.loadbyfilelist is None:
-            return ImagePatchesLoader3D(image(a.input, a.lsuffix, None, np.float32),
-                                        patch_size=patchsize, patch_stride=stride), \
-                   ImagePatchesLoader3D(image(a.train, None, None, np.uint8),
-                                        patch_size=patchsize, patch_stride=stride)
+            imset = ImagePatchesLoader3D(image(a.input, a.lsuffix, None, np.float32),
+                                        patch_size=patchsize, patch_stride=stride),
+            gtset = ImagePatchesLoader3D(image(a.train, None, None, np.uint8),
+                                        patch_size=patchsize, patch_stride=stride, reference_dataset=imset)
+            return imset, gtset
+
 
         else:
             gt_filelist, input_filelist = a.loadbyfilelist.split(',')
-            return ImagePatchesLoader3D(image(a.input, a.lsuffix, input_filelist, np.float32),
-                                        patch_size=patchsize, patch_stride=stride), \
-                   ImagePatchesLoader3D(image(a.train, None, gt_filelist, np.uint8),
+            imset = ImagePatchesLoader3D(image(a.input, a.lsuffix, input_filelist, np.float32),
                                         patch_size=patchsize, patch_stride=stride)
+            gtset = ImagePatchesLoader3D(image(a.train, None, gt_filelist, np.uint8),
+                                        patch_size=patchsize, patch_stride=stride, reference_dataset=imset)
+            return imset, gtset
+
 
 datamap = {'subband':LoadSubbandDataset,
            'image2D':LoadImageDataset,

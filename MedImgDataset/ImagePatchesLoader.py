@@ -102,7 +102,9 @@ class ImagePatchesLoader(Dataset):
             choices = np.random.choice(len(xy), p=prob.flatten(), size=pps)
         except Exception as e:
             print roi, len(xy), prob.flatten(), e.message
-        return [xy[c] for c in choices]
+        out = [xy[c] for c in choices]
+        del xy, choices, prob
+        return out
 
     def _calculate_random_patch_indexes(self):
         # Don't touch anything if this is referencing something
@@ -376,7 +378,6 @@ class ImagePatchesLoader(Dataset):
                 patch_index = item % len(self._patch_indexes)
 
             p = self._patch_indexes[patch_index]
-            s = self._base_dataset[slice_index]
 
             indexes = []
             for i in xrange(self._slice_dim):
@@ -386,5 +387,5 @@ class ImagePatchesLoader(Dataset):
                     indexes.append(slice(p[1], p[1] + self._patch_size[1]))
                 else:
                     indexes.append(slice(None))
-            return s[indexes]
+            return self._base_dataset[slice_index][indexes]
 

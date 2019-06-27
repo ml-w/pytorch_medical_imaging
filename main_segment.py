@@ -104,9 +104,9 @@ def main(a):
                     LogPrint("Cannot read from TENORBOARD_LOGDIR, retreating to default path...",
                              logging.WARNING)
                     tensorboard_rootdir = "/media/storage/PytorchRuns"
-                writer = SummaryWriter(tensorboard_rootdir + "/%s_%s_%s"%(a.network,
+                writer = SummaryWriter(tensorboard_rootdir + "/%s-%s-%s"%(a.network,
                                                                           a.lsuffix,
-                                                                          datetime.datetime.now().strftime("%Y%m%d_%H%M")))
+                                                                          datetime.datetime.now().strftime("%Y%m%d-%H%M%S")))
             except OSError:
                 writer = None
                 a.plot = False
@@ -208,12 +208,16 @@ def main(a):
                         if a.outcheckpoint is None else a.outcheckpoint.replace('.pt', '_temp.pt')
                     torch.save(net.module.state_dict(), backuppath)
                     temploss = loss.data.cpu()
+                del s, g
+                gc.collect()
 
             # Call back after each epoch
             try:
+                LogPrint("Initiate batch done callback.")
                 inputDataset.batch_done_callback()
+                LogPrint("Done")
             except:
-                LogPrint("Input dataset has no batch done callback.")
+                LogPrint("Input dataset has no batch done callback.", logging.WARNING)
 
 
             losses.append(E)
