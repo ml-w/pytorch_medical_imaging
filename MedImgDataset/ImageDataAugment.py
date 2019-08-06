@@ -9,6 +9,7 @@ from imgaug import augmenters as iaa
 import imgaug as ia
 import torch
 import numpy as np
+import gc
 
 class ImageDataSetAugment(ImageDataSet):
     def __init__(self, *args, **kwargs):
@@ -131,6 +132,7 @@ class ImageDataSetAugment(ImageDataSet):
                 augmented = augmented.transpose(2, 0, 1)
             out = torch.from_numpy(augmented).view_as(baseim).to(baseim.dtype)
             del augmented, baseim
+            # gc.collect()
 
         if self._call_count >= self.__len__():
             if self._update_each_epoch:

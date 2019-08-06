@@ -6,7 +6,7 @@ from ImageDataMultiChannel import ImageDataSetMultiChannel
 from ImageDataAugment import ImageDataSetAugment
 from tqdm import *
 import numpy as np
-
+import gc
 
 def _mpi_wrapper(arg, **kwargs):
     """This is required for mpi choose patches"""
@@ -104,6 +104,7 @@ class ImagePatchesLoader(Dataset):
             print roi, len(xy), prob.flatten(), e.message
         out = [xy[c] for c in choices]
         del xy, choices, prob
+        # gc.collect()
         return out
 
     def _calculate_random_patch_indexes(self):

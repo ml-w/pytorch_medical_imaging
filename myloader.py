@@ -273,7 +273,7 @@ def LoadSegmentationPatchLocTexHist_Aug(a, debug=False):
                                       random_patches=20)
             seg = imseg(a.train, None, gt_filelist, np.uint8)
             seg.set_reference_augment_dataset(invars._base_dataset)
-            gtvars = ImagePatchesLoader(seg,
+            gtvarsn = ImagePatchesLoader(seg,
                                         patchsize,
                                         stride,
                                         reference_dataset=invars)
@@ -345,7 +345,7 @@ def LoadSegmentationPatchLocMMTexHist_Aug(a, debug=False):
                                                                         filesuffix=fsuffix,
                                                                         loadBySlices=0,
                                                                         idlist=filelist,
-                                                                        aug_factor=3)
+                                                                        aug_factor=2)
     imseg = lambda input, fsuffix, filelist, dtype: ImageDataSetAugment(input,
                                                                         dtype=dtype,
                                                                         verbose=True,
@@ -354,7 +354,7 @@ def LoadSegmentationPatchLocMMTexHist_Aug(a, debug=False):
                                                                         loadBySlices=0,
                                                                         idlist=filelist,
                                                                         is_seg=True,
-                                                                        aug_factor=3)
+                                                                        aug_factor=2)
 
 
     patchsize = 128
@@ -388,7 +388,7 @@ def LoadSegmentationPatchLocMMTexHist_Aug(a, debug=False):
                                         patchsize,
                                         stride,
                                         mode='as_histograms',
-                                        random_patches=20,
+                                        random_patches=15,
                                         random_from_distribution=clip_5
                                         )
             seg = imseg(a.train, None, None, np.uint8)
@@ -408,7 +408,7 @@ def LoadSegmentationPatchLocMMTexHist_Aug(a, debug=False):
                                         patchsize,
                                         stride,
                                         mode='as_histograms',
-                                        random_patches=20,
+                                        random_patches=15,
                                         random_from_distribution=clip_5
                                         )
             seg = imseg(a.train, None, gt_filelist, np.uint8)

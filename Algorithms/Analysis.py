@@ -198,8 +198,11 @@ def EVAL(seg, gt, vars):
         try:
             segindexes.index(gtindexes[i])
         except ValueError:
-            data = pd.DataFrame([[os.path.basename(gt.get_data_source(i)), gt.get_internal_index(i)] + [np.nan] * len(vars)],
-                            columns=['filename','ImageIndex'] + vars.keys())
+            print "Skipping ", os.path.basename(gt.get_data_source(i))
+            data = pd.DataFrame([[os.path.basename(gt.get_data_source(i)),
+                                  gt.get_internal_index(i),
+                                  int(gtindexes[i])] + [np.nan] * len(vars)],
+                            columns=['filename','ImageIndex', 'Index'] + vars.keys())
             df = df.append(data)
             continue
 
@@ -224,8 +227,9 @@ def EVAL(seg, gt, vars):
                     values.append(np.nan)
                     print e.message
 
-        data = pd.DataFrame([[os.path.basename(gt.get_data_source(i)), gt.get_internal_index(i)] + values],
-                            columns=['filename','ImageIndex'] + vars.keys())
+        data = pd.DataFrame([[os.path.basename(gt.get_data_source(i)),
+                              gt.get_internal_index(i), int(gtindexes[i])] + values],
+                            columns=['filename','ImageIndex', 'Index'] + vars.keys())
         df = df.append(data)
     return df
 
@@ -327,16 +331,18 @@ if __name__ == '__main__':
     parse.add_argument('--save', action='store', default=None, dest='save', help='save analysis results as csv')
     parse.add_argument('--test-data', action='store', type=str, dest='testset', required=True)
     parse.add_argument('--gt-data', action='store', type=str, dest='gtset', required=True)
+    parse.add_argument('--added-label', action='store', type=str, dest='label',
+                       help='Additional label that will be marked under the colume "Note"')
     args = parse.parse_args()
     assert os.path.isdir(args.testset) and os.path.isdir(args.gtset), "Path error!"
 
     vars = {}
     if args.dice:
-        vars['DICE'] = DICE
+        vars['DSC'] = DICE
     if args.jac:
         vars['JAC'] = JAC
     if args.pm:
-        vars['PM'] = PercentMatch
+        vars['PPV'] = PercentMatch
     if args.vr:
         vars['VR'] = Volume
     if args.pr:
@@ -344,29 +350,39 @@ if __name__ == '__main__':
     if args.gce:
         vars['GCE'] = GCE
     if args.cr:
-        vars['CR'] = CR
+        vars['CR'] = CorrespondenceRatio
     if args.asd:
         vars['ASD'] = ASD
     if args.all:
         vars = {'GCE': GCE,
                 'JAC': JAC,
-                'DICE': DICE,
+                'DSC': DICE,
                 'VD': VD,
-                'PM': PercentMatch,
+                'PPV': PercentMatch,
                 'CR': CorrespondenceRatio,
                 'Volume Ratio': Volume,
                 'PR': PrecisionRate,
                 'ASD': ASD}
 
     output = ImageDataSet(args.testset, verbose=True, dtype='uint8')
-    seg = ImageDataSet(args.gtset, verbose=True, dtype='uint8')
+    seg = ImageDataSet(args.gtset, verbose=True, dtype='uint8', idlist=output.get_unique_IDs())
 
     results = EVAL(output, seg, vars)
-    results = results.sort_values('DICE')
+    results = results.sort_values('Index')
+
+    if not args.label is None:
+        results['Note'] = str(args.label)
 
     if not args.save is None:
         try:
-            results.to_csv(args.save)
+            results = results.set_index('Index')
+            # Append if file exist
+            if os.path.isfile(args.save):
+                print "Appending..."
+                with open(args.save, 'a') as f:
+                    results.to_csv(f, mode='a', header=False)
+            else:
+                results.to_csv(args.save)
         except:
             print "Cannot save to: ", args.save
     print results.to_string()

@@ -244,6 +244,8 @@ class UNetLocTexHistDeeper(UNet):
             fc_inchan = kwargs.pop('fc_inchan')
         except:
             fc_inchan = 104
+        self._save_inter_res = kwargs.pop('inter_res') if kwargs.has_key('inter_res') else False
+        self.inter_res = {}
         super(UNetLocTexHistDeeper, self).__init__(*args, **kwargs)
 
         self.fc = nn.Sequential(
@@ -281,12 +283,18 @@ class UNetLocTexHistDeeper(UNet):
         # expand pos
         pos = self.fc(pos)
 
+        if self._save_inter_res:
+            self.inter_res['before'] = [x2, x3, x4, x5, x6]
+
         X = []
         for _x, _fc in zip([x2, x3, x4, x5, x6], [self.fc2, self.fc3, self.fc4, self.fc5, self.fc6]):
             _pos = _fc(pos).expand_as(_x.permute(2, 3, 0, 1)).permute(2, 3, 0, 1)
             _x = _x * F.relu(_pos, True)
             X.append(_x)
         x2, x3, x4, x5, x6 = X
+
+        if self._save_inter_res:
+            self.inter_res['after'] = [x2, x3, x4, x5, x6]
 
         x = self.up0(self.dropout2(x6), self.dropout1(x5))
         x = self.up1(x, x4)

@@ -127,20 +127,80 @@ def GenerateTestBatch(gt_files, input_files, numOfTestSamples, outdir, prefix="B
         [f.close() for f in [testing_input, training_input]]
 
 
-def check_batches_files(dir):
+def check_batches_files(dir, globber=None):
+    files = os.listdir(dir)
+
+    # get list of each batch
+    b = []
+    d = {}
+    for f in files:
+        mo = re.search('[0-9]{3}_.*ing', f)
+        if not mo is None:
+            batch = f[mo.start():mo.end()]
+            d[batch] = [r.rstrip() for r in open(dir + '/' + f, 'r').readlines()]
+            d[batch].sort()
+            b.append(batch[:3])
+    b = list(set(b))
+
+    for bb in b:
+        # check if there are test/train overlap
+        train = d[bb + '_Training']
+        test = d[bb + '_Testing']
+
+        intersection = list(set(train) & set(test))
+        if len(intersection):
+            print "Intersection: ", bb, intersection
+
+
+    # check if there are repeated number in each list
+    for k in d:
+        if len(list(set(d[k]))) != len(d[k]):
+            print "Repated number: ",k
+
+
+    # check if there are inter-batch overlap
+    for bb in b:
+        for cc in b:
+            if bb == cc:
+                continue
+            test_b = d[bb + '_Testing']
+            test_c = d[cc + '_Testing']
+
+            inter_test = list(set(test_c) & set(test_b))
+            if len(inter_test):
+                print "Batch overlap!", bb, cc, inter_test
+
+    # check if all folds combine to give the same set list
+    fulllist = {}
+    for bb in b:
+        train = d[bb + '_Training']
+        test = d[bb + '_Testing']
+
+        fulllist[bb] = list(set(train) & set(test))
+
+    for k1 in fulllist:
+        for k2 in fulllist:
+            if k1 == k2:
+                continue
+            if fulllist[k1] != fulllist[k2]:
+                print "Difference in full: ", k1, k2
+
+
     pass
 
 
 if __name__ == '__main__':
     import os, fnmatch
     # GenerateKFoldBatch("./BrainVessel/01.BatchSource", "./BrainVessel/10.K_Fold_Batches", 10)
-    GenerateTestBatch(os.listdir('../NPC_Segmentation/21.NPC_Perfect_SegT2/00.First'),
-                      os.listdir('../NPC_Segmentation/06.NPC_Perfect'),
-                      50,
-                      '../NPC_Segmentation/99.Testing',
-                      prefix="B05/B05",
-                      k_fold=4
-                      )
+    # GenerateTestBatch(os.listdir('../NPC_Segmentation/21.NPC_Perfect_SegT2/00.First'),
+    #                   os.listdir('../NPC_Segmentation/06.NPC_Perfect'),
+    #                   50,
+    #                   '../NPC_Segmentation/99.Testing',
+    #                   prefix="B05/B05",
+    #                   k_fold=4
+    #                   )
 
     # print GenerateFileList(os.listdir('../NPC_Segmentation/06.NPC_Perfect')).to_csv('~/FTP/temp/perfect_file_list.csv')
+
+    check_batches_files('../NPC_Segmentation/99.Testing/B05/')
 

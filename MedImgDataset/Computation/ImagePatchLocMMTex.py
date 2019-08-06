@@ -2,9 +2,11 @@ import torch
 import torch.nn as nn
 
 import numpy as np
+import gc
 from .. import ImageDataSet, ImagePatchesLoader
 from .LocalNeighborhoodDifferencePattern import lndp
 from .LocalBinaryPattern import lbp
+
 
 class ImagePatchLocMMTex(ImagePatchesLoader):
     def __init__(self, *args, **kwargs):
@@ -111,6 +113,8 @@ class ImagePatchLocMMTex(ImagePatchesLoader):
                                torch.tensor([self._calculate_patch_dist(s_item)]).float(),
                                torch.tensor(hist_lbp).float(),
                                torch.tensor(hist_lndp).float()])
+            del texture_lbp, texture_lndp, hist_lbp, hist_lndp
+            # gc.collect()
             return patch, feats
 
     def __getitem__(self, item):
