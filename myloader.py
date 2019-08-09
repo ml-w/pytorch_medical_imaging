@@ -213,7 +213,7 @@ def LoadSegmentationPatchLocTexHist_Aug(a, debug=False):
                                                                         debugmode=debug,
                                                                         filesuffix=fsuffix,
                                                                         loadBySlices=0,
-                                                                        filelist=filelist,
+                                                                        idlist=filelist,
                                                                         aug_factor=5)
     imseg = lambda input, fsuffix, filelist, dtype: ImageDataSetAugment(input,
                                                                         dtype=dtype,
@@ -221,7 +221,7 @@ def LoadSegmentationPatchLocTexHist_Aug(a, debug=False):
                                                                         debugmode=debug,
                                                                         filesuffix=fsuffix,
                                                                         loadBySlices=0,
-                                                                        filelist=filelist,
+                                                                        idlist=filelist,
                                                                         is_seg=True)
 
 
@@ -262,7 +262,7 @@ def LoadSegmentationPatchLocTexHist_Aug(a, debug=False):
             return invars, gtvars
 
         else:
-            gt_filelist, input_filelist = a.loadbyfilelist.split(',')
+            input_filelist = a.loadbyfilelist
             invars = ImagePatchLocTex(imset(a.input,
                                             a.lsuffix,
                                             input_filelist,
@@ -400,7 +400,7 @@ def LoadSegmentationPatchLocMMTexHist_Aug(a, debug=False):
             return invars, gtvars
 
         else:
-            gt_filelist, input_filelist = a.loadbyfilelist.split(',')
+            input_filelist = a.loadbyfilelist
             invars = ImagePatchLocMMTex(imset(a.input,
                                               a.lsuffix,
                                               input_filelist,
@@ -411,7 +411,7 @@ def LoadSegmentationPatchLocMMTexHist_Aug(a, debug=False):
                                         random_patches=15,
                                         random_from_distribution=clip_5
                                         )
-            seg = imseg(a.train, None, gt_filelist, np.uint8)
+            seg = imseg(a.train, None, input_filelist, np.uint8)
             seg.set_reference_augment_dataset(invars._base_dataset)
             gtvars = ImagePatchesLoader(seg,
                                         patchsize,
