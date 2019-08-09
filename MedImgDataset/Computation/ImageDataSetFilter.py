@@ -15,8 +15,8 @@ class ImageDataSetFilter(ImageDataSet):
     def __init__(self, *args, **kwargs):
         try:
             self._filter_func = kwargs.pop('filter')
-        except Exception, e:
-            print e
+        except Exception as e:
+            print(e)
             return
 
         super(ImageDataSetFilter, self).__init__(*args, **kwargs)

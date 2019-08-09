@@ -93,7 +93,7 @@ class ImageDataSet(Dataset):
         """
 
         if self.verbose:
-            print "Parsing root path: ", self.rootdir
+            print("Parsing root path: ", self.rootdir)
 
         # Load files written in filelist from the root_dir
         removed_fnames = []
@@ -132,12 +132,12 @@ class ImageDataSet(Dataset):
             removed_fnames.sort()
             for fs in removed_fnames:
                 logging.getLogger('__main__').log(logging.WARNING, "Cannot find " + fs + " in " + self.rootdir)
-                print "Cannot find " + fs + " in " + self.rootdir
+                print("Cannot find " + fs + " in " + self.rootdir)
         filenames.sort()
 
         if self.verbose:
-            print "Found %s nii.gz files..."%len(filenames)
-            print "Start Loading"
+            print("Found %s nii.gz files..."%len(filenames))
+            print("Start Loading")
 
         self._itemindexes = [0] # [image index of start slice]
         for i, f in enumerate(tqdm(filenames, disable=not self.verbose)) \
@@ -171,7 +171,7 @@ class ImageDataSet(Dataset):
                 self.length = np.sum([m.size()[self._byslices] for m in self.data])
                 self.data = cat(self.data, dim=self._byslices).transpose(0, self._byslices).unsqueeze(1)
             except IndexError:
-                print "Wrong Index is used!"
+                print("Wrong Index is used!")
                 self.length = len(self.dataSourcePath)
         else:
             try:
@@ -179,7 +179,7 @@ class ImageDataSet(Dataset):
             except:
                 logging.log(logging.WARNING, "Cannot stack data due to non-uniform shapes.")
                 logging.log(logging.INFO, "%s"%[d.shape for d in self.data])
-                print "Cannot stack data due to non-uniform shapes. Some function might be impaired."
+                print("Cannot stack data due to non-uniform shapes. Some function might be impaired.")
 
 
     def size(self, int=None):
@@ -198,8 +198,8 @@ class ImageDataSet(Dataset):
         try:
             self.data = self.data.type(t)
             self.dtype = t
-        except Exception, e:
-            print e
+        except Exception as e:
+            print(e)
 
     def get_data_source(self, i):
         if self._byslices >=0:
@@ -231,9 +231,9 @@ class ImageDataSet(Dataset):
 
     def get_spacing(self, id):
         if self._byslices >= 0:
-            return [round(self.metadata[self.get_internal_index(id)]['pixdim[%d]'%(i+1)], 5) for i in xrange(3)]
+            return [round(self.metadata[self.get_internal_index(id)]['pixdim[%d]'%(i+1)], 5) for i in range(3)]
         else:
-            return [round(self.metadata[id]['pixdim[%d]'%(i+1)], 5) for i in xrange(3)]
+            return [round(self.metadata[id]['pixdim[%d]'%(i+1)], 5) for i in range(3)]
 
     def __len__(self):
         return self.length
@@ -252,7 +252,7 @@ class ImageDataSet(Dataset):
         # "File Paths\tSize\t\tSpacing\t\tOrigin\n"
         # printable = {'File Name': []}
         printable = {'File Name': [], 'Size': [], 'Spacing': [], 'Origin': []}
-        for i in xrange(len(self.dataSourcePath)):
+        for i in range(len(self.dataSourcePath)):
             printable['File Name'].append(os.path.basename(self.dataSourcePath[i]))
             # for keys in self.metadata[i]:
             #     if not printable.has_key(keys):
@@ -276,7 +276,7 @@ class ImageDataSet(Dataset):
         if self._byslices > -1:
             assert self._itemindexes[-1] == tensor_data.size()[0], "Dimension mismatch!"
             td=tensor_data.numpy()
-            for i in xrange(len(self.dataSourcePath)):
+            for i in range(len(self.dataSourcePath)):
                 start=self._itemindexes[i]
                 end=self._itemindexes[i+1]
                 # image=sitk.GetImageFromArray(td[start:end])
@@ -289,7 +289,7 @@ class ImageDataSet(Dataset):
         else:
             assert len(self) == len(tensor_data), "Length mismatch! %i vs %i"%(len(self), len(tensor_data))
 
-            for i in xrange(len(self)):
+            for i in range(len(self)):
                 source_file = self.dataSourcePath[i]
                 templateim = sitk.ReadImage(source_file)
                 image = sitk.GetImageFromArray(tensor_data[i].squeeze().numpy())
@@ -347,7 +347,7 @@ class ImageDataSet(Dataset):
         out_dict = {}
         for val, counts in [unique(d, return_counts=True) for d in self.data]:
             for v, c in zip(val, counts):
-                if not out_dict.has_key(v.item()):
+                if v.item() not in out_dict:
                     out_dict[v.item()] = c.item()
                 else:
                     out_dict[v.item()] += c.item()

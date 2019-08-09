@@ -5,7 +5,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
-from Layers import ReflectiveDoubleConv as double_conv
+from .Layers import ReflectiveDoubleConv as double_conv
 
 class inconv(nn.Module):
     def __init__(self, in_ch, out_ch):
@@ -244,7 +244,7 @@ class UNetLocTexHistDeeper(UNet):
             fc_inchan = kwargs.pop('fc_inchan')
         except:
             fc_inchan = 104
-        self._save_inter_res = kwargs.pop('inter_res') if kwargs.has_key('inter_res') else False
+        self._save_inter_res = kwargs.pop('inter_res') if 'inter_res' in kwargs else False
         self.inter_res = {}
         super(UNetLocTexHistDeeper, self).__init__(*args, **kwargs)
 

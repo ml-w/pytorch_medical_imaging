@@ -69,7 +69,7 @@ def SSIM(x,y, axis=None):
             Y = y
 
         out = []
-        for i in xrange(X.shape[0]):
+        for i in range(X.shape[0]):
             mu_x, mu_y = X[i].mean(), Y[i].mean()
             va_x, va_y = X[i].var(), Y[i].var()
             va_xy = np.cov(X[i].flatten(), Y[i].flatten())
@@ -187,7 +187,7 @@ def Volume(TP, FP, TN, FN):
     return (TP + FN)
 
 def EVAL(seg, gt, vars):
-    df = pd.DataFrame(columns=['filename','ImageIndex'] + vars.keys())
+    df = pd.DataFrame(columns=['filename','ImageIndex'] + list(vars.keys()))
 
     # match input's ID
     gtindexes = gt.get_unique_IDs()
@@ -198,11 +198,11 @@ def EVAL(seg, gt, vars):
         try:
             segindexes.index(gtindexes[i])
         except ValueError:
-            print "Skipping ", os.path.basename(gt.get_data_source(i))
+            print("Skipping ", os.path.basename(gt.get_data_source(i)))
             data = pd.DataFrame([[os.path.basename(gt.get_data_source(i)),
                                   gt.get_internal_index(i),
                                   int(gtindexes[i])] + [np.nan] * len(vars)],
-                            columns=['filename','ImageIndex', 'Index'] + vars.keys())
+                            columns=['filename','ImageIndex', 'Index'] + list(vars.keys()))
             df = df.append(data)
             continue
 
@@ -225,11 +225,11 @@ def EVAL(seg, gt, vars):
                     values.append(vars[keys](gg, ss, gt.get_spacing(i)))
                 except Exception as e:
                     values.append(np.nan)
-                    print e.message
+                    print(e.message)
 
         data = pd.DataFrame([[os.path.basename(gt.get_data_source(i)),
                               gt.get_internal_index(i), int(gtindexes[i])] + values],
-                            columns=['filename','ImageIndex', 'Index'] + vars.keys())
+                            columns=['filename','ImageIndex', 'Index'] + list(vars.keys()))
         df = df.append(data)
     return df
 
@@ -263,8 +263,8 @@ def BatchAnalysis(targetfiles, testfiles, func, mask=None, outputcsvdir=None):
     [allfiles.extend(testfiles[tf]) for tf in testfiles]
     b = [os.path.isfile(f) for f in allfiles]
     if not all(b):
-        print "Following files doesn't exist:"
-        print '\n'.join(np.array(allfiles)[np.invert(b)])
+        print("Following files doesn't exist:")
+        print('\n'.join(np.array(allfiles)[np.invert(b)]))
         return
 
 
@@ -378,11 +378,11 @@ if __name__ == '__main__':
             results = results.set_index('Index')
             # Append if file exist
             if os.path.isfile(args.save):
-                print "Appending..."
+                print("Appending...")
                 with open(args.save, 'a') as f:
                     results.to_csv(f, mode='a', header=False)
             else:
                 results.to_csv(args.save)
         except:
-            print "Cannot save to: ", args.save
-    print results.to_string()
+            print("Cannot save to: ", args.save)
+    print(results.to_string())

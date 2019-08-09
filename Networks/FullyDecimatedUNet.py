@@ -2,7 +2,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
-from Layers import DoubleConv, CircularDoubleConv, LinearDoubleConv
+from .Layers import DoubleConv, CircularDoubleConv, LinearDoubleConv
 
 class Decimation(nn.Module):
     def __init__(self, inchan):
@@ -12,7 +12,7 @@ class Decimation(nn.Module):
                                          [0, 0, 1, 0],
                                          [0, 0, 0, 1]]).view(4, 2, 2)
         self.weights = torch.zeros([inchan*4, inchan, 2, 2])
-        for i in xrange(inchan):
+        for i in range(inchan):
             self.weights[4*i:4*i+4, i] = self.kern_matrix
 
     def forward(self, x):
@@ -31,7 +31,7 @@ class Interpolation(nn.Module):
                                          [0, 0, 1, 0],
                                          [0, 0, 0, 1]]).view(4, 2, 2)
         self.weights = torch.zeros([inchan, inchan/4, 2, 2])
-        for i in xrange(inchan/4):
+        for i in range(inchan/4):
             self.weights[4*i:4*i+4, i] = self.kern_matrix
 
     def forward(self, x):
@@ -209,7 +209,7 @@ class PRDecimateUNet(nn.Module):
         self.net = LinearDUnet(1)
 
     def forward(self, x):
-        out = [self.net.forward(x.narrow(1, i, 1)) for i in xrange(self.inchan//2)] + \
-              [self.net.forward(x.narrow(1, i, 1).transpose(-1, -2)).transpose(-1, -2) for i in xrange(self.inchan//2, self.inchan)]
+        out = [self.net.forward(x.narrow(1, i, 1)) for i in range(self.inchan//2)] + \
+              [self.net.forward(x.narrow(1, i, 1).transpose(-1, -2)).transpose(-1, -2) for i in range(self.inchan//2, self.inchan)]
 
         return torch.cat(out, 1)

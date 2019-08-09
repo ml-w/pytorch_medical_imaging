@@ -1,4 +1,4 @@
-from ImageData import ImageDataSet
+from .ImageData import ImageDataSet
 from torch.utils.data import Dataset
 from torch import cat, stack
 import numpy as np
@@ -33,8 +33,8 @@ class ImageDataSetMultiChannel(Dataset):
     def Write(self, *args):
         try:
             self._basedata[0].Write(*args)
-        except Exception, e:
-            print e
+        except Exception as e:
+            print(e)
             raise NotImplementedError("Base data have no Write() method")
 
     def __len__(self):
@@ -47,7 +47,7 @@ class ImageDataSetMultiChannel(Dataset):
             stop = stop if not stop is None else len(self._basedataset)
             step = step if not step is None else 1
 
-            return stack([self.__getitem__(i) for i in xrange(start, stop, step)])
+            return stack([self.__getitem__(i) for i in range(start, stop, step)])
         else:
             # output datatype will follow the dtype of the first constructor argument
             if self._UNIQUE_DTYPE:

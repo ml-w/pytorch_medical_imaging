@@ -33,8 +33,8 @@ class ImageDataSetWithPos(Dataset):
     def Write(self, *args):
         try:
             self._basedataset.Write(*args)
-        except Exception, e:
-            print e
+        except Exception as e:
+            print(e)
             raise NotImplementedError("Base data have no Write() method")
 
     def __len__(self):
@@ -46,7 +46,7 @@ class ImageDataSetWithPos(Dataset):
             start = start if not start is None else 0
             stop = stop if not stop is None else len(self._basedataset)
             step = step if not step is None else 1
-            pos = [self._getpos(i) for i in xrange(start, stop, step)]
+            pos = [self._getpos(i) for i in range(start, stop, step)]
             pos = tensor(pos).view(len(pos), 1, 1, 1)
         else:
             pos = tensor(self._getpos(item)).expand(1, 1, 1)

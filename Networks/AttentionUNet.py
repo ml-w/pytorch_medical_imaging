@@ -1,7 +1,7 @@
 import torch
 import torch.nn as nn
 
-from Layers import DoubleConv, AttentionBlock, AttentionGating
+from .Layers import DoubleConv, AttentionBlock, AttentionGating
 from .UNet import up, down, outconv, inconv
 
 class AttentionUNet(nn.Module):

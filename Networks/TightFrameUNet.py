@@ -5,7 +5,7 @@ from torch.autograd import Variable
 from torch import cat, stack, tensor
 from numpy import sqrt
 
-from Layers import DoubleConv, CircularDoubleConv
+from .Layers import DoubleConv, CircularDoubleConv
 
 
 class HaarDown(nn.Module):
@@ -15,7 +15,7 @@ class HaarDown(nn.Module):
                                          [1., -1., 1., -1.],
                                          [1., 1., -1., -1.]]).float().view(3, 2, 2) / 2.
         self.weights = torch.zeros([inchan*3, inchan, 2, 2])
-        for i in xrange(inchan):
+        for i in range(inchan):
             self.weights[3*i:3*i+3, i] = self.haar_matrix
 
     def forward(self, x):
@@ -35,11 +35,11 @@ class HaarUp(nn.Module):
 
         if reduce:
             self.weights = torch.zeros([inchan*3, inchan, 2, 2])
-            for i in xrange(inchan):
+            for i in range(inchan):
                 self.weights[3*i:3*i+3, i] = self.haar_matrix
         else:
             self.weights = torch.zeros([inchan*3, inchan*3, 2, 2])
-            for i in xrange(inchan):
+            for i in range(inchan):
                 self.weights[i, 3*i:3*i+3] = self.haar_matrix
 
     def forward(self, x):

@@ -43,7 +43,7 @@ def SmoothImages(root_dir, out_dir):
     fnmatch.filter(f, "*.nii.gz")
 
     for fs in f:
-        print fs
+        print(fs)
         im = sitk.ReadImage(root_dir + "/" + fs)
         out = sitk.SmoothingRecursiveGaussian(im, 8, True)
         sitk.WriteImage(out, out_dir + "/" + fs)
@@ -55,10 +55,10 @@ def dicom2nii(folder, out_dir=None, seq_filters=None):
         assert os.path.isdir(out_dir)
 
     if not os.path.isdir(folder):
-        print "Cannot locate specified folder! ", folder
+        print("Cannot locate specified folder! ", folder)
         raise IOError("Cannot locate specified folder!")
 
-    print "Handling: ", folder
+    print("Handling: ", folder)
     folder = os.path.abspath(folder)
     f = folder.replace('\\', '/')
     # matchobj = re.search('NPC[0-9]+', f)
@@ -92,11 +92,11 @@ def dicom2nii(folder, out_dir=None, seq_filters=None):
                         regex += '|'
                 regex += ')'
                 if re.match(regex, headerreader.GetMetaData('0008|103e')) is None:
-                    print "skipping ", headerreader.GetMetaData('0008|103e'), "from ", f
+                    print("skipping ", headerreader.GetMetaData('0008|103e'), "from ", f)
                     continue
             elif isinstance(seq_filters, str):
                 if re.match(seq_filters, headerreader.GetMetaData('0008|103e')) is None:
-                    print "skipping ", headerreader.GetMetaData('0008|103e'), "from ", f
+                    print("skipping ", headerreader.GetMetaData('0008|103e'), "from ", f)
                     continue
 
         # Write image
@@ -143,7 +143,7 @@ def make_mask(inimage, outdir, pos=-1):
         sitk.WriteImage(gttest, outdir)
         return 0
     except Exception as e:
-        print e.message
+        print(e.message)
 
 
 def make_mask_from_dir(indir, outdir):
@@ -171,7 +171,7 @@ def main(args):
     try:
         os.mkdir(args[2])
     except:
-        print "Cannot mkdir."
+        print("Cannot mkdir.")
 
     assert os.path.isdir(args[1]) and os.path.isdir(args[2]), 'Cannot locate inputs directories or output directory.'
 

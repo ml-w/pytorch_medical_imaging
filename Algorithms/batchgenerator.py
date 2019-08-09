@@ -25,7 +25,7 @@ def GenerateFileList(files):
             FLAG = False
             for k in regex_dict:
                 matchobj = re.match(regex_dict[k], ff)
-                if not matchobj is None and not row.has_key(k):
+                if not matchobj is None and k not in row:
                     row[k] = ff
                     FLAG = True
             if not FLAG:
@@ -36,9 +36,9 @@ def GenerateFileList(files):
         else:
             row['None'] = '|'.join(row['None'])
 
-        tmp = pd.DataFrame([row.values()], columns=row.keys(), index=[i])
+        tmp = pd.DataFrame([list(row.values())], columns=list(row.keys()), index=[i])
         df = df.append(tmp)
-    return df[regex_dict.keys() + ['None']]
+    return df[list(regex_dict.keys()) + ['None']]
 
 
 
@@ -46,7 +46,7 @@ def GenerateTestBatch(gt_files, input_files, numOfTestSamples, outdir, prefix="B
     # assert len(gt_files) == len(input_files)
     # assert len(gt_files) > numOfTestSamples
 
-    indexes = range(len(gt_files))
+    indexes = list(range(len(gt_files)))
     shuffle(indexes)
     #
     # check if outdir exist
@@ -79,7 +79,7 @@ def GenerateTestBatch(gt_files, input_files, numOfTestSamples, outdir, prefix="B
     else:
         numOfTestSamples = len(indexes) // k_fold
 
-    for k in xrange(k_fold):
+    for k in range(k_fold):
         fold_number = "_%03d_"%k
         # Testing batch files
         # testing_gt = open(outdir + '/' + prefix + fold_number + "Testing_GT.txt", "w")
@@ -91,7 +91,7 @@ def GenerateTestBatch(gt_files, input_files, numOfTestSamples, outdir, prefix="B
 
         training_samples = {'input': [], 'gt':  []}
         testing_samples = {'input': [], 'gt': []}
-        for i in xrange(len(indexes)):
+        for i in range(len(indexes)):
             if (i > k * numOfTestSamples and i < (k+1) * numOfTestSamples) or i > k_fold * numOfTestSamples:
                 target = testing_samples
             else:
@@ -102,17 +102,17 @@ def GenerateTestBatch(gt_files, input_files, numOfTestSamples, outdir, prefix="B
             if not matchobj is None:
                 case_id = gt_files[indexes[i]][matchobj.start():matchobj.end()]
             else:
-                print "Skipping case: %s"%gt_files[indexes[i]]
+                print("Skipping case: %s"%gt_files[indexes[i]])
                 continue
 
             # skip if this case is not to be included
             if case_id in exclude:
-                print "Skipping case: %s"%case_id
+                print("Skipping case: %s"%case_id)
                 continue
 
             in_tar = fnmatch.filter(input_files, case_id + "*")
             if len(in_tar) < 1:
-                print "Cannot find input files for case: %s"%case_id
+                print("Cannot find input files for case: %s"%case_id)
                 continue
 
             target['input'].extend([case_id])
@@ -149,13 +149,13 @@ def check_batches_files(dir, globber=None):
 
         intersection = list(set(train) & set(test))
         if len(intersection):
-            print "Intersection: ", bb, intersection
+            print("Intersection: ", bb, intersection)
 
 
     # check if there are repeated number in each list
     for k in d:
         if len(list(set(d[k]))) != len(d[k]):
-            print "Repated number: ",k
+            print("Repated number: ",k)
 
 
     # check if there are inter-batch overlap
@@ -168,7 +168,7 @@ def check_batches_files(dir, globber=None):
 
             inter_test = list(set(test_c) & set(test_b))
             if len(inter_test):
-                print "Batch overlap!", bb, cc, inter_test
+                print("Batch overlap!", bb, cc, inter_test)
 
     # check if all folds combine to give the same set list
     fulllist = {}
@@ -183,7 +183,7 @@ def check_batches_files(dir, globber=None):
             if k1 == k2:
                 continue
             if fulllist[k1] != fulllist[k2]:
-                print "Difference in full: ", k1, k2
+                print("Difference in full: ", k1, k2)
 
 
     pass

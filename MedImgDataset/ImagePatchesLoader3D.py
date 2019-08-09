@@ -1,9 +1,9 @@
 import torch
 from torch import cat, stack, tensor, zeros
 from torch.utils.data import Dataset
-from ImageData import ImageDataSet
-from ImageDataMultiChannel import ImageDataSetMultiChannel
-from ImageDataAugment import ImageDataSetAugment
+from .ImageData import ImageDataSet
+from .ImageDataMultiChannel import ImageDataSetMultiChannel
+from .ImageDataAugment import ImageDataSetAugment
 from tqdm import *
 import numpy as np
 
@@ -86,8 +86,8 @@ class ImagePatchesLoader3D(Dataset):
 
         try:
             np.copyto(self._patch_indexes, patch_indexes)
-        except Exception, e:
-            print e.message
+        except Exception as e:
+            print(e.message)
             self._patch_indexes = patch_indexes
         pass
 
@@ -127,11 +127,11 @@ class ImagePatchesLoader3D(Dataset):
                       np.clip(y * Ystr, 0, Ylen - Ypat), \
                       np.clip(z * Zstr, 0, Zlen - Zpat)
 
-            self._patch_indexes.append(zip(x.flatten(), y.flatten(), z.flatten()))
+            self._patch_indexes.append(list(zip(x.flatten(), y.flatten(), z.flatten())))
 
     def size(self, val=None):
         newsize = list(self._unit_dimension)
-        for i in xrange(len(newsize)):
+        for i in range(len(newsize)):
             if i == self._axis[0] % self._patch_ndim:
                 newsize[i] = self._patch_size[0]
             elif i == self._axis[1] % self._patch_ndim:
@@ -151,21 +151,21 @@ class ImagePatchesLoader3D(Dataset):
         length = len(inpatches)
         channels = inpatches.size()[1]
         if length != self.__len__():
-            print "Warning! Size mismatch: " + str(len(inpatches)) + ',' + str(self.__len__())
+            print("Warning! Size mismatch: " + str(len(inpatches)) + ',' + str(self.__len__()))
 
         if isinstance(self._base_dataset.data, list):
             # if list mode, [(C, H, W, Z)...]
             temp_slice = [torch.stack([torch.zeros(d.shape, dtype=torch.float)
-                                     for i in xrange(channels)], dim=0) for d in self._base_dataset.data]
+                                     for i in range(channels)], dim=0) for d in self._base_dataset.data]
             count =  [torch.stack([torch.zeros(d.shape, dtype=torch.int16)
-                                     for i in xrange(channels)], dim=0) for d in self._base_dataset.data]
+                                     for i in range(channels)], dim=0) for d in self._base_dataset.data]
             for t in temp_slice:
                 t[0] += 1E-12
             LIST_MODE=True
         else:
             # else (B, C, H, W, Z)
             temp_slice = torch.cat([torch.zeros(self._base_dataset.data.shape, dtype=torch.float)
-                                    for i in xrange(channels)], dim=1)
+                                    for i in range(channels)], dim=1)
             temp_slice[:,0] = 1E-12 # This forces all the un processed slices to have null label.
             count = torch.zeros(temp_slice.size(), dtype=torch.int16)
             LIST_MODE=False
@@ -235,7 +235,7 @@ class ImagePatchesLoader3D(Dataset):
         if ndim is None:
             ndim = self._base_dataset.data[0].ndim()
         indexes = []
-        for k in xrange(ndim):
+        for k in range(ndim):
             if k == self._axis[0] % ndim:
                 indexes.append(slice(p[0], p[0] + self._patch_size[0]))
             elif k == self._axis[1] % ndim:
@@ -259,7 +259,7 @@ class ImagePatchesLoader3D(Dataset):
             start = item.start if not item.start is None else 0
             stop = item.stop if not item.stop is None else self.__len__()
             step = item.step if not item.step is None else 1
-            return stack([self.__getitem__(i) for i in xrange(start, stop, step)], 0)
+            return stack([self.__getitem__(i) for i in range(start, stop, step)], 0)
         else:
             slice_index, patch_index = self.get_internal_indexes(item)
 

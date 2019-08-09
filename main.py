@@ -45,10 +45,10 @@ def main(a):
     assert os.path.isdir(a.input), "Input data directory not exist!"
     if a.train is None:
         mode = 1 # Eval mode
-    if not ml.datamap.has_key(a.datatype):
-        LogPrint("Specified datatype doesn't exist! Retreating to default datatype: %s"%ml.datamap.keys()[0],
+    if a.datatype not in ml.datamap:
+        LogPrint("Specified datatype doesn't exist! Retreating to default datatype: %s"%list(ml.datamap.keys())[0],
                  logging.WARNING)
-        a.datatype = ml.datamap.keys()[0]
+        a.datatype = list(ml.datamap.keys())[0]
 
     ##############################
     # Training Mode
@@ -101,8 +101,8 @@ def main(a):
             import ast
             trainparams = ast.literal_eval(a.trainparams)
 
-        lr = trainparams['lr'] if trainparams.has_key('lr') else 1e-5
-        mm = trainparams['momentum'] if trainparams.has_key('momentum') else 0.01
+        lr = trainparams['lr'] if 'lr' in trainparams else 1e-5
+        mm = trainparams['momentum'] if 'momentum' in trainparams else 0.01
 
 
         # criterion, normfactor = nn.MSELoss(), nn.MSELoss()
@@ -141,9 +141,9 @@ def main(a):
                     try:
                         Zrange = out.shape[0] if out.shape[0] < 15 else 15
                         writer.add_scalar('Loss', loss.data, writerindex)
-                        poolim = make_grid(cat([out[z].unsqueeze(1).data for z in xrange(Zrange)], 0), nrow=4, padding=1, normalize=True)
-                        poolgt = make_grid(cat([g[z].unsqueeze(1).data for z in xrange(Zrange)], 0), nrow=4, padding=1, normalize=True)
-                        pooldiff = make_grid(cat([(out[z] - g[z]).unsqueeze(1) for z in xrange(Zrange)], 0).data, nrow=4, padding=1, normalize=True)
+                        poolim = make_grid(cat([out[z].unsqueeze(1).data for z in range(Zrange)], 0), nrow=4, padding=1, normalize=True)
+                        poolgt = make_grid(cat([g[z].unsqueeze(1).data for z in range(Zrange)], 0), nrow=4, padding=1, normalize=True)
+                        pooldiff = make_grid(cat([(out[z] - g[z]).unsqueeze(1) for z in range(Zrange)], 0).data, nrow=4, padding=1, normalize=True)
                         writer.add_image('Image/Image', poolim, writerindex)
                         writer.add_image('Image/Groundtruth', poolgt, writerindex)
                         writer.add_image('Image/Diff', pooldiff, writerindex)
@@ -152,19 +152,19 @@ def main(a):
                         gc.collect()
                     except:
                         try:
-                            tqdm.write(str(cat([g[z].unsqueeze(1).data for z in xrange(15)], 0)))
+                            tqdm.write(str(cat([g[z].unsqueeze(1).data for z in range(15)], 0)))
                         except:
                             LogPrint("Something went wrong while displaying images.", logging.WARNING)
 
                 if loss.data.cpu() <= temploss:
-                    backuppath = u"./Backup/cp_%s_%s_temp.pt"%(a.datatype, a.network) \
+                    backuppath = "./Backup/cp_%s_%s_temp.pt"%(a.datatype, a.network) \
                         if a.outcheckpoint is None else a.outcheckpoint.replace('.pt', '_temp.pt')
                     torch.save(net.module.state_dict(), backuppath)
                     temploss = loss.data.cpu()
 
             losses.append(E)
             if np.array(E).mean() <= lastloss:
-                backuppath = u"./Backup/cp_%s_%s.pt"%(a.datatype, a.network) \
+                backuppath = "./Backup/cp_%s_%s.pt"%(a.datatype, a.network) \
                     if a.outcheckpoint is None else a.outcheckpoint
                 torch.save(net.module.state_dict(), backuppath)
                 lastloss = np.array(E).mean()
@@ -272,10 +272,10 @@ if __name__ == '__main__':
                              "training mode and 'file1' for evaluation mode, remember to use quotations if"
                              " there are spaces in the string")
     parser.add_argument('--network', dest='network', action='store', type=str, default='',
-                        choices=available_networks.keys(),
+                        choices=list(available_networks.keys()),
                         help="Select DNN network." )
     parser.add_argument('--datatype', dest='datatype', action='store', type=str, default='',
-                        choices=ml.datamap.keys(),
+                        choices=list(ml.datamap.keys()),
                         help="Select input datatype.")
     a = parser.parse_args()
 

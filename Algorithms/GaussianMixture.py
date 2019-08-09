@@ -9,7 +9,7 @@ def get_gaussian_mixture(image, n_components=3):
     gmm = GaussianMixture(n_components=n_components, verbose=True, verbose_interval=1)
     gmm.fit(image.flatten().reshape(-1, 1))
 
-    params = np.array(zip(gmm.weights_, gmm.means_, gmm.covariances_))
+    params = np.array(list(zip(gmm.weights_, gmm.means_, gmm.covariances_)))
     return params
 
 def gaussian_mixture_model(params):

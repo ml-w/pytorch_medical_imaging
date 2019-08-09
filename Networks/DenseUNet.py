@@ -1,7 +1,7 @@
 import torch
 import torch.nn as nn
 
-from Layers import DenseBlock, DenseConv
+from .Layers import DenseBlock, DenseConv
 
 class Transition(nn.Module):
     def __init__(self, n_channels):

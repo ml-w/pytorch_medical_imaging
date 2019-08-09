@@ -91,12 +91,12 @@ class Projection_v2(Dataset):
                     return arr.astype(self.dtype), factor
             except AttributeError:
                 tqdm.write("File %s has some missing attributes! Returning random image instead!"%self.dataSourcePath[item])
-                return from_numpy(self.datacache[self.datacache.keys()[0]]['arr'].astype('float')), \
-                       from_numpy(self.datacache[self.datacache.keys()[0]]['factor'])
+                return from_numpy(self.datacache[list(self.datacache.keys())[0]]['arr'].astype('float')), \
+                       from_numpy(self.datacache[list(self.datacache.keys())[0]]['factor'])
             except:
                 tqdm.write("Unknow error at file %s"%self.dataSourcePath[item])
-                return from_numpy(self.datacache[self.datacache.keys()[0]]['arr'].astype('float')), \
-                       from_numpy(self.datacache[self.datacache.keys()[0]]['factor'])
+                return from_numpy(self.datacache[list(self.datacache.keys())[0]]['arr'].astype('float')), \
+                       from_numpy(self.datacache[list(self.datacache.keys())[0]]['factor'])
 
     def __str__(self):
         from pandas import DataFrame as df
@@ -108,7 +108,7 @@ class Projection_v2(Dataset):
         # "File Paths\tSize\t\tSpacing\t\tOrigin\n"
         # printable = {'File Name': []}
         printable = {'File Name': [], 'Size': []}
-        for i in xrange(self.length):
+        for i in range(self.length):
             printable['File Name'].append(os.path.basename(self.dataSourcePath[i]))
             # for keys in self.metadata[i]:
             #     if not printable.has_key(keys):
@@ -141,7 +141,7 @@ class Projection_v2(Dataset):
 
         tensor = tensor.numpy()
 
-        for i in tqdm(range(tensor.shape[0])):
+        for i in tqdm(list(range(tensor.shape[0]))):
             k = pydicom.dcmread(self.dataSourcePath[i], force=True)
             tosave = (tensor[i] - k.RescaleIntercept) / k.RescaleSlope
             tosave = tosave.astype(np.uint16)

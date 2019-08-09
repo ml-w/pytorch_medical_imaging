@@ -50,7 +50,7 @@ class Subbands(Dataset):
             for fs in filenames:
                 if not os.path.isfile(self.rootdir + '/' + fs):
                     filenames.remove(fs)
-                    print "Cannot find " + fs + " in " + self.rootdir
+                    print("Cannot find " + fs + " in " + self.rootdir)
 
         if not self.filesuffix is None:
             filenames = fnmatch.filter(filenames, "*" + self.filesuffix + "*")
@@ -58,8 +58,8 @@ class Subbands(Dataset):
 
         self.length = len(filenames)
         if self.verbose:
-            print "Found %s subband files..."%self.length
-            print "Start Loading"
+            print("Found %s subband files..."%self.length)
+            print("Start Loading")
 
         self._itemindexes = [0] # [image index of start slice]
         for i, f in enumerate(tqdm(filenames, disable=not self.verbose)) \
@@ -75,12 +75,12 @@ class Subbands(Dataset):
         if self._byslices >= 0:
             try:
                 self._itemindexes = np.cumsum(self._itemindexes)
-                self.dataSourcePath = [p for k in xrange(len(self.dataSourcePath))
+                self.dataSourcePath = [p for k in range(len(self.dataSourcePath))
                                          for p in [self.dataSourcePath[k]]*self.data[k].size()[self._byslices]]
                 self.length = np.sum([m.size()[self._byslices] for m in self.data])
                 self.data = cat(self.data, dim=self._byslices).transpose(0, self._byslices)
             except IndexError:
-                print "Wrong Index is used!"
+                print("Wrong Index is used!")
                 self.length = len(self.dataSourcePath)
 
 
@@ -97,7 +97,7 @@ class Subbands(Dataset):
         # "File Paths\tSize\t\tSpacing\t\tOrigin\n"
         # printable = {'File Name': []}
         printable = {'File Name': [], 'Size': []}
-        for i in xrange(len(self.data)):
+        for i in range(len(self.data)):
             printable['File Name'].append(os.path.basename(self.dataSourcePath[i]))
             printable['Size'].append([j for j in self.__getitem__(i).size()])
 
@@ -115,7 +115,7 @@ class Subbands(Dataset):
         assert tensor.size()[0] == self.__len__(), "Length is incorrect!"
         tensor = tensor.numpy().transpose(0, 2, 3, 1)
 
-        for i in tqdm(range(len(self._itemindexes)-1)):
+        for i in tqdm(list(range(len(self._itemindexes)-1))):
             outfname = self.dataSourcePath[self._itemindexes[i]].replace(self.rootdir, out_rootdir)
             np.savez_compressed(outfname, subbands=tensor[self._itemindexes[i]:
                                                           self._itemindexes[i+1]])

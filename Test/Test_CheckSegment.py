@@ -10,7 +10,7 @@ def save_fig(im0, im1, name):
     b = im0[index]
     o = im1[index]
 
-    im = torch.stack([torch.zeros_like(b)  for i in xrange(3)], 1)
+    im = torch.stack([torch.zeros_like(b)  for i in range(3)], 1)
     im[:, 0] += b * 255
     im[:, 1] += o * 255
 
@@ -30,8 +30,8 @@ def main():
         try:
             save_fig(s1, s2, "%04d.jpg"%set1.get_unique_IDs()[i])
         except Exception as e:
-            print e.message
-            print set1.get_unique_IDs()[i], ' error!'
+            print(e.message)
+            print(set1.get_unique_IDs()[i], ' error!')
 
 
 if __name__ == '__main__':

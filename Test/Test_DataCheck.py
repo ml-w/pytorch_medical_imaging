@@ -36,5 +36,5 @@ if __name__ == '__main__':
 
 
     # print list(pd[pd['Fold']==1]['Index'])
-    print get_in_a_not_b(fold_1, list(pd[pd['Fold']== 1]['Index']))
-    print get_in_a_not_b(fold_2, list(pd[pd['Fold']== 2]['Index']))
+    print(get_in_a_not_b(fold_1, list(pd[pd['Fold']== 1]['Index'])))
+    print(get_in_a_not_b(fold_2, list(pd[pd['Fold']== 2]['Index'])))

@@ -1,4 +1,4 @@
-from _LocalNeighborhoodDifferencePattern import LNDP
+from ._LocalNeighborhoodDifferencePattern import LNDP
 import multiprocessing as mpi
 import numpy as np
 from functools import partial
@@ -12,6 +12,6 @@ def lndp(data, window=1):
         bn = np.invert(bn)
     else:
         d = [LNDP(np.ascontiguousarray(data[i]), 8, window).astype('uint8')
-                for i in xrange(data.shape[0])]
+                for i in range(data.shape[0])]
         bn = np.stack(d, axis=0)
     return bn.astype('float')

@@ -1,9 +1,9 @@
 import torch
 from torch import cat, stack, tensor, zeros
 from torch.utils.data import Dataset
-from ImageData import ImageDataSet
-from ImageDataMultiChannel import ImageDataSetMultiChannel
-from ImageDataAugment import ImageDataSetAugment
+from .ImageData import ImageDataSet
+from .ImageDataMultiChannel import ImageDataSetMultiChannel
+from .ImageDataAugment import ImageDataSetAugment
 from tqdm import *
 import numpy as np
 import gc
@@ -92,7 +92,7 @@ class ImagePatchesLoader(Dataset):
 
         # Sample accordingly
         xy = np.meshgrid(np.arange(prob.shape[0]), np.arange(prob.shape[1]))
-        xy = zip(xy[0].flatten(), xy[1].flatten())
+        xy = list(zip(xy[0].flatten(), xy[1].flatten()))
 
         if np.isclose(prob.sum(), 0.):
             prob = np.ones_like(prob)
@@ -101,7 +101,7 @@ class ImagePatchesLoader(Dataset):
         try:
             choices = np.random.choice(len(xy), p=prob.flatten(), size=pps)
         except Exception as e:
-            print roi, len(xy), prob.flatten(), e.message
+            print(roi, len(xy), prob.flatten(), e.message)
         out = [xy[c] for c in choices]
         del xy, choices, prob
         # gc.collect()
@@ -122,7 +122,7 @@ class ImagePatchesLoader(Dataset):
 
         try:
             np.copyto(self._patch_indexes, patch_indexes)
-        except Exception, e:
+        except Exception as e:
             self._patch_indexes = patch_indexes
         pass
 
@@ -138,7 +138,7 @@ class ImagePatchesLoader(Dataset):
         func = self._random_from_distrib
 
         indexes = []
-        for j in xrange(self._slice_dim):
+        for j in range(self._slice_dim):
             if j == self._axis[0] % self._slice_dim:    # in case user use negative index
                 indexes.append(slice(self._patch_size[0] // 2,
                                      corner_range[0] + self._patch_size[0] - self._patch_size[0] // 2))
@@ -225,14 +225,14 @@ class ImagePatchesLoader(Dataset):
 
         func = lambda x, y: (x * Xstr, y * Ystr)
 
-        for i in xrange(nX + 1):
-            for j in xrange(nY + 1):
+        for i in range(nX + 1):
+            for j in range(nY + 1):
                 self._patch_indexes.append(func(i, j))
 
                 if resY != 0 and j == nY and self._include_last_patch:
                     self._patch_indexes.append([i * Xstr, j * Ystr + resY])
             if resX != 0 and i == nX and self._include_last_patch:
-                for k in xrange(nY + 1):
+                for k in range(nY + 1):
                     self._patch_indexes.append([i * Xstr + resX, k * Ystr])
             if resX != 0 and resY != 0 and i == nX and j == nY and self._include_last_patch:
                 self._patch_indexes.append([i * Xstr + resX, j * Ystr + resY])
@@ -240,7 +240,7 @@ class ImagePatchesLoader(Dataset):
 
     def size(self, val=None):
         newsize = list(self._unit_dimension)
-        for i in xrange(len(newsize)):
+        for i in range(len(newsize)):
             if i == self._axis[0] % self._slice_dim:
                 newsize[i] = self._patch_size[0]
             elif i == self._axis[1] % self._slice_dim:
@@ -262,10 +262,10 @@ class ImagePatchesLoader(Dataset):
             length = len(inpatches)
             channels = inpatches.size()[1]
         if length != self.__len__():
-            print "Warning! Size mismatch: " + str(len(inpatches)) + ',' + str(self.__len__())
+            print("Warning! Size mismatch: " + str(len(inpatches)) + ',' + str(self.__len__()))
 
         temp_slice = torch.cat([torch.zeros(self._base_dataset.data.shape, dtype=torch.float)
-                                  for i in xrange(channels)], dim=1)
+                                  for i in range(channels)], dim=1)
         temp_slice[:,0] = 1E-6 # This forces all the un processed slices to have null label.
         count = torch.zeros(temp_slice.size(), dtype=torch.int16)
 
@@ -273,7 +273,7 @@ class ImagePatchesLoader(Dataset):
             for j, p in enumerate(self._patch_indexes):
                 i = j // self._patch_perslice
                 indexes = []
-                for k in xrange(count.ndimension()):
+                for k in range(count.ndimension()):
                     if k == self._axis[0] % count.ndimension():
                         indexes.append(slice(p[0], p[0] + self._patch_size[0]))
                     elif k == self._axis[1] % count.ndimension():
@@ -291,10 +291,10 @@ class ImagePatchesLoader(Dataset):
                     temp_slice[indexes] += inpatches[j]
                 count[indexes] += 1
         else:
-            for i in xrange(len(self._base_dataset)):
+            for i in range(len(self._base_dataset)):
                 for j, p in enumerate(self._patch_indexes):
                     indexes = []
-                    for k in xrange(count.ndimension()):
+                    for k in range(count.ndimension()):
                         if k == self._axis[0] % count.ndimension():
                             indexes.append(slice(p[0], p[0] + self._patch_size[0]))
                         elif k == self._axis[1] % count.ndimension():
@@ -360,7 +360,7 @@ class ImagePatchesLoader(Dataset):
             start = item.start if not item.start is None else 0
             stop = item.stop if not item.stop is None else self.__len__()
             step = item.step if not item.step is None else 1
-            return stack([self.__getitem__(i) for i in xrange(start, stop, step)], 0)
+            return stack([self.__getitem__(i) for i in range(start, stop, step)], 0)
         else:
             # map item to shuffled list
             if self._pre_shuffle:
@@ -381,7 +381,7 @@ class ImagePatchesLoader(Dataset):
             p = self._patch_indexes[patch_index]
 
             indexes = []
-            for i in xrange(self._slice_dim):
+            for i in range(self._slice_dim):
                 if i == self._axis[0] % self._slice_dim:    # in case user use negative index
                     indexes.append(slice(p[0], p[0] + self._patch_size[0]))
                 elif i == self._axis[1] % self._slice_dim:

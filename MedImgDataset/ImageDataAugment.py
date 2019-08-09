@@ -1,4 +1,4 @@
-from ImageData import ImageDataSet
+from .ImageData import ImageDataSet
 from torchvision import transforms as tr
 from imgaug import augmenters as iaa
 
@@ -14,11 +14,11 @@ import gc
 class ImageDataSetAugment(ImageDataSet):
     def __init__(self, *args, **kwargs):
         # TODO: Allow reading augmentation parameters
-        self._augment_factor = kwargs.pop('aug_factor') if kwargs.has_key('aug_factor') else 5
-        self._is_segment = kwargs.pop('is_seg') if kwargs.has_key('is_seg') else False
-        self._references_dataset = kwargs.pop('reference_dataset') if kwargs.has_key('reference_dataset') \
+        self._augment_factor = kwargs.pop('aug_factor') if 'aug_factor' in kwargs else 5
+        self._is_segment = kwargs.pop('is_seg') if 'is_seg' in kwargs else False
+        self._references_dataset = kwargs.pop('reference_dataset') if 'reference_dataset' in kwargs \
             else None
-        self._update_each_epoch = kwargs.pop('renew') if kwargs.has_key('renew') else False
+        self._update_each_epoch = kwargs.pop('renew') if 'renew' in kwargs else False
 
         super(ImageDataSetAugment, self).__init__(*args, **kwargs)
         assert self._byslices >= 0, "Currently only support slices augmentation."
@@ -27,7 +27,7 @@ class ImageDataSetAugment(ImageDataSet):
         self._base_length = self.length
         self.length = self.length * (self._augment_factor + 1)
         self._nb_of_classes = len(np.unique(self.data.numpy()))
-        for i in xrange(self._augment_factor):
+        for i in range(self._augment_factor):
             self._itemindexes = np.concatenate([self._itemindexes, self._itemindexes[1:] + self._itemindexes[-1]])
         self._is_referenced = False
         self._is_referencing = False
@@ -84,7 +84,7 @@ class ImageDataSetAugment(ImageDataSet):
             dataset._is_referenced=True
             dataset._referencees.append(self)
         except:
-            print "Cannot reference target!"
+            print("Cannot reference target!")
             self._is_referencing=False
 
 

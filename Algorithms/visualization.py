@@ -89,17 +89,17 @@ def Visualize2D(*args, **kwargs):
 
     :return: None
     """
-    axis = kwargs['axis'] if kwargs.has_key('axis') else 0
-    env = kwargs['env'] if kwargs.has_key('env') else "Name"
-    prefix = kwargs['env'] if kwargs.has_key('Image') else 'Image'
-    displayrange = kwargs['displayrange'] if kwargs.has_key('displayrange') else [0, 0]
-    indexrange = kwargs['indexrange'] if kwargs.has_key('indexrange') else [0, 15]
-    nrow = kwargs['nrow'] if kwargs.has_key('nrow') else 5
+    axis = kwargs['axis'] if 'axis' in kwargs else 0
+    env = kwargs['env'] if 'env' in kwargs else "Name"
+    prefix = kwargs['env'] if 'Image' in kwargs else 'Image'
+    displayrange = kwargs['displayrange'] if 'displayrange' in kwargs else [0, 0]
+    indexrange = kwargs['indexrange'] if 'indexrange' in kwargs else [0, 15]
+    nrow = kwargs['nrow'] if 'nrow' in kwargs else 5
 
 
     for i, tensor in enumerate(args):
         # assert issubclass(type(tensor), _TensorBase)
-        t = tensor.permute(*np.roll(range(3), -axis).tolist())
+        t = tensor.permute(*np.roll(list(range(3)), -axis).tolist())
         temp = t.numpy()
         if displayrange == [0, 0]:
             drange = [0, 0]
@@ -131,14 +131,14 @@ def VisualizeMapWithLandmarks(images, landmarks, env="TOCI", N=20, win="Image"):
         assert images.shape[0] == landmarks.shape[0]
         landmarks = np.array(landmarks, dtype=np.uint32)
         images = np.tile(images[:,None,:,:], [1, 3, 1, 1])
-        for i in xrange(0, np.min([N, images.shape[0]])):
-            for j in xrange(landmarks.shape[1]):
+        for i in range(0, np.min([N, images.shape[0]])):
+            for j in range(landmarks.shape[1]):
                 # rr, cc = line(landmarks[i,j,0], landmarks[i,j,1], landmarks[i,j-1,0], landmarks[i,j-1,1])
                 rr, cc = circle(landmarks[i,j,0], landmarks[i,j,1], 5, shape=images.shape[2:])
                 images[i, :, rr, cc] = color[j]
         vis.images(images[:np.min([N, images.shape[0]])], nrow=5, env=env, win=win)
     else:
-        for i in xrange(landmarks.shape[0]):
+        for i in range(landmarks.shape[0]):
             rr, cc = circle(landmarks[i,0], landmarks[i,1], 3, shape=images.shape)
             images[rr, cc] = 255
         vis.image(images, env=env, win=win)

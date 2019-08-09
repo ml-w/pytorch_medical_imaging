@@ -74,7 +74,7 @@ class CircularDoubleConv(nn.Module):
         indexes_2 = []
         indexes_3 = []
         indexes_4 = []
-        for i in xrange(indim):
+        for i in range(indim):
             if i == dim[0] % indim:
                 indexes_1.append(slice(0, pad))
                 indexes_2.append(slice(None))

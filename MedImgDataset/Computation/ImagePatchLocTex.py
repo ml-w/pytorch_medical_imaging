@@ -67,7 +67,7 @@ class ImagePatchLocTex(ImagePatchesLoader):
             stop = item.stop if not item.stop is None else self.__len__()
             step = item.step if not item.step is None else 1
 
-            L = [self.__getitem__(i) for i in xrange(start, stop, step)]
+            L = [self.__getitem__(i) for i in range(start, stop, step)]
             out_0 = torch.stack([l[0] for l in L], 0)
             feats = torch.stack([l[1] for l in L], 0)
             return out_0.squeeze(), feats
@@ -87,7 +87,7 @@ class ImagePatchLocTex(ImagePatchesLoader):
             stop = item.stop if not item.stop is None else self.__len__()
             step = item.step if not item.step is None else 1
 
-            L = [self.__getitem__(i) for i in xrange(start, stop, step)]
+            L = [self.__getitem__(i) for i in range(start, stop, step)]
             out_0 = torch.stack([l[0] for l in L], 0)
             feats = torch.stack([l[1] for l in L], 0)
             return out_0.squeeze(), feats

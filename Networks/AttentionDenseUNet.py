@@ -1,4 +1,4 @@
-from Layers import AttentionBlock, AttentionGating
+from .Layers import AttentionBlock, AttentionGating
 from .DenseUNet import DenseBlock, DenseConv, Transition, Down, Up
 
 import torch.nn as nn

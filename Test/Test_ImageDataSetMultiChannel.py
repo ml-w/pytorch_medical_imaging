@@ -17,7 +17,7 @@ def main():
     test = ImagePatchesLoader(test, 128, 32)
 
     # print test[0][0].shape
-    print test[0].shape
+    print(test[0].shape)
 
 
 if __name__ == '__main__':

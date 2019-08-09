@@ -1,4 +1,4 @@
-from Layers import Conv3d
+from .Layers import Conv3d
 import torch
 import torch.nn as nn
 import torch.nn.functional as F

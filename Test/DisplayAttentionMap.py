@@ -55,7 +55,7 @@ def main():
             o1 = net.inter_res['after'][j].detach().cpu()
 
             nrow = int(np.sqrt(o0.shape[1]))
-            for i in xrange(o0.shape[0]):
+            for i in range(o0.shape[0]):
 
                 im_before = make_grid(o0[i].unsqueeze(1), nrow=nrow, normalize=True)
                 im_after = make_grid(o1[i].unsqueeze(1), nrow=nrow, normalize=True)

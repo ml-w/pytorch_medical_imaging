@@ -44,10 +44,10 @@ def main(a):
     assert os.path.isdir(a.input), "Input data directory not exist!"
     if a.train is None:
         mode = 1 # Eval mode
-    if not ml.datamap.has_key(a.datatype):
-        LogPrint("Specified datatype doesn't exist! Retreating to default datatype: %s"%ml.datamap.keys()[0],
+    if a.datatype not in ml.datamap:
+        LogPrint("Specified datatype doesn't exist! Retreating to default datatype: %s"%list(ml.datamap.keys())[0],
                  logging.WARNING)
-        a.datatype = ml.datamap.keys()[0]
+        a.datatype = list(ml.datamap.keys())[0]
 
     ##############################
     # Training Mode
@@ -58,7 +58,7 @@ def main(a):
         #check max class in gt
         LogPrint("Detecting number of classes...")
         valcountpair = gtDataset.get_unique_values_n_counts()
-        classes = valcountpair.keys()
+        classes = list(valcountpair.keys())
         numOfClasses = len(classes)
         LogPrint("Find %i classes: %s"%(numOfClasses, classes))
 
@@ -132,8 +132,8 @@ def main(a):
             import ast
             trainparams = ast.literal_eval(a.trainparams)
 
-        lr = trainparams['lr'] if trainparams.has_key('lr') else 1e-5
-        mm = trainparams['momentum'] if trainparams.has_key('momentum') else 0.01
+        lr = trainparams['lr'] if 'lr' in trainparams else 1e-5
+        mm = trainparams['momentum'] if 'momentum' in trainparams else 0.01
 
         criterion = nn.CrossEntropyLoss(weight=weights)
         optimizer = optim.SGD([{'params': net.parameters(),
@@ -196,15 +196,15 @@ def main(a):
                         del poolim, poolgt, poolseg, val, ar
                         gc.collect()
                     except Exception as e:
-                        traceback.print_tb(sys.exc_traceback)
+                        traceback.print_tb(sys.exc_info()[2])
                         LogPrint(str(e), logging.WARNING)
                         try:
-                            tqdm.write(str(cat([g[z].unsqueeze(1).data for z in xrange(15)], 0)))
+                            tqdm.write(str(cat([g[z].unsqueeze(1).data for z in range(15)], 0)))
                         except:
                             LogPrint("Something went wrong while displaying images.", logging.WARNING)
 
                 if loss.data.cpu() <= temploss:
-                    backuppath = u"./Backup/cp_%s_%s_temp.pt"%(a.datatype, a.network) \
+                    backuppath = "./Backup/cp_%s_%s_temp.pt"%(a.datatype, a.network) \
                         if a.outcheckpoint is None else a.outcheckpoint.replace('.pt', '_temp.pt')
                     torch.save(net.module.state_dict(), backuppath)
                     temploss = loss.data.cpu()
@@ -222,7 +222,7 @@ def main(a):
 
             losses.append(E)
             if np.array(E).mean() <= lastloss:
-                backuppath = u"./Backup/cp_%s_%s.pt"%(a.datatype, a.network) \
+                backuppath = "./Backup/cp_%s_%s.pt"%(a.datatype, a.network) \
                     if a.outcheckpoint is None else a.outcheckpoint
                 torch.save(net.module.state_dict(), backuppath)
                 lastloss = np.array(E).mean()
@@ -393,10 +393,10 @@ if __name__ == '__main__':
                              "training mode and 'file1' for evaluation mode, remember to use quotations if"
                              " there are spaces in the string")
     parser.add_argument('--network', dest='network', action='store', type=str, default='',
-                        choices=available_networks.keys(),
+                        choices=list(available_networks.keys()),
                         help="Select DNN network." )
     parser.add_argument('--datatype', dest='datatype', action='store', type=str, default='',
-                        choices=ml.datamap.keys(),
+                        choices=list(ml.datamap.keys()),
                         help="Select input datatype.")
     parser.add_argument('--initial-weight', dest='initialweight', action='store', type=float, default=None,
                         help="(Optional) Choose initial training weight factor of the loss function. The weight of "

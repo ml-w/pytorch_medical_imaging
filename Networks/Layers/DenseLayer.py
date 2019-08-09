@@ -35,7 +35,7 @@ class DenseBlock(nn.Module):
         inconv = DenseLayer(inchan, k, 4)
 
         convs = [inconv]
-        for i in xrange(num_layers - 1):
+        for i in range(num_layers - 1):
             convs.append(
                 DenseLayer(inchan + (i+1)*k, k, 4)
             )
