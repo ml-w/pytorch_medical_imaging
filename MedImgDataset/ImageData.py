@@ -274,7 +274,7 @@ class ImageDataSet(Dataset):
 
     def Write(self, tensor_data, outputdirectory, prefix=''):
         if self._byslices > -1:
-            assert self._itemindexes[-1] == tensor_data.size()[0], "Dimension mismatch!"
+            assert self._itemindexes[-1] == tensor_data.size()[0], "Dimension mismatch! (%s vs %s)"%(self._itemindexes[-1], tensor_data.size()[0])
             td=tensor_data.numpy()
             for i in range(len(self.dataSourcePath)):
                 start=self._itemindexes[i]

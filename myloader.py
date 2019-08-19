@@ -74,6 +74,47 @@ def LoadSegmentationImageDataset(a, debug=False):
             return image(a.input, a.lsuffix, input_filelist, np.float32), image(a.train, None, gt_filelist, np.uint8)
 
 
+def LoadSegmentationImageDataset_Aug(a, debug=False):
+    image = lambda input, fsuffix, filelist, dtype: ImageDataSet(input,
+                                                                 dtype=dtype,
+                                                                 verbose=True,
+                                                                 debugmode=debug,
+                                                                 idlist=filelist,
+                                                                 filesuffix=fsuffix,
+                                                                 loadBySlices=0
+                                                                 )
+
+    imset = lambda input, fsuffix, filelist, dtype: ImageDataSetAugment(input,
+                                                                        dtype=dtype,
+                                                                        verbose=True,
+                                                                        debugmode=debug,
+                                                                        filesuffix=fsuffix,
+                                                                        loadBySlices=0,
+                                                                        idlist=filelist,
+                                                                        aug_factor=2)
+    imseg = lambda input, fsuffix, filelist, dtype: ImageDataSetAugment(input,
+                                                                        dtype=dtype,
+                                                                        verbose=True,
+                                                                        debugmode=debug,
+                                                                        # filesuffix=fsuffix,
+                                                                        loadBySlices=0,
+                                                                        idlist=filelist,
+                                                                        is_seg=True,
+                                                                        aug_factor=2)
+
+    if a.train is None:
+        assert os.path.isfile(a.loadbyfilelist), "Cannot open filelist!"
+        # Eval mode
+        return image(a.input, a.lsuffix, a.loadbyfilelist, np.float32)
+    else:
+        # Training Mode
+        invars = imset(a.input, a.lsuffix, a.loadbyfilelist, np.float32)
+        seg = imseg(a.train, None, a.loadbyfilelist, np.uint8)
+        seg.set_reference_augment_dataset(invars)
+        return invars, seg
+
+
+
 def LoadSegmentationImageDatasetWithPos(a, debug=False):
     imagewifpos = lambda input, fsuffix, filelist, dtype: ImageDataSet(input,
                                                           dtype=dtype,
@@ -544,6 +585,7 @@ def LoadSegmentationImageDatasetByPatches(a, debug=False):
 datamap = {'subband':LoadSubbandDataset,
            'image2D':LoadImageDataset,
            'seg2D': LoadSegmentationImageDataset,
+           'seg2D_aug': LoadSegmentationImageDataset_Aug,
            'seg2Drandompatch_aug': LoadSegmentationPatchRandom_Aug,
            'seg2DwifPos': LoadSegmentationImageDatasetWithPos,
            'seg2DMMwifPos_aug': LoadSegmentationImageDatasetMMPos_Aug,
@@ -555,6 +597,7 @@ datamap = {'subband':LoadSubbandDataset,
            'subband_debug': partial(LoadSubbandDataset, debug=True),
            'image2D_debug': partial(LoadImageDataset, debug=True),
            'seg2D_debug': partial(LoadSegmentationImageDataset, debug=True),
+           'seg2D_aug_debug': partial(LoadSegmentationImageDataset_Aug, debug=True),
            'seg2Drandompatch_aug_debug': partial(LoadSegmentationPatchRandom_Aug, debug=True),
            'seg2DwifPos_debug': partial(LoadSegmentationImageDatasetWithPos, debug=True),
            'seg2Dloctex_debug': partial(LoadSegmentationPatchLocTex, debug=True),

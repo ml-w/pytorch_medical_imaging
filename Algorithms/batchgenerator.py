@@ -192,15 +192,15 @@ def check_batches_files(dir, globber=None):
 if __name__ == '__main__':
     import os, fnmatch
     # GenerateKFoldBatch("./BrainVessel/01.BatchSource", "./BrainVessel/10.K_Fold_Batches", 10)
-    # GenerateTestBatch(os.listdir('../NPC_Segmentation/21.NPC_Perfect_SegT2/00.First'),
-    #                   os.listdir('../NPC_Segmentation/06.NPC_Perfect'),
-    #                   50,
-    #                   '../NPC_Segmentation/99.Testing',
-    #                   prefix="B05/B05",
-    #                   k_fold=4
-    #                   )
+    GenerateTestBatch(os.listdir('../NPC_Segmentation/31.NPC_seg_T1C/00.First'),
+                      os.listdir('../NPC_Segmentation/06.NPC_Perfect'),
+                      51,
+                      '../NPC_Segmentation/99.Testing',
+                      prefix="B06/B06",
+                      k_fold=4
+                      )
 
     # print GenerateFileList(os.listdir('../NPC_Segmentation/06.NPC_Perfect')).to_csv('~/FTP/temp/perfect_file_list.csv')
 
-    check_batches_files('../NPC_Segmentation/99.Testing/B05/')
+    check_batches_files('../NPC_Segmentation/99.Testing/B06/')
 

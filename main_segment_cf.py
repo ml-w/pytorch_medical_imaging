@@ -24,6 +24,7 @@ import configparser
 from tensorboardX import SummaryWriter
 # import your own newtork
 
+
 def LogPrint(msg, level=logging.INFO):
     logging.getLogger(__name__).log(level, msg)
     tqdm.write(msg)
@@ -44,6 +45,8 @@ def main(a, config):
     #-----------------
     bool_plot = config['General'].getboolean('plot_tb', False)
     bool_usecuda = config['General'].getboolean('use_cuda')
+    run_mode = config['General'].get('run_mode', 'training')
+    mode = run_mode == 'test' or run_mode == 'testing'
 
     param_lr = float(config['RunParams'].get('leanring_rate', 1E-4))
     param_momentum = float(config['RunParams'].get('momentum', 0.9))
@@ -64,6 +67,7 @@ def main(a, config):
     dir_lsuffix = config['Data'].get('re_suffix', None)
     dir_idlist = config['Data'].get('id_list', None)
 
+    # This is for backward compatibility with myloader.py
     class backward_compatibility(object):
         def __init__(self, train, input, lsuffix, loadbyfilelist):
             super(backward_compatibility, self).__init__()
@@ -80,7 +84,6 @@ def main(a, config):
     ##############################
     # Error Check
     #-----------------
-    mode = 0 # Training Mode
     assert os.path.isdir(dir_input), "Input data directory not exist!"
     if dir_target is None:
         mode = 1 # Eval mode
@@ -117,7 +120,7 @@ def main(a, config):
             factor =  sigmoid_plus(param_initWeight + 1) * 100
         else:
             factor = 1
-        weights = torch.tensor([r[0] * factor] + r[1:].tolist())
+        weights = torch.as_tensor([r[0] * factor] + r[1:].tolist())
         LogPrint("Initial weight factor: " + str(weights))
 
         # if the input datatyp  e is not standard, retreat to 1
@@ -144,9 +147,11 @@ def main(a, config):
                     LogPrint("Cannot read from TENORBOARD_LOGDIR, retreating to default path...",
                              logging.WARNING)
                     tensorboard_rootdir = "/media/storage/PytorchRuns"
+
                 writer = SummaryWriter(tensorboard_rootdir + "/%s-%s-%s"%(net_nettype,
                                                                           dir_lsuffix,
-                                                                          datetime.datetime.now().strftime("%Y%m%d-%H%M%S")))
+                                                                          datetime.datetime.now().strftime(
+                                                                              "%Y%m%d-%H%M%S")))
             except OSError:
                 writer = None
                 bool_plot = False
@@ -222,11 +227,12 @@ def main(a, config):
                         writer.add_scalar('Loss', loss.data, writerindex)
                         val, ar = torch.max(out, 1)
                         poolim = make_grid(out[:Zrange, numOfClasses-1].unsqueeze(1).data, nrow=4, padding=1, normalize=True)
-                        poolgt = make_grid(g[:Zrange].data, nrow=4, padding=1, normalize=True)
+                        poolgt = make_grid(g[:Zrange].float().data, nrow=4, padding=1, normalize=True)
                         poolseg = make_grid(ar[:Zrange].unsqueeze(1).float().data, nrow=4, padding=1, range=[0, 1])
                         writer.add_image('Image/Image', poolim, writerindex)
-                        writer.add_image('Image/Groundtruth', poolgt, writerindex)
                         writer.add_image('Image/Segmentation', poolseg, writerindex)
+                        writer.add_image('Image/Groundtruth', poolgt, writerindex)
+
                         writerindex += 10
                         del poolim, poolgt, poolseg, val, ar
                         gc.collect()
@@ -273,7 +279,7 @@ def main(a, config):
                     LogPrint('Current weight: ' + str(criterion.weight), logging.INFO)
                     offsetfactor = i + param_initWeight if not param_initWeight is None else i
                     factor =  sigmoid_plus(offsetfactor + 1) * 100
-                    criterion.weight.copy_(torch.tensor([r[0] * factor] + r[1:].tolist()))
+                    criterion.weight.copy_(torch.as_tensor([r[0] * factor] + r[1:].tolist()))
                     LogPrint('New weight: ' + str(criterion.weight), logging.INFO)
             else:
                 pg = {'lr':lr}
@@ -289,7 +295,7 @@ def main(a, config):
             if not os.path.isfile(dir_idlist):
                 LogPrint("Cannot open input file list!", logging.WARNING)
 
-        inputDataset= ml.datamap[net_datatype](a)
+        inputDataset= ml.datamap[net_datatype](bc)
         loader = DataLoader(inputDataset, batch_size=param_batchsize, shuffle=False, num_workers=4)
         assert os.path.isfile(checkpoint_load), "Cannot open saved states"
         if not os.path.isdir(dir_output):
@@ -354,7 +360,12 @@ def main(a, config):
         if isinstance(inputDataset, ImagePatchesLoader) or isinstance(inputDataset, ImagePatchesLoader3D):
             out_tensor = inputDataset.piece_patches(out_tensor)
         else:
+            # check last tensor has same dimension
+            if not len(set([o.dim() for o in out_tensor])) == 1:
+                    out_tensor[-1] = out_tensor[-1].unsqueeze(0)
+
             out_tensor = torch.cat(out_tensor, dim=0)
+
 
         if isinstance(out_tensor, list):
             LogPrint("Writing with list mode", logging.INFO)
@@ -396,9 +407,9 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser(description="Training reconstruction from less projections.")
     parser.add_argument("config", metavar='config', action='store',
                         help="Config .ini file.", type=str)
-    parser.add_argument("-t", "--train", metavar='train', action='store', type=str, default=None,
-                        help="Required directory with target data which serve as ground truth for training." 
-                             "Set this to enable training mode.")
+    # parser.add_argument("-t", "--train", metavar='train', action='store', type=str, default=None,
+    #                     help="Required directory with target data which serve as ground truth for training."
+    #                          "Set this to enable training mode.")
 
     a = parser.parse_args()
 
@@ -415,9 +426,9 @@ if __name__ == '__main__':
         if not os.path.isdir("./Backup/Log"):
             os.mkdir("./Backup/Log")
         if config['General'].get('run_mode') == 'train':
-            log_dir = "./Backup/Log/run_%s.log"%(datetime.datetime.now().strftime("%Y%m%d-%H%M"))
+            log_dir = "./Backup/Log/run_%s.log"%(datetime.datetime.now().strftime("%Y%m%d-%H%M%S"))
         else:
-            log_dir = "./Backup/Log/eval_%s.log"%(datetime.datetime.now().strftime("%Y%m%d-%H%M"))
+            log_dir = "./Backup/Log/eval_%s.log"%(datetime.datetime.now().strftime("%Y%m%d-%H%M%S"))
     else:
         log_dir = config['General'].get('log_dir')
 

@@ -1,8 +1,7 @@
 import torch
-import torch.nn as nn
 
 import numpy as np
-from .. import ImageDataSet, ImagePatchesLoader
+from .. import ImagePatchesLoader
 from .LocalBinaryPattern import lbp
 
 class ImagePatchLocTex(ImagePatchesLoader):
