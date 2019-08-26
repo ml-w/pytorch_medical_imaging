@@ -375,7 +375,7 @@ class ImagePatchesLoader(Dataset):
                 if self._random_counter >= self.__len__() and self._renew_index:
                     self.batch_done_callback()
             else:
-                slice_index = item / len(self._patch_indexes)
+                slice_index = item // len(self._patch_indexes)
                 patch_index = item % len(self._patch_indexes)
 
             p = self._patch_indexes[patch_index]
