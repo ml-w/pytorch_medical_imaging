@@ -216,8 +216,8 @@ class ImagePatchesLoader(Dataset):
         Xstr, Ystr = self._patch_stride
 
         # Max partitions
-        nX = (Xlen - Xpat) / Xstr
-        nY = (Ylen - Ypat) / Ystr
+        nX = (Xlen - Xpat) // Xstr
+        nY = (Ylen - Ypat) // Ystr
 
         # Division residual
         resX = (Xlen - Xpat) % Xstr
