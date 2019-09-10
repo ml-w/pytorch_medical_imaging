@@ -24,7 +24,6 @@ import configparser
 from tensorboardX import SummaryWriter
 # import your own newtork
 
-
 def LogPrint(msg, level=logging.INFO):
     logging.getLogger(__name__).log(level, msg)
     tqdm.write(msg)
@@ -38,8 +37,58 @@ def excepthook(*args):
     logging.getLogger().error('Uncaught exception:', exc_info=args)
     traceback.print_tb(args[0])
 
+def validation(val_set, gt_set, batch_size, loss_func, net):
+    with torch.no_grad():
+        on_cuda = next(net.parameters()).is_cuda
+        dataset = TensorDataset(val_set, gt_set)
+        dl = DataLoader(dataset, batch_size=batch_size, shuffle=False, num_workers=0, drop_last=False, pin_memory=False)
+
+        validation_loss = []
+        for s, g in tqdm(dl, desc="Validation", position=2):
+            if on_cuda:
+                    s = [ss.cuda() for ss in s] if isinstance(s, list) else s.cuda()
+                    g = [gg.cuda() for gg in g] if isinstance(g, list) else g.cuda()
+
+            if isinstance(s, list):
+                res = net(*s)
+            else:
+                res = net(s)
+            res = F.log_softmax(res, dim=1)
+            loss = loss_func(res, g.squeeze().long())
+            validation_loss.append(loss.item())
+    return np.mean(np.array(validation_loss).flatten())
+
+
+def prepare_tensorboard_writer(bool_plot, dir_lsuffix, net_nettype):
+    if bool_plot:
+        tensorboard_rootdir = os.environ['TENSORBOARD_LOGDIR']
+        try:
+            if not os.path.isdir(tensorboard_rootdir):
+                LogPrint("Cannot read from TENORBOARD_LOGDIR, retreating to default path...",
+                         logging.WARNING)
+                tensorboard_rootdir = "/media/storage/PytorchRuns"
+
+            writer = SummaryWriter(tensorboard_rootdir + "/%s-%s-%s" % (net_nettype,
+                                                                        dir_lsuffix,
+                                                                        datetime.datetime.now().strftime(
+                                                                            "%Y%m%d-%H%M%S")))
+        except OSError:
+            writer = None
+            bool_plot = False
+    else:
+        writer = None
+    return bool_plot, writer
+
+class backward_compatibility(object):
+        def __init__(self, train, input, lsuffix, loadbyfilelist):
+            super(backward_compatibility, self).__init__()
+            self.train = train
+            self.input = input
+            self.lsuffix = lsuffix
+            self.loadbyfilelist = loadbyfilelist
+
 def main(a, config):
-    LogPrint("Recieve arguments: %s"%config)
+    LogPrint("Recieve arguments: %s"%dict(({section: dict(config[section]) for section in config.sections()})))
     ##############################
     # Parse config
     #-----------------
@@ -66,20 +115,26 @@ def main(a, config):
     dir_output = config['Data'].get('output_dir')
     dir_lsuffix = config['Data'].get('re_suffix', None)
     dir_idlist = config['Data'].get('id_list', None)
+    dir_validation_input = config['Data'].get('validation_input_dir', dir_input)
+    dir_validation_target = config['Data'].get('validation_gt_dir', dir_target)
+    dir_validation_lsuffix = config['Data'].get('validation_re_suffix', dir_lsuffix)
+    dir_validation_id = config['Data'].get('validation_id_list', None)
+
 
     # This is for backward compatibility with myloader.py
-    class backward_compatibility(object):
-        def __init__(self, train, input, lsuffix, loadbyfilelist):
-            super(backward_compatibility, self).__init__()
-            self.train = train
-            self.input = input
-            self.lsuffix = lsuffix
-            self.loadbyfilelist = loadbyfilelist
-
     bc = backward_compatibility(dir_target,
                                 dir_input,
                                 dir_lsuffix,
                                 dir_idlist)
+
+    validation_FLAG=False
+    if not dir_validation_id is None and bool_plot:
+        LogPrint("Recieved validation parameters.")
+        bc_val = backward_compatibility(dir_validation_target,
+                                        dir_validation_input,
+                                        dir_validation_lsuffix,
+                                        dir_validation_id)
+        validation_FLAG=True
 
     ##############################
     # Error Check
@@ -97,6 +152,7 @@ def main(a, config):
     if not mode:
         LogPrint("Start training...")
         inputDataset, gtDataset = ml.datamap[net_datatype](bc)
+        valDataset, valgtDataset = ml.datamap[net_datatype](bc_val) if validation_FLAG else (None, None)
 
         #check max class in gt
         LogPrint("Detecting number of classes...")
@@ -123,7 +179,7 @@ def main(a, config):
         weights = torch.as_tensor([r[0] * factor] + r[1:].tolist())
         LogPrint("Initial weight factor: " + str(weights))
 
-        # if the input datatyp  e is not standard, retreat to 1
+        # if the input datatype is not standard, retreat to 1
         try:
             if isinstance(inputDataset[0], tuple) or isinstance(inputDataset[0], list):
                 inchan = inputDataset[0][0].shape[0]
@@ -138,25 +194,11 @@ def main(a, config):
             LogPrint("Terminating", logging.ERROR)
             return
         trainingSet = TensorDataset(inputDataset, gtDataset)
-        loader      = DataLoader(trainingSet, batch_size=param_batchsize, shuffle=True, num_workers=4, drop_last=True, pin_memory=False)
-        # Read tensorboard dir from env
-        if bool_plot:
-            tensorboard_rootdir = os.environ['TENSORBOARD_LOGDIR']
-            try:
-                if not os.path.isdir(tensorboard_rootdir):
-                    LogPrint("Cannot read from TENORBOARD_LOGDIR, retreating to default path...",
-                             logging.WARNING)
-                    tensorboard_rootdir = "/media/storage/PytorchRuns"
+        loader      = DataLoader(trainingSet, batch_size=param_batchsize, shuffle=True, num_workers=0, drop_last=True, pin_memory=False)
 
-                writer = SummaryWriter(tensorboard_rootdir + "/%s-%s-%s"%(net_nettype,
-                                                                          dir_lsuffix,
-                                                                          datetime.datetime.now().strftime(
-                                                                              "%Y%m%d-%H%M%S")))
-            except OSError:
-                writer = None
-                bool_plot = False
-        else:
-            writer = None
+
+        # Read tensorboard dir from env, disable plot if it fails
+        bool_plot, writer = prepare_tensorboard_writer(bool_plot, dir_lsuffix, net_nettype)
 
         # Load Checkpoint or create new network
         #-----------------------------------------
@@ -221,20 +263,42 @@ def main(a, config):
                 optimizer.step()
                 E.append(loss.data.cpu())
                 LogPrint("\t[Step %04d] Loss: %.010f"%(index, loss.data))
+
+                # Plot to tensorboard
                 if bool_plot and index % 10 == 0:
                     try:
                         Zrange = out.shape[0] if out.shape[0] < 40 else 40
                         writer.add_scalar('Loss', loss.data, writerindex)
                         val, ar = torch.max(out, 1)
-                        poolim = make_grid(out[:Zrange, numOfClasses-1].unsqueeze(1).data, nrow=4, padding=1, normalize=True)
-                        poolgt = make_grid(g[:Zrange].float().data, nrow=4, padding=1, normalize=True)
-                        poolseg = make_grid(ar[:Zrange].unsqueeze(1).float().data, nrow=4, padding=1, range=[0, 1])
-                        writer.add_image('Image/Image', poolim, writerindex)
+                        ss = s[0] if isinstance(s, list) else s
+                        poolim = make_grid(ss[:Zrange].data.cpu(), nrow=4, padding=1, normalize=True)
+                        poolgt = make_grid(g[:Zrange].float().data.cpu(), nrow=4, padding=1, normalize=True)
+                        poolseg = make_grid(ar[:Zrange].unsqueeze(1).float().data.cpu(), nrow=4, padding=1, range=[0, 1])
+                        # make it red
+                        poolseg[1] = 0
+                        poolseg[2] = 0
+
+                        # make it green
+                        poolgt[0] = 0
+                        poolgt[2] = 0
+
+                        # alpha addition for overlaying
+                        alpha_value = 0.5
+                        alpha_map_seg = torch.zeros_like(poolseg)
+                        alpha_map_seg[poolseg != 0] = alpha_value
+                        alpha_map_gt = torch.zeros_like(poolgt)
+                        alpha_map_gt[poolgt != 0] = alpha_value
+                        poolseg = (poolim + poolseg * alpha_map_seg * (-alpha_map_seg + 1.)) / \
+                                  (1. + alpha_map_seg * (-alpha_map_seg + 1.))
+
+                        poolgt = (poolim + poolgt * alpha_map_gt * (-alpha_map_gt + 1.)) / \
+                                  (1. + alpha_map_gt * (-alpha_map_gt + 1.))
                         writer.add_image('Image/Segmentation', poolseg, writerindex)
                         writer.add_image('Image/Groundtruth', poolgt, writerindex)
+                        writer.add_image('Image/Image', poolim, writerindex)
 
-                        writerindex += 10
-                        del poolim, poolgt, poolseg, val, ar
+
+                        del poolim, poolgt, poolseg, val, ar, alpha_map_gt, alpha_map_seg
                         gc.collect()
                     except Exception as e:
                         traceback.print_tb(sys.exc_info()[2])
@@ -251,6 +315,18 @@ def main(a, config):
                     temploss = loss.data.cpu()
                 del s, g
                 gc.collect()
+
+                if index % 500 == 0 and validation_FLAG and bool_plot:
+                    try:
+                        # perform validation per 500 steps
+                        validation_loss = validation(valDataset, valgtDataset, param_batchsize, criterion, net)
+                        writer.add_scalar('Validation Loss', validation_loss, writerindex)
+                    except Exception as e:
+                        traceback.print_tb(sys.exc_info()[2])
+                        LogPrint(str(e), logging.WARNING)
+
+                # End of step
+                writerindex += 1
 
             # Call back after each epoch
             try:
@@ -295,8 +371,9 @@ def main(a, config):
             if not os.path.isfile(dir_idlist):
                 LogPrint("Cannot open input file list!", logging.WARNING)
 
+        bc.train = None # ensure going into inference mode
         inputDataset= ml.datamap[net_datatype](bc)
-        loader = DataLoader(inputDataset, batch_size=param_batchsize, shuffle=False, num_workers=4)
+        loader = DataLoader(inputDataset, batch_size=param_batchsize, shuffle=False, num_workers=1)
         assert os.path.isfile(checkpoint_load), "Cannot open saved states"
         if not os.path.isdir(dir_output):
             os.mkdir(dir_output)
@@ -384,6 +461,8 @@ def main(a, config):
         # inputDataset.Write(out_tensor[:,0].squeeze().float(), dir_output, prefix='D_')
 
     pass
+
+
 
 
 if __name__ == '__main__':

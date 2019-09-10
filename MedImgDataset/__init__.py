@@ -5,7 +5,6 @@ from .ImageFeaturePair import ImageFeaturePair
 from .ImageData import ImageDataSet
 from .ImageDataAugment import ImageDataSetAugment
 from .ImageDataMultiChannel import ImageDataSetMultiChannel
-from .Computation import *
 from .Subbands import Subbands
 from .Landmarks import Landmarks
 from .Projection import Projection
@@ -26,5 +25,5 @@ for row in f.readlines():
         add_private_dict_entry("CT-PD-dict_v8", Tag(*(r[0][1:-1]).split(',')), r[1].split('/')[0], r[2],r[2])
 
 __all__ = ['ImageDataSet2D', 'ImageFeaturePair', 'Landmarks', 'ImageDataSet',
-           'Projection', 'Subbands', 'ImagePatchesLoader', 'ImageDataSetWithPos',
+           'Projection', 'Subbands', 'ImagePatchesLoader',
            'ImageDataSetAugment', 'ImageDataSetMultiChannel', 'ImagePatchesLoader3D']

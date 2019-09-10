@@ -62,7 +62,7 @@ def dicom2nii(folder, out_dir=None, seq_filters=None):
     folder = os.path.abspath(folder)
     f = folder.replace('\\', '/')
     # matchobj = re.search('NPC[0-9]+', f)
-    matchobj = re.search('[^sS][0-9]{3,5}', f)
+    matchobj = re.search('[0-9]{3,5}', f)
     # prefix1 = f.split('/')[-2]
     prefix1 = f[matchobj.start():matchobj.end()]
 
@@ -190,5 +190,6 @@ if __name__ == '__main__':
     # folders = RecursiveListDir(5, '../NPC_Segmentation/00.RAW/MMX/840/')
     # batch_dicom2nii(folders, out_dir='../NPC_Segmentation/00.RAW/NIFTI/All')
     # dicom2nii('../NPC_Segmentation/00.RAW/MMX/769/S', '../NPC_Segmentation/00.RAW/NIFTI/MMX')
+    batch_dicom2nii(RecursiveListDir(2, '/home/lwong/Source/Repos/NPC_Segmentation/NPC_Segmentation/00.RAW/Benign NP/13-16'), '../NPC_Segmentation/41.Benign')
     # main(sys.argv)
-    make_mask_from_dir('../NPC_Segmentation/06.NPC_Perfect/temp_t2/', '../NPC_Segmentation/06.NPC_Perfect/temp_mask')
+    # make_mask_from_dir('../NPC_Segmentation/06.NPC_Perfect/temp_t2/', '../NPC_Segmentation/06.NPC_Perfect/temp_mask')

@@ -1,7 +1,5 @@
 from ._LocalNeighborhoodDifferencePattern import LNDP
-import multiprocessing as mpi
 import numpy as np
-from functools import partial
 
 def lndp(data, window=1):
     assert isinstance(data, np.ndarray), "Only support numpy arrays."

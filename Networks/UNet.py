@@ -88,6 +88,7 @@ class UNet(nn.Module):
         self.up4 = up(128, 64, True)
         self.outc = outconv(64, n_channels) if outchan is None else outconv(64, outchan)
         self.residual= residual
+        # self.steps=nn.Parameter(0, requires_grad=False)
 
     def forward(self, x):
         temp = x
