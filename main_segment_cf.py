@@ -9,6 +9,8 @@ from torch.utils.data import DataLoader, TensorDataset
 from torch.autograd import Variable
 from tqdm import *
 from functools import partial
+from .tb_plotter import TB_plotter
+from .logger import Logger
 import torch
 import torch.nn as nn
 import torch.optim as optim
@@ -23,10 +25,6 @@ import configparser
 
 from tensorboardX import SummaryWriter
 # import your own newtork
-
-def LogPrint(msg, level=logging.INFO):
-    logging.getLogger(__name__).log(level, msg)
-    tqdm.write(msg)
 
 def init_weights(m):
     if type(m) == nn.Conv2d:
@@ -64,14 +62,15 @@ def prepare_tensorboard_writer(bool_plot, dir_lsuffix, net_nettype):
         tensorboard_rootdir = os.environ['TENSORBOARD_LOGDIR']
         try:
             if not os.path.isdir(tensorboard_rootdir):
-                LogPrint("Cannot read from TENORBOARD_LOGDIR, retreating to default path...",
+                logger.log_print_tqdm("Cannot read from TENORBOARD_LOGDIR, retreating to default path...",
                          logging.WARNING)
                 tensorboard_rootdir = "/media/storage/PytorchRuns"
 
-            writer = SummaryWriter(tensorboard_rootdir + "/%s-%s-%s" % (net_nettype,
-                                                                        dir_lsuffix,
-                                                                        datetime.datetime.now().strftime(
+            writer = TB_plotter(tensorboard_rootdir + "/%s-%s-%s" % (net_nettype,
+                                                                     dir_lsuffix,
+                                                                     datetime.datetime.now().strftime(
                                                                             "%Y%m%d-%H%M%S")))
+
         except OSError:
             writer = None
             bool_plot = False
@@ -87,8 +86,8 @@ class backward_compatibility(object):
             self.lsuffix = lsuffix
             self.loadbyfilelist = loadbyfilelist
 
-def main(a, config):
-    LogPrint("Recieve arguments: %s"%dict(({section: dict(config[section]) for section in config.sections()})))
+def main(a, config, logger):
+    logger.log_print_tqdm("Recieve arguments: %s"%dict(({section: dict(config[section]) for section in config.sections()})))
     ##############################
     # Parse config
     #-----------------
@@ -129,7 +128,7 @@ def main(a, config):
 
     validation_FLAG=False
     if not dir_validation_id is None and bool_plot:
-        LogPrint("Recieved validation parameters.")
+        logger.log_print_tqdm("Recieved validation parameters.")
         bc_val = backward_compatibility(dir_validation_target,
                                         dir_validation_input,
                                         dir_validation_lsuffix,
@@ -143,23 +142,23 @@ def main(a, config):
     if dir_target is None:
         mode = 1 # Eval mode
     if net_datatype not in ml.datamap:
-        LogPrint("Specified datatype doesn't exist! Retreating to default datatype: %s"%list(ml.datamap.keys())[0],
+        logger.log_print_tqdm("Specified datatype doesn't exist! Retreating to default datatype: %s"%list(ml.datamap.keys())[0],
                  logging.WARNING)
         net_datatype = list(ml.datamap.keys())[0]
 
     ##############################
     # Training Mode
     if not mode:
-        LogPrint("Start training...")
+        logger.log_print_tqdm("Start training...")
         inputDataset, gtDataset = ml.datamap[net_datatype](bc)
         valDataset, valgtDataset = ml.datamap[net_datatype](bc_val) if validation_FLAG else (None, None)
 
         #check max class in gt
-        LogPrint("Detecting number of classes...")
+        logger.log_print_tqdm("Detecting number of classes...")
         valcountpair = gtDataset.get_unique_values_n_counts()
         classes = list(valcountpair.keys())
         numOfClasses = len(classes)
-        LogPrint("Find %i classes: %s"%(numOfClasses, classes))
+        logger.log_print_tqdm("Find %i classes: %s"%(numOfClasses, classes))
 
         # calculate empty label ratio for updating loss function weight
         r = []
@@ -177,7 +176,7 @@ def main(a, config):
         else:
             factor = 1
         weights = torch.as_tensor([r[0] * factor] + r[1:].tolist())
-        LogPrint("Initial weight factor: " + str(weights))
+        logger.log_print_tqdm("Initial weight factor: " + str(weights))
 
         # if the input datatype is not standard, retreat to 1
         try:
@@ -187,11 +186,11 @@ def main(a, config):
                 inchan = inputDataset[0].size()[0]
         except AttributeError:
             # retreat to 1 channel
-            LogPrint("Retreating to 1 channel.", logging.WARNING)
+            logger.log_print_tqdm("Retreating to 1 channel.", logging.WARNING)
             inchan = 1
         except Exception as e:
-            LogPrint(str(e), logging.ERROR)
-            LogPrint("Terminating", logging.ERROR)
+            logger.log_print_tqdm(str(e), logging.ERROR)
+            logger.log_print_tqdm("Terminating", logging.ERROR)
             return
         trainingSet = TensorDataset(inputDataset, gtDataset)
         loader      = DataLoader(trainingSet, batch_size=param_batchsize, shuffle=True, num_workers=0, drop_last=True, pin_memory=False)
@@ -208,10 +207,10 @@ def main(a, config):
         net.train(True)
         if os.path.isfile(checkpoint_load):
             # assert os.path.isfile(checkpoint_load)
-            LogPrint("Loading checkpoint " + checkpoint_load)
+            logger.log_print_tqdm("Loading checkpoint " + checkpoint_load)
             net.load_state_dict(torch.load(checkpoint_load))
         else:
-            LogPrint("Checkpoint doesn't exist!")
+            logger.log_print_tqdm("Checkpoint doesn't exist!")
         net = nn.DataParallel(net)
 
         lr = param_lr
@@ -229,7 +228,7 @@ def main(a, config):
         lastloss = 1e32
         writerindex = 0
         losses = []
-        LogPrint("Start training...")
+        logger.log_print_tqdm("Start training...")
         for i in range(param_epoch):
             E = []
             temploss = 1e32
@@ -262,51 +261,12 @@ def main(a, config):
                 loss.backward()
                 optimizer.step()
                 E.append(loss.data.cpu())
-                LogPrint("\t[Step %04d] Loss: %.010f"%(index, loss.data))
+                logger.log_print_tqdm("\t[Step %04d] Loss: %.010f"%(index, loss.data))
 
                 # Plot to tensorboard
                 if bool_plot and index % 10 == 0:
-                    try:
-                        Zrange = out.shape[0] if out.shape[0] < 40 else 40
-                        writer.add_scalar('Loss', loss.data, writerindex)
-                        val, ar = torch.max(out, 1)
-                        ss = s[0] if isinstance(s, list) else s
-                        poolim = make_grid(ss[:Zrange].data.cpu(), nrow=4, padding=1, normalize=True)
-                        poolgt = make_grid(g[:Zrange].float().data.cpu(), nrow=4, padding=1, normalize=True)
-                        poolseg = make_grid(ar[:Zrange].unsqueeze(1).float().data.cpu(), nrow=4, padding=1, range=[0, 1])
-                        # make it red
-                        poolseg[1] = 0
-                        poolseg[2] = 0
-
-                        # make it green
-                        poolgt[0] = 0
-                        poolgt[2] = 0
-
-                        # alpha addition for overlaying
-                        alpha_value = 0.5
-                        alpha_map_seg = torch.zeros_like(poolseg)
-                        alpha_map_seg[poolseg != 0] = alpha_value
-                        alpha_map_gt = torch.zeros_like(poolgt)
-                        alpha_map_gt[poolgt != 0] = alpha_value
-                        poolseg = (poolim + poolseg * alpha_map_seg * (-alpha_map_seg + 1.)) / \
-                                  (1. + alpha_map_seg * (-alpha_map_seg + 1.))
-
-                        poolgt = (poolim + poolgt * alpha_map_gt * (-alpha_map_gt + 1.)) / \
-                                  (1. + alpha_map_gt * (-alpha_map_gt + 1.))
-                        writer.add_image('Image/Segmentation', poolseg, writerindex)
-                        writer.add_image('Image/Groundtruth', poolgt, writerindex)
-                        writer.add_image('Image/Image', poolim, writerindex)
-
-
-                        del poolim, poolgt, poolseg, val, ar, alpha_map_gt, alpha_map_seg
-                        gc.collect()
-                    except Exception as e:
-                        traceback.print_tb(sys.exc_info()[2])
-                        LogPrint(str(e), logging.WARNING)
-                        try:
-                            tqdm.write(str(cat([g[z].unsqueeze(1).data for z in range(15)], 0)))
-                        except:
-                            LogPrint("Something went wrong while displaying images.", logging.WARNING)
+                    writer.plot_loss(loss.data, writerindex)
+                    writer.plot_segmentation(g, out, s, writerindex)
 
                 if loss.data.cpu() <= temploss:
                     backuppath = "./Backup/cp_%s_%s_temp.pt"%(net_datatype, net_nettype) \
@@ -323,18 +283,18 @@ def main(a, config):
                         writer.add_scalar('Validation Loss', validation_loss, writerindex)
                     except Exception as e:
                         traceback.print_tb(sys.exc_info()[2])
-                        LogPrint(str(e), logging.WARNING)
+                        logger.log_print_tqdm(str(e), logging.WARNING)
 
                 # End of step
                 writerindex += 1
 
             # Call back after each epoch
             try:
-                LogPrint("Initiate batch done callback.")
+                logger.log_print_tqdm("Initiate batch done callback.")
                 inputDataset.batch_done_callback()
-                LogPrint("Done")
+                logger.log_print_tqdm("Done")
             except:
-                LogPrint("Input dataset has no batch done callback.", logging.WARNING)
+                logger.log_print_tqdm("Input dataset has no batch done callback.", logging.WARNING)
 
 
             losses.append(E)
@@ -352,24 +312,24 @@ def main(a, config):
 
                 #
                 if isinstance(criterion, nn.CrossEntropyLoss):
-                    LogPrint('Current weight: ' + str(criterion.weight), logging.INFO)
+                    logger.log_print_tqdm('Current weight: ' + str(criterion.weight), logging.INFO)
                     offsetfactor = i + param_initWeight if not param_initWeight is None else i
                     factor =  sigmoid_plus(offsetfactor + 1) * 100
                     criterion.weight.copy_(torch.as_tensor([r[0] * factor] + r[1:].tolist()))
-                    LogPrint('New weight: ' + str(criterion.weight), logging.INFO)
+                    logger.log_print_tqdm('New weight: ' + str(criterion.weight), logging.INFO)
             else:
                 pg = {'lr':lr}
 
 
-            LogPrint("[Epoch %04d] Loss: %.010f LR: %.010f"%(i, np.array(E).mean(), pg['lr']))
+            logger.log_print_tqdm("[Epoch %04d] Loss: %.010f LR: %.010f"%(i, np.array(E).mean(), pg['lr']))
 
 
     # Evaluation mode
     else:
-        LogPrint("Starting evaluation...")
+        logger.log_print_tqdm("Starting evaluation...")
         if not dir_idlist is None:
             if not os.path.isfile(dir_idlist):
-                LogPrint("Cannot open input file list!", logging.WARNING)
+                logger.log_print_tqdm("Cannot open input file list!", logging.WARNING)
 
         bc.train = None # ensure going into inference mode
         inputDataset= ml.datamap[net_datatype](bc)
@@ -395,13 +355,13 @@ def main(a, config):
                 indim = inputDataset[0].squeeze().dim() + 1
 
         except AttributeError:
-            LogPrint("Retreating to indim=3, inchan=1.", logging.WARNING)
+            logger.log_print_tqdm("Retreating to indim=3, inchan=1.", logging.WARNING)
             # retreat to 1 channel and dim=4
             indim = 3
             inchan = 1
         except Exception as e:
-            LogPrint(str(e), logging.ERROR)
-            LogPrint("Terminating", logging.ERROR)
+            logger.log_print_tqdm(str(e), logging.ERROR)
+            logger.log_print_tqdm("Terminating", logging.ERROR)
             return
         net = available_networks[net_nettype](inchan, 2)
         # net = nn.DataParallel(net)
@@ -428,7 +388,7 @@ def main(a, config):
 
             while out.dim() < indim:
                 out = out.unsqueeze(0)
-                LogPrint('Unsqueezing last batch.' + str(out.shape))
+                logger.log_print_tqdm('Unsqueezing last batch.' + str(out.shape))
             # out = F.log_softmax(out, dim=1)
             # val, out = torch.max(out, 1)
             out_tensor.append(out.data.cpu())
@@ -445,7 +405,7 @@ def main(a, config):
 
 
         if isinstance(out_tensor, list):
-            LogPrint("Writing with list mode", logging.INFO)
+            logger.log_print_tqdm("Writing with list mode", logging.INFO)
             towrite = []
             for i, out in enumerate(out_tensor):
                 out = F.log_softmax(out, dim=0)
@@ -453,7 +413,7 @@ def main(a, config):
                 towrite.append(out.int())
             inputDataset.Write(towrite, dir_output)
         else:
-            LogPrint("Writing with tensor mode", logging.INFO)
+            logger.log_print_tqdm("Writing with tensor mode", logging.INFO)
             out_tensor = F.log_softmax(out_tensor, dim=1)
             out_tensor = torch.argmax(out_tensor, dim=1)
             inputDataset.Write(out_tensor.squeeze().int(), dir_output)
@@ -499,20 +459,14 @@ if __name__ == '__main__':
 
 
     # Parameters check
-    if config['General'].get('log_dir', None) is None:
-        if not os.path.isdir('./Backup'):
-            os.mkdir('./Backup/')
-        if not os.path.isdir("./Backup/Log"):
-            os.mkdir("./Backup/Log")
-        if config['General'].get('run_mode') == 'train':
-            log_dir = "./Backup/Log/run_%s.log"%(datetime.datetime.now().strftime("%Y%m%d-%H%M%S"))
-        else:
-            log_dir = "./Backup/Log/eval_%s.log"%(datetime.datetime.now().strftime("%Y%m%d-%H%M%S"))
+    log_dir = config['General'].get('log_dir', './Backup/Log/')
+    if config['General'].get('run_mode') == 'train':
+        log_dir = os.path.joint(log_dir,
+                                "run_%s.log"%(datetime.datetime.now().strftime("%Y%m%d-%H%M%S")))
     else:
-        log_dir = config['General'].get('log_dir')
-
-    logging.basicConfig(format="[%(asctime)-12s-%(levelname)s] %(message)s", filename=log_dir, level=logging.DEBUG)
-    sys.excepthook = excepthook
+        log_dir = os.path.joint(log_dir,
+                                "eval_%s.log"%(datetime.datetime.now().strftime("%Y%m%d-%H%M%S")))
 
 
-    main(a, config)
+    logger = Logger(log_dir)
+    main(a, config, logger)
