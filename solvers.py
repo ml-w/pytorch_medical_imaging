@@ -5,10 +5,12 @@ import torch.optim as optim
 from torch.utils.data import DataLoader, TensorDataset
 from torch.autograd import Variable
 
-from .logger import Logger
-from tqdm import *
 import numpy as np
+from logger import Logger
+from tqdm import *
 from abc import abstractmethod
+
+import numpy as np
 
 class SolverBase(object):
     def __init__(self, solver_configs):
@@ -21,17 +23,58 @@ class SolverBase(object):
         self._iscuda = solver_configs['iscuda']
 
         # optional
-        self._logger = solver_configs['logger'] if solver_configs.has_key('logger') else None
+        self._logger = solver_configs['logger'] if 'logger' in solver_configs else None
+        self._lr_decay = solver_configs['lrdecay'] if 'lrdecay' in solver_configs else None
+        self._mom_decay = solver_configs['momdecay'] if 'momdecay' in solver_configs else None
+
+        self._lr_decay_func = lambda lr: lr * np.exp(-self._lr_decay)
+        self._mom_decay_func = lambda mom: np.max(0.2, mom * np.exp(-self._mom_decay))
+
+        self._called_time = 0
+
+
+    def get_net(self):
+        return self._net
+
+    def get_optimizer(self):
+        return self._optimizer
+
+    def set_lr_decay(self, decay):
+        self._lr_decay = decay
+
+    def set_lr_decay_func(self, func):
+        assert callable(func), "Insert function not callable!"
+        self._lr_decay_func = func
+
+    def set_momentum_decay(self, decay):
+        self._mom_decay = decay
+
+    def set_momentum_decay_func(self, func):
+        assert callable(func), "Insert function not callable!"
+        self._mom_dcay_func = func
 
 
     def step(self, *args):
         out = self._feed_forward(*args)
         loss = self._loss_eval(out, *args)
         self._optimizer.zero_grad()
-        self._lossfunction.backward()
+        loss.backward()
         self._optimizer.step()
+
+        # decay
+        if not self._mom_decay is None or not self._lr_decay is None:
+            self.decay_optimizer()
+
+        self._called_time += 1
         return out, loss.cpu().data
 
+    def decay_optimizer(self):
+        if not self._lr_decay is None:
+            for pg in self._optimizer.param_groups:
+                pg['lr'] = self._lr_decay_func(pg['lr'])
+        if not self._mom_decay is None:
+            for pg in self._optimizer.param_groups:
+                pg['momentum'] = self._mom_decay_func(pg['momemtum'])
 
     def inference(self, *args):
         out = self._net.forward(*list(args))
@@ -73,11 +116,13 @@ class SolverBase(object):
 
 
 class SegmentationSolver(SolverBase):
-    def __init__(self, gt_data, net, param_optim, param_iscuda,
+    def __init__(self, in_data, gt_data, net, param_optim, param_iscuda,
                  param_initWeight=None, logger=None):
         assert isinstance(logger, Logger) or logger is None, "Logger incorrect settings!"
-        solver_configs = {}
 
+        self._decay_init_weight = param_initWeight
+
+        solver_configs = {}
         # check unique class in gt
         logger.log_print_tqdm("Detecting number of classes...")
         valcountpair = gt_data.get_unique_values_n_counts()
@@ -93,6 +138,7 @@ class SegmentationSolver(SolverBase):
             r.append(factor)
         r = np.array(r)
         r = r / r.max()
+        self._r = r
         del valcountpair # free RAM
 
         # calculate init-factor
@@ -103,8 +149,26 @@ class SegmentationSolver(SolverBase):
         weights = torch.as_tensor([r[0] * factor] + r[1:].tolist())
         logger.log_print_tqdm("Initial weight factor: " + str(weights))
 
+        # Create network
+        try:
+            if isinstance(in_data[0], tuple) or isinstance(in_data[0], list):
+                inchan = in_data[0][0].shape[0]
+            else:
+                inchan = in_data[0].size()[0]
+        except AttributeError:
+            # retreat to 1 channel
+            logger.log_print_tqdm("Retreating to 1 channel.", 30)
+            inchan = 1
+        except Exception as e:
+            logger.log_print_tqdm(str(e), 40)
+            logger.log_print_tqdm("Terminating", 40)
+            raise ArithmeticError("Cannot compute in channel!")
+
+        net = net(inchan, numOfClasses)
+
+        # Create optimizer and loss function
         lossfunction = nn.CrossEntropyLoss(weight=weights)
-        optimizer = optim.SGD(param_optim)
+        optimizer = optim.SGD(net.parameters(), lr=param_optim['lr'], momentum=param_optim['momentum'])
         iscuda = param_iscuda
         if param_iscuda:
             lossfunction = lossfunction.cuda()
@@ -152,3 +216,15 @@ class SegmentationSolver(SolverBase):
 
         loss = self._lossfunction(out, g.squeeze().long())
         return loss
+
+    def decay_optimizer(self):
+        super().decay_optimizer()
+
+        sigmoid_plus = lambda x: 1. / (1. + np.exp(-x * 0.05 + 2))
+        if isinstance(self._lossfunction, nn.CrossEntropyLoss):
+            self._logger.log_print_tqdm('Current weight: ' + str(self._lossfunction.weight), 20)
+            offsetfactor = self._called_time + self._decay_init_weight if not self._decay_init_weight is None else self._called_time
+            factor =  sigmoid_plus(offsetfactor + 1) * 100
+            self._lossfunction.weight.copy_(torch.as_tensor([self._r[0] * factor] + self._r[1:].tolist()))
+            self._logger.log_print_tqdm('New weight: ' + str(self._lossfunction.weight), 20)
+

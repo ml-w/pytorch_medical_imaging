@@ -9,8 +9,9 @@ from torch.utils.data import DataLoader, TensorDataset
 from torch.autograd import Variable
 from tqdm import *
 from functools import partial
-from .tb_plotter import TB_plotter
-from .logger import Logger
+from tb_plotter import TB_plotter
+from logger import Logger
+from solvers import *
 import torch
 import torch.nn as nn
 import torch.optim as optim
@@ -31,33 +32,8 @@ def init_weights(m):
         torch.nn.init.xavier_normal_(m.weight, 1)
         m.bias.data.fill_(0.01)
 
-def excepthook(*args):
-    logging.getLogger().error('Uncaught exception:', exc_info=args)
-    traceback.print_tb(args[0])
 
-def validation(val_set, gt_set, batch_size, loss_func, net):
-    with torch.no_grad():
-        on_cuda = next(net.parameters()).is_cuda
-        dataset = TensorDataset(val_set, gt_set)
-        dl = DataLoader(dataset, batch_size=batch_size, shuffle=False, num_workers=0, drop_last=False, pin_memory=False)
-
-        validation_loss = []
-        for s, g in tqdm(dl, desc="Validation", position=2):
-            if on_cuda:
-                    s = [ss.cuda() for ss in s] if isinstance(s, list) else s.cuda()
-                    g = [gg.cuda() for gg in g] if isinstance(g, list) else g.cuda()
-
-            if isinstance(s, list):
-                res = net(*s)
-            else:
-                res = net(s)
-            res = F.log_softmax(res, dim=1)
-            loss = loss_func(res, g.squeeze().long())
-            validation_loss.append(loss.item())
-    return np.mean(np.array(validation_loss).flatten())
-
-
-def prepare_tensorboard_writer(bool_plot, dir_lsuffix, net_nettype):
+def prepare_tensorboard_writer(bool_plot, dir_lsuffix, net_nettype, logger):
     if bool_plot:
         tensorboard_rootdir = os.environ['TENSORBOARD_LOGDIR']
         try:
@@ -66,10 +42,12 @@ def prepare_tensorboard_writer(bool_plot, dir_lsuffix, net_nettype):
                          logging.WARNING)
                 tensorboard_rootdir = "/media/storage/PytorchRuns"
 
-            writer = TB_plotter(tensorboard_rootdir + "/%s-%s-%s" % (net_nettype,
+            writer = SummaryWriter(tensorboard_rootdir + "/%s-%s-%s" % (net_nettype,
                                                                      dir_lsuffix,
-                                                                     datetime.datetime.now().strftime(
-                                                                            "%Y%m%d-%H%M%S")))
+                                                                     datetime.datetime.now().strftime("%Y%m%d-%H%M%S")))
+            writer = TB_plotter(writer, logger)
+
+
 
         except OSError:
             writer = None
@@ -153,57 +131,20 @@ def main(a, config, logger):
         inputDataset, gtDataset = ml.datamap[net_datatype](bc)
         valDataset, valgtDataset = ml.datamap[net_datatype](bc_val) if validation_FLAG else (None, None)
 
-        #check max class in gt
-        logger.log_print_tqdm("Detecting number of classes...")
-        valcountpair = gtDataset.get_unique_values_n_counts()
-        classes = list(valcountpair.keys())
-        numOfClasses = len(classes)
-        logger.log_print_tqdm("Find %i classes: %s"%(numOfClasses, classes))
+        solver = SegmentationSolver(inputDataset, gtDataset, available_networks[net_nettype],
+                                    {'lr': param_lr, 'momentum': param_momentum}, bool_usecuda,
+                                    param_initWeight=param_initWeight, logger=logger)
 
-        # calculate empty label ratio for updating loss function weight
-        r = []
-        sigmoid_plus = lambda x: 1. / (1. + np.exp(-x * 0.05 + 2))
-        for c in classes:
-            factor = float(np.prod(np.array(gtDataset.size())))/float(valcountpair[c])
-            r.append(factor)
-        r = np.array(r)
-        r = r / r.max()
-        del valcountpair # free RAM
-
-        # calculate init-factor
-        if not param_initWeight is None:
-            factor =  sigmoid_plus(param_initWeight + 1) * 100
-        else:
-            factor = 1
-        weights = torch.as_tensor([r[0] * factor] + r[1:].tolist())
-        logger.log_print_tqdm("Initial weight factor: " + str(weights))
-
-        # if the input datatype is not standard, retreat to 1
-        try:
-            if isinstance(inputDataset[0], tuple) or isinstance(inputDataset[0], list):
-                inchan = inputDataset[0][0].shape[0]
-            else:
-                inchan = inputDataset[0].size()[0]
-        except AttributeError:
-            # retreat to 1 channel
-            logger.log_print_tqdm("Retreating to 1 channel.", logging.WARNING)
-            inchan = 1
-        except Exception as e:
-            logger.log_print_tqdm(str(e), logging.ERROR)
-            logger.log_print_tqdm("Terminating", logging.ERROR)
-            return
         trainingSet = TensorDataset(inputDataset, gtDataset)
         loader      = DataLoader(trainingSet, batch_size=param_batchsize, shuffle=True, num_workers=0, drop_last=True, pin_memory=False)
 
 
         # Read tensorboard dir from env, disable plot if it fails
-        bool_plot, writer = prepare_tensorboard_writer(bool_plot, dir_lsuffix, net_nettype)
+        bool_plot, writer = prepare_tensorboard_writer(bool_plot, dir_lsuffix, net_nettype, logger)
 
         # Load Checkpoint or create new network
         #-----------------------------------------
-        net = available_networks[net_nettype](inchan, numOfClasses)
-        # net.apply(init_weights)
-
+        net = solver.get_net()
         net.train(True)
         if os.path.isfile(checkpoint_load):
             # assert os.path.isfile(checkpoint_load)
@@ -212,18 +153,6 @@ def main(a, config, logger):
         else:
             logger.log_print_tqdm("Checkpoint doesn't exist!")
         net = nn.DataParallel(net)
-
-        lr = param_lr
-        mm = param_momentum
-
-        criterion = nn.CrossEntropyLoss(weight=weights)
-        optimizer = optim.SGD([{'params': net.parameters(),
-                                'lr': lr, 'momentum': mm}])
-        if bool_usecuda:
-            criterion = criterion.cuda()
-            # normfactor = normfactor.cuda()
-            net = net.cuda()
-            # optimizer.cuda()
 
         lastloss = 1e32
         writerindex = 0
@@ -235,31 +164,9 @@ def main(a, config, logger):
             for index, samples in enumerate(loader):
                 s, g = samples
 
-                # Handle list elements
-                if (isinstance(s, list) or isinstance(s, tuple)) and len(s) > 1:
-                    s = [Variable(ss).float() for ss in s]
-                else:
-                    s = Variable(s).float()
-                if (isinstance(g, list) or isinstance(g, tuple)) and len(g) > 1:
-                    g = [Variable(gg, requires_grad=False) for gg in g]
-                else:
-                    g = Variable(g, requires_grad=False)
+                # initiate one train step.
+                out, loss = solver.step(s, g)
 
-
-                if bool_usecuda:
-                    s = [ss.cuda() for ss in s] if isinstance(s, list) else s.cuda()
-                    g = [gg.cuda() for gg in g] if isinstance(g, list) else g.cuda()
-
-                if isinstance(s, list):
-                    out = net.forward(*s)
-                else:
-                    out = net.forward(s)
-                out = F.log_softmax(out, dim=1)
-                loss = criterion(out, g.squeeze().long())
-
-                optimizer.zero_grad()
-                loss.backward()
-                optimizer.step()
                 E.append(loss.data.cpu())
                 logger.log_print_tqdm("\t[Step %04d] Loss: %.010f"%(index, loss.data))
 
@@ -279,8 +186,8 @@ def main(a, config, logger):
                 if index % 500 == 0 and validation_FLAG and bool_plot:
                     try:
                         # perform validation per 500 steps
-                        validation_loss = validation(valDataset, valgtDataset, param_batchsize, criterion, net)
-                        writer.add_scalar('Validation Loss', validation_loss, writerindex)
+                        validation_loss = solver.validation(valDataset, valgtDataset, param_batchsize)
+                        writer.plot_validation_loss(validation_loss, writerindex)
                     except Exception as e:
                         traceback.print_tb(sys.exc_info()[2])
                         logger.log_print_tqdm(str(e), logging.WARNING)
@@ -304,24 +211,9 @@ def main(a, config, logger):
                 torch.save(net.module.state_dict(), backuppath)
                 lastloss = np.array(E).mean()
 
-            # Decay learning rate
-            if param_decay != 0:
-                for pg in optimizer.param_groups:
-                    pg['lr'] = pg['lr'] * np.exp(-i * param_decay / float(param_epoch))
-                    pg['momentum'] = np.max([pg['momentum'] * np.exp(-i * param_decay / float(param_epoch)), 0.2])
 
-                #
-                if isinstance(criterion, nn.CrossEntropyLoss):
-                    logger.log_print_tqdm('Current weight: ' + str(criterion.weight), logging.INFO)
-                    offsetfactor = i + param_initWeight if not param_initWeight is None else i
-                    factor =  sigmoid_plus(offsetfactor + 1) * 100
-                    criterion.weight.copy_(torch.as_tensor([r[0] * factor] + r[1:].tolist()))
-                    logger.log_print_tqdm('New weight: ' + str(criterion.weight), logging.INFO)
-            else:
-                pg = {'lr':lr}
-
-
-            logger.log_print_tqdm("[Epoch %04d] Loss: %.010f LR: %.010f"%(i, np.array(E).mean(), pg['lr']))
+            current_lr = next(solver.get_optimizer().param_groups)['lr']
+            logger.log_print_tqdm("[Epoch %04d] Loss: %.010f LR: %.010f"%(i, np.array(E).mean(), current_lr))
 
 
     # Evaluation mode
@@ -461,10 +353,10 @@ if __name__ == '__main__':
     # Parameters check
     log_dir = config['General'].get('log_dir', './Backup/Log/')
     if config['General'].get('run_mode') == 'train':
-        log_dir = os.path.joint(log_dir,
+        log_dir = os.path.join(log_dir,
                                 "run_%s.log"%(datetime.datetime.now().strftime("%Y%m%d-%H%M%S")))
     else:
-        log_dir = os.path.joint(log_dir,
+        log_dir = os.path.join(log_dir,
                                 "eval_%s.log"%(datetime.datetime.now().strftime("%Y%m%d-%H%M%S")))
 
 

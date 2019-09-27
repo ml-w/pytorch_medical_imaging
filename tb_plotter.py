@@ -1,6 +1,6 @@
 import torch
 import gc
-from .logger import Logger
+from logger import Logger
 from torchvision.utils import make_grid
 
 __all__ = ['TB_plotter']
@@ -19,6 +19,8 @@ class TB_plotter(object):
     def plot_loss(self, loss, writer_index):
         self._writer.add_scalar('Loss', loss, writer_index)
 
+    def plot_validation_loss(self, loss, writer_index):
+        self._writer.add_scalar('Validation Loss', loss, writer_index)
 
     def plot_segmentation(self, gt, out, img, writer_index, Zrange=40, nrow=4):
         try:
