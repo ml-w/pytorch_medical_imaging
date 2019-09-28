@@ -131,6 +131,7 @@ def main(a, config, logger):
         inputDataset, gtDataset = ml.datamap[net_datatype](bc)
         valDataset, valgtDataset = ml.datamap[net_datatype](bc_val) if validation_FLAG else (None, None)
 
+        # Create training solver
         solver = SegmentationSolver(inputDataset, gtDataset, available_networks[net_nettype],
                                     {'lr': param_lr, 'momentum': param_momentum}, bool_usecuda,
                                     param_initWeight=param_initWeight, logger=logger)

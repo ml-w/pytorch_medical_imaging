@@ -51,7 +51,7 @@ def SmoothImages(root_dir, out_dir):
 
 def dicom2nii(folder, out_dir=None, seq_filters=None):
     if not os.path.isdir(out_dir):
-        os.mkdir(out_dir)
+        os.makedirs(out_dir, exist_ok=True)
         assert os.path.isdir(out_dir)
 
     if not os.path.isdir(folder):
@@ -62,9 +62,9 @@ def dicom2nii(folder, out_dir=None, seq_filters=None):
     folder = os.path.abspath(folder)
     f = folder.replace('\\', '/')
     # matchobj = re.search('NPC[0-9]+', f)
-    # matchobj = re.search('[0-9]{3,5}', f)
+    matchobj = re.search('(?i)(NPC|P)?[0-9]{3,5}', f)
     # prefix1 = f.split('/')[-2]
-    # prefix1 = f[matchobj.start():matchobj.end()]
+    prefix1 = f[matchobj.start():matchobj.end()]
 
 
     # Read file
@@ -82,7 +82,6 @@ def dicom2nii(folder, out_dir=None, seq_filters=None):
         headerreader.SetFileName(reader.GetFileNames()[0])
         headerreader.LoadPrivateTagsOn()
         headerreader.ReadImageInformation()
-        prefix1 = headerreader.GetMetaData('0010|0020')
         outname = out_dir + '/%s-%s.nii.gz'%(prefix1, headerreader.GetMetaData('0008|103e').rstrip().replace(' ', '_'))
         if not seq_filters is None:
             if isinstance(seq_filters, list):
@@ -101,6 +100,7 @@ def dicom2nii(folder, out_dir=None, seq_filters=None):
                     continue
 
         # Write image
+        print("Writting: ", outname)
         sitk.WriteImage(outimage, outname)
         del reader
 
@@ -170,7 +170,7 @@ def make_mask_from_dir(indir, outdir):
 
 def main(args):
     try:
-        os.mkdir(args[2])
+        os.makedirs(args[2], exist_ok=True)
     except:
         print("Cannot mkdir.")
 
@@ -191,6 +191,8 @@ if __name__ == '__main__':
     # folders = RecursiveListDir(5, '../NPC_Segmentation/00.RAW/MMX/840/')
     # batch_dicom2nii(folders, out_dir='../NPC_Segmentation/00.RAW/NIFTI/All')
     # dicom2nii('../NPC_Segmentation/00.RAW/MMX/769/S', '../NPC_Segmentation/00.RAW/NIFTI/MMX')
-    batch_dicom2nii(RecursiveListDir(2, '/home/lwong/FTP/2.Projects/8.NPC_Segmentation/00.RAW/Transfer/17-18'), '/home/lwong/FTP/2.Projects/8.NPC_Segmentation/0A.NIFTI_ALL')
+    batch_dicom2nii(RecursiveListDir(3, '../NPC_Segmentation/00.RAW/Transfer/Malignant2'),
+                    '../NPC_Segmentation/0A.NIFTI_ALL/Malignant')
+    # dicom2nii('../NPC_Segmentation/00.RAW/Transfer/Benign/NPC147/Orignial Scan/DICOM', '../NPC_Segmentation/0A.NIFTI_ALL/Benign')
     # main(sys.argv)
     # make_mask_from_dir('../NPC_Segmentation/06.NPC_Perfect/temp_t2/', '../NPC_Segmentation/06.NPC_Perfect/temp_mask')

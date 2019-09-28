@@ -226,7 +226,7 @@ class ImageDataSet(Dataset):
             matchobj = re.search(globber, f)
 
             if not matchobj is None:
-                outlist.append(int(f[matchobj.start():matchobj.end()]))
+                outlist.append(f[matchobj.start():matchobj.end()])
         return outlist
 
     def get_spacing(self, id):

@@ -50,7 +50,7 @@ def load_supervised_pair_by_IDs(source_dir, target_dir, idlist, globber=None):
 
     return source_list, target_list
 
-def directory_sorter(dir, sort_dict=None):
+def directory_sorter(dir, sort_dict=None, pre_filter=None):
     import fnmatch
     import shutil
     all_nii_files = os.listdir(dir)
@@ -58,16 +58,38 @@ def directory_sorter(dir, sort_dict=None):
     all_nii_files = fnmatch.filter(all_nii_files,'*nii.gz')
 
     if sort_dict is None:
-        sort_dict = {'T2WFS':"(?=.*T2.*)(?=.*[fF][sS].*)",
-                     'T2W': "(?=.*T2.*)(?!.*[fF][sS].*)",
-                     'CE-T1WFS': "(?=.*T1.*)(?=.*\+[cC].*)(?=.*[fF][sS].*)",
-                     'CE-T1W': "(?=.*T1.*)(?=.*\+[cC].*)(?!.*[fF][sS].*)",
-                     'T1W': "(?=.*T1.*)(?!.*\+[cC].*)(?!.*[fF][sS].*)"
+        sort_dict = {'T2WFS':   "(?i)(?=.*T2.*)(?=.*(fs|stir).*)",
+                     'T2W':     "(?i)(?=.*T2.*)(?!.*(fs|stir).*)",
+                     'CE-T1WFS':"(?i)(?=.*T1.*)(?=.*\+[cC].*)(?=.*(fs|stir).*)",
+                     'CE-T1W':  "(?i)(?=.*T1.*)(?=.*\+[cC].*)(?!.*(fs|stir).*)",
+                     'T1W':     "(?i)(?=.*T1.*)(?!.*\+[cC].*)(?!.*(fs|stir).*)"
                  }
+
+    if pre_filter is None:
+        pre_filter = {'SURVEY': "(?i)(?=.*survey.*)",
+                      'NECK': "(?i)(?=.*neck.*)"}
 
     directions = {'_COR': "(?i)(?=.*cor.*)",
                   '_TRA': "(?i)(?=.*tra.*)",
                   '_SAG': "(?i)(?=.*sag.*)",}
+
+    for p in pre_filter:
+        if not os.path.isdir(dir + '/' + p):
+                os.makedirs(dir + '/' + p, exist_ok=True)
+
+        remove=[]
+        for ff in all_nii_files:
+            if not re.search(pre_filter[p], ff) is None:
+                try:
+                    shutil.move(dir + '/' + ff, dir + '/' + p)
+                except Exception as e:
+                    print(e.args[0])
+                    print(os.path.join(dir, ff), os.path.join(dir, p))
+                remove.append(ff)
+
+        for r in remove:
+            all_nii_files.remove(r)
+
 
     for d in directions:
         for f in sort_dict:
@@ -99,7 +121,7 @@ def directory_sorter(dir, sort_dict=None):
             print(e.args[0])
 
 if __name__ == '__main__':
-    directory_sorter('/home/lwong/FTP/2.Projects/8.NPC_Segmentation/0A.NIFTI_ALL/')
+    directory_sorter('../NPC_Segmentation/0A.NIFTI_ALL/Malignant')
 
 
 
