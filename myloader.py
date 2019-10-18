@@ -29,7 +29,6 @@ def LoadSubbandDataset(a, debug=False):
             gt_filelist, input_filelist = a.loadbyfilelist.split(',')
             return subband(a.input, a.lsuffix, input_filelist), subband(a.train, None, gt_filelist)
 
-
 def LoadImageDataset(a, debug=False):
     image = lambda input, fsuffix, filelist: ImageDataSet(input,
                                                           dtype=np.float32,
@@ -51,7 +50,6 @@ def LoadImageDataset(a, debug=False):
             gt_filelist, input_filelist = a.loadbyfilelist.split(',')
             return image(a.input, a.lsuffix, input_filelist), image(a.train, None, gt_filelist)
 
-
 def LoadSegmentationImageDataset(a, debug=False):
     image = lambda input, fsuffix, filelist, dtype: ImageDataSet(input,
                                                           dtype=dtype,
@@ -72,7 +70,6 @@ def LoadSegmentationImageDataset(a, debug=False):
         else:
             gt_filelist, input_filelist = a.loadbyfilelist.split(',')
             return image(a.input, a.lsuffix, input_filelist, np.float32), image(a.train, None, gt_filelist, np.uint8)
-
 
 def LoadSegmentationImageDataset_Aug(a, debug=False):
     image = lambda input, fsuffix, filelist, dtype: ImageDataSet(input,
@@ -113,8 +110,6 @@ def LoadSegmentationImageDataset_Aug(a, debug=False):
         seg.set_reference_augment_dataset(invars)
         return invars, seg
 
-
-
 def LoadSegmentationImageDatasetWithPos(a, debug=False):
     imagewifpos = lambda input, fsuffix, filelist, dtype: ImageDataSet(input,
                                                           dtype=dtype,
@@ -144,7 +139,6 @@ def LoadSegmentationImageDatasetWithPos(a, debug=False):
             gt_filelist, input_filelist = a.loadbyfilelist.split(',')
             return ImageDataSetWithPos(imagewifpos(a.input, a.lsuffix, input_filelist, np.float32)), \
                    image(a.train, None, gt_filelist, np.uint8)
-
 
 def LoadSegmentationPatchLocTex(a, debug=False):
     imset = lambda input, fsuffix, filelist, dtype: ImageDataSet(input,
@@ -180,7 +174,6 @@ def LoadSegmentationPatchLocTex(a, debug=False):
             gt_filelist, input_filelist = a.loadbyfilelist.split(',')
             return ImagePatchLocTex(imset(a.input, a.lsuffix, input_filelist, np.float32), patchsize, stride), \
                    ImagePatchesLoader(imseg(a.train, None, gt_filelist, np.uint8), patchsize, stride)
-
 
 def LoadSegmentationPatchLocTexHist(a, debug=False):
     imset = lambda input, fsuffix, filelist, dtype: ImageDataSet(input,
@@ -245,7 +238,6 @@ def LoadSegmentationPatchLocTexHist(a, debug=False):
                                         stride,
                                         reference_dataset=invars)
             return invars, gtvars
-
 
 def LoadSegmentationPatchLocTexHist_Aug(a, debug=False):
     imset = lambda input, fsuffix, filelist, dtype: ImageDataSetAugment(input,
@@ -320,7 +312,6 @@ def LoadSegmentationPatchLocTexHist_Aug(a, debug=False):
                                         reference_dataset=invars)
             return invars, gtvars
 
-
 def LoadSegmentationImageDatasetMMPos_Aug(a, debug=False):
     imset = lambda input, fsuffix, filelist, dtype: ImageDataSetAugment(input,
                                                                         dtype=dtype,
@@ -375,7 +366,6 @@ def LoadSegmentationImageDatasetMMPos_Aug(a, debug=False):
             gtvars = imseg(a.train, None, gt_filelist, np.uint8)
             gtvars.set_reference_augment_dataset(invars1)
             return invars, gtvars
-
 
 def LoadSegmentationPatchLocMMTexHist_Aug(a, debug=False):
     from MedImgDataset.Computation import clip_5
@@ -540,7 +530,6 @@ def LoadSegmentationPatchRandom_Aug(a, debug=False):
                                         reference_dataset=invars)
             return invars, gtvars
 
-
 def LoadSegmentationImageDatasetByPatches(a, debug=False):
     image = lambda input, fsuffix, filelist, dtype: ImageDataSet(input,
                                                           dtype=dtype,
@@ -581,10 +570,34 @@ def LoadSegmentationImageDatasetByPatches(a, debug=False):
                                         patch_size=patchsize, patch_stride=stride, reference_dataset=imset)
             return imset, gtset
 
+def LoadClassificationDataSet(a, debug=False):
+    image = lambda input, fsuffix, filelist, dtype: ImageDataSet(input,
+                                                      dtype=dtype,
+                                                      verbose=True,
+                                                      debugmode=debug,
+                                                      filesuffix=fsuffix,
+                                                      idlist=filelist)
+    classes = lambda fname: DataLabel.from_csv(fname)
+
+    if a.train is None:
+        pass
+    else:
+        # Training Mode
+        imset = image(a.input, a.lsuffix, a.loadbyfilelist, np.float32)
+        gtset = classes(a.train)
+        gtset.set_target_column('Benign')
+        gtset.map_to_data(imset, target_id_globber="(?i)(NPC|P)?[0-9]{3,5}")
+        return imset, gtset
+
+
+
+
+
 
 datamap = {'subband':LoadSubbandDataset,
            'image2D':LoadImageDataset,
            'seg2D': LoadSegmentationImageDataset,
+           'imgclassification': LoadClassificationDataSet,
            'seg2D_aug': LoadSegmentationImageDataset_Aug,
            'seg2Drandompatch_aug': LoadSegmentationPatchRandom_Aug,
            'seg2DwifPos': LoadSegmentationImageDatasetWithPos,
@@ -596,6 +609,7 @@ datamap = {'subband':LoadSubbandDataset,
            'seg3DPatches': LoadSegmentationImageDatasetByPatches,
            'subband_debug': partial(LoadSubbandDataset, debug=True),
            'image2D_debug': partial(LoadImageDataset, debug=True),
+           'imgclassification_debug': partial(LoadClassificationDataSet, debug=True),
            'seg2D_debug': partial(LoadSegmentationImageDataset, debug=True),
            'seg2D_aug_debug': partial(LoadSegmentationImageDataset_Aug, debug=True),
            'seg2Drandompatch_aug_debug': partial(LoadSegmentationPatchRandom_Aug, debug=True),

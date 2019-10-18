@@ -19,7 +19,7 @@ class ImageDataSetAugment(ImageDataSet):
         self._references_dataset = kwargs.pop('reference_dataset') if 'reference_dataset' in kwargs \
             else None
         self._update_each_epoch = kwargs.pop('renew') if 'renew' in kwargs else False
-
+        self._augmentator = kwargs.pop('augmentator') if 'augmentator' in kwargs else None
         super(ImageDataSetAugment, self).__init__(*args, **kwargs)
         assert self._byslices >= 0, "Currently only support slices augmentation."
 
@@ -35,15 +35,16 @@ class ImageDataSetAugment(ImageDataSet):
         self._call_count = 0
 
         # Build augmentator
-        self._augmentator = iaa.Sequential(
-            [iaa.Affine(rotate=(-10, 10), scale=(0.9, 1.1)),
-             iaa.WithChannels(channels=[0], # TODO: this is temp solution to LBP channel
-                              children=iaa.AdditiveGaussianNoise(scale=(0,5), per_channel=False)),
-             iaa.WithChannels(channels=[0],
-                              children=iaa.LinearContrast(alpha=(0.5, 1.5), per_channel=False)),
-             ],
-            random_order=False
-        )
+        if self._augmentator is None:
+            self._augmentator = iaa.Sequential(
+                [iaa.Affine(rotate=(-10, 10), scale=(0.9, 1.1)),
+                 iaa.WithChannels(channels=[0], # TODO: this is temp solution to LBP channel
+                                  children=iaa.AdditiveGaussianNoise(scale=(0,5), per_channel=False)),
+                 iaa.WithChannels(channels=[0],
+                                  children=iaa.LinearContrast(alpha=(0.5, 1.5), per_channel=False)),
+                 ],
+                random_order=False
+            )
         self._update_augmentators()
 
 
@@ -99,6 +100,9 @@ class ImageDataSetAugment(ImageDataSet):
             self._update_augmentators()
         self._call_count = 0
 
+
+    def get_unique_IDs(self, globber=None):
+        return super(ImageDataSetAugment, self).get_unique_IDs(globber) * self._augment_factor
 
     def __getitem__(self, item):
         self._call_count += 1

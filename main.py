@@ -1,28 +1,27 @@
+# System
 import argparse
 import os, gc, sys
 import logging
-import numpy as np
 import datetime
 
-from MedImgDataset import ImagePatchesLoader, ImagePatchesLoader3D
-from torch.utils.data import DataLoader, TensorDataset
-from torch.autograd import Variable
-from tqdm import *
+# Propietary
 from functools import partial
-from tb_plotter import TB_plotter
-from logger import Logger
-from solvers import *
 import torch
 import torch.nn as nn
-import torch.optim as optim
-import torch.nn.functional as F
+from torch.utils.data import DataLoader, TensorDataset
 import traceback
-from torchvision.utils import make_grid
+import configparser
+import numpy as np
+from tqdm import *
+
+# This package
 from Networks import *
+from tb_plotter import TB_plotter
 import myloader as ml
 
-import configparser
-
+from logger import Logger
+from Solvers import *
+from Inferencers import *
 
 from tensorboardX import SummaryWriter
 # import your own newtork
@@ -72,6 +71,7 @@ def main(a, config, logger):
     bool_plot = config['General'].getboolean('plot_tb', False)
     bool_usecuda = config['General'].getboolean('use_cuda')
     run_mode = config['General'].get('run_mode', 'training')
+    run_type = config['General'].get('run_type', 'segmentation')
     mode = run_mode == 'test' or run_mode == 'testing'
 
     param_lr = float(config['RunParams'].get('leanring_rate', 1E-4))
@@ -132,9 +132,18 @@ def main(a, config, logger):
         valDataset, valgtDataset = ml.datamap[net_datatype](bc_val) if validation_FLAG else (None, None)
 
         # Create training solver
-        solver = SegmentationSolver(inputDataset, gtDataset, available_networks[net_nettype],
-                                    {'lr': param_lr, 'momentum': param_momentum}, bool_usecuda,
-                                    param_initWeight=param_initWeight, logger=logger)
+        if run_type == 'Segmentation':
+            solver_class = SegmentationSolver
+        elif run_type == 'Classification':
+            solver_class = ClassificationSolver
+        else:
+            logger.log_print_tqdm('Wrong run_type setting!', logging.ERROR)
+            return
+
+        solver = solver_class(inputDataset, gtDataset, available_networks[net_nettype],
+                              {'lr': param_lr, 'momentum': param_momentum}, bool_usecuda,
+                              param_initWeight=param_initWeight, logger=logger)
+        solver.set_lr_decay(param_decay)
 
         trainingSet = TensorDataset(inputDataset, gtDataset)
         loader      = DataLoader(trainingSet, batch_size=param_batchsize, shuffle=True, num_workers=0, drop_last=True, pin_memory=False)
@@ -145,15 +154,16 @@ def main(a, config, logger):
 
         # Load Checkpoint or create new network
         #-----------------------------------------
-        net = solver.get_net()
-        net.train(True)
+        # net = solver.get_net()
+        solver.get_net().train()
         if os.path.isfile(checkpoint_load):
             # assert os.path.isfile(checkpoint_load)
             logger.log_print_tqdm("Loading checkpoint " + checkpoint_load)
-            net.load_state_dict(torch.load(checkpoint_load))
+            solver.get_net().load_state_dict(torch.load(checkpoint_load))
         else:
             logger.log_print_tqdm("Checkpoint doesn't exist!")
-        net = nn.DataParallel(net)
+        solver.net_to_parallel()
+
 
         lastloss = 1e32
         writerindex = 0
@@ -174,12 +184,15 @@ def main(a, config, logger):
                 # Plot to tensorboard
                 if bool_plot and index % 10 == 0:
                     writer.plot_loss(loss.data, writerindex)
-                    writer.plot_segmentation(g, out, s, writerindex)
+                    if run_type == 'Segmentation':
+                        writer.plot_segmentation(g, out, s, writerindex)
+                    elif run_type == 'Classification':
+                        pass
 
                 if loss.data.cpu() <= temploss:
                     backuppath = "./Backup/cp_%s_%s_temp.pt"%(net_datatype, net_nettype) \
                         if checkpoint_save is None else checkpoint_save.replace('.pt', '_temp.pt')
-                    torch.save(net.module.state_dict(), backuppath)
+                    torch.save(solver.get_net().module.state_dict(), backuppath)
                     temploss = loss.data.cpu()
                 del s, g
                 gc.collect()
@@ -187,8 +200,7 @@ def main(a, config, logger):
                 if index % 500 == 0 and validation_FLAG and bool_plot:
                     try:
                         # perform validation per 500 steps
-                        validation_loss = solver.validation(valDataset, valgtDataset, param_batchsize)
-                        writer.plot_validation_loss(validation_loss, writerindex)
+                        writer.plot_validation_loss(writerindex, *solver.validation(valDataset, valgtDataset, param_batchsize))
                     except Exception as e:
                         traceback.print_tb(sys.exc_info()[2])
                         logger.log_print_tqdm(str(e), logging.WARNING)
@@ -209,11 +221,14 @@ def main(a, config, logger):
             if np.array(E).mean() <= lastloss:
                 backuppath = "./Backup/cp_%s_%s.pt"%(net_datatype, net_nettype) \
                     if checkpoint_save is None else checkpoint_save
-                torch.save(net.module.state_dict(), backuppath)
+                torch.save(solver.get_net().module.state_dict(), backuppath)
                 lastloss = np.array(E).mean()
 
 
-            current_lr = next(solver.get_optimizer().param_groups)['lr']
+            try:
+                current_lr = next(solver.get_optimizer().param_groups)['lr']
+            except:
+                current_lr = solver.get_optimizer().param_groups[0]['lr']
             logger.log_print_tqdm("[Epoch %04d] Loss: %.010f LR: %.010f"%(i, np.array(E).mean(), current_lr))
 
 
@@ -226,92 +241,18 @@ def main(a, config, logger):
 
         bc.train = None # ensure going into inference mode
         inputDataset= ml.datamap[net_datatype](bc)
-        loader = DataLoader(inputDataset, batch_size=param_batchsize, shuffle=False, num_workers=1)
-        assert os.path.isfile(checkpoint_load), "Cannot open saved states"
-        if not os.path.isdir(dir_output):
-            os.mkdir(dir_output)
-        assert os.path.isdir(dir_output), "Cannot create output directories"
+        os.makedirs(dir_output, exist_ok=True)
+
+        #=============================
+        # Perform inference
+        #-------------------
+        inferencer = SegmentationInferencer(inputDataset, dir_output, param_batchsize,
+                                            available_networks[net_nettype], checkpoint_load,
+                                            bool_usecuda, logger)
+
+        inferencer.write_out()
 
 
-        # Load Checkpoint or create new network
-        #-----------------------------------------
-        # if the input datatyle is not standard, retreat to 1
-        try:
-            if isinstance(inputDataset[0], tuple) or isinstance(inputDataset[0], list):
-                inchan = inputDataset[0][0].shape[0]
-                indim = inputDataset[0][0].squeeze().dim() + 1
-                if net_datatype.find('loctex') > -1: # Speacial case where data already have channels dim
-                    indim -= 1
-
-            else:
-                inchan = inputDataset[0].size()[0]
-                indim = inputDataset[0].squeeze().dim() + 1
-
-        except AttributeError:
-            logger.log_print_tqdm("Retreating to indim=3, inchan=1.", logging.WARNING)
-            # retreat to 1 channel and dim=4
-            indim = 3
-            inchan = 1
-        except Exception as e:
-            logger.log_print_tqdm(str(e), logging.ERROR)
-            logger.log_print_tqdm("Terminating", logging.ERROR)
-            return
-        net = available_networks[net_nettype](inchan, 2)
-        # net = nn.DataParallel(net)
-        net.load_state_dict(torch.load(checkpoint_load))
-        net.train(False)
-        net.eval()
-        if bool_usecuda:
-            net.cuda()
-
-        out_tensor = []
-        for index, samples in enumerate(tqdm(loader, desc="Steps")):
-            s = samples
-            if (isinstance(s, tuple) or isinstance(s, list)) and len(s) > 1:
-                s = [Variable(ss, requires_grad=False).float() for ss in s]
-
-            if bool_usecuda:
-                s = [ss.cuda() for ss in s] if isinstance(s, list) else s.cuda()
-
-            torch.no_grad()
-            if isinstance(s, list):
-                out = net.forward(*s).squeeze()
-            else:
-                out = net.forward(s).squeeze()
-
-            while out.dim() < indim:
-                out = out.unsqueeze(0)
-                logger.log_print_tqdm('Unsqueezing last batch.' + str(out.shape))
-            # out = F.log_softmax(out, dim=1)
-            # val, out = torch.max(out, 1)
-            out_tensor.append(out.data.cpu())
-            del out
-
-        if isinstance(inputDataset, ImagePatchesLoader) or isinstance(inputDataset, ImagePatchesLoader3D):
-            out_tensor = inputDataset.piece_patches(out_tensor)
-        else:
-            # check last tensor has same dimension
-            if not len(set([o.dim() for o in out_tensor])) == 1:
-                    out_tensor[-1] = out_tensor[-1].unsqueeze(0)
-
-            out_tensor = torch.cat(out_tensor, dim=0)
-
-
-        if isinstance(out_tensor, list):
-            logger.log_print_tqdm("Writing with list mode", logging.INFO)
-            towrite = []
-            for i, out in enumerate(out_tensor):
-                out = F.log_softmax(out, dim=0)
-                out = torch.argmax(out, dim=0)
-                towrite.append(out.int())
-            inputDataset.Write(towrite, dir_output)
-        else:
-            logger.log_print_tqdm("Writing with tensor mode", logging.INFO)
-            out_tensor = F.log_softmax(out_tensor, dim=1)
-            out_tensor = torch.argmax(out_tensor, dim=1)
-            inputDataset.Write(out_tensor.squeeze().int(), dir_output)
-        # inputDataset.Write(out_tensor[:,1].squeeze().float(), dir_output)
-        # inputDataset.Write(out_tensor[:,0].squeeze().float(), dir_output, prefix='D_')
 
     pass
 
@@ -332,7 +273,8 @@ if __name__ == '__main__':
                           'AttentionDenseUNet': AttentionDenseUNet2D,
                           'AttentionUNetPosAware': AttentionUNetPosAware,
                           'AttentionUNetLocTexAware': AttentionUNetLocTexAware,
-                          'LLinNet': LLinNet
+                          'LLinNet': LLinNet,
+                          'AttentionResidual': AttentionResidualNet
                           }
 
 

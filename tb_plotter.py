@@ -19,8 +19,10 @@ class TB_plotter(object):
     def plot_loss(self, loss, writer_index):
         self._writer.add_scalar('Loss', loss, writer_index)
 
-    def plot_validation_loss(self, loss, writer_index):
-        self._writer.add_scalar('Validation Loss', loss, writer_index)
+    def plot_validation_loss(self, writer_index, *args):
+        self._writer.add_scalar('Validation Loss', args[0], writer_index)
+        if len(args) >= 2:
+            self._writer.add_scalar('Accuracies', args[1], writer_index)
 
     def plot_segmentation(self, gt, out, img, writer_index, Zrange=40, nrow=4):
         try:
@@ -62,3 +64,8 @@ class TB_plotter(object):
             from logging import WARNING
             traceback.print_tb(sys.exc_info()[2])
             self._logger.log_print(str(e), WARNING)
+
+
+    # def plot_classification(self, gt, out, writer_index):
+    #     try:
+

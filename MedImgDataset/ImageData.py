@@ -78,6 +78,7 @@ class ImageDataSet(Dataset):
         self.filelist = filelist
         self.idlist = idlist
         self.filesuffix = filesuffix
+        self._id_globber = None
         self._debug=debugmode
         self._byslices=loadBySlices
         self._ParseRootDir()
@@ -215,10 +216,13 @@ class ImageDataSet(Dataset):
 
     def get_unique_IDs(self, globber=None):
         import re
-        if globber is None:
-            globber = "[^T][0-9]+"
+        if self._id_globber is None and globber is None:
+            if globber is None:
+                globber = "[^T][0-9]+"
+        else:
+            self._id_globber = globber
 
-        filenames = [os.path.basename(f) for f in self.dataSourcePath]
+        filenames = [os.path.basename(self.get_data_source(i)) for i in range(self.__len__())]
 
 
         outlist = []
