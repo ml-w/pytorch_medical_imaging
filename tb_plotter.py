@@ -20,7 +20,7 @@ class TB_plotter(object):
         self._writer.add_scalar('Loss', loss, writer_index)
 
     def plot_validation_loss(self, writer_index, *args):
-        self._writer.add_scalar('Validation Loss', args[0], writer_index)
+        self._writer.add_scalar('Validation_Loss', args[0], writer_index)
         if len(args) >= 2:
             self._writer.add_scalar('Accuracies', args[1], writer_index)
 
