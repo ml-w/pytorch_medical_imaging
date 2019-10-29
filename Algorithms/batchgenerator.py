@@ -42,7 +42,7 @@ def GenerateFileList(files):
 
 
 
-def GenerateTestBatch(gt_files, input_files, numOfTestSamples, outdir, prefix="Batch_", exclude_list=None, k_fold=None):
+def GenerateTestBatch(gt_files, input_files, numOfTestSamples, outdir, prefix="Batch_", exclude_list=None, k_fold=None, globber=None):
     # assert len(gt_files) == len(input_files)
     # assert len(gt_files) > numOfTestSamples
 
@@ -61,7 +61,7 @@ def GenerateTestBatch(gt_files, input_files, numOfTestSamples, outdir, prefix="B
             for row in exclude_list:
                 assert isinstance(row, str), "Must be list or tuple of string!"
                 exclude.append(row.rstrip())
-        elif isinstance(exclude_list, file):
+        elif isinstance(exclude_list, int):
             for row in exclude_list.readlines():
                 if row[0] == '#':
                     continue
@@ -98,7 +98,7 @@ def GenerateTestBatch(gt_files, input_files, numOfTestSamples, outdir, prefix="B
                 target = training_samples
 
             # each case should be named "[ID]_details.nii.gz"
-            matchobj = re.match('^[0-9]{3,5}', gt_files[indexes[i]])
+            matchobj = re.match('^[0-9]{3,5}' if globber is None else globber, gt_files[indexes[i]])
             if not matchobj is None:
                 case_id = gt_files[indexes[i]][matchobj.start():matchobj.end()]
             else:
@@ -134,7 +134,7 @@ def check_batches_files(dir, globber=None):
     b = []
     d = {}
     for f in files:
-        mo = re.search('[0-9]{3}_.*ing', f)
+        mo = re.search(globber if not globber is None else '[0-9]{3}_.*ing', f)
         if not mo is None:
             batch = f[mo.start():mo.end()]
             d[batch] = [r.rstrip() for r in open(dir + '/' + f, 'r').readlines()]
@@ -196,7 +196,7 @@ if __name__ == '__main__':
                       os.listdir('../NPC_Segmentation/06.NPC_Perfect'),
                       51,
                       '../NPC_Segmentation/99.Testing',
-                      prefix="B06/B06",
+                      prefix="C01/C01",
                       k_fold=4
                       )
 

@@ -72,6 +72,7 @@ def main(a, config, logger):
     bool_usecuda = config['General'].getboolean('use_cuda')
     run_mode = config['General'].get('run_mode', 'training')
     run_type = config['General'].get('run_type', 'segmentation')
+    write_mode = config['General'].get('write_mode', None)
     mode = run_mode == 'test' or run_mode == 'testing'
 
     param_lr = float(config['RunParams'].get('leanring_rate', 1E-4))
@@ -131,6 +132,7 @@ def main(a, config, logger):
         inputDataset, gtDataset = ml.datamap[net_datatype](bc)
         valDataset, valgtDataset = ml.datamap[net_datatype](bc_val) if validation_FLAG else (None, None)
 
+        #------------------------
         # Create training solver
         if run_type == 'Segmentation':
             solver_class = SegmentationSolver
@@ -246,11 +248,26 @@ def main(a, config, logger):
         #=============================
         # Perform inference
         #-------------------
-        inferencer = SegmentationInferencer(inputDataset, dir_output, param_batchsize,
-                                            available_networks[net_nettype], checkpoint_load,
-                                            bool_usecuda, logger)
 
-        inferencer.write_out()
+        #------------------------
+        # Create testing inferencer
+        if run_type == 'Segmentation':
+            infer_class = SegmentationInferencer
+        elif run_type == 'Classification':
+            infer_class = ClassificationInferencer
+        else:
+            logger.log_print_tqdm('Wrong run_type setting!', logging.ERROR)
+            return
+
+        inferencer = infer_class(inputDataset, dir_output, param_batchsize,
+                                 available_networks[net_nettype], checkpoint_load,
+                                 bool_usecuda, logger)
+
+        if write_mode == 'GradCAM':
+            inferencer.grad_cam_write_out(['att2'])
+        else:
+            with torch.no_grad():
+                inferencer.write_out()
 
 
 

@@ -74,7 +74,7 @@ class AttentionModule(nn.Module):
         mask = self.soft_mask_branch(out)
         mask = trunk * (1 + mask)
         if self.bool_save_mask:
-            self.saved_mask = mask.detech.cpu()
+            self.saved_mask = mask.cpu()
 
         out = self.out_conv(mask)
         return out
@@ -91,11 +91,11 @@ class AttentionResidualNet(nn.Module):
         self.in_conv2 = ResidualBlock3d(64, 256)
 
 
-        self.att1 = AttentionModule(256, 256, save_mask)
+        self.att1 = AttentionModule(256, 256, save_mask=save_mask)
         self.r1 = ResidualBlock3d(256, 512)
-        self.att2 = AttentionModule(512, 512, save_mask)
+        self.att2 = AttentionModule(512, 512, save_mask=save_mask)
         self.r2 = ResidualBlock3d(512, 1024)
-        self.att3 = AttentionModule(1024, 1024, save_mask)
+        self.att3 = AttentionModule(1024, 1024, save_mask=save_mask)
 
         self.out_conv1 = ResidualBlock3d(1024, 2048)
 
@@ -124,5 +124,6 @@ class AttentionResidualNet(nn.Module):
 
 
     def get_mask(self):
+        #[[B,H,W,D],[B,H,W,D],[B,H,W,]]
         return [r.get_mask() for r in [self.att1, self.att2, self.att3]]
 

@@ -22,7 +22,7 @@ class ClassificationSolver(SolverBase):
         logger.log_print_tqdm("Detecting number of classes...")
         numOfClasses = len(gt_data.get_unique_values())
         numOfClasses = 2 if numOfClasses < 2 else numOfClasses
-        numOfClasses = 2 #TODO: Temp fix
+        # numOfClasses = 2 #TODO: Temp fix
         logger.log_print_tqdm("Find %i classes.."%(numOfClasses))
 
 

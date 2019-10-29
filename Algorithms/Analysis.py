@@ -34,7 +34,7 @@ def SSIM(x,y, axis=None):
                \sigma_i is the variance of the i-th image
                \sigma_xy is the covariance of the two image
                \c_i = (k_i L)^2
-               k_1 = 0.01, k2 = 0.03
+               k_1 = 0.01, k2 = 0.03pp
 
         To facilitate comparison, the bit length constant is set to min(x.dtype.itemsize*8, 16)
 

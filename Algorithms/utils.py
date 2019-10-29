@@ -17,12 +17,15 @@ def get_unique_IDs(fnames, globber=None):
     return idlist
 
 
-def get_fnames_by_IDs(fnames, idlist):
+def get_fnames_by_IDs(fnames, idlist, globber=None):
+    if globber is None:
+        globber = "(?=.*%s.*)"
+
     outfnames = {}
     for id in idlist:
         flist = []
         for f in fnames:
-            if not re.match("(?=.*%s.*)"%(id), f) is None:
+            if not re.match(globber%id, f) is None:
                 flist.append(f)
         outfnames[id] = flist
     return outfnames
@@ -119,6 +122,7 @@ def directory_sorter(dir, sort_dict=None, pre_filter=None):
             shutil.move(dir + '/' + ff, dir + '/misc')
         except Exception as e:
             print(e.args[0])
+
 
 if __name__ == '__main__':
     directory_sorter('../NPC_Segmentation/0A.NIFTI_ALL/Malignant')

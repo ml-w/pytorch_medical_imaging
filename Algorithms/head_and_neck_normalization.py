@@ -49,6 +49,8 @@ def align_image_to_symmetry_plane(image):
 
 
 def main(inputdir ,outputdir, segdir=None, globber=None):
+    os.makedirs(outputdir, exist_ok=True)
+
     segfiles = None
     if not segdir is None:
         ids = get_unique_IDs(os.listdir(segdir))
@@ -78,10 +80,10 @@ def main(inputdir ,outputdir, segdir=None, globber=None):
 if __name__ == '__main__':
     # main('../NPC_Segmentation/41.Benign/T2WFS/',
     #      '../NPC_Segmentation/42.Benign_upright/T2WFS')
-    main('../NPC_Segmentation/06.NPC_Perfect/',
-         '../NPC_Segmentation/43.NPC_upright/T2WFS',
-         '../NPC_Segmentation/21.NPC_Perfect_SegT2/00.First',
-         globber="(?=.*T2.*)(?=.*FS.*)(?!.*[cC].*)")
+    main('../NPC_Segmentation/41.Benign_Malignant/',
+         '../NPC_Segmentation/41.Benign_Malignant_Upright')
+         # '../NPC_Segmentation/21.NPC_Perfect_SegT2/00.First',
+         # globber="(?=.*T2.*)(?=.*FS.*)(?!.*[cC].*)")
 
 
 

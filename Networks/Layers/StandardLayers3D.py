@@ -36,12 +36,13 @@ class DoubleConv3d(nn.Module):
         )
 
 
+
     def forward(self, x):
         return self.conv(x)
 
 
 class ResidualBlock3d(nn.Module):
-    def __init__(self, in_ch, out_ch):
+    def __init__(self, in_ch, out_ch, p=0.2):
         super(ResidualBlock3d, self).__init__()
         self._in_ch = in_ch
         self._out_ch = out_ch
@@ -54,13 +55,14 @@ class ResidualBlock3d(nn.Module):
 
         self.out_conv = nn.Conv3d(out_ch // 4, out_ch, 1, 1, bias=False, padding=0)
         self.pre_add_conv = nn.Conv3d(in_ch, out_ch, kernel_size=1)
+        self.dropout = nn.Dropout3d(p=p)
 
     def forward(self, x):
         while x.dim() < 5:
             x = x.unsqueeze(0)
         res = x
         pre_out = F.relu(self.in_bn(x), inplace=True)
-        out = F.dropout3d(self.in_conv(pre_out), p=0.2)
+        out = self.dropout(self.in_conv(pre_out))
         out = self.out_conv(out)
 
         if (self._in_ch != self._out_ch):

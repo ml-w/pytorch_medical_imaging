@@ -580,7 +580,8 @@ def LoadClassificationDataSet(a, debug=False):
     classes = lambda fname: DataLabel.from_csv(fname)
 
     if a.train is None:
-        pass
+        imset = image(a.input, a.lsuffix, a.loadbyfilelist, np.float32)
+        return imset
     else:
         # Training Mode
         imset = image(a.input, a.lsuffix, a.loadbyfilelist, np.float32)

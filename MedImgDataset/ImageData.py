@@ -328,7 +328,7 @@ class ImageDataSet(Dataset):
                     [2*b*d - 2*a*c, 2*c*d + 2*a*b, a*a + d*d - c*c - b*b]
                 ])
             A[:2, :3] = -A[:2, :3]
-            A[:,2] = metadata['pixdim[0]'] * A[:,2]
+            A[:,2] = float(metadata['pixdim[0]']) * A[:,2]
             im.SetOrigin(ori)
             im.SetDirection(A.flatten())
             im.SetSpacing(spacing)

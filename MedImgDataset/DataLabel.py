@@ -40,6 +40,14 @@ class DataLabel(Dataset):
         datalabel = DataLabel(df)
         return datalabel
 
+    @staticmethod
+    def from_dict(dict):
+        df = pd.DataFrame.from_dict(dict)
+        df.set_index(df.keys()[0])
+
+        datalabel = DataLabel(df)
+        return datalabel
+
     def map_to_data(self, target, target_id_globber=None):
         target_ids = target.get_unique_IDs(target_id_globber)
         try:
@@ -53,6 +61,10 @@ class DataLabel(Dataset):
 
     def size(self, item):
         return self.__len__()
+
+    def write(self, out_fname):
+        self._data_table.to_csv(out_fname)
+
 
     def __len__(self):
         return len(self._data_table)
