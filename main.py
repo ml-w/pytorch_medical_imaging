@@ -55,6 +55,19 @@ def prepare_tensorboard_writer(bool_plot, dir_lsuffix, net_nettype, logger):
         writer = None
     return bool_plot, writer
 
+
+def parse_ini_filelist(filelist, mode):
+    assert os.path.isfile(filelist)
+
+    fparser = configparser.ConfigParser()
+    fparser.read(filelist)
+
+    # test
+    if mode:
+        return fparser['FileList'].get('testing').split(',')
+    else:
+        return fparser['FileList'].get('training').split(',')
+
 class backward_compatibility(object):
         def __init__(self, train, input, lsuffix, loadbyfilelist):
             super(backward_compatibility, self).__init__()
@@ -98,6 +111,15 @@ def main(a, config, logger):
     dir_validation_lsuffix = config['Data'].get('validation_re_suffix', dir_lsuffix)
     dir_validation_id = config['Data'].get('validation_id_list', None)
 
+    # Config override
+    #-----------------
+    if a.train:
+        mode = 0
+    if a.inference:
+        mode = 1
+
+    if dir_idlist.endswith('ini'):
+        dir_idlist = parse_ini_filelist(dir_idlist, mode)
 
     # This is for backward compatibility with myloader.py
     bc = backward_compatibility(dir_target,
@@ -161,7 +183,7 @@ def main(a, config, logger):
         if os.path.isfile(checkpoint_load):
             # assert os.path.isfile(checkpoint_load)
             logger.log_print_tqdm("Loading checkpoint " + checkpoint_load)
-            solver.get_net().load_state_dict(torch.load(checkpoint_load))
+            solver.get_net().load_state_dict(torch.load(checkpoint_load), strict=False)
         else:
             logger.log_print_tqdm("Checkpoint doesn't exist!")
         solver.net_to_parallel()
@@ -264,7 +286,7 @@ def main(a, config, logger):
                                  bool_usecuda, logger)
 
         if write_mode == 'GradCAM':
-            inferencer.grad_cam_write_out(['att2'])
+            inferencer.grad_cam_write_out(['att3'])
         else:
             with torch.no_grad():
                 inferencer.write_out()
@@ -298,9 +320,10 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser(description="Training reconstruction from less projections.")
     parser.add_argument("config", metavar='config', action='store',
                         help="Config .ini file.", type=str)
-    # parser.add_argument("-t", "--train", metavar='train', action='store', type=str, default=None,
-    #                     help="Required directory with target data which serve as ground truth for training."
-    #                          "Set this to enable training mode.")
+    parser.add_argument("-t", "--train", metavar='train', action='store_true', type=bool, default=None,
+                        help="Set this to force training mode. (Implementing)")
+    parser.add_argument("-i", "--inference", metvar="inference", action='store_true', type=bool, default=None,
+                        help="Set this to force inference mode. If used with -t option, will still go into inference. (Implementing")
 
     a = parser.parse_args()
 

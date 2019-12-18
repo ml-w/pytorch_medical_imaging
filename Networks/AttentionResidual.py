@@ -65,7 +65,7 @@ class AttentionModule(nn.Module):
         self.saved_mask = None
 
     def forward(self, x):
-        res = F.relu(F.max_pool3d(x, [1, 3, 3], stride=[1, 2, 2]))
+        res = F.relu(F.max_pool3d(x, [1, 2, 2]))
         out = self.in_conv(res)
         out += res
 
@@ -88,6 +88,8 @@ class AttentionResidualNet(nn.Module):
         super(AttentionResidualNet, self).__init__()
 
         self.in_conv1 = Conv3d(in_ch, 64, stride=[1, 2, 2], padding=[1, 2, 2])
+        self.in_sw = Conv3d(64, 20)
+
         self.in_conv2 = ResidualBlock3d(64, 256)
 
 
@@ -98,6 +100,7 @@ class AttentionResidualNet(nn.Module):
         self.att3 = AttentionModule(1024, 1024, save_mask=save_mask)
 
         self.out_conv1 = ResidualBlock3d(1024, 2048)
+        self.out_linear = nn.Linear(20, 1)
 
         self.out_fc1 = nn.Linear(2048, out_ch)
 
@@ -106,7 +109,22 @@ class AttentionResidualNet(nn.Module):
         while x.dim() < 5:
             x = x.unsqueeze(0)
         x = self.in_conv1(x)
-        x = F.max_pool3d(x, [1, 2, 2], stride=[1, 2, 2])
+
+        # Construct slice weight
+        x_w = self.in_sw(x)
+        x_w = F.avg_pool3d(x_w,kernel_size=x_w.shape[-3:]).squeeze()
+        x_w = F.sigmoid(x_w) + 0.5
+        x_w = x_w.view([-1])
+
+        # Permute the axial dimension to the last
+        x = F.max_pool3d(x, [1, 2, 2], stride=[1, 2, 2]).permute([1, 3, 4, 0, 2])
+        x_shape = x.shape
+        new_shape = list(x_shape[:3]) + [x_shape[-2] * x_shape[-1]]
+        x = x.reshape(new_shape)
+        x = x * x_w.expand_as(x)
+
+        # Resume dimension
+        x = x.view(x_shape).permute([3, 0, 4, 1, 2])
         x = self.in_conv2(x)
 
         x = self.att1(x)
@@ -116,7 +134,8 @@ class AttentionResidualNet(nn.Module):
         x = self.att3(x)
 
         x = self.out_conv1(x)
-        x = F.avg_pool3d(x, kernel_size=x.shape[-3:]).squeeze()
+        x = F.avg_pool3d(x, kernel_size=[1] + list(x.shape[-2:])).squeeze()
+        x = self.out_linear(x).squeeze()
         x = self.out_fc1(x)
         while x.dim() < 2:
             x = x.unsqueeze(0)

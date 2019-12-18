@@ -106,6 +106,7 @@ class ImageDataSet(Dataset):
                     filenames.remove(fs)
                     removed_fnames.append(fs)
         elif not self.idlist is None:
+            # if its a file instead of a list of ids
             if isinstance(self.idlist, str):
                 self.idlist = [r.strip() for r in open(self.idlist, 'r').readlines()]
             tmp_filenames = os.listdir(self.rootdir)
@@ -214,12 +215,22 @@ class ImageDataSet(Dataset):
         else:
             return i
 
+    def get_data_by_ID(self, id, globber=None):
+        ids = self.get_unique_IDs(globber)
+        if len(set(ids)) != len(ids):
+            raise AttributeError("IDs are not unique using this globber: %s!"%globber)
+
+        return self.__getitem__(ids.index(id))
+
+
     def get_unique_IDs(self, globber=None):
         import re
+
+        # Default to numbers
         if self._id_globber is None and globber is None:
             if globber is None:
-                globber = "[^T][0-9]+"
-        else:
+                self._id_globber = "[^T][0-9]+"
+        elif self._id_globber is None and not globber is None:
             self._id_globber = globber
 
         filenames = [os.path.basename(self.get_data_source(i)) for i in range(self.__len__())]
@@ -227,7 +238,7 @@ class ImageDataSet(Dataset):
 
         outlist = []
         for f in filenames:
-            matchobj = re.search(globber, f)
+            matchobj = re.search(self._id_globber, f)
 
             if not matchobj is None:
                 outlist.append(f[matchobj.start():matchobj.end()])

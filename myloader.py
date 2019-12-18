@@ -2,6 +2,7 @@ import os
 from functools import partial
 
 import numpy as np
+import configparser
 
 from MedImgDataset import *
 from MedImgDataset.Computation import *
@@ -458,7 +459,7 @@ def LoadSegmentationPatchRandom_Aug(a, debug=False):
                                                                         debugmode=debug,
                                                                         filesuffix=fsuffix,
                                                                         loadBySlices=0,
-                                                                        filelist=filelist,
+                                                                        idlist=filelist,
                                                                         aug_factor=3)
     imseg = lambda input, fsuffix, filelist, dtype: ImageDataSetAugment(input,
                                                                         dtype=dtype,
@@ -466,7 +467,7 @@ def LoadSegmentationPatchRandom_Aug(a, debug=False):
                                                                         debugmode=debug,
                                                                         filesuffix=fsuffix,
                                                                         loadBySlices=0,
-                                                                        filelist=filelist,
+                                                                        idlist=filelist,
                                                                         is_seg=True,
                                                                         aug_factor=3)
 

@@ -7,7 +7,7 @@ import numpy as np
 
 __all__ = ['draw_overlay_heatmap']
 
-def draw_grid(image, segmentation, nrow=5, padding=1):
+def draw_grid(image, segmentation, nrow=5, padding=1, color=[1., 0., 0.]):
     # Error check
     assert isinstance(image, torch.TensorType) and isinstance(segmentation, torch.TensorType),\
             "Wrong input type: (%s, %s)"%(str(type(image)), str(type(segmentation)))

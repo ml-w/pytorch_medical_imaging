@@ -213,7 +213,11 @@ def EVAL(seg, gt, vars):
         if not isinstance(gg, np.ndarray):
             gg = gg.numpy().astype('bool')
 
-        TP, FP, TN, FN = np.array(perf_measure(gg.flatten(), ss.flatten()), dtype=float)
+        try:
+            TP, FP, TN, FN = np.array(perf_measure(gg.flatten(), ss.flatten()), dtype=float)
+        except:
+            print(gtindexes[i])
+            continue
         if TP == 0:
             continue
         values = []
