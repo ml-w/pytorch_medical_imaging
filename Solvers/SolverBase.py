@@ -23,10 +23,13 @@ class SolverBase(object):
         self._lr_decay          = solver_configs['lrdecay'] if 'lrdecay' in solver_configs else None
         self._mom_decay         = solver_configs['momdecay'] if 'momdecay' in solver_configs else None
 
-        self._lr_decay_func     = lambda lr: lr * np.exp(-self._lr_decay)
+        self._lr_decay_func     = lambda epoch: np.exp(-self._lr_decay * epoch)
         self._mom_decay_func    = lambda mom: np.max(0.2, mom * np.exp(-self._mom_decay))
 
+        self._lr_schedular      = None
+
         self._called_time = 0
+        self._decayed_time= 0
 
 
     def get_net(self):
@@ -41,6 +44,16 @@ class SolverBase(object):
     def set_lr_decay_func(self, func):
         assert callable(func), "Insert function not callable!"
         self._lr_decay_func = func
+        self._lr_schedular = torch.optim.lr_scheduler.LambdaLR(self._optimizer, self._lr_decay_func)
+
+    def set_lr_decay_to_reduceOnPlateau(self, patience, factor):
+        self._lr_schedular = torch.optim.lr_scheduler.ReduceLROnPlateau(
+            self._optimizer,
+            factor= factor,
+            patience = int(patience),
+            cooldown=2,
+            min_lr = 1E-6
+        )
 
     def set_momentum_decay(self, decay):
         self._mom_decay = decay
@@ -60,20 +73,16 @@ class SolverBase(object):
         loss.backward()
         self._optimizer.step()
 
-        # decay
-        if not self._mom_decay is None or not self._lr_decay is None:
-            self.decay_optimizer()
-
         self._called_time += 1
         return out, loss.cpu().data
 
     def decay_optimizer(self):
-        if not self._lr_decay is None:
-            for pg in self._optimizer.param_groups:
-                pg['lr'] = self._lr_decay_func(pg['lr'])
+        if not self._lr_schedular is None:
+            self._lr_schedular.step()
         if not self._mom_decay is None:
             for pg in self._optimizer.param_groups:
                 pg['momentum'] = self._mom_decay_func(pg['momemtum'])
+        self._decayed_time += 1
 
     def inference(self, *args):
         out = self._net.forward(*list(args))
@@ -98,7 +107,7 @@ class SolverBase(object):
             res = F.log_softmax(res, dim=1)
             loss = self._lossfunction(res, g.squeeze().long())
             validation_loss.append(loss.item())
-        return np.mean(np.array(validation_loss).flatten())
+        return [np.mean(np.array(validation_loss).flatten())]
 
 
     @staticmethod

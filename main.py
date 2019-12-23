@@ -94,6 +94,7 @@ def main(a, config, logger):
     param_epoch = int(config['RunParams'].get('num_of_epochs'))
     param_decay = float(config['RunParams'].get('decay_rate_LR'))
     param_batchsize = int(config['RunParams'].get('batch_size'))
+    param_decay_on_plateau = config['RunParams'].getboolean('decay_on_plateau', False)
 
     checkpoint_load = config['Checkpoint'].get('cp_load_dir', "")
     checkpoint_save = config['Checkpoint'].get('cp_save_dir', "")
@@ -104,12 +105,13 @@ def main(a, config, logger):
     dir_input = config['Data'].get('input_dir')
     dir_target = config['Data'].get('target_dir')
     dir_output = config['Data'].get('output_dir')
-    dir_lsuffix = config['Data'].get('re_suffix', None)
-    dir_idlist = config['Data'].get('id_list', None)
     dir_validation_input = config['Data'].get('validation_input_dir', dir_input)
     dir_validation_target = config['Data'].get('validation_gt_dir', dir_target)
-    dir_validation_lsuffix = config['Data'].get('validation_re_suffix', dir_lsuffix)
-    dir_validation_id = config['Data'].get('validation_id_list', None)
+
+    filters_lsuffix = config['Filters'].get('re_suffix', None)
+    filters_idlist = config['Filters'].get('id_list', None)
+    filters_validation_lsuffix = config['Filters'].get('validation_re_suffix', filters_lsuffix)
+    filters_validation_id = config['Filters'].get('validation_id_list', None)
 
     # Config override
     #-----------------
@@ -118,22 +120,31 @@ def main(a, config, logger):
     if a.inference:
         mode = 1
 
-    if dir_idlist.endswith('ini'):
-        dir_idlist = parse_ini_filelist(dir_idlist, mode)
+    # Check directories
+    for key in list(config['Data']):
+        d = config['Data'].get(key)
+        if not os.path.isfile(d) or not os.path.isdir(d):
+            logger.log_print_tqdm("Cannot locate %s: %s"%(key, d), logging.CRITICAL)
+            return
+
+
+    if filters_idlist.endswith('ini'):
+        filters_idlist = parse_ini_filelist(filters_idlist, mode)
+
 
     # This is for backward compatibility with myloader.py
     bc = backward_compatibility(dir_target,
                                 dir_input,
-                                dir_lsuffix,
-                                dir_idlist)
+                                filters_lsuffix,
+                                filters_idlist)
 
     validation_FLAG=False
-    if not dir_validation_id is None and bool_plot:
+    if not filters_validation_id is None and bool_plot:
         logger.log_print_tqdm("Recieved validation parameters.")
         bc_val = backward_compatibility(dir_validation_target,
                                         dir_validation_input,
-                                        dir_validation_lsuffix,
-                                        dir_validation_id)
+                                        filters_validation_lsuffix,
+                                        filters_validation_id)
         validation_FLAG=True
 
     ##############################
@@ -167,14 +178,18 @@ def main(a, config, logger):
         solver = solver_class(inputDataset, gtDataset, available_networks[net_nettype],
                               {'lr': param_lr, 'momentum': param_momentum}, bool_usecuda,
                               param_initWeight=param_initWeight, logger=logger)
-        solver.set_lr_decay(param_decay)
+        if param_decay_on_plateau:
+            logger.log_print_tqdm("Optimizer decay on plateau.")
+            solver.set_lr_decay_to_reduceOnPlateau(5, param_decay)
+        else:
+            solver.set_lr_decay(param_decay)
 
         trainingSet = TensorDataset(inputDataset, gtDataset)
         loader      = DataLoader(trainingSet, batch_size=param_batchsize, shuffle=True, num_workers=0, drop_last=True, pin_memory=False)
 
 
         # Read tensorboard dir from env, disable plot if it fails
-        bool_plot, writer = prepare_tensorboard_writer(bool_plot, dir_lsuffix, net_nettype, logger)
+        bool_plot, writer = prepare_tensorboard_writer(bool_plot, filters_lsuffix, net_nettype, logger)
 
         # Load Checkpoint or create new network
         #-----------------------------------------
@@ -232,6 +247,10 @@ def main(a, config, logger):
                 # End of step
                 writerindex += 1
 
+            # Decay after each epoch
+            solver.decay_optimizer()
+
+
             # Call back after each epoch
             try:
                 logger.log_print_tqdm("Initiate batch done callback.")
@@ -259,9 +278,6 @@ def main(a, config, logger):
     # Evaluation mode
     else:
         logger.log_print_tqdm("Starting evaluation...")
-        if not dir_idlist is None:
-            if not os.path.isfile(dir_idlist):
-                logger.log_print_tqdm("Cannot open input file list!", logging.WARNING)
 
         bc.train = None # ensure going into inference mode
         inputDataset= ml.datamap[net_datatype](bc)
@@ -320,9 +336,9 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser(description="Training reconstruction from less projections.")
     parser.add_argument("config", metavar='config', action='store',
                         help="Config .ini file.", type=str)
-    parser.add_argument("-t", "--train", metavar='train', action='store_true', type=bool, default=None,
+    parser.add_argument("-t", "--train", dest='train', action='store_true', default=False,
                         help="Set this to force training mode. (Implementing)")
-    parser.add_argument("-i", "--inference", metvar="inference", action='store_true', type=bool, default=None,
+    parser.add_argument("-i", "--inference", dest="inference", action='store_true', default=False,
                         help="Set this to force inference mode. If used with -t option, will still go into inference. (Implementing")
 
     a = parser.parse_args()
@@ -335,12 +351,9 @@ if __name__ == '__main__':
 
     # Parameters check
     log_dir = config['General'].get('log_dir', './Backup/Log/')
-    if config['General'].get('run_mode') == 'train':
-        log_dir = os.path.join(log_dir,
-                                "run_%s.log"%(datetime.datetime.now().strftime("%Y%m%d-%H%M%S")))
-    else:
-        log_dir = os.path.join(log_dir,
-                                "eval_%s.log"%(datetime.datetime.now().strftime("%Y%m%d-%H%M%S")))
+    if os.path.isdir(log_dir):
+        log_dir = os.path.join(log_dir, "%s_%s.log"%(config['General'].get('run_mode', 'training'),
+                                                     datetime.datetime.now().strftime("%Y%m%d-%H%M%S")))
 
 
     logger = Logger(log_dir)

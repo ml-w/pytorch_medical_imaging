@@ -24,7 +24,7 @@ class TB_plotter(object):
         if len(args) >= 2:
             self._writer.add_scalar('Accuracies', args[1], writer_index)
 
-    def plot_segmentation(self, gt, out, img, writer_index, Zrange=40, nrow=4):
+    def plot_segmentation(self, gt, out, img, writer_index, Zrange=40, nrow=3):
         try:
             Zrange = out.shape[0] if out.shape[0] < 40 else Zrange
 

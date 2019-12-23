@@ -37,8 +37,8 @@ class ClassificationInferencer(InferencerBase):
         out_chan = 2 #TODO: Temp fix
 
         try:
-            self._net = self._net(in_chan, out_chan, save_mask=True)
-            self._ATTENTION_FLAG=True
+            self._net = self._net(in_chan, out_chan, save_mask=False)
+            self._ATTENTION_FLAG=False
         except:
             self._logger.log_print_tqdm("Cannot create network with 'save_mask' attribute!", 20)
             self._net = self._net(in_chan, out_chan)

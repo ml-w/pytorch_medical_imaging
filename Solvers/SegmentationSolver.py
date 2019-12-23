@@ -14,7 +14,7 @@ class SegmentationSolver(SolverBase):
                  param_initWeight=None, logger=None):
         assert isinstance(logger, Logger) or logger is None, "Logger incorrect settings!"
 
-        self._decay_init_weight = param_initWeight
+        self._decay_init_weight = param_initWeight if not param_initWeight is None else 0
 
         solver_configs = {}
         # check unique class in gt
@@ -41,6 +41,7 @@ class SegmentationSolver(SolverBase):
         else:
             factor = 1
         weights = torch.as_tensor([r[0] * factor] + r[1:].tolist())
+        self.loss_init_weights = weights.cpu()
         logger.log_print_tqdm("Initial weight factor: " + str(weights))
 
         # Create network
@@ -114,11 +115,12 @@ class SegmentationSolver(SolverBase):
     def decay_optimizer(self):
         super().decay_optimizer()
 
-        sigmoid_plus = lambda x: 1. / (1. + np.exp(-x * 0.05 + 2))
+        sigmoid_plus = lambda x, init, stretch, delay: init + (1 - init) * 1. / \
+                                                       (1 + np.exp(- x / stretch + delay * 2 / stretch))
         if isinstance(self._lossfunction, nn.CrossEntropyLoss):
             self._logger.log_print_tqdm('Current weight: ' + str(self._lossfunction.weight), 20)
-            offsetfactor = self._called_time + self._decay_init_weight if not self._decay_init_weight is None else self._called_time
-            factor =  sigmoid_plus(offsetfactor + 1) * 100
-            self._lossfunction.weight.copy_(torch.as_tensor([self._r[0] * factor] + self._r[1:].tolist()))
+            offset = self._decayed_time + self._decay_init_weight
+            new_weight = torch.as_tensor([sigmoid_plus(offset, self._r[i], 10, 25) for i in range(len(self._r))])
+            self._lossfunction.weight.copy_(new_weight)
             self._logger.log_print_tqdm('New weight: ' + str(self._lossfunction.weight), 20)
 

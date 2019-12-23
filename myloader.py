@@ -101,7 +101,6 @@ def LoadSegmentationImageDataset_Aug(a, debug=False):
                                                                         aug_factor=2)
 
     if a.train is None:
-        assert os.path.isfile(a.loadbyfilelist), "Cannot open filelist!"
         # Eval mode
         return image(a.input, a.lsuffix, a.loadbyfilelist, np.float32)
     else:
