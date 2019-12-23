@@ -4,12 +4,15 @@ import torch.nn.functional as F
 import cv2
 import matplotlib.pyplot as plt
 import numpy as np
+import os
 
-__all__ = ['draw_overlay_heatmap']
+__all__ = ['draw_overlay_heatmap', 'draw_grid', 'contour_grid_by_dir']
 
-def draw_grid(image, segmentation, nrow=5, padding=1, color=[1., 0., 0.]):
+
+def draw_grid(image, segmentation, ground_truth=None,
+              nrow=None, padding=1, color=None, only_with_seg=False, thickness=2):
     # Error check
-    assert isinstance(image, torch.TensorType) and isinstance(segmentation, torch.TensorType),\
+    assert isinstance(image, torch.Tensor) and isinstance(segmentation, torch.Tensor),\
             "Wrong input type: (%s, %s)"%(str(type(image)), str(type(segmentation)))
 
     # Handle dimensions
@@ -18,20 +21,57 @@ def draw_grid(image, segmentation, nrow=5, padding=1, color=[1., 0., 0.]):
     if segmentation.dim() == 3:
         segmentation = segmentation.unsqueeze(1)
 
+    if only_with_seg:
+        seg_index = segmentation.sum([1, 2, 3]) != 0
+        image = image[seg_index]
+        segmentation = segmentation[seg_index]
+
+    if nrow is None:
+        nrow = np.int(np.ceil(np.sqrt(len(segmentation))))
+
+    # Check number of classes in the segmentaiton
+    num_of_class = len(np.unique(segmentation.flatten()))
+    class_values = np.unique(segmentation.flatten())
+    class_val_pair = zip(range(num_of_class), class_values)
 
 
-    # create image grid
-    im_grid = make_grid(image, nrow, )
+    im_grid = make_grid(image, nrow, padding=padding, normalize=True)
+    im_grid = (im_grid * 255.).permute(1, 2, 0).numpy().astype('uint8').copy()
 
     # create segmentation grid
+    seg_grid = make_grid(segmentation, nrow, padding=padding, normalize=False)
 
-    # Convert segmentation grid to binary
+    # For each class value
+    for c, val in class_val_pair:
+        # We don't need the null class
+        if val == 0:
+            continue
 
-    # Find contour on segmentation grid
+        # Convert segmentation grid binary
+        seg_grid_single = (seg_grid == val).numpy()[0].astype('uint8')
 
-    # Draw contour on image grid
+        # Fid Contours
+        _a, contours, _b = cv2.findContours(seg_grid_single, mode=cv2.RETR_EXTERNAL,
+                                            method=cv2.CHAIN_APPROX_SIMPLE)
 
-    pass
+        # Draw contour on image grid
+        contour_color = np.array(plt.get_cmap('Set2').colors[c]) * 255. if color is None else color
+        cv2.drawContours(im_grid, contours, -1, contour_color, thickness=thickness)
+
+    if not ground_truth is None:
+        if ground_truth.dim() == 3:
+            ground_truth = ground_truth.unsqueeze(1)
+
+        if only_with_seg:
+            ground_truth = ground_truth[seg_index]
+
+        gt_grid = make_grid(ground_truth, nrow=nrow, padding=padding, normalize=False)
+        gt_grid_single = (gt_grid != 0).numpy()[0].astype('uint8')
+        _a, contours, _b = cv2.findContours(gt_grid_single, mode=cv2.RETR_EXTERNAL,
+                                            method=cv2.CHAIN_APPROX_SIMPLE)
+        cv2.drawContours(im_grid, contours, -1, [50, 255, 50], thickness=1)
+
+    return im_grid
 
 def draw_vector_image_grid(vect_im, out_prefix, nrow=5, downscale=-1):
     # [C x D x W x H] or [C x W x H]
@@ -82,5 +122,30 @@ def draw_overlay_heatmap(baseim, heatmap):
     return out_im
 
 
+def contour_grid_by_dir(im_dir, seg_dir, output_dir, gt_dir=None, write_png=False):
+    from MedImgDataset import ImageDataSet
+
+    if not os.path.isdir(output_dir):
+        os.makedirs(output_dir, exist_ok=True)
+
+    segs = ImageDataSet(seg_dir, verbose=True, dtype='uint8')
+    ims = ImageDataSet(im_dir, verbose=True, idlist=segs.get_unique_IDs())
+
+    suffix = '.png' if write_png else '.jpg'
+
+    if not gt_dir is None:
+        gts = ImageDataSet(gt_dir, verbose=True, idlist=segs.get_unique_IDs())
+    else:
+        gts = None
+
+    for i, (im, seg) in enumerate(zip(ims, segs)):
+        if not gts is None:
+            gt = gts[i].squeeze()
+        else:
+            gt = None
+        idx = segs.get_unique_IDs()[i]
+        fname = os.path.join(output_dir, str(idx) + suffix)
+        grid = draw_grid(im.squeeze(), seg.squeeze(), ground_truth=gt, only_with_seg=True)
+        cv2.imwrite(fname, grid)
 
 
