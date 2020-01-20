@@ -373,13 +373,14 @@ if __name__ == '__main__':
 
     results = EVAL(output, seg, vars)
     results = results.sort_values('Index')
+    results = results.set_index('Index')
+    results.index = results.index.astype(str)
 
     if not args.label is None:
         results['Note'] = str(args.label)
 
     if not args.save is None:
         try:
-            results = results.set_index('Index')
             # Append if file exist
             if os.path.isfile(args.save):
                 print("Appending...")
@@ -390,3 +391,4 @@ if __name__ == '__main__':
         except:
             print("Cannot save to: ", args.save)
     print(results.to_string())
+    print(results.mean())

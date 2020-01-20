@@ -56,7 +56,6 @@ def GenerateTestBatch(ids, k_fold, outdir, prefix="Batch_", exclude_list=None, s
 
     # Clean excluded list from input ids
     if not exclude_list is None:
-        print(exclude_list)
         if isinstance(exclude_list, str):
             exclude_list = [r.rstrip() for r in open(exclude_list, 'r').readlines()]
 
@@ -65,6 +64,8 @@ def GenerateTestBatch(ids, k_fold, outdir, prefix="Batch_", exclude_list=None, s
                 if e in ids:
                     ids.remove(e)
                     print("Removed ", e)
+                else:
+                    print(e, " not in list")
 
     # Determine if stratified sampling is used for class balances
     if not stratification_class is None:
@@ -83,6 +84,7 @@ def GenerateTestBatch(ids, k_fold, outdir, prefix="Batch_", exclude_list=None, s
         test_ids = [ids[i] for i in test_index]
         train_ids.sort()
         test_ids.sort()
+        print("Train: %d, Test: %d"%(len(train_ids), len(test_ids)))
         out[i] = {'train_id': train_ids, 'test_ids': test_ids}
 
     # Output files
@@ -158,20 +160,20 @@ def check_batches_files(dir, globber=None):
 
 
 if __name__ == '__main__':
-    target_ids = get_unique_IDs(os.listdir('../NPC_Segmentation/0B.Segmentations/CE-T1W_TRA/00.First'))
-    datasheet = pd.read_excel('../NPC_Segmentation/0A.NIFTI_ALL/0A_Datasheet.xlsx', 'Patients_T1vsT2')
+    # target_ids = get_unique_IDs(os.listdir('../NPC_Segmentation/0B.Segmentations/CE-T1W_TRA/00.First'))
+    datasheet = pd.read_excel('../NPC_Segmentation/0A.NIFTI_ALL/0A_Datasheet.xlsx', 'Patients_BenignMelignant')
     datasheet = datasheet.set_index("IDs")
     datasheet.index = datasheet.index.astype(str)
-    excludelist = [f.rstrip() for f in open('../NPC_Segmentation/99.Testing/T1vT2/Validation.txt', 'r').readlines()]
-    tstage = datasheet.loc[target_ids]['Tstage']
-    print(tstage)
+    excludelist = [f.rstrip() for f in open('../NPC_Segmentation/99.Testing/CLASS_5Folds/Validation.txt', 'r').readlines()]
+    tstage = datasheet['Tstage']
+    tstage[tstage > 1] = 1
 
-    GenerateTestBatch(datasheet.index,
+    GenerateTestBatch(tstage.index,
                       5,
-                      '../NPC_Segmentation/99.Testing/T1vT2/',
+                      '../NPC_Segmentation/99.Testing/CLASS_5Folds/',
                       exclude_list=excludelist,
                       stratification_class = tstage.tolist(),
-                      prefix="B",
+                      prefix="C",
                       )
 
     # print GenerateFileList(os.listdir('../NPC_Segmentation/06.NPC_Perfect')).to_csv('~/FTP/temp/perfect_file_list.csv')
