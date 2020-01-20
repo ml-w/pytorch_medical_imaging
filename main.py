@@ -322,21 +322,7 @@ def main(a, config, logger):
 
 if __name__ == '__main__':
     # This controls the available networks
-    available_networks = {'UNet':UNet,
-                          'UNetPosAware': UNetPosAware,
-                          'UNetLocTexAware': UNetLocTexAware,
-                          'UNetLocTexHist': UNetLocTexHist,
-                          'UNetLocTexHistDeeper': UNetLocTexHistDeeper,
-                          'UNetLocTexHist_MM': partial(UNetLocTexHist, fc_inchan=204),
-                          'UNetLocTexHistDeeper_MM': partial(UNetLocTexHistDeeper, fc_inchan=204),
-                          'DenseUNet': DenseUNet2D,
-                          'AttentionUNet': AttentionUNet,
-                          'AttentionDenseUNet': AttentionDenseUNet2D,
-                          'AttentionUNetPosAware': AttentionUNetPosAware,
-                          'AttentionUNetLocTexAware': AttentionUNetLocTexAware,
-                          'LLinNet': LLinNet,
-                          'AttentionResidual': AttentionResidualNet
-                          }
+    available_networks = {'AttentionResidual': AttentionResidualNet}
 
 
     parser = argparse.ArgumentParser(description="Training reconstruction from less projections.")
