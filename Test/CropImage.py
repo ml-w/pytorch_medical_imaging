@@ -21,8 +21,8 @@ def crop_image(im, center, size):
 
 
 if __name__ == '__main__':
-    SRC_DIR = '../NPC_Segmentation/42.Benign_Malignant_Upright/'
-    OUT_DIR = '../NPC_Segmentation/44.Benign_Malignant_Cropped_Largest/'
+    SRC_DIR = '../NPC_Segmentation/42.Benign_Malignant_Upright/nyul_normed'
+    OUT_DIR = '../NPC_Segmentation/44.Benign_Malignant_Cropped_Largest.2/'
     cropsize = [444, 444, 20]
     os.makedirs(OUT_DIR, exist_ok=True)
     min_x, min_y = np.array(cropsize[:2]) / 2

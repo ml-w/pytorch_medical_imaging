@@ -88,7 +88,7 @@ def main(a, config, logger):
     write_mode = config['General'].get('write_mode', None)
     mode = run_mode == 'test' or run_mode == 'testing'
 
-    param_lr = float(config['RunParams'].get('leanring_rate', 1E-4))
+    param_lr = float(config['RunParams'].get('learning_rate', 1E-4))
     param_momentum = float(config['RunParams'].get('momentum', 0.9))
     param_initWeight = int(config['RunParams'].get('initial_weight', None))
     param_epoch = int(config['RunParams'].get('num_of_epochs'))
@@ -120,10 +120,13 @@ def main(a, config, logger):
     if a.inference:
         mode = 1
 
+    # Try to make outputdir first if it exist
+    os.makedirs(dir_output, mode=755, exist_ok=True)
+
     # Check directories
     for key in list(config['Data']):
         d = config['Data'].get(key)
-        if not os.path.isfile(d) or not os.path.isdir(d):
+        if not os.path.isfile(d) and not os.path.isdir(d):
             logger.log_print_tqdm("Cannot locate %s: %s"%(key, d), logging.CRITICAL)
             return
 
@@ -248,7 +251,10 @@ def main(a, config, logger):
                 writerindex += 1
 
             # Decay after each epoch
-            solver.decay_optimizer()
+            if param_decay_on_plateau:
+                solver.decay_optimizer(lastloss)
+            else:
+                solver.decay_optimizer()
 
 
             # Call back after each epoch
