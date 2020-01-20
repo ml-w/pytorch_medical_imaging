@@ -27,7 +27,6 @@ class SolverBase(object):
         self._mom_decay_func    = lambda mom: np.max(0.2, mom * np.exp(-self._mom_decay))
 
         self._lr_schedular      = None
-
         self._called_time = 0
         self._decayed_time= 0
 
@@ -40,6 +39,10 @@ class SolverBase(object):
 
     def set_lr_decay(self, decay):
         self._lr_decay = decay
+
+    def set_lr_decay_exp(self, decay):
+        self._lr_decay = decay
+        self._lr_schedular = torch.optim.lr_scheduler.ExponentialLR(self._optimizer, self._lr_decay)
 
     def set_lr_decay_func(self, func):
         assert callable(func), "Insert function not callable!"
@@ -76,9 +79,12 @@ class SolverBase(object):
         self._called_time += 1
         return out, loss.cpu().data
 
-    def decay_optimizer(self):
+    def decay_optimizer(self, *args):
         if not self._lr_schedular is None:
-            self._lr_schedular.step()
+            if len(args) > 0:
+                self._lr_schedular.step(*args)
+            else:
+                self._lr_schedular.step()
         if not self._mom_decay is None:
             for pg in self._optimizer.param_groups:
                 pg['momentum'] = self._mom_decay_func(pg['momemtum'])

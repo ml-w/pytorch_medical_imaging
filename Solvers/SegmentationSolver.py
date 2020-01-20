@@ -112,8 +112,8 @@ class SegmentationSolver(SolverBase):
         loss = self._lossfunction(out, g.squeeze().long())
         return loss
 
-    def decay_optimizer(self):
-        super().decay_optimizer()
+    def decay_optimizer(self, *args):
+        super().decay_optimizer(*args)
 
         sigmoid_plus = lambda x, init, stretch, delay: init + (1 - init) * 1. / \
                                                        (1 + np.exp(- x / stretch + delay * 2 / stretch))
