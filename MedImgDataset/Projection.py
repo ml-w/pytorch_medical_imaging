@@ -76,10 +76,10 @@ class Projection(Dataset):
                 return self[item]
             except AttributeError:
                 tqdm.write("File %s has some missing attributes! Returning random image instead!"%self.dataSourcePath[item])
-                return from_numpy(self.datacache[self.datacache.keys()[0]])
+                return from_numpy(self.datacache[list(self.datacache.keys())[0]])
             except:
                 tqdm.write("Unknow error at file %s"%self.dataSourcePath[item])
-                return from_numpy(self.datacache[self.datacache.keys()[0]])
+                return from_numpy(self.datacache[list(self.datacache.keys())[0]])
 
 
     def __str__(self):
@@ -92,7 +92,7 @@ class Projection(Dataset):
         # "File Paths\tSize\t\tSpacing\t\tOrigin\n"
         # printable = {'File Name': []}
         printable = {'File Name': [], 'Size': []}
-        for i in xrange(self.length):
+        for i in range(self.length):
             printable['File Name'].append(os.path.basename(self.dataSourcePath[i]))
             # for keys in self.metadata[i]:
             #     if not printable.has_key(keys):
@@ -125,7 +125,7 @@ class Projection(Dataset):
 
         tensor = tensor.numpy()
 
-        for i in tqdm(range(tensor.shape[0])):
+        for i in tqdm(list(range(tensor.shape[0]))):
             k = pydicom.dcmread(self.dataSourcePath[i], force=True)
             tosave = (tensor[i] - k.RescaleIntercept) / k.RescaleSlope
             tosave = tosave.astype(np.uint16)

@@ -5,11 +5,23 @@ import numpy as np
 import os
 import SimpleITK as sitk
 import pandas as pd
+
+from MedImgDataset import ImageDataSet
 from tqdm import *
+from surface_distance import compute_surface_distances, compute_average_surface_distance
+import argparse
+
+
+
 
 #========================================
 # Similarity functions
 #========================================
+def ASD(seg, test, spacing):
+    return np.sum(compute_average_surface_distance(
+        compute_surface_distances(seg, test, spacing))) / 2.
+
+
 def SSIM(x,y, axis=None):
     """
     Description
@@ -22,7 +34,7 @@ def SSIM(x,y, axis=None):
                \sigma_i is the variance of the i-th image
                \sigma_xy is the covariance of the two image
                \c_i = (k_i L)^2
-               k_1 = 0.01, k2 = 0.03
+               k_1 = 0.01, k2 = 0.03pp
 
         To facilitate comparison, the bit length constant is set to min(x.dtype.itemsize*8, 16)
 
@@ -57,7 +69,7 @@ def SSIM(x,y, axis=None):
             Y = y
 
         out = []
-        for i in xrange(X.shape[0]):
+        for i in range(X.shape[0]):
             mu_x, mu_y = X[i].mean(), Y[i].mean()
             va_x, va_y = X[i].var(), Y[i].var()
             va_xy = np.cov(X[i].flatten(), Y[i].flatten())
@@ -122,6 +134,110 @@ def MSE(x, y):
     return RMSE(x,y)**2
 
 
+#========================================
+# Segmentation
+#========================================
+
+def perf_measure(y_actual, y_guess):
+    y = y_actual.flatten()
+    x = y_guess.flatten()
+
+    TP = np.sum((y == True) & (x == True))
+    TN = np.sum((y == False) & (x == False))
+    FP = np.sum((y == False) & (x == True))
+    FN = np.sum((y == True) & (x == False))
+    TP, TN, FP, FN = [float(v) for v in [TP, TN, FP, FN]]
+    return TP, FP, TN, FN
+
+def JAC(TP, FP, TN, FN):
+    return TP / (TP + FP + FN)
+
+def GCE(TP, FP, TN, FN):
+    n = float(np.sum(TP + FP + TN + FN))
+
+    val = np.min([FN * (FN + 2*TP) / (TP + FN) + FP * (FP + 2*TN)/(TN+FP),
+                FP * (FP + 2*TP) / (TP + FP) + FN * (FN + 2*TN)/(TN+FN)]) / n
+    # if np.sum(actual) == 0 or  np.sum(guess) == 0:
+    #     print TP, FP, TN, FN, np.sum(actual) == 0, np.sum(guess) == 0
+    return val
+
+def DICE(TP, FP, TN, FN):
+    if np.isclose(2*TP+FP+FN, 0):
+        return 1
+    else:
+        return 2*TP / (2*TP+FP+FN)
+
+def VS(TP, FP, TN, FN):
+
+    return 1 - abs(FN - FP) / (2*TP + FP + FN)
+
+def VD(TP, FP, TN, FN):
+    return 1 - VS(TP, FP, TN, FN)
+
+def PercentMatch(TP, FP, TN, FN):
+    return TP / float(TP+FN)
+
+def PrecisionRate(TP, FP, TN, FN):
+    return TP / float(TP+FP)
+
+def CorrespondenceRatio(TP, FP, TN, FN):
+    return (1.*TP - 0.5*FP) / float(TP + FN)
+
+def Volume(TP, FP, TN, FN):
+    return (TP + FN)
+
+def EVAL(seg, gt, vars):
+    df = pd.DataFrame(columns=['filename','ImageIndex'] + list(vars.keys()))
+
+    # match input's ID
+    gtindexes = gt.get_unique_IDs()
+    segindexes = seg.get_unique_IDs()
+
+    for i, row in enumerate(tqdm(gtindexes)):
+        # check if both have same ID
+        try:
+            segindexes.index(gtindexes[i])
+        except ValueError:
+            print("Skipping ", os.path.basename(gt.get_data_source(i)))
+            data = pd.DataFrame([[os.path.basename(gt.get_data_source(i)),
+                                  gt.get_internal_index(i),
+                                  int(gtindexes[i])] + [np.nan] * len(vars)],
+                            columns=['filename','ImageIndex', 'Index'] + list(vars.keys()))
+            df = df.append(data)
+            continue
+
+        gg = gt[i]
+        ss = seg[segindexes.index(gtindexes[i])]
+        if not isinstance(ss, np.ndarray):
+            ss = ss.numpy().astype('bool')
+        if not isinstance(gg, np.ndarray):
+            gg = gg.numpy().astype('bool')
+
+        try:
+            TP, FP, TN, FN = np.array(perf_measure(gg.flatten(), ss.flatten()), dtype=float)
+        except:
+            print(gtindexes[i])
+            continue
+        if TP == 0:
+            continue
+        values = []
+        for keys in vars:
+            try:
+                values.append(vars[keys](TP, FP, TN, FN))
+            except:
+                try:
+                    values.append(vars[keys](gg, ss, gt.get_spacing(i)))
+                except Exception as e:
+                    values.append(np.nan)
+                    print(e.message)
+
+        data = pd.DataFrame([[os.path.basename(gt.get_data_source(i)),
+                              gt.get_internal_index(i), int(gtindexes[i])] + values],
+                            columns=['filename','ImageIndex', 'Index'] + list(vars.keys()))
+        df = df.append(data)
+    return df
+
+
 #=========================================
 # General batch analysis
 #=========================================
@@ -151,8 +267,8 @@ def BatchAnalysis(targetfiles, testfiles, func, mask=None, outputcsvdir=None):
     [allfiles.extend(testfiles[tf]) for tf in testfiles]
     b = [os.path.isfile(f) for f in allfiles]
     if not all(b):
-        print "Following files doesn't exist:"
-        print '\n'.join(np.array(allfiles)[np.invert(b)])
+        print("Following files doesn't exist:")
+        print('\n'.join(np.array(allfiles)[np.invert(b)]))
         return
 
 
@@ -194,23 +310,85 @@ def BatchAnalysis(targetfiles, testfiles, func, mask=None, outputcsvdir=None):
 
 
 
-
+from skimage.transform import resize
 
 if __name__ == '__main__':
-    import fnmatch
+    parse = argparse.ArgumentParser()
+    parse.add_argument('-d', '--DICE', action='store_true', default=False, dest='dice', help="add DICE to analysis.")
+    parse.add_argument('-p', '--PM', action='store_true', default=False, dest='pm',
+                       help='add percentage match to analysis.')
+    parse.add_argument('-j', '--JAC', action='store_true', default=False, dest='jac',
+                       help='add percentage match to analysis.')
+    parse.add_argument('-v', '--VR', action='store_true', default=False, dest='vr',
+                       help='add percentage match to analysis.')
+    parse.add_argument('-r', '--PR', action='store_true', default=False, dest='pr',
+                       help='add percentage match to analysis.')
+    parse.add_argument('-vd', '--VD', action='store_true', default=False, dest='vd',
+                       help='add volume difference to analysis.')
+    parse.add_argument('-g', '--GCE', action='store_true', default=False, dest='gce',
+                       help='add global consistency error to analysis.')
+    parse.add_argument('-c', '--CR', action='store_true', default=False, dest='cr',
+                       help='add corresponding ratio to analysis.')
+    parse.add_argument('--asd', action='store', default=False, dest='asd',
+                       help='add average surface distance to analysis.')
+    parse.add_argument('-a', '--all', action='store_true', default=False, dest='all', help='use all available analysis.')
+    parse.add_argument('--save', action='store', default=None, dest='save', help='save analysis results as csv')
+    parse.add_argument('--test-data', action='store', type=str, dest='testset', required=True)
+    parse.add_argument('--gt-data', action='store', type=str, dest='gtset', required=True)
+    parse.add_argument('--added-label', action='store', type=str, dest='label',
+                       help='Additional label that will be marked under the colume "Note"')
+    args = parse.parse_args()
+    assert os.path.isdir(args.testset) and os.path.isdir(args.gtset), "Path error!"
 
-    inputdict = {}
-    dir = "/home/lwong/Source/Repos/dfb_sparse_view_reconstruction/DFB_Recon/99.Testing/Batch/B01"
-    files = os.listdir(dir)
-    files.remove('target_files.txt')
-    files.remove('mask_files.txt')
-    files = fnmatch.filter(files, "*txt")
-    for k in files:
-        kdir = dir + '/' + k
-        inputdict[k.split('_')[-1].replace('.txt', '')] = [f.rstrip() for f in open(kdir).readlines()]
+    vars = {}
+    if args.dice:
+        vars['DSC'] = DICE
+    if args.jac:
+        vars['JAC'] = JAC
+    if args.pm:
+        vars['PPV'] = PercentMatch
+    if args.vr:
+        vars['VR'] = Volume
+    if args.pr:
+        vars['PR'] = PrecisionRate
+    if args.gce:
+        vars['GCE'] = GCE
+    if args.cr:
+        vars['CR'] = CorrespondenceRatio
+    if args.asd:
+        vars['ASD'] = ASD
+    if args.all:
+        vars = {'GCE': GCE,
+                'JAC': JAC,
+                'DSC': DICE,
+                'VD': VD,
+                'PPV': PercentMatch,
+                'CR': CorrespondenceRatio,
+                'Volume Ratio': Volume,
+                'PR': PrecisionRate,
+                'ASD': ASD}
 
-    tarfiles = [f.rstrip() for f in open(dir + '/target_files.txt').readlines()]
-    maskfiles = [f.strip() for f in open(dir + '/mask_files.txt').readlines()]
+    output = ImageDataSet(args.testset, verbose=True, dtype='uint8')
+    seg = ImageDataSet(args.gtset, verbose=True, dtype='uint8', idlist=output.get_unique_IDs())
 
-    BatchAnalysis(tarfiles, inputdict, [PSNR, SSIM, RMSE], outputcsvdir=dir+'/newresult_mask.csv',
-                  mask=maskfiles)
+    results = EVAL(output, seg, vars)
+    results = results.sort_values('Index')
+    results = results.set_index('Index')
+    results.index = results.index.astype(str)
+
+    if not args.label is None:
+        results['Note'] = str(args.label)
+
+    if not args.save is None:
+        try:
+            # Append if file exist
+            if os.path.isfile(args.save):
+                print("Appending...")
+                with open(args.save, 'a') as f:
+                    results.to_csv(f, mode='a', header=False)
+            else:
+                results.to_csv(args.save)
+        except:
+            print("Cannot save to: ", args.save)
+    print(results.to_string())
+    print(results.mean())

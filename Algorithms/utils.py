@@ -1,0 +1,133 @@
+import re, os
+
+__all__ = ['get_unique_IDs', 'get_fnames_by_globber', 'get_fnames_by_IDs', 'load_supervised_pair_by_IDs']
+
+def get_unique_IDs(fnames, globber=None):
+    idlist = []
+    for f in fnames:
+        if globber is None:
+            globber = "([0-9]{3,5})"
+
+        mo = re.search(globber, f)
+        if not mo is None:
+            idlist.append(f[mo.start():mo.end()])
+
+    idlist = list(set(idlist))
+    idlist.sort()
+    return idlist
+
+
+def get_fnames_by_IDs(fnames, idlist, globber=None):
+    if globber is None:
+        globber = "(?=.*%s.*)"
+
+    outfnames = {}
+    for id in idlist:
+        flist = []
+        for f in fnames:
+            if not re.match(globber%id, f) is None:
+                flist.append(f)
+        outfnames[id] = flist
+    return outfnames
+
+
+def get_fnames_by_globber(fnames, globber):
+    assert isinstance(fnames, list)
+
+    copy = list(fnames)
+    for f in fnames:
+        if re.match(globber, f) is None:
+            copy.remove(f)
+    return copy
+
+def load_supervised_pair_by_IDs(source_dir, target_dir, idlist, globber=None):
+    source_list = get_fnames_by_globber(os.listdir(source_dir), globber) \
+        if not globber is None else os.listdir(source_dir)
+    source_list = get_fnames_by_IDs(source_list, idlist)
+    source_list = [source_list[key][0] for key in source_list]
+    target_list = get_fnames_by_IDs(os.listdir(target_dir), idlist)
+    target_list = [target_list[key][0] for key in target_list]
+
+    if len(source_list) != len(target_list):
+        raise ValueError("Dimension mismatch! Src: %i vs Target: %i"%(len(source_list), len(target_list)))
+
+    return source_list, target_list
+
+def directory_sorter(dir, sort_dict=None, pre_filter=None):
+    import fnmatch
+    import shutil
+    all_nii_files = os.listdir(dir)
+    all_nii_files.sort()
+    all_nii_files = fnmatch.filter(all_nii_files,'*nii.gz')
+
+    if sort_dict is None:
+        sort_dict = {'T2WFS':   "(?i)(?=.*T2.*)(?=.*(fs|stir).*)",
+                     'T2W':     "(?i)(?=.*T2.*)(?!.*(fs|stir).*)",
+                     'CE-T1WFS':"(?i)(?=.*T1.*)(?=.*\+[cC].*)(?=.*(fs|stir).*)",
+                     'CE-T1W':  "(?i)(?=.*T1.*)(?=.*\+[cC].*)(?!.*(fs|stir).*)",
+                     'T1W':     "(?i)(?=.*T1.*)(?!.*\+[cC].*)(?!.*(fs|stir).*)"
+                 }
+
+    if pre_filter is None:
+        pre_filter = {'SURVEY': "(?i)(?=.*survey.*)",
+                      'NECK': "(?i)(?=.*neck.*)"}
+
+    directions = {'_COR': "(?i)(?=.*cor.*)",
+                  '_TRA': "(?i)(?=.*tra.*)",
+                  '_SAG': "(?i)(?=.*sag.*)",}
+
+    for p in pre_filter:
+        if not os.path.isdir(dir + '/' + p):
+                os.makedirs(dir + '/' + p, exist_ok=True)
+
+        remove=[]
+        for ff in all_nii_files:
+            if not re.search(pre_filter[p], ff) is None:
+                try:
+                    shutil.move(dir + '/' + ff, dir + '/' + p)
+                except Exception as e:
+                    print(e.args[0])
+                    print(os.path.join(dir, ff), os.path.join(dir, p))
+                remove.append(ff)
+
+        for r in remove:
+            all_nii_files.remove(r)
+
+
+    for d in directions:
+        for f in sort_dict:
+            if not os.path.isdir(dir + '/' + f + d):
+                os.mkdir(dir + '/' + f + d)
+
+            remove=[]
+            for ff in all_nii_files:
+                if not re.search(sort_dict[f] + directions[d], ff) is None:
+                    try:
+                        shutil.move(dir + '/' + ff, dir + '/' + f + d)
+                    except Exception as e:
+                        print(e.args[0])
+                        print(os.path.join(dir, ff), os.path.join(dir, f + d))
+                    remove.append(ff)
+
+            for r in remove:
+                all_nii_files.remove(r)
+
+
+    # move all unhandled to misc folder
+    if not os.path.isdir(dir + '/misc'):
+        os.mkdir(dir + '/misc')
+
+    for ff in all_nii_files:
+        try:
+            shutil.move(dir + '/' + ff, dir + '/misc')
+        except Exception as e:
+            print(e.args[0])
+
+
+if __name__ == '__main__':
+    directory_sorter('../NPC_Segmentation/0A.NIFTI_ALL/Malignant')
+
+
+
+
+

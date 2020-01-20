@@ -1,77 +1,182 @@
-from MedImgDataset import ImageDataSet, Projection
-from random import shuffle
-import fnmatch
+import pandas as pd
+import re
+from sklearn import model_selection
 import os
-import numpy as np
+from utils import get_unique_IDs
 
+def GenerateFileList(files):
+    regex_dict = {'T1W':        "((?=.*T1.*)(?!.*FS.*)(?!.*[cC].*))",
+                  'CE-T1W':     "((?=.*T1.*)(?!.*FS.*)(?=.*[cC].*))",
+                  'CE-T1W-FS':  "((?=.*T1.*)(?=.*FS.*)(?=.*[cC].*))",
+                  'T2W-FS':     "((?=.*T2.*)(?=.*FS.*))"}
 
+    # get unique indexes
+    globber = "[0-9]+"
+    outlist = []
+    for f in files:
+        matchobj = re.search(globber, f)
+        if not matchobj is None:
+            outlist.append(int(f[matchobj.start():matchobj.end()]))
+    idlist = list(set(outlist))
 
-def GenerateTestBatch(gt_files, input_files, numOfTestSamples, outdir, prefix="Batch_"):
-    # assert len(gt_files) == len(input_files)
-    # assert len(gt_files) > numOfTestSamples
+    df = pd.DataFrame()
+    for i in idlist:
+        row = {'None': []}
+        fs = fnmatch.filter(files, str(i) + '*')
+        for ff in fs:
+            FLAG = False
+            for k in regex_dict:
+                matchobj = re.match(regex_dict[k], ff)
+                if not matchobj is None and k not in row:
+                    row[k] = ff
+                    FLAG = True
+            if not FLAG:
+                row['None'].append(ff)
 
-    indexes = range(len(gt_files))
-    shuffle(indexes)
-
-    # check if outdir exist
-    if not os.path.isdir(outdir):
-        os.mkdir(outdir)
-        assert os.path.isdir(outdir), "Cannot create director!"
-
-    # Testing batch files
-    testing_gt = open(outdir + '/' + prefix + "Testing_GT.txt", "w")
-    testing_input = open(outdir + '/' + prefix + "Testing_Input.txt", "w")
-
-    # Training batch files
-    training_gt = open(outdir + '/' + prefix + "Training_GT.txt", 'w')
-    training_input = open(outdir + '/' + prefix + "Training_Input.txt", 'w')
-
-    training_samples = {'input': [], 'gt':  []}
-    testing_samples = {'input': [], 'gt': []}
-    for i in xrange(len(indexes)):
-        if i < numOfTestSamples:
-            target = testing_samples
+        if len(row['None']) == 0:
+            row['None'] = "NULL"
         else:
-            target = training_samples
+            row['None'] = '|'.join(row['None'])
 
-        target['input'].extend(fnmatch.filter(input_files, gt_files[indexes[i]].split('_')[0] + "*"))
-        target['gt'].append(gt_files[indexes[i]])
-
-    testing_gt.writelines([f + '\n' for f in testing_samples['gt']])
-    testing_input.writelines([f + '\n' for f in testing_samples['input']])
-
-    training_gt.writelines([f + '\n' for f in training_samples['gt']])
-    training_input.writelines([f + '\n' for f in training_samples['input']])
-
-    [f.close() for f in [testing_gt, testing_input, training_input, training_gt]]
-
-def GenerateKFoldBatch(GTfiles, targetdir, numOfTestSamples):
-    files = sourcedir
-
-    indexes = range(len(images))
-    shuffle(indexes)
-    indexes = np.array(indexes, dtype=int)
-    indexes = np.pad(indexes, [(0, numOfTestSamples - len(images) % numOfTestSamples)], 'constant', constant_values=0)
-    indexes = indexes.reshape(len(indexes)/numOfTestSamples, numOfTestSamples)
-
-    # d1 for testing, d2 for training
-    if not os.path.isdir(targetdir):
-        os.mkdir(targetdir)
-
-    # last batch has more data
-    for i in xrange(indexes.shape[0] - 1):
-        testlist = 0
+        tmp = pd.DataFrame([list(row.values())], columns=list(row.keys()), index=[i])
+        df = df.append(tmp)
+    return df[list(regex_dict.keys()) + ['None']]
 
 
+
+def GenerateTestBatch(ids, k_fold, outdir, prefix="Batch_", exclude_list=None, stratification_class=None):
+    import configparser
+    try:
+        ids = list(ids.tolist())
+    except:
+        pass
+
+    # Set up output dictionary for writing
+    out = {}
+
+    # Clean excluded list from input ids
+    if not exclude_list is None:
+        if isinstance(exclude_list, str):
+            exclude_list = [r.rstrip() for r in open(exclude_list, 'r').readlines()]
+
+        if isinstance(exclude_list, list):
+            for e in exclude_list:
+                if e in ids:
+                    ids.remove(e)
+                    print("Removed ", e)
+                else:
+                    print(e, " not in list")
+
+    # Determine if stratified sampling is used for class balances
+    if not stratification_class is None:
+        splitter = model_selection.KFold(n_splits=k_fold, shuffle=True)
+        get_split = lambda x: splitter.split(ids)
+    else:
+        splitter = model_selection.StratifiedKFold(n_splits=k_fold, shuffle=True)
+        get_split = lambda x: splitter.split(ids, stratification_class)
+
+    # Create folder if not exist
+    os.makedirs(outdir, exist_ok=True)
+
+    # Determine train test fold split
+    for i, (train_index, test_index) in enumerate(get_split(ids)):
+        train_ids = [ids[i] for i in train_index]
+        test_ids = [ids[i] for i in test_index]
+        train_ids.sort()
+        test_ids.sort()
+        print("Train: %d, Test: %d"%(len(train_ids), len(test_ids)))
+        out[i] = {'train_id': train_ids, 'test_ids': test_ids}
+
+    # Output files
+    for k in range(k_fold):
+        outfile = os.path.join(outdir, prefix + '%02d.ini'%k)
+
+        outconf = configparser.ConfigParser()
+        outconf['FileList'] = {'testing': ','.join(out[k]['test_ids']), 'training': ','.join(out[k]['train_id'])}
+        with open(outfile, 'w') as f:
+            outconf.write(f)
+
+
+def check_batches_files(dir, globber=None):
+    files = os.listdir(dir)
+
+    # get list of each batch
+    b = []
+    d = {}
+    for f in files:
+        mo = re.search(globber if not globber is None else '[0-9]{3}_.*ing', f)
+        if not mo is None:
+            batch = f[mo.start():mo.end()]
+            d[batch] = [r.rstrip() for r in open(dir + '/' + f, 'r').readlines()]
+            d[batch].sort()
+            b.append(batch[:3])
+    b = list(set(b))
+
+    for bb in b:
+        # check if there are test/train overlap
+        train = d[bb + '_Training']
+        test = d[bb + '_Testing']
+
+        intersection = list(set(train) & set(test))
+        if len(intersection):
+            print("Intersection: ", bb, intersection)
+
+
+    # check if there are repeated number in each list
+    for k in d:
+        if len(list(set(d[k]))) != len(d[k]):
+            print("Repated number: ",k)
+
+
+    # check if there are inter-batch overlap
+    for bb in b:
+        for cc in b:
+            if bb == cc:
+                continue
+            test_b = d[bb + '_Testing']
+            test_c = d[cc + '_Testing']
+
+            inter_test = list(set(test_c) & set(test_b))
+            if len(inter_test):
+                print("Batch overlap!", bb, cc, inter_test)
+
+    # check if all folds combine to give the same set list
+    fulllist = {}
+    for bb in b:
+        train = d[bb + '_Training']
+        test = d[bb + '_Testing']
+
+        fulllist[bb] = list(set(train) & set(test))
+
+    for k1 in fulllist:
+        for k2 in fulllist:
+            if k1 == k2:
+                continue
+            if fulllist[k1] != fulllist[k2]:
+                print("Difference in full: ", k1, k2)
+
+
+    pass
 
 
 if __name__ == '__main__':
-    import os, fnmatch
-    # GenerateKFoldBatch("./BrainVessel/01.BatchSource", "./BrainVessel/10.K_Fold_Batches", 10)
-    GenerateTestBatch(os.listdir('../DFB_Recon/10.GT_Subbands'),
-                      os.listdir('../DFB_Recon/11.SparseView_subbands'),
-                      15,
-                      '../DFB_Recon/99.Testing/Batch',
-                      prefix="B01_"
+    # target_ids = get_unique_IDs(os.listdir('../NPC_Segmentation/0B.Segmentations/CE-T1W_TRA/00.First'))
+    datasheet = pd.read_excel('../NPC_Segmentation/0A.NIFTI_ALL/0A_Datasheet.xlsx', 'Patients_BenignMelignant')
+    datasheet = datasheet.set_index("IDs")
+    datasheet.index = datasheet.index.astype(str)
+    excludelist = [f.rstrip() for f in open('../NPC_Segmentation/99.Testing/CLASS_5Folds/Validation.txt', 'r').readlines()]
+    tstage = datasheet['Tstage']
+    tstage[tstage > 1] = 1
+
+    GenerateTestBatch(tstage.index,
+                      5,
+                      '../NPC_Segmentation/99.Testing/CLASS_5Folds/',
+                      exclude_list=excludelist,
+                      stratification_class = tstage.tolist(),
+                      prefix="C",
                       )
+
+    # print GenerateFileList(os.listdir('../NPC_Segmentation/06.NPC_Perfect')).to_csv('~/FTP/temp/perfect_file_list.csv')
+
+    # check_batches_files('../NPC_Segmentation/99.Testing/B06/')
 

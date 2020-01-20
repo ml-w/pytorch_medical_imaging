@@ -46,7 +46,7 @@ class ImageDataSet2D(Dataset):
 
         for f in self.dataSourcePath:
             if self.verbose:
-                print "Reading from ", f
+                print("Reading from ", f)
             if self.readfunc is None:
                 im = imread(f, as_grey=self.as_grey)
             else:
@@ -72,7 +72,7 @@ class ImageDataSet2D(Dataset):
         # "File Paths\tSize\t\tSpacing\t\tOrigin\n"
         # printable = {'File Name': []}
         printable = {'File Name': [], 'Size': []}
-        for i in xrange(self.length):
+        for i in range(self.length):
             printable['File Name'].append(os.path.basename(self.dataSourcePath[i]))
             # for keys in self.metadata[i]:
             #     if not printable.has_key(keys):
@@ -92,13 +92,3 @@ class ImageDataSet2D(Dataset):
     def tonumpy(self):
         assert self.length != 0
         return cat([K.unsqueeze(0) for K in self.data], dim=0).numpy()
-
-if __name__ == '__main__':
-    import visdom as vis
-
-    v = vis.Visdom(port=80)
-
-    data = ImageDataSet2D("./TOCI/10.TestData/Resized_SAR", dtype=np.float, verbose=True, as_gray=True)
-    im = np.array([d.numpy()*255 for d in data.data], dtype=np.uint8)
-    im = np.tile(im[:,None,:,:], (1, 3, 1, 1))
-    v.images(im, env="Test", win="Image")

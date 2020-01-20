@@ -15,7 +15,7 @@ class TV(nn.Module):
         b, c, h, w = input.size()
         vweights = torch.zeros([c, c, 3, 1])
         hweights = torch.zeros([c, c, 1, 3])
-        for i in xrange(c):
+        for i in range(c):
             vweights[i, i] = self._vkern
             hweights[i, i] = self._hkern
 

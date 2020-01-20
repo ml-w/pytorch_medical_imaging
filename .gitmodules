@@ -1,3 +1,9 @@
-[submodule "ThirdParty/py_2d_filter_banks"]
-	path = ThirdParty/py_2d_filter_banks
-	url = git@github.com:teracamo/py_2d_filter_banks.git
+[submodule "ThirdParty/surface-distance"]
+	path = ThirdParty/surface-distance
+	url = git@github.com:deepmind/surface-distance.git
+[submodule "ThirdParty/EROS"]
+	path = ThirdParty/EROS
+	url = git@github.com:alabamagan/EROS.git
+[submodule "ThirdParty/Nyul"]
+	path = ThirdParty/Nyul
+	url = git@github.com:alabamagan/Nyul.git

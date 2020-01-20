@@ -1,11 +1,12 @@
 from torch.utils.data import Dataset
-from torch import from_numpy, cat
+from torch import from_numpy, cat, tensor, stack, unique
 from tqdm import *
-import fnmatch
+import fnmatch, re
 import os
 import numpy as np
 import SimpleITK as sitk
 
+import logging
 
 
 NIFTI_DICT = {
@@ -59,7 +60,7 @@ class ImageDataSet(Dataset):
     This dataset automatically load all the nii files in the specific directory to
     generate a 3D dataset
     """
-    def __init__(self, rootdir, filelist=None, filesuffix=None, loadBySlices=-1, verbose=False, dtype=float, debugmode=False):
+    def __init__(self, rootdir, filelist=None, filesuffix=None, idlist=None, loadBySlices=-1, verbose=False, dtype=float, debugmode=False):
         """
 
         :param rootdir:
@@ -75,7 +76,9 @@ class ImageDataSet(Dataset):
         self.verbose = verbose
         self.dtype = dtype
         self.filelist = filelist
+        self.idlist = idlist
         self.filesuffix = filesuffix
+        self._id_globber = None
         self._debug=debugmode
         self._byslices=loadBySlices
         self._ParseRootDir()
@@ -91,29 +94,52 @@ class ImageDataSet(Dataset):
         """
 
         if self.verbose:
-            print "Parsing root path: ", self.rootdir
+            print("Parsing root path: ", self.rootdir)
 
         # Load files written in filelist from the root_dir
-        if self.filelist is None:
-            filenames = os.listdir(self.rootdir)
-            filenames = fnmatch.filter(filenames, "*.nii.gz")
-        else:
+        removed_fnames = []
+        if not self.filelist is None:
             filelist = open(self.filelist, 'r')
             filenames = [fs.rstrip() for fs in filelist.readlines()]
             for fs in filenames:
                 if not os.path.isfile(self.rootdir + '/' + fs):
                     filenames.remove(fs)
-                    print "Cannot find " + fs + " in " + self.rootdir
+                    removed_fnames.append(fs)
+        elif not self.idlist is None:
+            # if its a file instead of a list of ids
+            if isinstance(self.idlist, str):
+                self.idlist = [r.strip() for r in open(self.idlist, 'r').readlines()]
+            tmp_filenames = os.listdir(self.rootdir)
+            tmp_filenames = fnmatch.filter(tmp_filenames, "*.nii.gz")
+            filenames = []
+            for id in self.idlist:
+                filenames.extend(fnmatch.filter(tmp_filenames, str(id)+"*"))
+        else:
+            filenames = os.listdir(self.rootdir)
+            filenames = fnmatch.filter(filenames, "*.nii.gz")
 
         if not self.filesuffix is None:
-            filenames = fnmatch.filter(filenames, "*" + self.filesuffix + "*")
+            # use REGEX if find paranthesis
+            if self.filesuffix[0] == '(':
+                tmp = []
+                for f in filenames:
+                    if not re.match(self.filesuffix, f) is None:
+                        tmp.append(f)
+                filenames = tmp
+            else:
+                # Else use bash-style wild card
+                filenames = fnmatch.filter(filenames, "*" + self.filesuffix + "*")
+
+        if len(removed_fnames) > 0:
+            removed_fnames.sort()
+            for fs in removed_fnames:
+                logging.getLogger('__main__').log(logging.WARNING, "Cannot find " + fs + " in " + self.rootdir)
+                print("Cannot find " + fs + " in " + self.rootdir)
         filenames.sort()
 
-
-        self.length = len(filenames)
         if self.verbose:
-            print "Found %s nii.gz files..."%self.length
-            print "Start Loading"
+            print("Found %s nii.gz files..."%len(filenames))
+            print("Start Loading")
 
         self._itemindexes = [0] # [image index of start slice]
         for i, f in enumerate(tqdm(filenames, disable=not self.verbose)) \
@@ -123,7 +149,6 @@ class ImageDataSet(Dataset):
             im = sitk.ReadImage(self.rootdir + "/" + f)
             self.dataSourcePath.append(self.rootdir + "/" + f)
             imarr = sitk.GetArrayFromImage(im).astype(self.dtype)
-            imarr[imarr <= -1000] = -1000
             self.data.append(from_numpy(imarr))
             self._itemindexes.append(self.data[i].size()[0])
             metadata = {}
@@ -140,19 +165,113 @@ class ImageDataSet(Dataset):
                 except:
                     metadata[key] = im.GetMetaData(key)
             self.metadata.append(metadata)
+        self.length = len(self.dataSourcePath)
 
         if self._byslices >= 0:
             try:
                 self._itemindexes = np.cumsum(self._itemindexes)
                 self.length = np.sum([m.size()[self._byslices] for m in self.data])
+                # check if all sizes are the same
+                allsizes = [tuple(np.array(m.size())[np.arange(m.dim()) != self._byslices]) for m in self.data]
+                uniquesizes = set(allsizes)
+                if not len(uniquesizes) == 1:
+                    logging.log(logging.WARNING, "There are more than one size, attempting to crop")
+                    majority_size = uniquesizes[np.argmax([allsizes.count(tup) for tup in uniquesizes])]
+                    # Get all index of image that is not of majority size
+                    target = [ss != majority_size for ss in allsizes]
+                    target = [i for i, x in enumerate(target) if x]
+
+                    for t in target:
+                        target_dat = self.data[t]
+                        target_size = target_dat.size()
+                        cent = np.array(target_size) // 2
+                        corner_index = cent - np.array(majority_size)
+
+                        # Crop image to standard size
+                        for dim, corn in enumerate(corner_index):
+                            t_dim = dim + 1 if dim >= self._byslices else dim
+                            temp = target_dat.narrow(t_dim, corn, majority_size[dim])
+                        self.data[t] = temp
+
+
                 self.data = cat(self.data, dim=self._byslices).transpose(0, self._byslices).unsqueeze(1)
             except IndexError:
-                print "Wrong Index is used!"
+                print("Wrong Index is used!")
                 self.length = len(self.dataSourcePath)
+        else:
+            try:
+                self.data = stack(self.data, dim=0).unsqueeze(1)
+            except:
+                logging.log(logging.WARNING, "Cannot stack data due to non-uniform shapes.")
+                logging.log(logging.INFO, "%s"%[d.shape for d in self.data])
+                print("Cannot stack data due to non-uniform shapes. Some function might be impaired.")
 
 
-    def size(self, int):
-        return self.length
+    def size(self, int=None):
+        if int is None:
+            try:
+                return self.data.shape
+            except:
+                return self.length
+        else:
+            return self.length
+
+    def type(self):
+        return self.data[0].type()
+
+    def as_type(self, t):
+        try:
+            self.data = self.data.type(t)
+            self.dtype = t
+        except Exception as e:
+            print(e)
+
+    def get_data_source(self, i):
+        if self._byslices >=0:
+            return self.dataSourcePath[int(np.argmax(self._itemindexes > i)) - 1]
+        else:
+            return self.dataSourcePath[i]
+
+    def get_internal_index(self, i):
+        if self._byslices >= 0:
+            return i - self._itemindexes[int(np.argmax(self._itemindexes > i)) - 1]
+        else:
+            return i
+
+    def get_data_by_ID(self, id, globber=None):
+        ids = self.get_unique_IDs(globber)
+        if len(set(ids)) != len(ids):
+            raise AttributeError("IDs are not unique using this globber: %s!"%globber)
+
+        return self.__getitem__(ids.index(id))
+
+
+    def get_unique_IDs(self, globber=None):
+        import re
+
+        # Default to numbers
+        if self._id_globber is None and globber is None:
+            if globber is None:
+                self._id_globber = "[^T][0-9]+"
+        elif self._id_globber is None and not globber is None:
+            self._id_globber = globber
+
+        filenames = [os.path.basename(self.get_data_source(i)) for i in range(self.__len__())]
+
+
+        outlist = []
+        for f in filenames:
+            matchobj = re.search(self._id_globber, f)
+
+            if not matchobj is None:
+                outlist.append(f[matchobj.start():matchobj.end()])
+        return outlist
+
+    def get_spacing(self, id):
+        if self._byslices >= 0:
+            return [round(self.metadata[self.get_internal_index(id)]['pixdim[%d]'%(i+1)], 5) for i in range(3)]
+        else:
+            return [round(self.metadata[id]['pixdim[%d]'%(i+1)], 5) for i in range(3)]
 
     def __len__(self):
         return self.length
@@ -171,7 +290,7 @@ class ImageDataSet(Dataset):
         # "File Paths\tSize\t\tSpacing\t\tOrigin\n"
         # printable = {'File Name': []}
         printable = {'File Name': [], 'Size': [], 'Spacing': [], 'Origin': []}
-        for i in xrange(len(self.dataSourcePath)):
+        for i in range(len(self.dataSourcePath)):
             printable['File Name'].append(os.path.basename(self.dataSourcePath[i]))
             # for keys in self.metadata[i]:
             #     if not printable.has_key(keys):
@@ -191,16 +310,30 @@ class ImageDataSet(Dataset):
         s += data.to_string()
         return s
 
-    def Write(self, tensor_data, outputdirectory):
-        assert self._itemindexes[-1] == tensor_data.size()[0], "Dimension mismatch!"
+    def Write(self, tensor_data, outputdirectory, prefix=''):
+        if self._byslices > -1:
+            assert self._itemindexes[-1] == tensor_data.size()[0], "Dimension mismatch! (%s vs %s)"%(self._itemindexes[-1], tensor_data.size()[0])
+            td=tensor_data.numpy()
+            for i in range(len(self.dataSourcePath)):
+                start=self._itemindexes[i]
+                end=self._itemindexes[i+1]
+                # image=sitk.GetImageFromArray(td[start:end])
+                templateim = sitk.ReadImage(self.dataSourcePath[i])
+                image = sitk.GetImageFromArray(td[start:end])
+                image.CopyInformation(templateim)
+                # image=self.WrapImageWithMetaData(td[start:end], self.metadata[i])
+                sitk.WriteImage(image, outputdirectory+'/'+ prefix + os.path.basename(self.dataSourcePath[i]))
 
-        td=tensor_data.numpy()
-        for i in xrange(len(self.dataSourcePath)):
-            start=self._itemindexes[i]
-            end=self._itemindexes[i+1]
-            # image=sitk.GetImageFromArray(td[start:end])
-            image=self.WrapImageWithMetaData(td[start:end], self.metadata[i])
-            sitk.WriteImage(image, outputdirectory+'/'+os.path.basename(self.dataSourcePath[i]))
+        else:
+            assert len(self) == len(tensor_data), "Length mismatch! %i vs %i"%(len(self), len(tensor_data))
+
+            for i in range(len(self)):
+                source_file = self.dataSourcePath[i]
+                templateim = sitk.ReadImage(source_file)
+                image = sitk.GetImageFromArray(tensor_data[i].squeeze().numpy())
+                image.CopyInformation(templateim)
+                sitk.WriteImage(image, outputdirectory+'/'+ prefix + os.path.basename(self.dataSourcePath[i]))
+
 
     @staticmethod
     def WrapImageWithMetaData(inImage, metadata):
@@ -229,33 +362,31 @@ class ImageDataSet(Dataset):
                     [2*b*d - 2*a*c, 2*c*d + 2*a*b, a*a + d*d - c*c - b*b]
                 ])
             A[:2, :3] = -A[:2, :3]
-            A[:,2] = metadata['pixdim[0]'] * A[:,2]
+            A[:,2] = float(metadata['pixdim[0]']) * A[:,2]
             im.SetOrigin(ori)
             im.SetDirection(A.flatten())
             im.SetSpacing(spacing)
             return im
 
-class MaskedTensorDataset(Dataset):
-    """
-    Data set wrapping like Tensor Dataset, except this also accept a mask.
-    """
-
-    def __init__(self, data_tensor, target_tensor, mask_tensor):
+    def get_unique_values(self):
+        """get_unique_values() -> torch.tensor
+        Get the tensor of all unique values in basedata. Only for integer tensors
+        :return: torch.tensor
         """
+        assert self.data[0].is_floating_point() == False, "This function is for integer tensors. Current datatype is: %s"%(self.data[0].dtype)
+        vals = unique(cat([unique(d) for d in self.data]))
+        return vals
 
-        :param ImageDataSet data_tensor:
-        :param ImageDataSet target_tensor:
-        :param ImageDataSet mask_tensor:
+    def get_unique_values_n_counts(self):
+        """get_unique_label_n_counts() -> dict
+        Get a dictionary of unique values as key and its counts as value.
         """
-        assert data_tensor.size(0) == target_tensor.size(0) == mask_tensor.size(0)
-        assert mask_tensor.dtype == np.uint8, "Mask has to be of dtype np.uint8"
-
-        self.data_tensor = data_tensor
-        self.target_tensor = target_tensor
-        self.mask_tensor = mask_tensor
-
-    def __getitem__(self, index):
-        return self.data_tensor[index], self.target_tensor[index], self.mask_tensor[index]
-
-    def __len__(self):
-        return self.data_tensor.size(0)
+        assert self.data[0].is_floating_point() == False, "This function is for integer tensors. Current datatype is: %s"%(self.data[0].dtype)
+        out_dict = {}
+        for val, counts in [unique(d, return_counts=True) for d in self.data]:
+            for v, c in zip(val, counts):
+                if v.item() not in out_dict:
+                    out_dict[v.item()] = c.item()
+                else:
+                    out_dict[v.item()] += c.item()
+        return out_dict

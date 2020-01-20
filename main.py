@@ -1,296 +1,366 @@
+# System
 import argparse
 import os, gc, sys
 import logging
-import numpy as np
 import datetime
 
-from MedImgDataset import Subbands, ImagePatchesLoader
-from torch.utils.data import DataLoader, TensorDataset
-from torch.autograd import Variable
-from tqdm import *
-import torch.nn as nn
-import torch.optim as optim
+# Propietary
+from functools import partial
 import torch
+import torch.nn as nn
+from torch.utils.data import DataLoader, TensorDataset
 import traceback
-from torch import cat, stack
-from torchvision.utils import make_grid
-from Networks.UNet import *
-from Networks.TightFrameUNet import *
-from Networks.FullyDecimatedUNet import *
-from Loss.NMSE import NMSELoss
-from Loss.IMSE import IMSELoss
+import configparser
+import numpy as np
+from tqdm import *
+
+# This package
+from Networks import *
+from tb_plotter import TB_plotter
 import myloader as ml
 
+from logger import Logger
+from Solvers import *
+from Inferencers import *
 
 from tensorboardX import SummaryWriter
 # import your own newtork
-
-def LogPrint(msg, level=logging.INFO):
-    logging.getLogger(__name__).log(level, msg)
-    tqdm.write(msg)
 
 def init_weights(m):
     if type(m) == nn.Conv2d:
         torch.nn.init.xavier_normal_(m.weight, 1)
         m.bias.data.fill_(0.01)
 
-def excepthook(*args):
-    logging.getLogger().error('Uncaught exception:', exc_info=args)
-    traceback.print_tb(args)
 
-def main(a):
-    LogPrint("Recieve arguments: %s"%a)
+def prepare_tensorboard_writer(bool_plot, dir_lsuffix, net_nettype, logger):
+    if bool_plot:
+        tensorboard_rootdir = os.environ['TENSORBOARD_LOGDIR']
+        try:
+            if not os.path.isdir(tensorboard_rootdir):
+                logger.log_print_tqdm("Cannot read from TENORBOARD_LOGDIR, retreating to default path...",
+                         logging.WARNING)
+                tensorboard_rootdir = "/media/storage/PytorchRuns"
+
+            writer = SummaryWriter(tensorboard_rootdir + "/%s-%s-%s" % (net_nettype,
+                                                                     dir_lsuffix,
+                                                                     datetime.datetime.now().strftime("%Y%m%d-%H%M%S")))
+            writer = TB_plotter(writer, logger)
+
+
+
+        except OSError:
+            writer = None
+            bool_plot = False
+    else:
+        writer = None
+    return bool_plot, writer
+
+
+def parse_ini_filelist(filelist, mode):
+    assert os.path.isfile(filelist)
+
+    fparser = configparser.ConfigParser()
+    fparser.read(filelist)
+
+    # test
+    if mode:
+        return fparser['FileList'].get('testing').split(',')
+    else:
+        return fparser['FileList'].get('training').split(',')
+
+class backward_compatibility(object):
+        def __init__(self, train, input, lsuffix, loadbyfilelist):
+            super(backward_compatibility, self).__init__()
+            self.train = train
+            self.input = input
+            self.lsuffix = lsuffix
+            self.loadbyfilelist = loadbyfilelist
+
+def main(a, config, logger):
+    logger.log_print_tqdm("Recieve arguments: %s"%dict(({section: dict(config[section]) for section in config.sections()})))
+    ##############################
+    # Parse config
+    #-----------------
+    bool_plot = config['General'].getboolean('plot_tb', False)
+    bool_usecuda = config['General'].getboolean('use_cuda')
+    run_mode = config['General'].get('run_mode', 'training')
+    run_type = config['General'].get('run_type', 'segmentation')
+    write_mode = config['General'].get('write_mode', None)
+    mode = run_mode == 'test' or run_mode == 'testing'
+
+    param_lr = float(config['RunParams'].get('learning_rate', 1E-4))
+    param_momentum = float(config['RunParams'].get('momentum', 0.9))
+    param_initWeight = int(config['RunParams'].get('initial_weight', None))
+    param_epoch = int(config['RunParams'].get('num_of_epochs'))
+    param_decay = float(config['RunParams'].get('decay_rate_LR'))
+    param_batchsize = int(config['RunParams'].get('batch_size'))
+    param_decay_on_plateau = config['RunParams'].getboolean('decay_on_plateau', False)
+
+    checkpoint_load = config['Checkpoint'].get('cp_load_dir', "")
+    checkpoint_save = config['Checkpoint'].get('cp_save_dir', "")
+
+    net_nettype = config['Network'].get('network_type')
+    net_datatype = config['Network'].get('data_type')
+
+    dir_input = config['Data'].get('input_dir')
+    dir_target = config['Data'].get('target_dir')
+    dir_output = config['Data'].get('output_dir')
+    dir_validation_input = config['Data'].get('validation_input_dir', dir_input)
+    dir_validation_target = config['Data'].get('validation_gt_dir', dir_target)
+
+    filters_lsuffix = config['Filters'].get('re_suffix', None)
+    filters_idlist = config['Filters'].get('id_list', None)
+    filters_validation_lsuffix = config['Filters'].get('validation_re_suffix', filters_lsuffix)
+    filters_validation_id = config['Filters'].get('validation_id_list', None)
+
+    # Config override
+    #-----------------
+    if a.train:
+        mode = 0
+    if a.inference:
+        mode = 1
+
+    # Try to make outputdir first if it exist
+    os.makedirs(dir_output, mode=755, exist_ok=True)
+
+    # Check directories
+    for key in list(config['Data']):
+        d = config['Data'].get(key)
+        if not os.path.isfile(d) and not os.path.isdir(d):
+            logger.log_print_tqdm("Cannot locate %s: %s"%(key, d), logging.CRITICAL)
+            return
+
+
+    if filters_idlist.endswith('ini'):
+        filters_idlist = parse_ini_filelist(filters_idlist, mode)
+
+
+    # This is for backward compatibility with myloader.py
+    bc = backward_compatibility(dir_target,
+                                dir_input,
+                                filters_lsuffix,
+                                filters_idlist)
+
+    validation_FLAG=False
+    if not filters_validation_id is None and bool_plot:
+        logger.log_print_tqdm("Recieved validation parameters.")
+        bc_val = backward_compatibility(dir_validation_target,
+                                        dir_validation_input,
+                                        filters_validation_lsuffix,
+                                        filters_validation_id)
+        validation_FLAG=True
+
     ##############################
     # Error Check
     #-----------------
-    mode = 0 # Training Mode
-    assert os.path.isdir(a.input), "Input data directory not exist!"
-    if a.train is None:
+    assert os.path.isdir(dir_input), "Input data directory not exist!"
+    if dir_target is None:
         mode = 1 # Eval mode
-    if not ml.datamap.has_key(a.datatype):
-        LogPrint("Specified datatype doesn't exist! Retreating to default datatype: %s"%ml.datamap.keys()[0],
+    if net_datatype not in ml.datamap:
+        logger.log_print_tqdm("Specified datatype doesn't exist! Retreating to default datatype: %s"%list(ml.datamap.keys())[0],
                  logging.WARNING)
-        a.datatype = ml.datamap.keys()[0]
+        net_datatype = list(ml.datamap.keys())[0]
 
     ##############################
     # Training Mode
     if not mode:
-        LogPrint("Start training...")
-        inputDataset, gtDataset = ml.datamap[a.datatype](a)
+        logger.log_print_tqdm("Start training...")
+        inputDataset, gtDataset = ml.datamap[net_datatype](bc)
+        valDataset, valgtDataset = ml.datamap[net_datatype](bc_val) if validation_FLAG else (None, None)
 
-        # Use image patches for training
-        if a.usepatch > 0:
-            inputDataset = ImagePatchesLoader(inputDataset, patch_stride=a.usepatch/2, patch_size=a.usepatch)
-            gtDataset = ImagePatchesLoader(gtDataset, patch_stride=a.usepatch/2, patch_size=a.usepatch)
-
-        inchan = inputDataset[0].size()[0]
-        trainingSet = TensorDataset(inputDataset, gtDataset)
-        loader      = DataLoader(trainingSet, batch_size=a.batchsize, shuffle=True, num_workers=4)
-
-        # Read tensorboard dir from env
-        if a.plot:
-            tensorboard_rootdir = os.environ['TENSORBOARD_LOGDIR']
-            try:
-                if not os.path.isdir(tensorboard_rootdir):
-                    LogPrint("Cannot read from TENORBOARD_LOGDIR, retreating to default path...",
-                             logging.WARNING)
-                    tensorboard_rootdir = "/media/storage/PytorchRuns"
-                writer = SummaryWriter(tensorboard_rootdir + "/%s_%s_%s"%(a.network,
-                                                                       a.lsuffix,
-                                                                       datetime.datetime.now().strftime("%Y%m%d_%H%M")))
-            except OSError:
-                writer = None
-                a.plot = False
+        #------------------------
+        # Create training solver
+        if run_type == 'Segmentation':
+            solver_class = SegmentationSolver
+        elif run_type == 'Classification':
+            solver_class = ClassificationSolver
         else:
-            writer = None
+            logger.log_print_tqdm('Wrong run_type setting!', logging.ERROR)
+            return
+
+        solver = solver_class(inputDataset, gtDataset, available_networks[net_nettype],
+                              {'lr': param_lr, 'momentum': param_momentum}, bool_usecuda,
+                              param_initWeight=param_initWeight, logger=logger)
+        if param_decay_on_plateau:
+            logger.log_print_tqdm("Optimizer decay on plateau.")
+            solver.set_lr_decay_to_reduceOnPlateau(5, param_decay)
+        else:
+            solver.set_lr_decay(param_decay)
+
+        trainingSet = TensorDataset(inputDataset, gtDataset)
+        loader      = DataLoader(trainingSet, batch_size=param_batchsize, shuffle=True, num_workers=0, drop_last=True, pin_memory=False)
+
+
+        # Read tensorboard dir from env, disable plot if it fails
+        bool_plot, writer = prepare_tensorboard_writer(bool_plot, filters_lsuffix, net_nettype, logger)
 
         # Load Checkpoint or create new network
         #-----------------------------------------
-        net = available_networks[a.network](inchan)
-        net.apply(init_weights)
-
-        net.train(True)
-        if os.path.isfile(a.checkpoint):
-            # assert os.path.isfile(a.checkpoint)
-            LogPrint("Loading checkpoint " + a.checkpoint)
-            net.load_state_dict(torch.load(a.checkpoint))
+        # net = solver.get_net()
+        solver.get_net().train()
+        if os.path.isfile(checkpoint_load):
+            # assert os.path.isfile(checkpoint_load)
+            logger.log_print_tqdm("Loading checkpoint " + checkpoint_load)
+            solver.get_net().load_state_dict(torch.load(checkpoint_load), strict=False)
         else:
-            LogPrint("Checkpoint doesn't exist!")
+            logger.log_print_tqdm("Checkpoint doesn't exist!")
+        solver.net_to_parallel()
 
-        trainparams = {}
-        if not a.trainparams is None:
-            import ast
-            trainparams = ast.literal_eval(a.trainparams)
-
-        lr = trainparams['lr'] if trainparams.has_key('lr') else 1e-5
-        mm = trainparams['momentum'] if trainparams.has_key('momentum') else 0.01
-
-
-        # criterion, normfactor = nn.MSELoss(), nn.MSELoss()
-        # criterion = NMSELoss(size_average=True)
-        criterion = NMSELoss(size_average=True)
-        optimizer = optim.SGD([{'params': net.parameters(),
-                                 'lr': lr, 'momentum': mm}])
-        if a.usecuda:
-            criterion = criterion.cuda()
-            # normfactor = normfactor.cuda()
-            net = net.cuda()
-            # optimizer.cuda()
 
         lastloss = 1e32
         writerindex = 0
         losses = []
-        for i in range(a.epoch):
+        logger.log_print_tqdm("Start training...")
+        for i in range(param_epoch):
             E = []
             temploss = 1e32
             for index, samples in enumerate(loader):
-                if a.usecuda:
-                    s = Variable(samples[0]).float().cuda()
-                    g = Variable(samples[1], requires_grad=False).float().cuda()
-                else:
-                    s, g = Variable(samples[0]), Variable(samples[1])
-                out = net.forward(s)
-                # loss = criterion(out,g.float()) / normfactor(s, g)
-                loss = criterion(out, g.float())
+                s, g = samples
 
-                optimizer.zero_grad()
-                loss.backward()
-                optimizer.step()
+                # initiate one train step.
+                out, loss = solver.step(s, g)
+
                 E.append(loss.data.cpu())
-                LogPrint("\t[Step %04d] Loss: %.010f"%(index, loss.data))
-                if a.plot and index % 10 == 0:
-                    try:
-                        Zrange = out.shape[0] if out.shape[0] < 15 else 15
-                        writer.add_scalar('Loss', loss.data, writerindex)
-                        poolim = make_grid(cat([out[z].unsqueeze(1).data for z in xrange(Zrange)], 0), nrow=4, padding=1, normalize=True)
-                        poolgt = make_grid(cat([g[z].unsqueeze(1).data for z in xrange(Zrange)], 0), nrow=4, padding=1, normalize=True)
-                        pooldiff = make_grid(cat([(out[z] - g[z]).unsqueeze(1) for z in xrange(Zrange)], 0).data, nrow=4, padding=1, normalize=True)
-                        writer.add_image('Image/Image', poolim, writerindex)
-                        writer.add_image('Image/Groundtruth', poolgt, writerindex)
-                        writer.add_image('Image/Diff', pooldiff, writerindex)
-                        writerindex += 10
-                        del poolim, poolgt, pooldiff
-                        gc.collect()
-                    except:
-                        try:
-                            tqdm.write(str(cat([g[z].unsqueeze(1).data for z in xrange(15)], 0)))
-                        except:
-                            LogPrint("Something went wrong while displaying images.", logging.WARNING)
+                logger.log_print_tqdm("\t[Step %04d] Loss: %.010f"%(index, loss.data))
+
+                # Plot to tensorboard
+                if bool_plot and index % 10 == 0:
+                    writer.plot_loss(loss.data, writerindex)
+                    if run_type == 'Segmentation':
+                        writer.plot_segmentation(g, out, s, writerindex)
+                    elif run_type == 'Classification':
+                        pass
 
                 if loss.data.cpu() <= temploss:
-                    backuppath = u"./Backup/cp_%s_%s_temp.pt"%(a.datatype, a.network) \
-                        if a.outcheckpoint is None else a.outcheckpoint.replace('.pt', '_temp.pt')
-                    torch.save(net.state_dict(), backuppath)
+                    backuppath = "./Backup/cp_%s_%s_temp.pt"%(net_datatype, net_nettype) \
+                        if checkpoint_save is None else checkpoint_save.replace('.pt', '_temp.pt')
+                    torch.save(solver.get_net().module.state_dict(), backuppath)
                     temploss = loss.data.cpu()
+                del s, g
+                gc.collect()
+
+                if index % 500 == 0 and validation_FLAG and bool_plot:
+                    try:
+                        # perform validation per 500 steps
+                        writer.plot_validation_loss(writerindex, *solver.validation(valDataset, valgtDataset, param_batchsize))
+                    except Exception as e:
+                        traceback.print_tb(sys.exc_info()[2])
+                        logger.log_print_tqdm(str(e), logging.WARNING)
+
+                # End of step
+                writerindex += 1
+
+            # Decay after each epoch
+            if param_decay_on_plateau:
+                solver.decay_optimizer(lastloss)
+            else:
+                solver.decay_optimizer()
+
+
+            # Call back after each epoch
+            try:
+                logger.log_print_tqdm("Initiate batch done callback.")
+                inputDataset.batch_done_callback()
+                logger.log_print_tqdm("Done")
+            except:
+                logger.log_print_tqdm("Input dataset has no batch done callback.", logging.WARNING)
+
 
             losses.append(E)
             if np.array(E).mean() <= lastloss:
-                backuppath = u"./Backup/cp_%s_%s.pt"%(a.datatype, a.network) \
-                    if a.outcheckpoint is None else a.outcheckpoint
-                torch.save(net.state_dict(), backuppath)
+                backuppath = "./Backup/cp_%s_%s.pt"%(net_datatype, net_nettype) \
+                    if checkpoint_save is None else checkpoint_save
+                torch.save(solver.get_net().module.state_dict(), backuppath)
                 lastloss = np.array(E).mean()
 
-            # Decay learning rate
-            if a.decay != 0:
-                for pg in optimizer.param_groups:
-                    pg['lr'] = pg['lr'] * np.exp(-i * a.decay / float(a.epoch))
 
-            LogPrint("[Epoch %04d] Loss: %.010f LR: %.010f"%(i, np.array(E).mean(), pg['lr']))
+            try:
+                current_lr = next(solver.get_optimizer().param_groups)['lr']
+            except:
+                current_lr = solver.get_optimizer().param_groups[0]['lr']
+            logger.log_print_tqdm("[Epoch %04d] Loss: %.010f LR: %.010f"%(i, np.array(E).mean(), current_lr))
 
 
     # Evaluation mode
     else:
-        LogPrint("Starting evaluation...")
-        if not os.path.isfile(a.loadbyfilelist):
-            LogPrint("Cannot open input file list!", logging.WARNING)
+        logger.log_print_tqdm("Starting evaluation...")
 
-        inputDataset= ml.datamap[a.datatype](a)
-        loader = DataLoader(inputDataset, batch_size=a.batchsize, shuffle=False, num_workers=4)
-        assert os.path.isfile(a.checkpoint), "Cannot open saved states"
-        if not os.path.isdir(a.output):
-            os.mkdir(a.output)
-        assert os.path.isdir(a.output), "Cannot create output directories"
+        bc.train = None # ensure going into inference mode
+        inputDataset= ml.datamap[net_datatype](bc)
+        os.makedirs(dir_output, exist_ok=True)
+
+        #=============================
+        # Perform inference
+        #-------------------
+
+        #------------------------
+        # Create testing inferencer
+        if run_type == 'Segmentation':
+            infer_class = SegmentationInferencer
+        elif run_type == 'Classification':
+            infer_class = ClassificationInferencer
+        else:
+            logger.log_print_tqdm('Wrong run_type setting!', logging.ERROR)
+            return
+
+        inferencer = infer_class(inputDataset, dir_output, param_batchsize,
+                                 available_networks[net_nettype], checkpoint_load,
+                                 bool_usecuda, logger)
+
+        if write_mode == 'GradCAM':
+            inferencer.grad_cam_write_out(['att3'])
+        else:
+            with torch.no_grad():
+                inferencer.write_out()
 
 
-        # Load Checkpoint or create new network
-        #-----------------------------------------
-        indim = inputDataset[0].squeeze().dim()
-        inchan = inputDataset[0].size()[0]
-        net = available_networks[a.network](inchan)
-        net.load_state_dict(torch.load(a.checkpoint))
-        net.train(False)
-        net.eval()
-        if a.usecuda:
-            net.cuda()
-
-        out_tensor = []
-        for index, samples in enumerate(tqdm(loader, desc="Steps")):
-            if a.usecuda:
-                s = Variable(samples, requires_grad=False).float().cuda()
-            else:
-                s = Variable(samples, requires_grad=False).float()
-
-            torch.no_grad()
-            out = net.forward(s).squeeze()
-            while out.dim() <= indim:
-                LogPrint('Unsqueezing last batch.')
-                out = out.unsqueeze(0)
-            out_tensor.append(out.data.cpu())
-        out_tensor = torch.cat(out_tensor, dim=0)
-        inputDataset.Write(out_tensor, a.output)
-        pass
 
     pass
 
 
+
+
 if __name__ == '__main__':
-    from functools import partial
     # This controls the available networks
-    available_networks = {'UNet': UNetSubbands,
-                          'TFUNet': TightFrameUNetSubbands,
-                          'FDUNet': FullyDecimatedUNet,
-                          'PRUNet': PRDecimateUNet,
-                          'OverkillUNet': OverKillUNet,
-                          'CircularTFUNet': lambda chan:  TightFrameUNetSubbands(chan, circular=True),
-                          'UNet_res': lambda chan: UNetSubbands(chan, residual=True),
-                          'TFUNet_res': lambda chan: TightFrameUNetSubbands(chan, residual=True)}
+    available_networks = {'UNet':UNet,
+                          'UNetPosAware': UNetPosAware,
+                          'UNetLocTexAware': UNetLocTexAware,
+                          'UNetLocTexHist': UNetLocTexHist,
+                          'UNetLocTexHistDeeper': UNetLocTexHistDeeper,
+                          'UNetLocTexHist_MM': partial(UNetLocTexHist, fc_inchan=204),
+                          'UNetLocTexHistDeeper_MM': partial(UNetLocTexHistDeeper, fc_inchan=204),
+                          'DenseUNet': DenseUNet2D,
+                          'AttentionUNet': AttentionUNet,
+                          'AttentionDenseUNet': AttentionDenseUNet2D,
+                          'AttentionUNetPosAware': AttentionUNetPosAware,
+                          'AttentionUNetLocTexAware': AttentionUNetLocTexAware,
+                          'LLinNet': LLinNet,
+                          'AttentionResidual': AttentionResidualNet
+                          }
 
 
     parser = argparse.ArgumentParser(description="Training reconstruction from less projections.")
-    parser.add_argument("input", metavar='input', action='store',
-                        help="Train/Target input", type=str)
-    parser.add_argument("-t", "--train", metavar='train', action='store', type=str, default=None,
-                        help="Required directory with target data which serve as ground truth for training. Do no" 
-                             "Set this to enable training mode.")
-    parser.add_argument("-o", metavar='output', dest='output', action='store', type=str, default=None,
-                        help="Set where to store outputs for eval mode")
-    parser.add_argument("-p", dest='plot', action='store_true', default=False,
-                        help="Select whether to disply the plot for stepwise loss")
-    parser.add_argument("-d", "--decayLR", dest='decay', action='store', type=float, default=0,
-                        help="Set decay halflife of the learning rates.")
-    parser.add_argument("-e", "--epoch", dest='epoch', action='store', type=int, default=0,
-                        help="Select network epoch.")
-    parser.add_argument("-s", "--steps", dest='steps', action='store', type=int, default=1000,
-                        help="Specify how many steps to run per epoch.")
-    parser.add_argument("-b", "--batchsize", dest='batchsize', action='store', type=int, default=5,
-                        help="Specify batchsize in each iteration.")
-    parser.add_argument("--usepatch", dest='usepatch', action='store', default=0, type=int,
-                        help="Option to use patches for training, only support square patches now.")
-    parser.add_argument("--load", dest='checkpoint', action='store', default='',
-                        help="Specify network checkpoint.")
-    parser.add_argument("--useCUDA", dest='usecuda', action='store_true',default=False,
-                        help="Set whether to use CUDA or not.")
-    parser.add_argument("--train-params", dest='trainparams', action='store', type=str, default=None,
-                        help="Path to a file with dictionary of training parameters written inside")
-    parser.add_argument("--log", dest='log', action='store', type=str, default=None,
-                        help="If specified, all the messages will be written to the specified file.")
-    parser.add_argument("--checkpoint", dest='outcheckpoint', action='store', default=None, type=str,
-                        help="Output checkpoint to specific location")
-    parser.add_argument("--loadersuffix", dest='lsuffix', action='store', type=str, default=None,
-                        help="Data loader will use this suffix to grep according files for input dataset.")
-    parser.add_argument('--load-by-file-list', dest='loadbyfilelist', action='store', type=str, default=None,
-                        help="Specify two files that contains files to load in forms of 'file1,file2' for "
-                             "training mode and 'file1' for evaluation mode, remember to use quotations if"
-                             " there are spaces in the string")
-    parser.add_argument('--network', dest='network', action='store', type=str, default='',
-                        choices=available_networks.keys(),
-                        help="Select DNN network." )
-    parser.add_argument('--datatype', dest='datatype', action='store', type=str, default='',
-                        choices=ml.datamap.keys(),
-                        help="Select input datatype.")
+    parser.add_argument("config", metavar='config', action='store',
+                        help="Config .ini file.", type=str)
+    parser.add_argument("-t", "--train", dest='train', action='store_true', default=False,
+                        help="Set this to force training mode. (Implementing)")
+    parser.add_argument("-i", "--inference", dest="inference", action='store_true', default=False,
+                        help="Set this to force inference mode. If used with -t option, will still go into inference. (Implementing")
+
     a = parser.parse_args()
 
-    if a.log is None:
-        if not os.path.isdir('./Backup'):
-            os.mkdir('./Backup/')
-        if not os.path.isdir("./Backup/Log"):
-            os.mkdir("./Backup/Log")
-        if a.train:
-            a.log = "./Backup/Log/run_%s.log"%(datetime.datetime.now().strftime("%Y%m%d-%H%M"))
-        else:
-            a.log = "./Backup/Log/eval_%s.log"%(datetime.datetime.now().strftime("%Y%m%d-%H%M"))
+    assert os.path.isfile(a.config), "Cannot find config file!"
 
-    logging.basicConfig(format="[%(asctime)-12s-%(levelname)s] %(message)s", filename=a.log, level=logging.DEBUG)
+    config = configparser.ConfigParser()
+    config.read(a.config)
 
-    sys.excepthook = excepthook
-    main(a)
+
+    # Parameters check
+    log_dir = config['General'].get('log_dir', './Backup/Log/')
+    if os.path.isdir(log_dir):
+        log_dir = os.path.join(log_dir, "%s_%s.log"%(config['General'].get('run_mode', 'training'),
+                                                     datetime.datetime.now().strftime("%Y%m%d-%H%M%S")))
+
+
+    logger = Logger(log_dir)
+    main(a, config, logger)
