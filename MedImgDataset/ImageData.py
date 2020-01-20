@@ -171,6 +171,29 @@ class ImageDataSet(Dataset):
             try:
                 self._itemindexes = np.cumsum(self._itemindexes)
                 self.length = np.sum([m.size()[self._byslices] for m in self.data])
+                # check if all sizes are the same
+                allsizes = [tuple(np.array(m.size())[np.arange(m.dim()) != self._byslices]) for m in self.data]
+                uniquesizes = set(allsizes)
+                if not len(uniquesizes) == 1:
+                    logging.log(logging.WARNING, "There are more than one size, attempting to crop")
+                    majority_size = uniquesizes[np.argmax([allsizes.count(tup) for tup in uniquesizes])]
+                    # Get all index of image that is not of majority size
+                    target = [ss != majority_size for ss in allsizes]
+                    target = [i for i, x in enumerate(target) if x]
+
+                    for t in target:
+                        target_dat = self.data[t]
+                        target_size = target_dat.size()
+                        cent = np.array(target_size) // 2
+                        corner_index = cent - np.array(majority_size)
+
+                        # Crop image to standard size
+                        for dim, corn in enumerate(corner_index):
+                            t_dim = dim + 1 if dim >= self._byslices else dim
+                            temp = target_dat.narrow(t_dim, corn, majority_size[dim])
+                        self.data[t] = temp
+
+
                 self.data = cat(self.data, dim=self._byslices).transpose(0, self._byslices).unsqueeze(1)
             except IndexError:
                 print("Wrong Index is used!")
