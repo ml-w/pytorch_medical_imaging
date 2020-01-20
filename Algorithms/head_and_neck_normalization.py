@@ -2,7 +2,6 @@ from eros import *
 from tqdm import *
 import SimpleITK as sitk
 import numpy as np
-import matplotlib.pyplot as plt
 import sys, os
 from utils import *
 
@@ -21,14 +20,11 @@ def align_image_to_symmetry_plane(image):
     assert isinstance(image, sitk.Image)
 
     ssfactor    = 4
-    # map = sitk.MaximumProjection(image, 2)
+
     eros_res    = eros.eros(sitk.GetArrayFromImage(image)[:,::ssfactor,::ssfactor], 2, angle_range=[-10, 10])
     best_angle  = eros_res.get_mean_angle()
     com         = eros_res.get_mean_com() * ssfactor
-    print(com)
 
-    # best_angle, com = eros.eros(sitk.GetArrayFromImage(map)[:,::ssfactor,::ssfactor], 2, angle_range=[-10, 10])[0]
-    #
     # strip directional information
     newim = sitk.GetImageFromArray(sitk.GetArrayFromImage(image))
     s = np.array(newim.GetSize())
@@ -43,6 +39,7 @@ def align_image_to_symmetry_plane(image):
     transform.SetTranslation(translation)
     transform.Rotate(0, 1, -np.deg2rad(best_angle))
 
+    # restore directional information.
     out_im = sitk.Resample(newim, transform)
     out_im.CopyInformation(image)
     return out_im, transform
@@ -78,13 +75,7 @@ def main(inputdir ,outputdir, segdir=None, globber=None):
     pass
 
 if __name__ == '__main__':
-    # main('../NPC_Segmentation/41.Benign/T2WFS/',
-    #      '../NPC_Segmentation/42.Benign_upright/T2WFS')
-    main('../NPC_Segmentation/41.Benign_Malignant/',
-         '../NPC_Segmentation/41.Benign_Malignant_Upright')
-         # '../NPC_Segmentation/21.NPC_Perfect_SegT2/00.First',
-         # globber="(?=.*T2.*)(?=.*FS.*)(?!.*[cC].*)")
-
+    main(*sys.argv)
 
 
 
