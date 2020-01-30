@@ -329,9 +329,9 @@ if __name__ == '__main__':
     parser.add_argument("config", metavar='config', action='store',
                         help="Config .ini file.", type=str)
     parser.add_argument("-t", "--train", dest='train', action='store_true', default=False,
-                        help="Set this to force training mode. (Implementing)")
+                        help="Set this to force training mode. (Default)")
     parser.add_argument("-i", "--inference", dest="inference", action='store_true', default=False,
-                        help="Set this to force inference mode. If used with -t option, will still go into inference. (Implementing")
+                        help="Set this to force inference mode. If used with -t option, will still go into inference.")
 
     a = parser.parse_args()
 
