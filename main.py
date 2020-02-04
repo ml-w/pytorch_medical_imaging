@@ -3,28 +3,27 @@ import argparse
 import os, gc, sys
 import logging
 import datetime
+from logger import Logger
 
 # Propietary
-from functools import partial
 import torch
 import torch.nn as nn
 from torch.utils.data import DataLoader, TensorDataset
 import traceback
 import configparser
 import numpy as np
-from tqdm import *
+
 
 # This package
 from Networks import *
 from tb_plotter import TB_plotter
 import myloader as ml
 
-from logger import Logger
+
 from Solvers import *
 from Inferencers import *
 
 from tensorboardX import SummaryWriter
-# import your own newtork
 
 def init_weights(m):
     if type(m) == nn.Conv2d:
