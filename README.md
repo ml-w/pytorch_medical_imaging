@@ -9,6 +9,20 @@ Specifically, the software accepts an MR image, cropped to a fixed size and cent
 
 # Installation
 
+## Prerequisite
+- numpy>=1.16
+- scikit-image>=0.14.2
+- opencv-python>=3.4
+- torch>=1.2
+- scipy
+- setuptools
+- pydicom
+- pandas
+- SimpleITK
+- tqdm
+- scikit-learn
+
+
 
 # Usage
 

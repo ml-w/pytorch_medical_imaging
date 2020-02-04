@@ -1,9 +1,7 @@
-imgaug>=0.2.7
 numpy>=1.16
 scikit-image>=0.14.2
 opencv-python>=3.4
-cython
-torch>=1.1
+torch>=1.2
 scipy
 setuptools
 pydicom
