@@ -104,3 +104,5 @@ The implementation was taken from [this](https://gitlab.com/eferrante/nyul) repo
 
 # Reference
 
+1. Chen X, Tian J, Zhang Y, Yang X. A Robust Orientation Estimation Algorithm for Low Quality Fingerprints. IWBRS 2005 Adv Biometric Pers Authentication. Heidelberg: Springer; 2005. p. 95–102   http://link.springer.com/10.1007/11569947_12.
+2. Nyúl, László G., and Jayaram K. Udupa. "On standardizing the MR image intensity scale." Magnetic Resonance in Medicine: An Official Journal of the International Society for Magnetic Resonance in Medicine 42.6 (1999): 1072-1081.
