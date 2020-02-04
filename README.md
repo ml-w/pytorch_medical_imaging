@@ -26,7 +26,7 @@ output = '/dir/to/deposit/output/'
 normalization(input, output)
 ```
 
-## Training & Inference
+## Config File
 
 This software uses .ini files to configure both the training and inference process. Configuration files used for this studies is deposited in the directory ```./Config/Class_C00.ini```
 
@@ -57,7 +57,19 @@ Parameters are breifly explained here:
 | |id_list|Ini file holding the id list of the desired input|**str**|
 | |validation_id_list|Text file holding the id list of the desired validation|**str**|
 
+## Training & Inference
 
+For training, make sure the ini file set run_mode to ```train```: 
+```bash
+python main.py Config/File.ini
+```
+
+For training, if you specify correct input and output dir in the same ini file, you can simply use the command:
+```bash
+python main.py Config/File.ini --inference
+```
+
+Otherwise, make sure you set run_mode to ```inference```.
 
 # Thirdparty Software
 
