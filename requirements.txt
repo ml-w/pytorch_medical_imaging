@@ -11,5 +11,4 @@ pandas
 SimpleITK
 tqdm
 scikit-learn
-scikit-image
 

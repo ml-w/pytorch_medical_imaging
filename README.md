@@ -7,6 +7,9 @@ The purpose of this study is to propose a convolutional neural network (CNN) for
 
 Specifically, the software accepts an MR image, cropped to a fixed size and centred approximately the naospharynx, and then computes a score from 0-1 with respect to the likelihood of NPC. 
 
+# Installation
+
+
 # Usage
 
 ## Normalization
