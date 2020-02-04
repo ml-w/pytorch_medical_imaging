@@ -30,14 +30,32 @@ normalization(input, output)
 
 This software uses .ini files to configure both the training and inference process. Configuration files used for this studies is deposited in the directory ```./Config/Class_C00.ini```
 
+Examples ID list are also given in ```./Configs/CLASS_3Folds```
+
 Parameters are breifly explained here:
 
 |Genre|Parameter|Function|Values|
 |-----|---------|--------|------|
 |General|use_cuda|Use GPU for computation.|True / False|
 | |run_mode|Training or inference| train / inference|
-| |run_type|Depreciated |Classification|
+| |run_type|_Deprecated_ |Classification|
 | |plot_tb|Plot training process to tensorboard, requires setting environmental variable TENSORBOARD_DIR| True / False|
+|Checkpoint|cp_save_dir|Directory to save the network parameter states| **str**|
+| |cp_load_dir|Directory to load the saved network states| **str**|
+|RunParam|batch_size|Batch size| **int**|
+| |initial_weight|_Deprecated_||
+| |learning_rate| Initial learning rate of training| **float**|
+| |momentum| Initial momentum of training| **float** [0-1]|
+| |num_of_epoch| Number of epoch to train| **int**|
+| |decay_rate_LR| Exponential decay rate for the learning rate| **float**|
+|Data|target_dir|Directory of the ground-truth class .csv file| **str**|
+| |input_dir|Directory of the input images| **str**|
+| |output_dir|Directory of to deposit the output in inference mode| **str**|
+| |validation_dir|Directory of the image for validation| **str**|
+| |validation_gt_dir|Directory of the .csv file recorded with ground-truth class|**str**|
+|Filters|re_suffix|Regular expression suffix for globbing files from input directories|**str**|
+| |id_list|Ini file holding the id list of the desired input|**str**|
+| |validation_id_list|Text file holding the id list of the desired validation|**str**|
 
 
 
