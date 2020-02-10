@@ -74,7 +74,7 @@ class ImageDataSetAugment(ImageDataSet):
     def set_reference_augment_dataset(self, dataset):
         assert isinstance(dataset, ImageDataSetAugment)
         assert not dataset in self._referencees,"Assigned dataset is already referenced."
-        assert len(self) == len(dataset), "Datasets have different length! [%i, %i]"%(len(self), len(dataset))
+        assert len(self) == len(dataset), "Datasets have different length! [%s, %s]"%(self.data.shape, dataset.data.shape)
 
         try:
             self._is_referenced=False

@@ -207,6 +207,33 @@ class ImageDataSet(Dataset):
                 print("Cannot stack data due to non-uniform shapes. Some function might be impaired.")
 
 
+    def get_raw_data_shape(self):
+        return [self.get_size(id) for id in range(len(self.metadata))]
+
+    def check_shape_identical(self, image):
+        assert isinstance(image, ImageDataSet), "Target is not image dataset."
+
+        self_shape = self.get_raw_data_shape()
+        target_shape = image.get_raw_data_shape()
+
+        if len(self_shape) != len(target_shape):
+            logging.log(logging.WARNING, "Difference data length!")
+            return False
+
+        assert type(self_shape) == type(target_shape), "There are major discrepancies in dimension!"
+        truth_list = [a == b for a, b in zip(self_shape, target_shape)]
+        if not all(truth_list):
+            discrip = np.argwhere(np.array(truth_list) == False)
+            for x in discrip:
+                logging.log(logging.WARNING,
+                            "Discripency in element %i, ID: %s, File:[%s, %s]"%(
+                                x,
+                                self.get_unique_IDs(x),
+                                os.path.basename(self.get_data_source(x)),
+                                os.path.basename(image.get_data_source(x))))
+
+        return all(truth_list)
+
     def size(self, int=None):
         if int is None:
             try:
@@ -267,7 +294,15 @@ class ImageDataSet(Dataset):
                 outlist.append(f[matchobj.start():matchobj.end()])
         return outlist
 
+    def get_size(self, id):
+        id = id % len(self.metadata)
+        if self._byslices >= 0:
+            return [int(self.metadata[self.get_internal_index(id)]['dim[%d]'%(i+1)]) for i in range(3)]
+        else:
+            return [int(self.metadata[id]['dim[%d]'%(i+1)]) for i in range(3)]
+
     def get_spacing(self, id):
+        id = id % len(self.metadata)
         if self._byslices >= 0:
             return [round(self.metadata[self.get_internal_index(id)]['pixdim[%d]'%(i+1)], 5) for i in range(3)]
         else:

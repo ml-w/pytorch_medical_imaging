@@ -107,6 +107,7 @@ def LoadSegmentationImageDataset_Aug(a, debug=False):
         # Training Mode
         invars = imset(a.input, a.lsuffix, a.loadbyfilelist, np.float32)
         seg = imseg(a.train, None, a.loadbyfilelist, np.uint8)
+        print(invars.check_shape_identical(seg))
         seg.set_reference_augment_dataset(invars)
         return invars, seg
 

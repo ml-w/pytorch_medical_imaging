@@ -1,6 +1,5 @@
 from .ImagePatchesLoader import ImagePatchesLoader
 from .ImagePatchesLoader3D import ImagePatchesLoader3D
-from .ImageData2D import ImageDataSet2D
 from .ImageFeaturePair import ImageFeaturePair
 from .ImageData import ImageDataSet
 from .ImageDataAugment import ImageDataSetAugment
@@ -26,6 +25,6 @@ for row in f.readlines():
     except:
         add_private_dict_entry("CT-PD-dict_v8", Tag(*(r[0][1:-1]).split(',')), r[1].split('/')[0], r[2],r[2])
 
-__all__ = ['ImageDataSet2D', 'ImageFeaturePair', 'Landmarks', 'ImageDataSet',
+__all__ = ['ImageFeaturePair', 'Landmarks', 'ImageDataSet',
            'Projection', 'Subbands', 'ImagePatchesLoader',
            'ImageDataSetAugment', 'ImageDataSetMultiChannel', 'ImagePatchesLoader3D', 'DataLabel']
