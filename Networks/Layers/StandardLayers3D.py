@@ -2,18 +2,6 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
-class Conv3d(nn.Module):
-    def __init__(self, in_ch, out_ch, kern_size=3, stride=1, padding=1, bias=True):
-        super(Conv3d, self).__init__()
-        self.conv = nn.Sequential(
-            nn.Conv3d(in_ch, out_ch, kern_size, stride, padding=padding, bias=bias),
-            nn.BatchNorm3d(out_ch),
-            nn.ReLU(inplace=True)
-        )
-
-    def forward(self, x):
-        return self.conv(x)
-
 class InvertedConv3d(nn.Module):
     def __init__(self, in_ch, out_ch, kern_size=3, stride=1, padding=1, bias=True):
         super(InvertedConv3d, self).__init__()
@@ -21,6 +9,19 @@ class InvertedConv3d(nn.Module):
             nn.BatchNorm3d(in_ch),
             nn.ReLU(inplace=True),
             nn.Conv3d(in_ch, out_ch, kern_size, stride, padding=padding, bias=bias)
+        )
+
+    def forward(self, x):
+        return self.conv(x)
+
+
+class Conv3d(nn.Module):
+    def __init__(self, in_ch, out_ch, kern_size=3, stride=1, padding=1, bias=True):
+        super(Conv3d, self).__init__()
+        self.conv = nn.Sequential(
+            nn.Conv3d(in_ch, out_ch, kern_size, stride, padding=padding, bias=bias),
+            nn.BatchNorm3d(out_ch),
+            nn.ReLU(inplace=True)
         )
 
     def forward(self, x):
@@ -35,7 +36,17 @@ class DoubleConv3d(nn.Module):
             Conv3d(out_ch, out_ch)
         )
 
+    def forward(self, x):
+        return self.conv(x)
 
+class ConvTrans3d(nn.Module):
+    def __init__(self, in_ch, out_ch, kern_size=3, stride=1, padding=1, bias=True):
+        super(ConvTrans3d, self).__init__()
+        self.conv = nn.Sequential(
+            nn.ConvTranspose3d(in_ch, out_ch, kern_size, stride, padding=padding, bias=bias),
+            nn.BatchNorm3d(out_ch),
+            nn.ReLU(inplace=True)
+        )
 
     def forward(self, x):
         return self.conv(x)
@@ -70,3 +81,17 @@ class ResidualBlock3d(nn.Module):
 
         out += res
         return out
+
+
+class MultiConvResBlock3d(nn.Module):
+    def __init__(self, in_ch, out_ch, num_of_convs, kern_size=5, padding=2, drop_out=0, bias=True):
+        assert num_of_convs > 1, "Number of convolutions must be larger than 1."
+        super(MultiConvResBlock3d, self).__init__()
+        self.first_conv = Conv3d(in_ch, out_ch, kern_size=kern_size, padding=padding, bias=bias)
+        self.convs = [Conv3d(out_ch,out_ch, kern_size=kern_size, padding=padding, bias=bias) for i in range(num_of_convs - 1)]
+        self.conv = nn.Sequential(*self.convs)
+        self.dropout = nn.Dropout3d(p=drop_out)
+
+    def forward(self, x):
+        x = self.first_conv(x)
+        return self.dropout(self.conv(x)) + x
