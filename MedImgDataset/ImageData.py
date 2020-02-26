@@ -56,15 +56,71 @@ NIFTI_DICT = {
 }
 
 class ImageDataSet(Dataset):
-    """
-    This dataset automatically load all the nii files in the specific directory to
-    generate a 3D dataset
-    """
-    def __init__(self, rootdir, filelist=None, filesuffix=None, idlist=None, loadBySlices=-1, verbose=False, dtype=float, debugmode=False):
-        """
+    """ImageDataSet class that reads and load nifty in a specified directory
 
-        :param rootdir:
-        """
+    Attributes
+    ----------
+    rootdir: str
+        Path to the root directory for reading nifties
+    readmode: str
+        {'normal', 'recursive', 'explicit'}. Default is normal.
+        Normal - typical loading behavior, reading all nii/nii.gz files in the directory.
+        Recursive - search all subdirectories excluding softlinks, use with causion.
+        Explicit - specifying directories of the files to load.
+    filtermode: str
+        {'idlist', 'regex', 'both', None}. Default is None.
+        After grabbing file directories, they are filtered by either id or regex or both. Corresponding att needed.
+    idlist: str or list
+        If its str, it should be directory to a file containing IDs, one each line, otherwise, an explicit list.
+        Need if filtermode is 'idlist'. Globber of id can be specified with attribute idGlobber.
+    regex: str
+        Regex that is used to match file directories. Un-matched ones are discarded. Effective when filtermode='idlist'
+    idGlobber: str
+        Regex string to search ID. Effective when filtermode='idlist', optional. If none specified the default
+        globber is '(^[a-ZA-Z0-9]+), globbing the first one matches the regex in file basename. Must start with
+        paranthesis.
+    loadBySlices: int
+        If its < 0, images are loaded as 3D volumes. If its >= 0, the slices along i-th dimension loaded.
+    verbose: bool
+        Whether to report loading progress.
+    dtype: str or type
+        Cast loaded data element to the specified type.
+    debugmode:
+        For debug only.
+    recursiveSearch: bool
+        Whether to load files recursively into subdirectories
+
+
+    Examples
+    --------
+    Load all nii images in a folder:
+
+    >>> from MedImgDataset import ImageDataSet
+    >>> imgset = ImageDataSet('/some/dir/')
+
+    Load all nii images, filtered by string 'T2W' in string:
+    >>> imgset = ImageDataSet('/some/dir/', filtermode='regex', regex='(?=.*T2W.*)')
+
+    Given a text file '/home/usr/loadlist.txt' with all image directories like this:
+    /home/usr/img1.nii.gz
+    /home/usr/img2.nii.gz
+    /home/usr/temp/img3.nii.gz
+    /home/usr/temp/img_not_wanted.nii.gz
+
+    Load all nii images, filtered by file basename having numbers:
+    >>> imgset = ImageDataSet('/home/usr/loadlist.txt', readmode='explicit')
+
+
+    Get the first image:
+    >>> im_1st = imgset[0]
+    >>> im_2nd = imgset[1]
+    >>> type(im_1st)
+    torch.tensor
+
+
+    """
+    def __init__(self, rootdir, readmode='normal', filtermode=None, loadBySlices=-1, verbose=False, dtype=float,
+                 debugmode=False, **kwargs):
         super(Dataset, self)
         assert os.path.isdir(rootdir), "Cannot access directory!"
         assert loadBySlices <= 2, "This class only handle 3D data!"
@@ -75,79 +131,111 @@ class ImageDataSet(Dataset):
         self.length = 0
         self.verbose = verbose
         self.dtype = dtype
-        self.filelist = filelist
-        self.idlist = idlist
-        self.filesuffix = filesuffix
-        self._id_globber = None
+        # self.idlist = idlist
+        # self.filesuffix = filesuffix
+        self._filterargs = kwargs
+        self._filtermode=filtermode
+        self._readmode=readmode
+        self._id_globber = kwargs['idGlobber'] if 'idGlobber' in kwargs else "(^[a-zA-Z0-9]+)"
         self._debug=debugmode
         self._byslices=loadBySlices
-        self._ParseRootDir()
 
+        self._error_check()
+        self._parse_root_dir()
 
-    def _ParseRootDir(self):
+    def _error_check(self):
+        assert self._readmode in ['normal', 'recursive', 'explicit'], 'Wrong readmode specified.'
+
+        if self._readmode == 'normal' or self._readmode == 'recursive':
+            assert os.path.isdir(self.rootdir)
+
+        if self._readmode == 'explicit':
+            assert os.path.isfile(self.rootdir)
+
+        assert self._filtermode in ['idlist', 'regex', 'both', None], 'Wrong filtermode specified.'
+        assert self._filtermode in self._filterargs or self._filtermode in ['both', None], \
+            'Specifying arguemnets to filter is necessary'
+        if self._filtermode == 'both':
+            assert all([ k in self._filterargs for k in ['idlist', 'regex']]), 'No filter arguments.'
+
+    def log_print(self, msg, level=logging.INFO):
+        logging.getLogger('__main__').log(level, msg)
+        if self.verbose:
+            print(msg)
+
+    def _parse_root_dir(self):
         """
-        Description
-        -----------
-          Load all nii images to cache
-
-        :return:
+        Main parsing function.
         """
 
         if self.verbose:
             print("Parsing root path: ", self.rootdir)
 
-        # Load files written in filelist from the root_dir
+        # Read all nii.gz files exist first.
         removed_fnames = []
-        if not self.filelist is None:
-            filelist = open(self.filelist, 'r')
-            filenames = [fs.rstrip() for fs in filelist.readlines()]
-            for fs in filenames:
-                if not os.path.isfile(self.rootdir + '/' + fs):
-                    filenames.remove(fs)
+        if self._readmode is 'normal':
+            file_dirs = os.listdir(self.rootdir)
+            file_dirs = fnmatch.filter(file_dirs, "*.nii.gz")
+        elif self._readmode is 'explicit':
+            file_dirs = [fs.rstrip() for fs in open(self.rootdir, 'r').readlines()]
+            for fs in file_dirs:
+                if not os.path.isfile(fs):
+                    file_dirs.remove(fs)
                     removed_fnames.append(fs)
-        elif not self.idlist is None:
-            # if its a file instead of a list of ids
-            if isinstance(self.idlist, str):
-                self.idlist = [r.strip() for r in open(self.idlist, 'r').readlines()]
-            tmp_filenames = os.listdir(self.rootdir)
-            tmp_filenames = fnmatch.filter(tmp_filenames, "*.nii.gz")
-            filenames = []
-            for id in self.idlist:
-                filenames.extend(fnmatch.filter(tmp_filenames, str(id)+"*"))
+        elif self._readmode is 'recursive':
+            file_dirs = []
+            for root, folder, files in os.walk(self.rootdir):
+                if len(files):
+                    file_dirs.extend([os.path.join(root,f) for f in files])
+            file_dirs = fnmatch.filter(file_dirs, '*.nii.gz')
         else:
-            filenames = os.listdir(self.rootdir)
-            filenames = fnmatch.filter(filenames, "*.nii.gz")
+            raise AttributeError("file_dirs is not assigned!")
 
-        if not self.filesuffix is None:
-            # use REGEX if find paranthesis
-            if self.filesuffix[0] == '(':
-                tmp = []
-                for f in filenames:
-                    if not re.match(self.filesuffix, f) is None:
-                        tmp.append(f)
-                filenames = tmp
+        # Apply filter if specified:
+        filtered_away = []
+        if self._filtermode == 'idlist' or self._filtermode == 'both':
+            file_basenames = [os.path.basename(f) for f in file_dirs]
+            file_ids = [re.search(self._id_globber, f) for f in file_basenames]
+            file_ids = [str(mo.group()) if not mo is None else mo for mo in file_ids]
+            if isinstance(self._filterargs['idlist'], str):
+                self._idlist = [r.strip() for r in open(self._filterargs['idlist'], 'r').readlines()]
             else:
-                # Else use bash-style wild card
-                filenames = fnmatch.filter(filenames, "*" + self.filesuffix + "*")
+                self._idlist = self._filterargs['idlist']
+
+            tmp_file_dirs = np.array(file_dirs)
+            keep = [id in self._idlist for id in file_ids]
+            file_dirs = tmp_file_dirs[keep].tolist()
+            filtered_away.extend(tmp_file_dirs[np.invert(keep)])
+
+        if self._filtermode == 'regex' or self._filtermode == 'both':
+            file_basenames = [os.path.basename(f) for f in file_dirs]
+
+            # use REGEX if find paranthesis
+            if self._filterargs['regex'][0] == '(':
+                keep = np.invert([re.match(self._filterargs['regex'], f) is None for f in file_basenames])
+                filtered_away.extend(np.array(file_dirs)[np.invert(keep)].tolist())
+                file_dirs = np.array(file_dirs)[keep].tolist()
+            else: # else use wild card
+                file_dirs = fnmatch.filter(file_dirs, "*" + self._filterargs['regex'] + "*")
 
         if len(removed_fnames) > 0:
             removed_fnames.sort()
             for fs in removed_fnames:
-                logging.getLogger('__main__').log(logging.WARNING, "Cannot find " + fs + " in " + self.rootdir)
-                print("Cannot find " + fs + " in " + self.rootdir)
-        filenames.sort()
+                self.log_print("Cannot find " + fs + " in " + self.rootdir, logging.WARNING)
+
+        file_dirs.sort()
 
         if self.verbose:
-            print("Found %s nii.gz files..."%len(filenames))
+            print("Found %s nii.gz files..."%len(file_dirs))
             print("Start Loading")
 
         self._itemindexes = [0] # [image index of start slice]
-        for i, f in enumerate(tqdm(filenames, disable=not self.verbose)) \
-                if not self._debug else enumerate(tqdm(filenames[:3], disable=not self.verbose)):
+        for i, f in enumerate(tqdm(file_dirs, disable=not self.verbose)) \
+                if not self._debug else enumerate(tqdm(file_dirs[:3], disable=not self.verbose)):
             if self.verbose:
                 tqdm.write("Reading from "+f)
-            im = sitk.ReadImage(self.rootdir + "/" + f)
-            self.dataSourcePath.append(self.rootdir + "/" + f)
+            im = sitk.ReadImage(f)
+            self.dataSourcePath.append(f)
             imarr = sitk.GetArrayFromImage(im).astype(self.dtype)
             self.data.append(from_numpy(imarr))
             self._itemindexes.append(self.data[i].size()[0])
@@ -210,11 +298,11 @@ class ImageDataSet(Dataset):
     def get_raw_data_shape(self):
         return [self.get_size(id) for id in range(len(self.metadata))]
 
-    def check_shape_identical(self, image):
-        assert isinstance(image, ImageDataSet), "Target is not image dataset."
+    def check_shape_identical(self, target_imset):
+        assert isinstance(target_imset, ImageDataSet), "Target is not image dataset."
 
         self_shape = self.get_raw_data_shape()
-        target_shape = image.get_raw_data_shape()
+        target_shape = target_imset.get_raw_data_shape()
 
         if len(self_shape) != len(target_shape):
             logging.log(logging.WARNING, "Difference data length!")
@@ -226,11 +314,11 @@ class ImageDataSet(Dataset):
             discrip = np.argwhere(np.array(truth_list) == False)
             for x in discrip:
                 logging.log(logging.WARNING,
-                            "Discripency in element %i, ID: %s, File:[%s, %s]"%(
+                            "Discripency in element %i, ID: %s, File:[%s, %s]" % (
                                 x,
                                 self.get_unique_IDs(x),
                                 os.path.basename(self.get_data_source(x)),
-                                os.path.basename(image.get_data_source(x))))
+                                os.path.basename(target_imset.get_data_source(x))))
 
         return all(truth_list)
 
@@ -265,30 +353,34 @@ class ImageDataSet(Dataset):
         else:
             return i
 
-    def get_data_by_ID(self, id, globber=None):
-        ids = self.get_unique_IDs(globber)
-        if len(set(ids)) != len(ids):
-            raise AttributeError("IDs are not unique using this globber: %s!"%globber)
+    def get_data_by_ID(self, id, globber=None, get_all=False):
+        if globber is None:
+            globber = self._id_globber
 
-        return self.__getitem__(ids.index(id))
+        ids = self.get_unique_IDs(globber)
+        if len(set(ids)) != len(ids) and not get_all:
+            self.log_print("IDs are not unique using this globber: %s!"%globber, logging.WARNING)
+
+        if ids.count(id) <= 1 or not get_all:
+            return self.__getitem__(ids.index(id))
+        else:
+            return [self.__getitem__(i) for i in np.where(np.array(ids)==id)[0]]
 
 
     def get_unique_IDs(self, globber=None):
+        """
+        Get all IDs globbed by the specified globber. If its None, default globber used. If its not None, the
+        class globber will be updated to the specified one.
+        """
         import re
 
-        # Default to numbers
-        if self._id_globber is None and globber is None:
-            if globber is None:
-                self._id_globber = "[^T][0-9]+"
-        elif self._id_globber is None and not globber is None:
+        if not globber is None:
             self._id_globber = globber
-
         filenames = [os.path.basename(self.get_data_source(i)) for i in range(self.__len__())]
-
 
         outlist = []
         for f in filenames:
-            matchobj = re.search(self._id_globber, f)
+            matchobj = re.search(globber, f)
 
             if not matchobj is None:
                 outlist.append(f[matchobj.start():matchobj.end()])
@@ -324,8 +416,11 @@ class ImageDataSet(Dataset):
             "--------------\n"%(self.rootdir, self.length, self._byslices)
         # "File Paths\tSize\t\tSpacing\t\tOrigin\n"
         # printable = {'File Name': []}
-        printable = {'File Name': [], 'Size': [], 'Spacing': [], 'Origin': []}
+        printable = {'ID': [], 'File Name': [], 'Size': [], 'Spacing': [], 'Origin': []}
         for i in range(len(self.dataSourcePath)):
+            id_mo = re.search(self._id_globber, os.path.basename(self.dataSourcePath[i]))
+            id_mo = 'None' if id_mo is None else id_mo.group()
+            printable['ID'].append(id_mo)
             printable['File Name'].append(os.path.basename(self.dataSourcePath[i]))
             # for keys in self.metadata[i]:
             #     if not printable.has_key(keys):
@@ -342,6 +437,7 @@ class ImageDataSet(Dataset):
                                         round(self.metadata[i]['qoffset_y'], 2),
                                         round(self.metadata[i]['qoffset_z'], 2)])
         data = df(data=printable)
+        data = data.set_index('ID')
         s += data.to_string()
         return s
 
