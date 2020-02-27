@@ -187,9 +187,8 @@ def Volume(TP, FP, TN, FN):
     return (TP + FN)
 
 def EVAL(seg, gt, vars):
-    df = pd.DataFrame(columns=['filename','ImageIndex'] + list(vars.keys()))
+    df = pd.DataFrame(columns=['Filename','ImageIndex'] + list(vars.keys()))
 
-    # match input's ID
     gtindexes = gt.get_unique_IDs()
     segindexes = seg.get_unique_IDs()
 
@@ -198,12 +197,17 @@ def EVAL(seg, gt, vars):
         try:
             segindexes.index(gtindexes[i])
         except ValueError:
-            print("Skipping ", os.path.basename(gt.get_data_source(i)))
-            data = pd.DataFrame([[os.path.basename(gt.get_data_source(i)),
-                                  gt.get_internal_index(i),
-                                  int(gtindexes[i])] + [np.nan] * len(vars)],
-                            columns=['filename','ImageIndex', 'Index'] + list(vars.keys()))
-            df = df.append(data)
+            print("Skipping ", os.path.basename(gt.get_data_source(
+                i)))
+            # data = pd.DataFrame([[os.path.basename(gt.get_data_source(i)),
+            #                       'Not Found',
+            #                       gt.get_internal_index(i),
+            #                       int(gtindexes[i])] + [np.nan] * len(vars)],
+            #                 columns=['Filename', 'TestParentDirectory',
+            #                          'ImageIndex',
+            #                          'Index'] +
+            #                         list(vars.keys()))
+            # df = df.append(data)
             continue
 
         gg = gt[i]
@@ -231,86 +235,20 @@ def EVAL(seg, gt, vars):
                     values.append(np.nan)
                     print(e.message)
 
-        data = pd.DataFrame([[os.path.basename(gt.get_data_source(i)),
-                              gt.get_internal_index(i), int(gtindexes[i])] + values],
-                            columns=['filename','ImageIndex', 'Index'] + list(vars.keys()))
+        data = pd.DataFrame([[os.path.basename(seg.get_data_source(segindexes.index(gtindexes[i]))),
+                              os.path.basename(
+                                      os.path.dirname(
+                                          seg.get_data_source(segindexes.index(gtindexes[i])))
+                                  ),
+                              seg._filterargs['regex'],
+                              gt.get_internal_index(i),
+                              int(gtindexes[i])] + values],
+                            columns=['Filename', 'TestParentDirectory',
+                                     'TestFilter', 'ImageIndex', 'Index'] +
+                                    list(vars.keys()))
         df = df.append(data)
+        df.set_index('Index')
     return df
-
-
-#=========================================
-# General batch analysis
-#=========================================
-def BatchAnalysis(targetfiles, testfiles, func, mask=None, outputcsvdir=None):
-    """
-    Description
-    -----------
-
-    :return: pd.DataFrame
-    """
-
-    columnlist = ['RootFile', 'InstanceNumber', 'Group']
-    for fs in func:
-        if isinstance(fs, type(lambda: None)):
-            columnlist.append(fs.__name__)
-
-
-    assert isinstance(testfiles, dict), "Expect testfiles input to be dictionary of list."
-    assert all([len(targetfiles) == len(testfiles[tf]) for tf in testfiles])
-
-    # Check existance of all files
-    allfiles = []
-    allfiles.extend(targetfiles)
-    if not mask is None:
-        assert len(mask) == len(targetfiles), "Input mask files list has wrong length."
-        allfiles.extend(mask)
-    [allfiles.extend(testfiles[tf]) for tf in testfiles]
-    b = [os.path.isfile(f) for f in allfiles]
-    if not all(b):
-        print("Following files doesn't exist:")
-        print('\n'.join(np.array(allfiles)[np.invert(b)]))
-        return
-
-
-    df = pd.DataFrame(columns=columnlist)
-    loadimage = lambda imdir: sitk.GetArrayFromImage(sitk.ReadImage(imdir)).astype('int')
-    targets = [loadimage(tf) for tf in targetfiles]
-    if not mask is None:
-        mas = [loadimage(tf).astype('bool') for tf in mask]
-    N = len(targetfiles)    # Number of files per batch to process
-    for group in tqdm(testfiles, desc='Group', leave=False):
-        for i in trange(N, desc='Files', leave=False):
-            tar = targets[i]
-            input = loadimage(testfiles[group][i])
-            for s in range(tar.shape[0]):
-                instancenumber = s
-                values = []
-                for fs in func:
-                    try:
-                        if mask is None:
-                            val = fs(input[s], tar[s])
-                            values.append(val)
-                        else:
-                            m = np.invert(mas[i][s])
-                            input[s][m] = 0
-                            tar[s][m] = 0
-                            val = fs(input[s], tar[s])
-                            values.append(val)
-
-                    except IndexError:
-                        values.append('N/A')
-                l_df = pd.DataFrame([[os.path.basename(testfiles[group][i]),
-                                      instancenumber,
-                                      group] + values],
-                                    columns=columnlist)
-                df = df.append(l_df)
-    if not outputcsvdir is None:
-        df.to_csv(outputcsvdir)
-    return df
-
-
-
-from skimage.transform import resize
 
 if __name__ == '__main__':
     parse = argparse.ArgumentParser()
@@ -332,9 +270,14 @@ if __name__ == '__main__':
     parse.add_argument('--asd', action='store', default=False, dest='asd',
                        help='add average surface distance to analysis.')
     parse.add_argument('-a', '--all', action='store_true', default=False, dest='all', help='use all available analysis.')
+    parse.add_argument('--append', action='store_true', default=False, dest='append', help='append datalist on save.')
     parse.add_argument('--save', action='store', default=None, dest='save', help='save analysis results as csv')
     parse.add_argument('--test-data', action='store', type=str, dest='testset', required=True)
+    parse.add_argument('--test-filter', action='store', type=str,
+                       dest='testfilter', default=None, help='Filter for test filter')
     parse.add_argument('--gt-data', action='store', type=str, dest='gtset', required=True)
+    parse.add_argument('--gt-filter', action='store', type=str,
+                       dest='gtfilter', default=None, help='Filter for ground truth data.')
     parse.add_argument('--added-label', action='store', type=str, dest='label',
                        help='Additional label that will be marked under the colume "Note"')
     args = parse.parse_args()
@@ -368,13 +311,21 @@ if __name__ == '__main__':
                 'PR': PrecisionRate,
                 'ASD': ASD}
 
-    output = ImageDataSet(args.testset, verbose=True, dtype='uint8')
-    seg = ImageDataSet(args.gtset, verbose=True, dtype='uint8', idlist=output.get_unique_IDs())
 
-    results = EVAL(output, seg, vars)
+    imset = ImageDataSet(args.testset, readmode='recursive',
+                         filtermode='regex', regex=args.testfilter,
+                         verbose=True, debugmode=False)
+    gtset = ImageDataSet(args.gtset, filtermode='both',
+                         regex=args.gtfilter, idlist=imset.get_unique_IDs(),
+                         verbose=True, debugmode=False)
+
+    results = EVAL(imset, gtset, vars)
     results = results.sort_values('Index')
     results = results.set_index('Index')
     results.index = results.index.astype(str)
+
+    print(results.to_string())
+    print(results.mean())
 
     if not args.label is None:
         results['Note'] = str(args.label)
@@ -382,13 +333,12 @@ if __name__ == '__main__':
     if not args.save is None:
         try:
             # Append if file exist
-            if os.path.isfile(args.save):
+            if os.path.isfile(args.save) and args.append:
                 print("Appending...")
                 with open(args.save, 'a') as f:
                     results.to_csv(f, mode='a', header=False)
             else:
+                print("Saving...")
                 results.to_csv(args.save)
         except:
             print("Cannot save to: ", args.save)
-    print(results.to_string())
-    print(results.mean())

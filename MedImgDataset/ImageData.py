@@ -178,6 +178,7 @@ class ImageDataSet(Dataset):
         if self._readmode is 'normal':
             file_dirs = os.listdir(self.rootdir)
             file_dirs = fnmatch.filter(file_dirs, "*.nii.gz")
+            file_dirs = [os.path.join(self.rootdir, f) for f in file_dirs]
         elif self._readmode is 'explicit':
             file_dirs = [fs.rstrip() for fs in open(self.rootdir, 'r').readlines()]
             for fs in file_dirs:
@@ -200,11 +201,15 @@ class ImageDataSet(Dataset):
         # Filter idlist
         #--------------
         if self._filtermode == 'idlist' or self._filtermode == 'both':
+            print(self._filterargs['idlist'])
             file_basenames = [os.path.basename(f) for f in file_dirs]
             file_ids = [re.search(self._id_globber, f) for f in file_basenames]
             file_ids = [str(mo.group()) if not mo is None else mo for mo in file_ids]
             if isinstance(self._filterargs['idlist'], str):
                 self._idlist = [r.strip() for r in open(self._filterargs['idlist'], 'r').readlines()]
+            elif self._filterargs['idlist'] is None:
+                self.log_print('Idlist input is None!')
+                pass
             else:
                 self._idlist = self._filterargs['idlist']
 
@@ -216,9 +221,12 @@ class ImageDataSet(Dataset):
         #--------------
         if self._filtermode == 'regex' or self._filtermode == 'both':
             file_basenames = [os.path.basename(f) for f in file_dirs]
-
             # use REGEX if find paranthesis
-            if self._filterargs['regex'][0] == '(':
+            if self._filterargs['regex'] is None:
+                # do nothing if regex is Nonw
+                self.log_print('Regex input is None!', logging.WARNING)
+                pass
+            elif self._filterargs['regex'][0] == '(':
                 keep = np.invert([re.match(self._filterargs['regex'], f) is None for f in file_basenames])
                 filtered_away.extend(np.array(file_dirs)[np.invert(keep)].tolist())
                 file_dirs = np.array(file_dirs)[keep].tolist()
@@ -242,7 +250,8 @@ class ImageDataSet(Dataset):
         #-------------
         self._itemindexes = [0] # [image index of start slice]
         for i, f in enumerate(tqdm(file_dirs, disable=not self.verbose)) \
-                if not self._debug else enumerate(tqdm(file_dirs[:3], disable=not self.verbose)):
+                if not self._debug else enumerate(tqdm(file_dirs[:5],
+                                                       disable=not self.verbose)):
             if self.verbose:
                 tqdm.write("Reading from "+f)
             im = sitk.ReadImage(f)
@@ -407,7 +416,7 @@ class ImageDataSet(Dataset):
 
         outlist = []
         for f in filenames:
-            matchobj = re.search(globber, f)
+            matchobj = re.search(self._id_globber, f)
 
             if not matchobj is None:
                 outlist.append(f[matchobj.start():matchobj.end()])
