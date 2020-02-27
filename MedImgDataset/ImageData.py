@@ -348,18 +348,14 @@ class ImageDataSet(Dataset):
         return all(truth_list)
 
     def size(self, i=None):
-        """Return size of the whole data array, if its a list, return list length.
-
-        Args:
-            i (:obj:`int`, Optional): Index location of the requested element.
-        """
+        """Required by pytorch."""
         if i is None:
             try:
                 return self.data.shape
             except:
                 return self.length
         else:
-            return self.__getitem__(i).shape
+            return self.length
 
     def type(self):
         """Return datatype of the elements."""
