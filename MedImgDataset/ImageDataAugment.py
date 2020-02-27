@@ -13,6 +13,32 @@ import gc
 
 class ImageDataSetAugment(ImageDataSet):
     def __init__(self, *args, **kwargs):
+        """
+        This class allows augmentation on an ImageDataSet on load if its loaded as 2D, i.e. loadBySlice >= 0.
+        Package imgaug [1] was used  here. Currently this only supports one mode of augmentation with random
+        parameters but it is planned to add more to the basket of choice.
+
+        TODO: Allow reading custom augmentation parameters and methods.
+
+        Attributes:
+            aug_factor (int): Number of augmentation per image. Default to 5. I.e. 1 input augment to 5 output plut
+                origin.
+            is_segmentation (:obj:`bool`, Optional): Specify if its a segmentation set. Some augmentation will disable if
+                this is true.
+            reference_dataset (:obj:`ImageDataSetAugment`, Optional): Copy augmentation state from referenced dataset.
+            update_each_epoch (:obj:`bool`, Optional.): Update augmentation state on each epoch. Default to False.
+
+        Args:
+             *Please see ```ImageDataSet```*
+
+        See Also:
+            :class:ImageDataSet
+
+
+        References:
+            1. Alexander B. Jung et el. "imgaug" url: https://github.com/aleju/imgaug
+
+        """
         # TODO: Allow reading augmentation parameters
         self._augment_factor = kwargs.pop('aug_factor') if 'aug_factor' in kwargs else 5
         self._is_segment = kwargs.pop('is_seg') if 'is_seg' in kwargs else False
@@ -23,7 +49,9 @@ class ImageDataSetAugment(ImageDataSet):
         super(ImageDataSetAugment, self).__init__(*args, **kwargs)
         assert self._byslices >= 0, "Currently only support slices augmentation."
 
-        # Change the length of the dataset
+        #==============================
+        # Recalculate length of dataset
+        #------------------------------
         self._base_length = self.length
         self.length = self.length * (self._augment_factor + 1)
         self._nb_of_classes = len(np.unique(self.data.numpy()))
@@ -34,7 +62,9 @@ class ImageDataSetAugment(ImageDataSet):
         self._referencees = []
         self._call_count = 0
 
+        #==================
         # Build augmentator
+        #------------------
         if self._augmentator is None:
             self._augmentator = iaa.Sequential(
                 [iaa.Affine(rotate=(-10, 10), scale=(0.9, 1.1)),
@@ -49,6 +79,7 @@ class ImageDataSetAugment(ImageDataSet):
 
 
         # Augment dtype
+        #--------------
         self._augdtype = None
         if self.dtype == float or self.dtype == 'float' or np.issubdtype(self.dtype, np.float32):
             self._augdtype = 'float32'
@@ -60,6 +91,7 @@ class ImageDataSetAugment(ImageDataSet):
             self.set_reference_augment_dataset(self._references_dataset)
 
     def _update_augmentators(self):
+        """Update the augmentator state, say after each epoch."""
         # Don't touch anything if referencing others.
         if self._is_referencing:
             return
@@ -72,6 +104,7 @@ class ImageDataSetAugment(ImageDataSet):
 
 
     def set_reference_augment_dataset(self, dataset):
+        """This will share the augmentator of two object."""
         assert isinstance(dataset, ImageDataSetAugment)
         assert not dataset in self._referencees,"Assigned dataset is already referenced."
         assert len(self) == len(dataset), "Datasets have different length! [%s, %s]"%(self.data.shape, dataset.data.shape)
@@ -90,18 +123,21 @@ class ImageDataSetAugment(ImageDataSet):
 
 
     def size(self, int=None):
+        """Override parent class method."""
         if int is None:
             return [self.__len__()] + list(self.data[0].shape)
         else:
             return super(ImageDataSetAugment, self).size(int)
 
     def batch_done_callback(self):
+        """Override parent class method. Called after each epoch."""
         if self._update_each_epoch:
             self._update_augmentators()
         self._call_count = 0
 
 
     def get_unique_IDs(self, globber=None):
+        """Override parent class method. Augmented image has the same 'unique ID` as the image its augmented from."""
         return super(ImageDataSetAugment, self).get_unique_IDs(globber) * self._augment_factor
 
     def __getitem__(self, item):
