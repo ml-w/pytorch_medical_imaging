@@ -56,68 +56,68 @@ NIFTI_DICT = {
 }
 
 class ImageDataSet(Dataset):
-    """ImageDataSet class that reads and load nifty in a specified directory
+    """ImageDataSet class that reads and load nifty in a specified directory.
 
-    Attributes
-    ----------
-    rootdir: str
-        Path to the root directory for reading nifties
-    readmode: str
-        {'normal', 'recursive', 'explicit'}. Default is normal.
-        Normal - typical loading behavior, reading all nii/nii.gz files in the directory.
-        Recursive - search all subdirectories excluding softlinks, use with causion.
-        Explicit - specifying directories of the files to load.
-    filtermode: str
-        {'idlist', 'regex', 'both', None}. Default is None.
-        After grabbing file directories, they are filtered by either id or regex or both. Corresponding att needed.
-    idlist: str or list
-        If its str, it should be directory to a file containing IDs, one each line, otherwise, an explicit list.
-        Need if filtermode is 'idlist'. Globber of id can be specified with attribute idGlobber.
-    regex: str
-        Regex that is used to match file directories. Un-matched ones are discarded. Effective when filtermode='idlist'
-    idGlobber: str
-        Regex string to search ID. Effective when filtermode='idlist', optional. If none specified the default
-        globber is '(^[a-ZA-Z0-9]+), globbing the first one matches the regex in file basename. Must start with
-        paranthesis.
-    loadBySlices: int
-        If its < 0, images are loaded as 3D volumes. If its >= 0, the slices along i-th dimension loaded.
-    verbose: bool
-        Whether to report loading progress.
-    dtype: str or type
-        Cast loaded data element to the specified type.
-    debugmode:
-        For debug only.
-    recursiveSearch: bool
-        Whether to load files recursively into subdirectories
+    Attributes:
+        readmode (str): {'normal', 'recursive', 'explicit'}. Default is normal.
+            Normal - typical loading behavior, reading all nii/nii.gz files
+                in the directory.
+            Recursive - search all subdirectories excluding softlinks, use
+                with causion.
+            Explicit - specifying directories of the files to load.
+        filtermode (str): {'idlist', 'regex', 'both', None}. Default is None.
+            After grabbing file directories, they are filtered by either id or
+            regex or both. Corresponding att needed.
+        idlist (str or list): If its str, it should be directory to a file
+            containing IDs, one each line, otherwise, an explicit list. Need
+            if filtermode is 'idlist'. Globber of id can be specified with
+            attribute idGlobber.
+        regex (str): Regex that is used to match file directories. Un-matched
+            ones are discarded. Effective when filtermode='idlist'
+        idGlobber (str): Regex string to search ID. Effective when
+            filtermode='idlist', optional. If none specified the default
+            globber is '(^[a-ZA-Z0-9]+), globbing the first one matches the
+            regex in file basename. Must start with paranthesis.
+        loadBySlices (int):
+            If its < 0, images are loaded as 3D volumes. If its >= 0,
+            the slices along i-th dimension loaded.
+        verbose (bool): Whether to report loading progress.
+        dtype (str or type): Cast loaded data element to the specified type.
+        debugmode (bool): For debug only.
+        recursiveSearch (bool): Whether to load files recursively into
+            subdirectories
 
+    Args:
+        rootdir (str): Path to the root directory for reading nifties
 
-    Examples
-    --------
-    Load all nii images in a folder:
+    Examples:
+        Load all nii images in a folder:
 
-    >>> from MedImgDataset import ImageDataSet
-    >>> imgset = ImageDataSet('/some/dir/')
+        >>> from MedImgDataset import ImageDataSet
+        >>> imgset = ImageDataSet('/some/dir/')
 
-    Load all nii images, filtered by string 'T2W' in string:
-    >>> imgset = ImageDataSet('/some/dir/', filtermode='regex', regex='(?=.*T2W.*)')
+        Load all nii images, filtered by string 'T2W' in string:
 
-    Given a text file '/home/usr/loadlist.txt' with all image directories like this:
-    /home/usr/img1.nii.gz
-    /home/usr/img2.nii.gz
-    /home/usr/temp/img3.nii.gz
-    /home/usr/temp/img_not_wanted.nii.gz
+        >>> imgset = ImageDataSet('/some/dir/', filtermode='regex', \
+                                  regex='(?=.*T2W.*)')
 
-    Load all nii images, filtered by file basename having numbers:
-    >>> imgset = ImageDataSet('/home/usr/loadlist.txt', readmode='explicit')
+        Given a text file '/home/usr/loadlist.txt' with all image directories like this:
+        /home/usr/img1.nii.gz
+        /home/usr/img2.nii.gz
+        /home/usr/temp/img3.nii.gz
+        /home/usr/temp/img_not_wanted.nii.gz
 
+        Load all nii images, filtered by file basename having numbers:
 
-    Get the first image:
-    >>> im_1st = imgset[0]
-    >>> im_2nd = imgset[1]
-    >>> type(im_1st)
-    torch.tensor
+        >>> imgset = ImageDataSet('/home/usr/loadlist.txt', readmode='explicit')
 
 
+        Get the first image:
+
+        >>> im_1st = imgset[0]
+        >>> im_2nd = imgset[1]
+        >>> type(im_1st)
+        torch.tensor
     """
     def __init__(self, rootdir, readmode='normal', filtermode=None, loadBySlices=-1, verbose=False, dtype=float,
                  debugmode=False, **kwargs):
@@ -171,7 +171,9 @@ class ImageDataSet(Dataset):
         if self.verbose:
             print("Parsing root path: ", self.rootdir)
 
+        #===================================
         # Read all nii.gz files exist first.
+        #-----------------------------------
         removed_fnames = []
         if self._readmode is 'normal':
             file_dirs = os.listdir(self.rootdir)
@@ -191,8 +193,12 @@ class ImageDataSet(Dataset):
         else:
             raise AttributeError("file_dirs is not assigned!")
 
-        # Apply filter if specified:
+        #==========================
+        # Apply filter if specified
+        #--------------------------
         filtered_away = []
+        # Filter idlist
+        #--------------
         if self._filtermode == 'idlist' or self._filtermode == 'both':
             file_basenames = [os.path.basename(f) for f in file_dirs]
             file_ids = [re.search(self._id_globber, f) for f in file_basenames]
@@ -206,7 +212,8 @@ class ImageDataSet(Dataset):
             keep = [id in self._idlist for id in file_ids]
             file_dirs = tmp_file_dirs[keep].tolist()
             filtered_away.extend(tmp_file_dirs[np.invert(keep)])
-
+        # Fitlter regex
+        #--------------
         if self._filtermode == 'regex' or self._filtermode == 'both':
             file_basenames = [os.path.basename(f) for f in file_dirs]
 
@@ -229,6 +236,10 @@ class ImageDataSet(Dataset):
             print("Found %s nii.gz files..."%len(file_dirs))
             print("Start Loading")
 
+
+        #=============
+        # Reading data
+        #-------------
         self._itemindexes = [0] # [image index of start slice]
         for i, f in enumerate(tqdm(file_dirs, disable=not self.verbose)) \
                 if not self._debug else enumerate(tqdm(file_dirs[:3], disable=not self.verbose)):
@@ -255,6 +266,9 @@ class ImageDataSet(Dataset):
             self.metadata.append(metadata)
         self.length = len(self.dataSourcePath)
 
+        #=====================================
+        # Option to load 3D images as 2D slice
+        #-------------------------------------
         if self._byslices >= 0:
             try:
                 self._itemindexes = np.cumsum(self._itemindexes)
@@ -296,9 +310,11 @@ class ImageDataSet(Dataset):
 
 
     def get_raw_data_shape(self):
-        return [self.get_size(id) for id in range(len(self.metadata))]
+        """Get shape of all files as a list (ignore load by slice option)."""
+        return [self.get_size(i) for i in range(len(self.metadata))]
 
     def check_shape_identical(self, target_imset):
+        """Check if file shape is identical to another ImageDataSet."""
         assert isinstance(target_imset, ImageDataSet), "Target is not image dataset."
 
         self_shape = self.get_raw_data_shape()
@@ -322,19 +338,26 @@ class ImageDataSet(Dataset):
 
         return all(truth_list)
 
-    def size(self, int=None):
-        if int is None:
+    def size(self, i=None):
+        """Return size of the whole data array, if its a list, return list length.
+
+        Args:
+            i (:obj:`int`, Optional): Index location of the requested element.
+        """
+        if i is None:
             try:
                 return self.data.shape
             except:
                 return self.length
         else:
-            return self.length
+            return self.__getitem__(i).shape
 
     def type(self):
+        """Return datatype of the elements."""
         return self.data[0].type()
 
     def as_type(self, t):
+        """Cast all elements to specified type."""
         try:
             self.data = self.data.type(t)
             self.dtype = t
@@ -342,18 +365,22 @@ class ImageDataSet(Dataset):
             print(e)
 
     def get_data_source(self, i):
+        """Get directory of the source of the i-th element."""
         if self._byslices >=0:
             return self.dataSourcePath[int(np.argmax(self._itemindexes > i)) - 1]
         else:
             return self.dataSourcePath[i]
 
     def get_internal_index(self, i):
+        """If load by slice, get the slice number of the i-th 2D element in
+        its original image."""
         if self._byslices >= 0:
             return i - self._itemindexes[int(np.argmax(self._itemindexes > i)) - 1]
         else:
             return i
 
     def get_data_by_ID(self, id, globber=None, get_all=False):
+        """Get data by globbing ID from the basename of files."""
         if globber is None:
             globber = self._id_globber
 
@@ -368,9 +395,9 @@ class ImageDataSet(Dataset):
 
 
     def get_unique_IDs(self, globber=None):
-        """
-        Get all IDs globbed by the specified globber. If its None, default globber used. If its not None, the
-        class globber will be updated to the specified one.
+        """Get all IDs globbed by the specified globber. If its None,
+        default globber used. If its not None, the class globber will be
+        updated to the specified one.
         """
         import re
 
@@ -387,6 +414,8 @@ class ImageDataSet(Dataset):
         return outlist
 
     def get_size(self, id):
+        """Get the size of the original image. Ignores load by slice and
+        gives 3D size."""
         id = id % len(self.metadata)
         if self._byslices >= 0:
             return [int(self.metadata[self.get_internal_index(id)]['dim[%d]'%(i+1)]) for i in range(3)]
@@ -394,6 +423,8 @@ class ImageDataSet(Dataset):
             return [int(self.metadata[id]['dim[%d]'%(i+1)]) for i in range(3)]
 
     def get_spacing(self, id):
+        """Get the spacing of the original image. Ignores load by slice and
+        gives 3D spacing."""
         id = id % len(self.metadata)
         if self._byslices >= 0:
             return [round(self.metadata[self.get_internal_index(id)]['pixdim[%d]'%(i+1)], 5) for i in range(3)]
@@ -442,8 +473,18 @@ class ImageDataSet(Dataset):
         return s
 
     def Write(self, tensor_data, outputdirectory, prefix=''):
+        """Write data array to the output directory accordining to the image
+        properties of the loaded images.
+
+        Args:
+            tensor_data (:obj:`torch.tensor`): Data arrays to save, has to
+                be arranged identically as the attribute self.data of the object.
+            outputdirectory (str): Folder to output nii files
+            prefix (str): Prefix to add before saved files. Default to ''.
+        """
         if self._byslices > -1:
-            assert self._itemindexes[-1] == tensor_data.size()[0], "Dimension mismatch! (%s vs %s)"%(self._itemindexes[-1], tensor_data.size()[0])
+            assert self._itemindexes[-1] == tensor_data.size()[0], \
+                "Dimension mismatch! (%s vs %s)"%(self._itemindexes[-1], tensor_data.size()[0])
             td=tensor_data.numpy()
             for i in range(len(self.dataSourcePath)):
                 start=self._itemindexes[i]
@@ -468,11 +509,7 @@ class ImageDataSet(Dataset):
 
     @staticmethod
     def WrapImageWithMetaData(inImage, metadata):
-        """WrapImageWithMetaData(np.ndarray or sitk.sitkImage) -> sitk.sitkImage
-
-        :param np.ndarray inImage:
-        :return:
-        """
+        """Depreicated"""
 
         im = inImage
         if isinstance(inImage, np.ndarray):
@@ -500,19 +537,18 @@ class ImageDataSet(Dataset):
             return im
 
     def get_unique_values(self):
-        """get_unique_values() -> torch.tensor
-        Get the tensor of all unique values in basedata. Only for integer tensors
-        :return: torch.tensor
+        """Get the tensor of all unique values in basedata. Only for integer tensors
         """
-        assert self.data[0].is_floating_point() == False, "This function is for integer tensors. Current datatype is: %s"%(self.data[0].dtype)
+        assert self.data[0].is_floating_point() == False, \
+            "This function is for integer tensors. Current datatype is: %s"%(self.data[0].dtype)
         vals = unique(cat([unique(d) for d in self.data]))
         return vals
 
     def get_unique_values_n_counts(self):
-        """get_unique_label_n_counts() -> dict
-        Get a dictionary of unique values as key and its counts as value.
+        """Get a dictionary of unique values as key and its counts as value.
         """
-        assert self.data[0].is_floating_point() == False, "This function is for integer tensors. Current datatype is: %s"%(self.data[0].dtype)
+        assert self.data[0].is_floating_point() == False, \
+            "This function is for integer tensors. Current datatype is: %s"%(self.data[0].dtype)
         out_dict = {}
         for val, counts in [unique(d, return_counts=True) for d in self.data]:
             for v, c in zip(val, counts):
