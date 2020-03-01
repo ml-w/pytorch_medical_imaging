@@ -56,36 +56,40 @@ NIFTI_DICT = {
 }
 
 class ImageDataSet(Dataset):
-    """ImageDataSet class that reads and load nifty in a specified directory.
+    """
+    ImageDataSet class that reads and load nifty in a specified directory.
 
     Attributes:
-        readmode (str): {'normal', 'recursive', 'explicit'}. Default is normal.
-            Normal - typical loading behavior, reading all nii/nii.gz files
-                in the directory.
-            Recursive - search all subdirectories excluding softlinks, use
-                with causion.
-            Explicit - specifying directories of the files to load.
-        filtermode (str): {'idlist', 'regex', 'both', None}. Default is None.
-            After grabbing file directories, they are filtered by either id or
-            regex or both. Corresponding att needed.
-        idlist (str or list): If its str, it should be directory to a file
-            containing IDs, one each line, otherwise, an explicit list. Need
-            if filtermode is 'idlist'. Globber of id can be specified with
-            attribute idGlobber.
-        regex (str): Regex that is used to match file directories. Un-matched
-            ones are discarded. Effective when filtermode='idlist'
-        idGlobber (str): Regex string to search ID. Effective when
-            filtermode='idlist', optional. If none specified the default
-            globber is '(^[a-ZA-Z0-9]+), globbing the first one matches the
-            regex in file basename. Must start with paranthesis.
+        readmode (str):
+            `{'normal', 'recursive', 'explicit'}`. Default is `normal`.
+            `normal` - typical loading behavior, reading all nii/nii.gz files in the directory.
+            `recursive` - search all subdirectories excluding softlinks, use with causion.
+            `explicit` - specifying directories of the files to load.
+        filtermode (str):
+            `{'idlist', 'regex', 'both', None}`. Default is None. \n
+            After grabbing file directories, they are filtered by either id or regex or both. Corresponding att
+            needed.
+        idlist (str or list):
+            If its str, it should be directory to a file containing IDs, one each line, otherwise,
+            an explicit list. Need if filtermode is 'idlist'. Globber of id can be specified with attribute
+            idGlobber.
+        regex (str):
+            Regex that is used to match file directories. Un-matched ones are discarded. Effective when
+            filtermode='idlist'
+        idGlobber (str):
+            Regex string to search ID. Effective when filtermode='idlist', optional. If none specified
+            the default globber is '(^[a-ZA-Z0-9]+), globbing the first one matches the regex in file basename. Must
+            start with paranthesis.
         loadBySlices (int):
-            If its < 0, images are loaded as 3D volumes. If its >= 0,
-            the slices along i-th dimension loaded.
-        verbose (bool): Whether to report loading progress.
-        dtype (str or type): Cast loaded data element to the specified type.
-        debugmode (bool): For debug only.
-        recursiveSearch (bool): Whether to load files recursively into
-            subdirectories
+            If its < 0, images are loaded as 3D volumes. If its >= 0, the slices along i-th dimension loaded.
+        verbose (bool):
+            Whether to report loading progress.
+        dtype (str or type):
+            Cast loaded data element to the specified type.
+        debugmode (bool):
+            For debug only.
+        recursiveSearch (bool):
+            Whether to load files recursively into subdirectories
 
     Args:
         rootdir (str): Path to the root directory for reading nifties
@@ -102,6 +106,7 @@ class ImageDataSet(Dataset):
                                   regex='(?=.*T2W.*)')
 
         Given a text file '/home/usr/loadlist.txt' with all image directories like this:
+        ..code
         /home/usr/img1.nii.gz
         /home/usr/img2.nii.gz
         /home/usr/temp/img3.nii.gz

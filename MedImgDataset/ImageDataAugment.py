@@ -12,33 +12,34 @@ import numpy as np
 import gc
 
 class ImageDataSetAugment(ImageDataSet):
+    """
+    This class allows augmentation on an ImageDataSet on load if its loaded as 2D, i.e. loadBySlice >= 0.
+    Package imgaug [1] was used  here. Currently this only supports one mode of augmentation with random
+    parameters but it is planned to add more to the basket of choice.
+
+    TODO: Allow reading custom augmentation parameters and methods.
+
+    Attributes:
+        aug_factor (int): Number of augmentation per image. Default to 5. I.e. 1 input augment to 5 output plut
+            origin.
+        is_segmentation (:obj:`bool`, Optional): Specify if its a segmentation set. Some augmentation will disable if
+            this is true.
+        reference_dataset (:obj:`ImageDataSetAugment`, Optional): Copy augmentation state from referenced dataset.
+        update_each_epoch (:obj:`bool`, Optional.): Update augmentation state on each epoch. Default to False.
+
+    Args:
+         *Please see ImageDataSet*
+
+    See Also:
+        :class:`ImageDataSet`
+
+
+    References:
+        1. Alexander B. Jung et el. "imgaug" url: https://github.com/aleju/imgaug
+
+    """
     def __init__(self, *args, **kwargs):
-        """
-        This class allows augmentation on an ImageDataSet on load if its loaded as 2D, i.e. loadBySlice >= 0.
-        Package imgaug [1] was used  here. Currently this only supports one mode of augmentation with random
-        parameters but it is planned to add more to the basket of choice.
 
-        TODO: Allow reading custom augmentation parameters and methods.
-
-        Attributes:
-            aug_factor (int): Number of augmentation per image. Default to 5. I.e. 1 input augment to 5 output plut
-                origin.
-            is_segmentation (:obj:`bool`, Optional): Specify if its a segmentation set. Some augmentation will disable if
-                this is true.
-            reference_dataset (:obj:`ImageDataSetAugment`, Optional): Copy augmentation state from referenced dataset.
-            update_each_epoch (:obj:`bool`, Optional.): Update augmentation state on each epoch. Default to False.
-
-        Args:
-             *Please see ```ImageDataSet```*
-
-        See Also:
-            :class:ImageDataSet
-
-
-        References:
-            1. Alexander B. Jung et el. "imgaug" url: https://github.com/aleju/imgaug
-
-        """
         # TODO: Allow reading augmentation parameters
         self._augment_factor = kwargs.pop('aug_factor') if 'aug_factor' in kwargs else 5
         self._is_segment = kwargs.pop('is_seg') if 'is_seg' in kwargs else False

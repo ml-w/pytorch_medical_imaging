@@ -4,13 +4,15 @@
    contain the root `toctree` directive.
 
 PyTorch Meidcal Imaging's documentation
-===================================================
+=======================================
 
 .. toctree::
    :maxdepth: 2
    :caption: Contents:
 
-.. automodule:: MedImgDataset
+ImageDataSet
+-------------
+.. autoclass:: MedImgDataset.ImageDataSet
    :members:
 
 
