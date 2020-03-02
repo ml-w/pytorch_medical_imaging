@@ -121,7 +121,7 @@ def main(a, config, logger):
         mode = 1
 
     # Try to make outputdir first if it exist
-    os.makedirs(dir_output, mode=755, exist_ok=True)
+    os.makedirs(dir_output, exist_ok=True)
 
     # Check directories
     for key in list(config['Data']):

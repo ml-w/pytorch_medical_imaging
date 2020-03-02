@@ -193,7 +193,7 @@ class ImageDataSet(Dataset):
         """
 
         if self.verbose:
-            print("Parsing root path: ", self.rootdir)
+            self.log_print("Parsing root path: ", self.rootdir)
 
         #===================================
         # Read all nii.gz files exist first.
@@ -225,7 +225,7 @@ class ImageDataSet(Dataset):
         # Filter idlist
         #--------------
         if self._filtermode == 'idlist' or self._filtermode == 'both':
-            print(self._filterargs['idlist'])
+            self.log_print("Globbing ID with globber: " + self._id_globber + " ...")
             file_basenames = [os.path.basename(f) for f in file_dirs]
             file_ids = [re.search(self._id_globber, f) for f in file_basenames]
             file_ids = [str(mo.group()) if not mo is None else mo for mo in file_ids]
