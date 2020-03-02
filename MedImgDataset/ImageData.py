@@ -193,7 +193,7 @@ class ImageDataSet(Dataset):
         """
 
         if self.verbose:
-            self.log_print("Parsing root path: ", self.rootdir)
+            self.log_print("Parsing root path: " + self.rootdir)
 
         #===================================
         # Read all nii.gz files exist first.
