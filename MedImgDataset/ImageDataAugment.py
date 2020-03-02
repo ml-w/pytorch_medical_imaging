@@ -20,22 +20,25 @@ class ImageDataSetAugment(ImageDataSet):
     TODO: Allow reading custom augmentation parameters and methods.
 
     Attributes:
-        aug_factor (int): Number of augmentation per image. Default to 5. I.e. 1 input augment to 5 output plut
-            origin.
-        is_segmentation (:obj:`bool`, Optional): Specify if its a segmentation set. Some augmentation will disable if
-            this is true.
-        reference_dataset (:obj:`ImageDataSetAugment`, Optional): Copy augmentation state from referenced dataset.
-        update_each_epoch (:obj:`bool`, Optional.): Update augmentation state on each epoch. Default to False.
+        aug_factor (int):
+            Number of augmentation per image. Default to 5. \n
+            e.g. 1 input image augment to 5 output plus origin, total 6 images results.
+        is_segmentation (:obj:`bool`, Optional):
+            Specify if its a segmentation set. Some augmentation will disable if this is true.
+        reference_dataset (:obj:`ImageDataSetAugment`, Optional):
+            Copy augmentation state from referenced dataset.
+        update_each_epoch (:obj:`bool`, Optional.):
+            Update augmentation state on each epoch. Default to False.
 
     Args:
-         *Please see ImageDataSet*
-
-    See Also:
-        :class:`ImageDataSet`
-
+         *args: Inherit from :class:`ImageDataSet`
+         **kwargs: See upper attributes.
 
     References:
         1. Alexander B. Jung et el. "imgaug" url: https://github.com/aleju/imgaug
+
+    See Also:
+        :class:`ImageDataSet`
 
     """
     def __init__(self, *args, **kwargs):

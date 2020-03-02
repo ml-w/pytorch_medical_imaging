@@ -6,14 +6,17 @@
 PyTorch Meidcal Imaging's documentation
 =======================================
 
+
+Module List
+-----------
 .. toctree::
    :maxdepth: 2
    :caption: Contents:
 
-ImageDataSet
--------------
-.. autoclass:: MedImgDataset.ImageDataSet
-   :members:
+   MedImgDataset.rst
+   PMIDataLoader.rst
+
+
 
 
 Indices and tables

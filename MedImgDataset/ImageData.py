@@ -61,68 +61,87 @@ class ImageDataSet(Dataset):
 
     Attributes:
         readmode (str):
-            `{'normal', 'recursive', 'explicit'}`. Default is `normal`.
-            `normal` - typical loading behavior, reading all nii/nii.gz files in the directory.
-            `recursive` - search all subdirectories excluding softlinks, use with causion.
-            `explicit` - specifying directories of the files to load.
+            Possible values: `{'normal', 'recursive', 'explicit'}`. Default is `normal`.\n
+            Usage:
+                * `normal` - typical loading behavior, reading all nii/nii.gz files in the directory.
+                * `recursive` - search all subdirectories excluding softlinks, use with causion.
+                * `explicit` - specifying directories of the files to load.
         filtermode (str):
             `{'idlist', 'regex', 'both', None}`. Default is None. \n
-            After grabbing file directories, they are filtered by either id or regex or both. Corresponding att
-            needed.
+            After grabbing file directories, they are filtered by either ID, regex or both. Corresponding att
+            needed. \n
+            Usage:
+                * `idlist`: Extract images that is on a specified list, globbed with `idGlobber`. Requires att `idlist`.
+                * `regex`: Extract images that matches one regex sepcified with att `regex`.
+                * `both': Use both `idlist` and `regex` as filtering method. Requires both att specified.
+                * None: No filter, read all .nii.gz images in the directory.
         idlist (str or list):
-            If its str, it should be directory to a file containing IDs, one each line, otherwise,
-            an explicit list. Need if filtermode is 'idlist'. Globber of id can be specified with attribute
+            If its `str`, it should be directory to a file containing IDs, one in each line, otherwise,
+            an explicit list of strings. Need if filtermode is 'idlist'. Globber of id can be specified with attribute
             idGlobber.
         regex (str):
             Regex that is used to match file directories. Un-matched ones are discarded. Effective when
-            filtermode='idlist'
+            `filtermode='idlist'`.Must start with paranthesis. Otherwise, its treated as wild cards, e.g. `'*nii.gz'`
         idGlobber (str):
             Regex string to search ID. Effective when filtermode='idlist', optional. If none specified
-            the default globber is '(^[a-ZA-Z0-9]+), globbing the first one matches the regex in file basename. Must
-            start with paranthesis.
+            the default globber is `'(^[a-ZA-Z0-9]+)`, globbing the first one matches the regex in file basename. .
         loadBySlices (int):
-            If its < 0, images are loaded as 3D volumes. If its >= 0, the slices along i-th dimension loaded.
+            If its < 0, images are loaded as 3D volumes. If its >= 0, the slices along i-th dimension loaded. Default is `-1`
         verbose (bool):
-            Whether to report loading progress.
+            Whether to report loading progress or not. Default to `False`.
         dtype (str or type):
-            Cast loaded data element to the specified type.
+            Cast loaded data element to the specified type. Default is `float`.
         debugmode (bool):
-            For debug only.
+            For debug only. Default is `False`
         recursiveSearch (bool):
-            Whether to load files recursively into subdirectories
+            Whether to load files recursively into subdirectories. Default is `False`
 
     Args:
         rootdir (str): Path to the root directory for reading nifties
 
     Examples:
-        Load all nii images in a folder:
 
-        >>> from MedImgDataset import ImageDataSet
-        >>> imgset = ImageDataSet('/some/dir/')
+        Loading images:
 
-        Load all nii images, filtered by string 'T2W' in string:
+        1. Load all nii images in a folder:
 
-        >>> imgset = ImageDataSet('/some/dir/', filtermode='regex', \
-                                  regex='(?=.*T2W.*)')
+            >>> from MedImgDataset.rst import ImageDataSet
+            >>> imgset = ImageDataSet('/some/dir/')
 
-        Given a text file '/home/usr/loadlist.txt' with all image directories like this:
-        ..code
-        /home/usr/img1.nii.gz
-        /home/usr/img2.nii.gz
-        /home/usr/temp/img3.nii.gz
-        /home/usr/temp/img_not_wanted.nii.gz
+        2. Load all nii images, filtered by string 'T2W' in string:
 
-        Load all nii images, filtered by file basename having numbers:
+            >>> imgset = ImageDataSet('/some/dir/', filtermode='regex', regex='(?=.*T2W.*)')
 
-        >>> imgset = ImageDataSet('/home/usr/loadlist.txt', readmode='explicit')
+        3. Given a text file '/home/usr/loadlist.txt' with all image directories, say 'load.txt', load all nii
+           images, filtered by file basename having numbers::
+
+            # load.txt
+            /home/usr/img1.nii.gz
+            /home/usr/img2.nii.gz
+            /home/usr/temp/img3.nii.gz
+            /home/usr/temp/img_not_wanted.nii.gz
+
+            # Commend to load.
+            >>> imgset = ImageDataSet('/home/usr/loadlist.txt', readmode='explicit')
 
 
-        Get the first image:
+        Geting image from object:
 
-        >>> im_1st = imgset[0]
-        >>> im_2nd = imgset[1]
-        >>> type(im_1st)
-        torch.tensor
+        1. Getting the first and second images:
+
+            >>> im_1st = imgset[0]
+            >>> im_2nd = imgset[1]
+            >>> type(im_1st)
+            torch.tensor
+
+        2. Getting the last image:
+
+            >>> imset[-1]
+            torch.tensor
+
+        3. Print details of the loaded images:
+
+            >>> print(imset)
     """
     def __init__(self, rootdir, readmode='normal', filtermode=None, loadBySlices=-1, verbose=False, dtype=float,
                  debugmode=False, **kwargs):
