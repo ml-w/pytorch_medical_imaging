@@ -264,9 +264,8 @@ class ImageDataSet(Dataset):
 
         file_dirs.sort()
 
-        if self.verbose:
-            print("Found %s nii.gz files..."%len(file_dirs))
-            print("Start Loading")
+        self.log_print("Found %s nii.gz files..."%len(file_dirs))
+        self.log_print("Start Loading")
 
 
         #=============
@@ -339,7 +338,8 @@ class ImageDataSet(Dataset):
             except:
                 logging.log(logging.WARNING, "Cannot stack data due to non-uniform shapes.")
                 logging.log(logging.INFO, "%s"%[d.shape for d in self.data])
-                print("Cannot stack data due to non-uniform shapes. Some function might be impaired.")
+                self.log_print("Cannot stack data due to non-uniform shapes. Some function might be impaired.",
+                               logging.WARNING)
 
 
     def get_raw_data_shape(self):

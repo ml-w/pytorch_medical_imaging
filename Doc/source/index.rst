@@ -11,11 +11,16 @@ Module List
 -----------
 .. toctree::
    :maxdepth: 2
-   :caption: Contents:
 
    MedImgDataset.rst
    PMIDataLoader.rst
 
+Utilities
+---------
+.. toctree::
+   :maxdepth: 2
+
+   Algorithms/Analysis.rst
 
 
 

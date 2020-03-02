@@ -14,7 +14,7 @@ import gc
 class ImageDataSetAugment(ImageDataSet):
     """
     This class allows augmentation on an ImageDataSet on load if its loaded as 2D, i.e. loadBySlice >= 0.
-    Package imgaug [1] was used  here. Currently this only supports one mode of augmentation with random
+    Package imgaug [1]_ was used  here. Currently this only supports one mode of augmentation with random
     parameters but it is planned to add more to the basket of choice.
 
     TODO: Allow reading custom augmentation parameters and methods.
@@ -35,7 +35,7 @@ class ImageDataSetAugment(ImageDataSet):
          **kwargs: See upper attributes.
 
     References:
-        1. Alexander B. Jung et el. "imgaug" url: https://github.com/aleju/imgaug
+        .. [1] Alexander B. Jung et el. "imgaug" url: https://github.com/aleju/imgaug
 
     See Also:
         :class:`ImageDataSet`
