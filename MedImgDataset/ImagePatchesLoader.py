@@ -13,13 +13,103 @@ def _mpi_wrapper(arg, **kwargs):
     return ImagePatchesLoader._choose_from_probability_map(arg, **kwargs)
 
 class ImagePatchesLoader(Dataset):
+    """
+    This class depends on but does not inherit the class :class:`ImageDataSet`. This class sample patches from the
+    input `ImageDataSet` or its child classes if they are loaded by slices (i.e. `loadBySlice != 0`).
+
+    There are two main loading mode for this class: 1) load by partitioning the slices evenly 2) load by randomly
+    drawing equal size patches. The loaded patches are eventually stacked back into a column of patches. The channels
+    of the images are inherited in each of the patches.
+
+    For each loading modes, there are options that decide the loading sequence.
+
+    Attributes:
+        has_reference (bool):
+            (**Random mode**) Not set explicited. Indicate whether this object was referenced by another object.
+        unit_dimension (int):
+            Number of dimensions the input data has.
+        slice_dim (int or list of int):
+            Number of dimensions each input element has. In generally equals to `unit_dimension - 1` but there are
+            exceptions when one of the input dimension is actually a vitual axis with length be 1.
+
+    Args:
+        patch_size (int or list of int):
+            Size of extracted patch. If its an `int`, assume patches are square patches.
+        pre_shuffle (bool, Optional):
+            Specify whether to shuffle patches order before stacking them up. Is usually helpful to maintain a
+            consistent value statistics such that the batch-norms trained with random order functions as effectively
+            during inference. This should be set to 'True' during inference but 'False' during training in general.
+            Default to 'False'.
+        axis ([int, int], Optional):
+            Patches are drawn from 2D slices parallel to the specified option. Default to the last two axes `[-2,-1]`.
+        patch_stride (int or list of int, Optional):
+            (**Uniform mode**) Decide the stride between adjacent patches, if value smaller then patch dimension,
+            the output patches will overlap. For negative value, patches stride will be set to be identical to patch
+            dimension. Ignored if `random_patches > 0`. Default to `-1`.
+        include_last_patch (bool, Optional):
+            (**Uniform mode**) Whether to include last patches when stride and patch dimensions does not divide input
+            image completely such that all voxels in an image will be present in the patches stack. Inored if
+            `random_patches > 0`. Default to `True`.
+        random_patches (int, Optional):
+            (**Random mode**) Number of patches to sample from the image per slices. Ignored if `<= 0`. Default to `-1`.
+        random_from_distribution (callalble, Optional):
+            (**Random mode**) A callable function can be submitted to calculate the sampling probability of each
+            slices with the slice as the function argument. The function should return an array identical to slice
+            dimension that summed to 1. Otherwise, each voxel has the same probability to be sampled. Ignored if is
+            `None`. Default to `None`.
+        renew_index (bool, Optional):
+            (**Random mode**) Specify whether to sample again after each Epoch. Defaul to `False`.
+        reference_dataset (ImagePatchesLoader, Optional):
+            (**Random mode**) This options allows another ImagePathcesLoader object to reference this object when
+            computing sampling index. If not `None`, ts sampling index of the referencee will be identical to this
+            object and will renew together in cases `renew_index == True`. Useful when performing segmentation as
+            you want the ground-truth to has the same patches sampling location. Default to 'None'.
+
+        base_data (ImageDataSet): Input to be sampled.
+
+    Examples:
+
+        >>> from MedImgDataset import ImageDataSet, ImageDataSetAugment, ImagePatchesLoader
+        >>>
+        >>> # Read images
+        >>> imset = ImageDataSet('.', verbose=True)
+        >>> imset_aug = ImageDataSetAugment('.', verbose=True, aug_factor=5, augmentator=)
+        >>>
+        >>> # This dataset has same augmentation state as imset_aug
+        >>> segset_aug = ImageDataSetAugment('./Seg', verbose=True, aug_factor=5,
+        >>>                                  reference_dataset=imset_aug, is_seg=True)
+        >>>
+        >>> # Standard patches
+        >>> img_patches = ImagePatchesLoader(imset, patch_size=64, random_patches=20)
+        >>>
+        >>> # Augment first, then draw patches
+        >>> img_aug_patches = ImagePatchesLoader(imset_aug, patch_size=64, random_patches=20)
+        >>> # This patches sample the same patches at locations same as img_aug_patches
+        >>> segseg_aug_patches = ImagePatchesLoader(segseg_aug, patch_size=64, random_patches=20,
+        >>>                                         reference_dataset=img_aug_patches)
+
+
+
+
+    .. note::
+        This class has the ability to align random states of multiple objects using the argument `reference_dataset`.
+        Users would like to do this in times that the patches are extracted for segmentation. Do note that python,
+        unlike c++, passes arguements by referneces, so every time you update one of the chained object, the random
+        state is passed on to others top down. For instance, if you chained `b->a` and `c->a`, `b` and `c` will
+        change state if you changes `a` (e.g. through calling batch_done_callback), but `c` will remains if you
+        changes `b`. Currently, this is mitigated through using np.ndarray as a psuedo pointer.
+
+    .. hint::
+        You want to set `pre_shuffle` to `True` during inference and `False` during training because by default,
+        the training solver shuffles the data before sampling but the inferencer won't to keep track of things.
+
+
+
+
+    """
     def __init__(self, base_dataset, patch_size, patch_stride=-1, include_last_patch=True,
                  axis=None, reference_dataset=None, pre_shuffle=False, random_patches=-1,
                  random_from_distribution=None, renew_index=True):
-        """ImagePatchesLoader(self, base_dataset, patch_size, patch_stride, include_last_patch=True,
-                 axis=None, reference_dataset=None, pre_shuffle=False, random_patches=-1,
-                 random_from_distribution=None) --> ImagePatchesLoader
-        """
         super(ImagePatchesLoader, self).__init__()
 
         assert axis is None or len(axis) == 2, \
