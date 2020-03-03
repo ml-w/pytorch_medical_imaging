@@ -19,7 +19,7 @@ class ImageDataSetAugment(ImageDataSet):
 
     TODO: Allow reading custom augmentation parameters and methods.
 
-    Attributes:
+    Args:
         aug_factor (int):
             Number of augmentation per image. Default to 5. \n
             e.g. 1 input image augment to 5 output plus origin, total 6 images results.
@@ -29,10 +29,8 @@ class ImageDataSetAugment(ImageDataSet):
             Copy augmentation state from referenced dataset.
         update_each_epoch (:obj:`bool`, Optional.):
             Update augmentation state on each epoch. Default to False.
-
-    Args:
-         *args: Inherit from :class:`ImageDataSet`
-         **kwargs: See upper attributes.
+        *args: Inherit from :class:`ImageDataSet`
+        **kwargs: Inherit from :class:`ImageDataSet`
 
     References:
         .. [1] Alexander B. Jung et el. "imgaug" url: https://github.com/aleju/imgaug

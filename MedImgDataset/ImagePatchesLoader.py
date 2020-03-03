@@ -198,6 +198,7 @@ class ImagePatchesLoader(Dataset):
         return out
 
     def _calculate_random_patch_indexes(self):
+        """Calculated the corner index of the patches."""
         # Don't touch anything if this is referencing something
         if self._has_reference:
             return
@@ -217,6 +218,7 @@ class ImagePatchesLoader(Dataset):
         pass
 
     def _sample_patches_from_distribution(self):
+        """Sample patches with probability distribution."""
         # Use multiprocessing
         import multiprocessing as mpi
         from functools import partial
@@ -265,7 +267,7 @@ class ImagePatchesLoader(Dataset):
 
             rois.append(roi)
 
-        # Non-MPI
+        # Non-MPI, sometimes MPI causes some problem.
         # for roi in tqdm(rois, desc="ROI sampling"):
         #     patch_indexes.extend(_mpi_wrapper(roi, func=func, pps=self._patch_perslice))
 
@@ -291,6 +293,7 @@ class ImagePatchesLoader(Dataset):
 
 
     def _calculate_patch_indexes(self):
+        """Calcualted patches index for uniform patches."""
         # Don't touch anything if this is referencing something
         if self._has_reference:
             return
@@ -329,6 +332,7 @@ class ImagePatchesLoader(Dataset):
         self._patch_indexes = np.array(self._patch_indexes)
 
     def size(self, val=None):
+        """Requried by pytorch."""
         newsize = list(self._unit_dimension)
         for i in range(len(newsize)):
             if i == self._axis[0] % self._slice_dim:
@@ -342,6 +346,19 @@ class ImagePatchesLoader(Dataset):
             return size[val]
 
     def piece_patches(self, inpatches):
+        """
+        Pieces patches back into one accordining to where it was sampled. Usefult for cases like image de-noising or
+        segmentation.
+
+        Args:
+            inpatches (torch.tensor):
+                A tensor that should have a dimension identical to `self.data`.
+
+        Returns:
+            (torch.tensor):
+                A tensor that has a shape identical to `self.basedata.data`
+
+        """
         if isinstance(inpatches, list):
             length = np.sum([len(x) for x in inpatches])
             channels = inpatches[0].size()[1]
@@ -429,6 +446,7 @@ class ImagePatchesLoader(Dataset):
         return self._base_dataset.get_unique_values_n_counts()
 
     def batch_done_callback(self):
+        """Called after `__getitem__` is called for `__len__` number of time."""
         if self._renew_index:
             if callable(self._random_from_distrib):
                 self._sample_patches_from_distribution()

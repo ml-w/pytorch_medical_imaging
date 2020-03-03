@@ -60,21 +60,35 @@ class ImageDataSet(Dataset):
     ImageDataSet class that reads and load nifty in a specified directory.
 
     Attributes:
-        readmode (str):
-            Possible values: `{'normal', 'recursive', 'explicit'}`. Default is `normal`.\n
-            Usage:
+        root_dir (str):
+            Root dir of image loading.
+        data_source_path (list of str):
+            Directories of the input image relative to the root dir
+        data (torch.tensor or list of torch.tensor):
+            Actual data to load from. It will be one stack of images if image dimensions are compatible or if
+            specified to load data slices by slices.
+        metadata (list of dict):
+            Meta data of the loaded images. Such as their origin, orientation and dimensions...etc.
+
+
+    Args:
+        rootdir (str):
+            Path to the root directory for reading nifties
+        readmode (str, Optional):
+            Decide image directories globbing method, whether to look into subdirectories or not. \n
+            Possible values:
                 * `normal` - typical loading behavior, reading all nii/nii.gz files in the directory.
                 * `recursive` - search all subdirectories excluding softlinks, use with causion.
                 * `explicit` - specifying directories of the files to load.
+            Default is `normal`.
         filtermode (str):
-            `{'idlist', 'regex', 'both', None}`. Default is None. \n
-            After grabbing file directories, they are filtered by either ID, regex or both. Corresponding att
-            needed. \n
+            After grabbing file directories, they are filtered by either ID, regex or both. Corresponding att needed. \n
             Usage:
                 * `idlist`: Extract images that is on a specified list, globbed with `idGlobber`. Requires att `idlist`.
                 * `regex`: Extract images that matches one regex sepcified with att `regex`.
                 * `both': Use both `idlist` and `regex` as filtering method. Requires both att specified.
                 * None: No filter, read all .nii.gz images in the directory.
+            Default is `None`.
         idlist (str or list):
             If its `str`, it should be directory to a file containing IDs, one in each line, otherwise,
             an explicit list of strings. Need if filtermode is 'idlist'. Globber of id can be specified with attribute
@@ -96,8 +110,6 @@ class ImageDataSet(Dataset):
         recursiveSearch (bool):
             Whether to load files recursively into subdirectories. Default is `False`
 
-    Args:
-        rootdir (str): Path to the root directory for reading nifties
 
     Examples:
 
@@ -149,7 +161,7 @@ class ImageDataSet(Dataset):
         assert os.path.isdir(rootdir), "Cannot access directory!"
         assert loadBySlices <= 2, "This class only handle 3D data!"
         self.rootdir = rootdir
-        self.dataSourcePath = []
+        self.data_source_path = []
         self.data = []
         self.metadata = []
         self.length = 0
@@ -278,7 +290,7 @@ class ImageDataSet(Dataset):
             if self.verbose:
                 tqdm.write("Reading from "+f)
             im = sitk.ReadImage(f)
-            self.dataSourcePath.append(f)
+            self.data_source_path.append(f)
             imarr = sitk.GetArrayFromImage(im).astype(self.dtype)
             self.data.append(from_numpy(imarr))
             self._itemindexes.append(self.data[i].size()[0])
@@ -296,7 +308,7 @@ class ImageDataSet(Dataset):
                 except:
                     metadata[key] = im.GetMetaData(key)
             self.metadata.append(metadata)
-        self.length = len(self.dataSourcePath)
+        self.length = len(self.data_source_path)
 
         #=====================================
         # Option to load 3D images as 2D slice
@@ -331,7 +343,7 @@ class ImageDataSet(Dataset):
                 self.data = cat(self.data, dim=self._byslices).transpose(0, self._byslices).unsqueeze(1)
             except IndexError:
                 print("Wrong Index is used!")
-                self.length = len(self.dataSourcePath)
+                self.length = len(self.data_source_path)
         else:
             try:
                 self.data = stack(self.data, dim=0).unsqueeze(1)
@@ -396,9 +408,9 @@ class ImageDataSet(Dataset):
     def get_data_source(self, i):
         """Get directory of the source of the i-th element."""
         if self._byslices >=0:
-            return self.dataSourcePath[int(np.argmax(self._itemindexes > i)) - 1]
+            return self.data_source_path[int(np.argmax(self._itemindexes > i)) - 1]
         else:
-            return self.dataSourcePath[i]
+            return self.data_source_path[i]
 
     def get_internal_index(self, i):
         """If load by slice, get the slice number of the i-th 2D element in
@@ -477,11 +489,11 @@ class ImageDataSet(Dataset):
         # "File Paths\tSize\t\tSpacing\t\tOrigin\n"
         # printable = {'File Name': []}
         printable = {'ID': [], 'File Name': [], 'Size': [], 'Spacing': [], 'Origin': []}
-        for i in range(len(self.dataSourcePath)):
-            id_mo = re.search(self._id_globber, os.path.basename(self.dataSourcePath[i]))
+        for i in range(len(self.data_source_path)):
+            id_mo = re.search(self._id_globber, os.path.basename(self.data_source_path[i]))
             id_mo = 'None' if id_mo is None else id_mo.group()
             printable['ID'].append(id_mo)
-            printable['File Name'].append(os.path.basename(self.dataSourcePath[i]))
+            printable['File Name'].append(os.path.basename(self.data_source_path[i]))
             # for keys in self.metadata[i]:
             #     if not printable.has_key(keys):
             #         printable[keys] = []
@@ -515,25 +527,25 @@ class ImageDataSet(Dataset):
             assert self._itemindexes[-1] == tensor_data.size()[0], \
                 "Dimension mismatch! (%s vs %s)"%(self._itemindexes[-1], tensor_data.size()[0])
             td=tensor_data.numpy()
-            for i in range(len(self.dataSourcePath)):
+            for i in range(len(self.data_source_path)):
                 start=self._itemindexes[i]
                 end=self._itemindexes[i+1]
                 # image=sitk.GetImageFromArray(td[start:end])
-                templateim = sitk.ReadImage(self.dataSourcePath[i])
+                templateim = sitk.ReadImage(self.data_source_path[i])
                 image = sitk.GetImageFromArray(td[start:end])
                 image.CopyInformation(templateim)
                 # image=self.WrapImageWithMetaData(td[start:end], self.metadata[i])
-                sitk.WriteImage(image, outputdirectory+'/'+ prefix + os.path.basename(self.dataSourcePath[i]))
+                sitk.WriteImage(image, outputdirectory +'/' + prefix + os.path.basename(self.data_source_path[i]))
 
         else:
             assert len(self) == len(tensor_data), "Length mismatch! %i vs %i"%(len(self), len(tensor_data))
 
             for i in range(len(self)):
-                source_file = self.dataSourcePath[i]
+                source_file = self.data_source_path[i]
                 templateim = sitk.ReadImage(source_file)
                 image = sitk.GetImageFromArray(tensor_data[i].squeeze().numpy())
                 image.CopyInformation(templateim)
-                sitk.WriteImage(image, outputdirectory+'/'+ prefix + os.path.basename(self.dataSourcePath[i]))
+                sitk.WriteImage(image, outputdirectory +'/' + prefix + os.path.basename(self.data_source_path[i]))
 
 
     @staticmethod
