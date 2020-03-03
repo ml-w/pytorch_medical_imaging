@@ -16,14 +16,26 @@ class PMIImageDataLoader(PMIDataLoaderBase):
         * Image super-resolution
 
     Attributes:
-        _regex (str): Please see :class:`ImageDataSet`.
-        _idlist (str or list): Please see :class:`ImageDataSet`.
-        _augmentation (int): If `_augmentation` > 0, :class:`ImageDataSetAugment` will be used instead.
-        _load_by_slice (int):
+        regex (str, Optional):
+            Filter for loading files. See :class:`ImageDataSet`
+        idlist (str or list, Optional):
+            Filter for loading files. See :class:`ImageDataSet`
+        augmentation (int):
+            If `_augmentation` > 0, :class:`ImageDataSetAugment` will be used instead.
+        load_by_slice (int):
             If `_load_by_slice` > -1, images volumes are loaded slice by slice along the axis specified.
 
+    Args:
+        *args: Please see parent class.
+        **kwargs: Please see parent class.
+
     .. note::
-        These attributes are defined in :func:`PMIImageDataLoader._read_params`
+        Attributes are defined in :func:`PMIImageDataLoader._read_params`, either read from a dictionary or an ini
+        file. The current system reads the [LoaderParams].
+
+    .. hint::
+        Users are suppose to pass arguments to the super class for handling. If in doubt, look at the docs of parent
+        class!
 
 
     See Also:
@@ -31,8 +43,6 @@ class PMIImageDataLoader(PMIDataLoaderBase):
     """
     def __init__(self, *args, **kwargs):
         super(PMIImageDataLoader, self).__init__(*args, **kwargs)
-
-
 
     def _check_input(self):
         """Not implemented."""
@@ -79,7 +89,7 @@ class PMIImageDataLoader(PMIDataLoaderBase):
             :class:`MedImgDataset.ImageDataSet`
         """
         # default reader func
-        if self._augmentation > 0:
+        if self._augmentation > 0 and not re.match('(?=.*train.*)', self._run_mode) is None:
             self._image_class = ImageDataSetAugment
         else:
             self._image_class = ImageDataSet
@@ -89,43 +99,26 @@ class PMIImageDataLoader(PMIDataLoaderBase):
                                  aug_factor=self._augmentation, **kwargs)
 
     def _load_data_set_training(self):
-        return self._read_image(self._input_dir)
+        """
+        Load either ImageDataSet or ImageDataSetAugment for network input.
 
-    def _load_data_set_loss_func_gt(self):
-        if not re.match("(?=.*seg.*)", self._datatype, re.IGNORECASE) is None:
-            return self._read_image(self._target_dir, dtype='uint8', is_seg=True)
-        else:
-            return self._read_image(self._target_dir)
-
-    @staticmethod
-    def parse_ini_filelist(filelist, mode):
-        r"""
-        Parse the ini file for this class.
-
-        Args:
-            filelist (str): Relative directory to the ini filelist.
+        Detect if loading type is a segmentation, if so, cast ground-truth data to `uint8` and mark them as
+        segmentation such that the augmentator adjust for it.
 
         Returns:
-            (list): A list containing the IDs specifed in the target file list.
-
-        Examples:
-
-            An example of .ini file list should look something like this,
-
-            file_list.ini::
-
-                [FileList]
-                testing=ID_0,ID_1,...,ID_n
-                training=ID_a,ID_b,...,ID_m
+            (ImageDataSet or ImageDataSetAugment)
 
         """
-        assert os.path.isfile(filelist)
-
-        fparser = configparser.ConfigParser()
-        fparser.read(filelist)
-
-        # test
-        if re.match('(?=.*train.*)', mode):
-            return fparser['FileList'].get('testing').split(',')
+        img_out = self._read_image(self._input_dir)
+        if not re.match("(?=.*seg.*)", self._datatype, re.IGNORECASE) is None:
+            gt_out = self._read_image(self._target_dir, dtype='uint8', is_seg=True, reference_dataset=img_out)
         else:
-            return fparser['FileList'].get('training').split(',')
+            gt_out = self._read_image(self._target_dir, reference_dataset=img_out)
+
+        return img_out, gt_out
+
+
+    def _load_data_set_inference(self):
+        """Same as :func:`_load_data_set_training` in this class."""
+        return self._read_image(self._input_dir)
+

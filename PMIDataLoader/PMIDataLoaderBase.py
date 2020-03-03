@@ -1,3 +1,4 @@
+import os
 import re
 import logging
 import configparser
@@ -9,21 +10,26 @@ class PMIDataLoaderBase(object):
     and implement the abstract methods for the main file to function properly.
 
     Attributes:
-        debug (bool, Optional):
-            Enable debug mode when loading data. Default to False.
-        verbose (bool, Optional):
-            Enable verbose output during data loading. Default to False.
-        logging (logging, Optional):
-            Specify logger. If None, default logger `__main__` would be used.
-        _data_type (str):
+        data_type (str):
             Name of the data type.
-        _input_dir (str):
+        input_dir (str):
             Root directory of input to network.
-        _target_dir (str, Optional):
+        target_dir (str, Optional):
             Root directory of input to loss function.
 
     Args:
         prop_dict (dict or str):
+            Either a dictionary of parameters or a str pointing to an .ini file that hold the required parameters.
+        run_mode (str):
+            {'train', 'inference'}. Decide the behavior of objects.
+        debug (bool, Optional):
+            Enable debug mode when loading data. Default to `False`.
+        verbose (bool, Optional):
+            Enable verbose output during data loading. Default to `False`.
+        logging (logging, Optional):
+            Specify logger. If `None`, default logger `__main__` would be used.
+
+
 
     .. note::
         * The private attributes are defined in :func:`PMIDataLoaderBase._read_params`.
@@ -33,7 +39,7 @@ class PMIDataLoaderBase(object):
 
 
     """
-    def __init__(self, prop_dict, debug=False, verbose=True, logger=None, **kwargs):
+    def __init__(self, prop_dict, run_mode='training', debug=False, verbose=True, logger=None, **kwargs):
         self._prop_dict = prop_dict
         self._logger = logger if logger is None else logging.getLogger('__main__')
         self._verbose = verbose
@@ -42,7 +48,7 @@ class PMIDataLoaderBase(object):
             raise AttributeError
 
         self._read_params(prop_dict)
-        self._run_mode = self._prop_dict['General'].get('run_mode')
+        self._run_mode = run_mode
 
     @abstractmethod
     def _check_input(self):
@@ -57,21 +63,53 @@ class PMIDataLoaderBase(object):
         raise NotImplementedError
 
     @abstractmethod
-    def _load_data_set_loss_func_gt(self):
-        """Inhereit in child class. Private method called to load loss function arguments. You can design the
-        function to retun `None` if loss function doesn't require gt, but you stil need to inherit this.
-        """
-        raise NotImplemented
-
-    @abstractmethod
     def _load_data_set_inference(self):
         """Inherit in child class. Private method called to load data for inference mode."""
         raise NotImplementedError
+
+    @staticmethod
+    def parse_ini_filelist(filelist, mode):
+        r"""
+        Parse the ini file for this class.
+
+        Args:
+            filelist (str): Relative directory to the ini filelist.
+
+        Returns:
+            (list): A list containing the IDs specifed in the target file list.
+
+        Examples:
+
+            An example of .ini file list should look something like this,
+
+            file_list.ini::
+
+                [FileList]
+                testing=ID_0,ID_1,...,ID_n
+                training=ID_a,ID_b,...,ID_m
+
+        """
+        assert os.path.isfile(filelist)
+
+        fparser = configparser.ConfigParser()
+        fparser.read(filelist)
+
+        # test
+        if re.match('(?=.*train.*)', mode):
+            return fparser['FileList'].get('testing').split(',')
+        else:
+            return fparser['FileList'].get('training').split(',')
 
     def load_data_set(self):
         """
         Called in solver or inferencer to load arguments for the network training or actual inference. Normally you
         would need to inherit this but you can do so to added some custom features.
+
+        Returns:
+            (ImageDataSet or [ImageDataSet, ImageDataSet]): Depend on whether `self._run_mode` is `training` or
+            `inference`, return dataset for solver or inferencer to process.
+
+
         """
         if re.match('(?=.*train.*)', self._run_mode):
             return self._load_data_set_training()
@@ -122,3 +160,45 @@ class PMIDataLoaderBase(object):
         """
         tar_dict = self._prop_dict if tar_dict is None else tar_dict
         return tar_dict[key] if key in tar_dict else default_value
+
+    def get_from_prop_dict_with_eval(self, key, default_value=None, tar_dict=None):
+        """
+        Method for convenient value extraction. Read from self._prop_dict or specified dictionary with default
+        parameters if the key doesn't exist.
+
+        If the target is string, `eval()` is called to convert them to python objects.
+
+        Args:
+            key (obj): Key to read from self.
+            default_value (Optional): Value to fill in if the key is not found in `tar_dict`. Default to `None`.
+            tar_dict (dict): Target dictionary. Default to `self._prop_dict`
+        """
+        tar_dict = self._prop_dict if tar_dict is None else tar_dict
+        out = tar_dict[key] if key in tar_dict else default_value
+        if isinstance(out, str):
+            out = eval(out)
+        return out
+
+    def get_target_attributes(self, tar_keys, tar_def_values=None, tar_eval_flag=None, tar_dict=None):
+        """
+        Get attributes from target dictioary with default values in batch.
+
+        Args:
+            tar_keys (list of str):
+            tar_def_values (list of values, Optional):
+            tar_eval_flat (list of bool):
+            tar_dict (dict): Target dictionary. Default to `self._prop_dict`
+
+        Returns:
+            out_dict (dict): Dictionary with
+        """
+
+        out_dict = {}
+        for k, default_value, eval_flag in zip(tar_keys, tar_def_values, tar_eval_flag):
+            if eval_flag:
+                _func = self.get_from_prop_dict_with_eval
+            else:
+                _func = self.get_from_prop_dict
+            out_dict[k] = _func(k, default_value=default_value, tar_dict=tar_dict)
+        return out_dict
+
