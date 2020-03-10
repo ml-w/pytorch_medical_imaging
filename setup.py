@@ -31,13 +31,13 @@ if use_cython:
                   include_dirs=[numpy.get_include()]),
     ]
     cmdclass.update({'build_ext': build_ext})
-    # ext_modules += cythonize("MedImgDataset/Computation/_LocalNeighborhoodDifferencePattern.pyx")
+    # ext_modules += cythonize("MedImgDataset.rst/Computation/_LocalNeighborhoodDifferencePattern.pyx")
 
 setup(
     name='NPC_Segment',
     version='0.1',
     packages=['Loss', 'Networks', 'Networks.Layers', 'Algorithms', 'MedImgDataset', 'MedImgDataset.Computation'],
-    url='https://github.com/teracamo/pytorch_medical_imaging/tree/NPC_Segment',
+    url='https://github.com/alabamagan/pytorch_medical_imaging/tree/NPC_Segment',
     license='',
     author='Wong Matthew Lun',
     author_email='fromosia@link.cuhk.edu.hk',
