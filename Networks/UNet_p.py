@@ -3,7 +3,7 @@ import torch.nn as nn
 
 from .Layers.StandardLayers import *
 
-class down(nn.Module):
+class Down(nn.Module):
     """
     Downwards transitions for :class:`UNet_p`
 
@@ -18,7 +18,7 @@ class down(nn.Module):
 
     """
     def __init__(self, in_chan, out_chan, pool_mode='avg'):
-        super(down, self).__init__()
+        super(Down, self).__init__()
 
         self._in_chan = in_chan
         self._out_chan = out_chan
@@ -58,7 +58,7 @@ class down(nn.Module):
         return self.conv(x)
 
 
-class up(nn.Module):
+class Up(nn.Module):
     """
     Module for upwards transition.
 
@@ -68,7 +68,7 @@ class up(nn.Module):
         up_mode (str, Optional): {'nearest'|'bilinear'|'cubic'|'learn'}. Mode for upsampling.
     """
     def __init__(self, in_chan, out_chan, up_mode='nearest'):
-        super(up, self).__init__()
+        super(Up, self).__init__()
 
         self._in_chan = in_chan
         self._out_chan = out_chan
@@ -77,8 +77,8 @@ class up(nn.Module):
 
         self.upsampling = {
             'nearest' : nn.Upsample(scale_factor=self._up_fact, mode='nearest'),
-            'bilinear': nn.Upsample(scale_factor=self._up_fact, mode='bilinear'),
-            'cubic': nn.Upsample(scale_factor=self._up_fact, mode='bicubic'),
+            'bilinear': nn.Upsample(scale_factor=self._up_fact, mode='bilinear', align_corners=True),
+            'cubic': nn.Upsample(scale_factor=self._up_fact, mode='bicubic', align_corners=True),
             'learn': nn.ConvTranspose2d(in_chan // self._up_fact, in_chan // self._up_fact, kernel_size=self._up_fact,
                                         stride= self._up_fact)
         }
@@ -113,7 +113,8 @@ class up(nn.Module):
 
 class UNet_p(nn.Module):
     """
-    General implementation of the UNet.
+    General implementation of the UNet in [1]_, but we make it more general so there are a few macro parameters to
+    tweak with and help with your experiments.
 
     Attributes:
         start_chans (int): Number of Channels in the first layer. This is currently not customizable and set to 64.
@@ -142,12 +143,21 @@ class UNet_p(nn.Module):
 
             Default to `nearest`. See module :class:`up` and :class:`down` for more details.
 
+    References:
+        .. [1]  Ronneberger, Olaf, Philipp Fischer, and Thomas Brox. "U-net: Convolutional networks for biomedical image
+                segmentation." International Conference on Medical image computing and computer-assisted intervention.
+                Springer, Cham, 2015.
+
     See Also:
         * :class:`up`
         * :class:`down`
 
+    .. note::
+        For exact implementation of the original UNet proposed in [1], use `layers=4`, `up_mode='learn'` and
+        `down_mode='max'`. This is different to our default setting.
+
     """
-    def __init__(self, in_chan, out_chan, layers, down_mode='avg', up_mode='nearest'):
+    def __init__(self, in_chan, out_chan, layers=4, down_mode='avg', up_mode='nearest'):
         super(UNet_p, self).__init__()
 
         self._in_chan = in_chan
@@ -158,11 +168,11 @@ class UNet_p(nn.Module):
         self._start_chans = 64
 
         self.inconv = DoubleConv(in_chan, self._start_chans)
-        self.downs = [down(self._start_chans * 2 ** i, self._start_chans * 2 ** (i+1), down_mode) \
-                      for i in range(layers)]
+        self.downs = nn.ModuleList([Down(self._start_chans * 2 ** i, self._start_chans * 2 ** (i + 1), down_mode) \
+                      for i in range(layers)])
 
-        self.ups = [up(self._start_chans * 2 ** (layers - i), self._start_chans * 2 ** (layers - i - 1),
-                       up_mode=up_mode) for i in range(layers)]
+        self.ups = nn.ModuleList([Up(self._start_chans * 2 ** (layers - i), self._start_chans * 2 ** (layers - i - 1),
+                       up_mode=up_mode) for i in range(layers)])
 
         self.lastconv = DoubleConv(self._start_chans, out_chan)
 
@@ -187,3 +197,4 @@ class UNet_p(nn.Module):
             x = u(short_conn[self._layers - i - 1], x)
         x = self.lastconv(x)
         return x
+
