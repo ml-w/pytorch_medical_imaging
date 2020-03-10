@@ -12,3 +12,9 @@ PMIImageDataLoader
 .. autoclass:: PMIDataLoader.PMIImageDataLoader
    :members:
    :private-members:
+
+PMIImagePatchesLoader
+---------------------
+.. autoclass:: PMIDataLoader.PMIImagePatchesLoader
+   :members:
+   :private-members:

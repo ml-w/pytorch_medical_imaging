@@ -10,3 +10,8 @@ ImageDataSetAugment
 -------------------
 .. autoclass:: MedImgDataset.ImageDataSetAugment
    :members:
+
+ImagePatchesLoader
+------------------
+.. autoclass:: MedImgDataset.ImagePatchesLoader
+   :members:

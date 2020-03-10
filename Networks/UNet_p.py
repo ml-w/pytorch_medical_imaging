@@ -127,17 +127,19 @@ class UNet_p(nn.Module):
             Depth of the UNet, although number of layers is not restricted here, its restrcited by your input size as the
             dimension shrinks along `H` and `W` shrinks by 2 fold in each level.
         down_mode (str, Optional):
-            {'avg'|'max'|'learn'}. The pooling layer in each level can be customized with this option.
+            `{'avg'|'max'|'learn'}`. The pooling layer in each level can be customized with this option.\n
             * `avg` - Average pooling.
             * `max` - Max pooling.
             * `learn` - Pool by learnable convolutional layers with `kern_size=2` and `stride=2`.
-            Default to 'avg'. See module :class:`up` and :class:`down` for more details.
+
+            Default to `avg`. See module :class:`up` and :class:`down` for more details.
         up_mode (str, Optional):
-            {'nearest'|'bilinear'|'cubic'|'learn'}. The upsample layer can be customized with this option.
+            `{'nearest'|'bilinear'|'cubic'|'learn'}`. The upsample layer can be customized with this option. \n
             * `nearest` - Use nearest interpolation for upsampling.
             * `bilinear` - Use bilinear interpolation for upsampling.
             * `cubic` - Use bicubic interpolation for upsapmling. Note that its possible to have overshoot values.
-            * `learn` - Use learnable transpose convolutional layers with `kern_size=2` and `stride=2`
+            * `learn` - Use learnable transpose convolutional layers with `kern_size=2` and `stride=2`.
+
             Default to `nearest`. See module :class:`up` and :class:`down` for more details.
 
     See Also:
@@ -165,6 +167,15 @@ class UNet_p(nn.Module):
         self.lastconv = DoubleConv(self._start_chans, out_chan)
 
     def forward(self, x):
+        """
+        Forward function of :class:`UNet_p`.
+
+        Args:
+            x (Tensor): Tensor or variable with dimension: :math:`(B \\times C \\times H \\times W)`.
+
+        Returns:
+            (Tensor)
+        """
         x = self.inconv(x)
         short_conn = [x]
         for i, d in enumerate(self.downs):

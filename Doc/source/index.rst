@@ -22,7 +22,12 @@ Utilities
 
    Algorithms/Analysis.rst
 
+Networks
+--------
+.. toctree::
+   :maxdepth: 2
 
+   Networks/Networks.rst
 
 Indices and tables
 ==================

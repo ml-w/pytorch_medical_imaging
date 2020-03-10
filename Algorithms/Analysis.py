@@ -1,4 +1,3 @@
-
 import matplotlib as mpl
 mpl.use('Qt5Agg')
 import numpy as np
@@ -12,7 +11,7 @@ from surface_distance import compute_surface_distances, compute_average_surface_
 import argparse
 
 
-
+__all__ = ['ASD', 'SSIM']
 
 #========================================
 # Similarity functions
@@ -23,24 +22,31 @@ def ASD(seg, test, spacing):
 
 
 def SSIM(x,y, axis=None):
-    """
-    Description
-    -----------
-      Calculate the structual similarity of the two image patches using the following
-      equation:
+    r"""
+    Calculate the structual similarity of the two image patches using the following
+    equation:
+
+    .. math::
+
         SSIM(x, y) = \frac{(2\mu_x \mu_y + c_1)(2\sigma_{xy} + c_2)}
                         {(\mu_x^2 + \mu_y^2 + c_1)(\sigma_x^2 + \sigma_y^2 + c_2)}
-        Where: \mu_i is the mean of i-th image
-               \sigma_i is the variance of the i-th image
-               \sigma_xy is the covariance of the two image
-               \c_i = (k_i L)^2
-               k_1 = 0.01, k2 = 0.03pp
+
+    Where:
+        * :math:`\mu_i` is the mean of i-th image
+        * :math:`\sigma_i` is the variance of the i-th image
+        * :math:`\sigma_{xy}` is the covariance of the two image
+        * :math:`c_i = (k_i L)^2`
+        * :math:`k_1 = 0.01, k_2 = 0.03`
 
         To facilitate comparison, the bit length constant is set to min(x.dtype.itemsize*8, 16)
 
-    :param np.ndarray x: Image 1
-    :param np.ndarray y: Image 2
-    :return:
+    Args:
+        x (np.ndarray): Image 1
+        y (np.ndarray): Image 2
+
+    Return:
+        np.ndarray
+
     """
 
     assert isinstance(x, np.ndarray) and isinstance(y, np.ndarray), "Input must be numpy arrays!"
@@ -80,16 +86,21 @@ def SSIM(x,y, axis=None):
         return np.array(out, dtype=float)
 
 def CNR(x, y, noise):
-    """
-    Description
-    -----------
-      Calculate the contrast to noise ratio according to the following equation:
-        CNR = |mu_x - mu_y| / VAR(noise)
+    r"""
+    Calculate the contrast to noise ratio according to the following equation:
 
-    :param np.ndarray x:     Array of tissue x
-    :param np.ndarray y:     Array of tissue y
-    :param np.ndarray noise: Array of pure noise
-    :return:
+    .. math::
+
+        CNR = |\mu_x - \mu_y| / \text{VAR}(noise)
+
+    Where:
+        * :math:`\mu_{x|y}` is the image input.
+        * :math:`\text{VAR}` returns the variance of :math:`noise`
+
+    Args:
+        x (np.ndarray): Array of tissue x
+        y (np.ndarray): Array of tissue y
+        noise (np.ndarray): Array of pure noise
     """
 
     assert isinstance(x, np.ndarray) and \
@@ -99,13 +110,16 @@ def CNR(x, y, noise):
     return np.abs(x.mean() - y.mean()) / noise.var()
 
 def RMSE(x, y):
-    """
-    Description
-    -----------
-      Return the MSE difference of the two images
-    :param np.ndarray x:
-    :param np.ndarray y:
-    :return:
+    r"""
+    Return the MSE difference of the two images
+
+    Args:
+        x (np.ndarray): Image x
+        y (np.ndarray): Image y
+
+    Returns:
+        (float): Value of MSE (float)
+
     """
     assert isinstance(x, np.ndarray) and isinstance(x, np.ndarray), "Input num be numpy arrays"
     assert x.shape == y.shape, "Two images must have same dimensions" + str(x.shape) + str(y.shape)
@@ -114,15 +128,21 @@ def RMSE(x, y):
     return np.sqrt(d)
 
 def PSNR(x, y):
-    """
-    Description
-    -----------
-      Return the PSNR of the input image where one is assumed to be a lossless groundtruth. Uses the
-      following equation:
+    r"""
+    Return the PSNR of the input image where one is assumed to be a lossless groundtruth. Uses the
+    following equation:
+
+    .. math::
+
         PSNR = 10 \cdot log_10 \left(\frac{MAX_I^2}{MSE} \right)
-    :param np.ndarray x:
-    :param np.ndarray y:
-    :return:
+
+    Args:
+        x (np.array): Image x
+        y (np.array): Image y
+
+    Returns:
+        (np.array or double)
+
     """
 
     # MAX_I = 2**(x.dtype.itemsize) - 1
@@ -139,6 +159,17 @@ def MSE(x, y):
 #========================================
 
 def perf_measure(y_actual, y_guess):
+    """
+    Obtain the result of index test, i.e. the TF, FP, TN and FN of the test.
+
+    Args:
+        y_actual (np.array): Actual class.
+        y_guess (np.array: Guess class.
+
+    Returns:
+        (list of int): TP, FP, TN and FN respectively
+    """
+
     y = y_actual.flatten()
     x = y_guess.flatten()
 
@@ -192,26 +223,26 @@ def EVAL(seg, gt, vars):
     gtindexes = gt.get_unique_IDs()
     segindexes = seg.get_unique_IDs()
 
-    for i, row in enumerate(tqdm(gtindexes)):
+    for i, row in enumerate(tqdm(segindexes)):
         # check if both have same ID
         try:
-            segindexes.index(gtindexes[i])
+            gtindexes.index(segindexes[i])
         except ValueError:
             print("Skipping ", os.path.basename(gt.get_data_source(
                 i)))
-            # data = pd.DataFrame([[os.path.basename(gt.get_data_source(i)),
-            #                       'Not Found',
-            #                       gt.get_internal_index(i),
-            #                       int(gtindexes[i])] + [np.nan] * len(vars)],
-            #                 columns=['Filename', 'TestParentDirectory',
-            #                          'ImageIndex',
-            #                          'Index'] +
-            #                         list(vars.keys()))
-            # df = df.append(data)
+            data = pd.DataFrame([[os.path.basename(gt.get_data_source(i)),
+                                  'Not Found',
+                                  gt.get_internal_index(i),
+                                  int(segindexes[i])] + [np.nan] * len(vars)],
+                            columns=['Filename', 'TestParentDirectory',
+                                     'ImageIndex',
+                                     'Index'] +
+                                    list(vars.keys()))
+            df = df.append(data)
             continue
 
-        gg = gt[i]
-        ss = seg[segindexes.index(gtindexes[i])]
+        ss = seg[i]
+        gg = gt[gtindexes.index(segindexes[i])]
         if not isinstance(ss, np.ndarray):
             ss = ss.numpy().astype('bool')
         if not isinstance(gg, np.ndarray):
@@ -220,7 +251,7 @@ def EVAL(seg, gt, vars):
         try:
             TP, FP, TN, FN = np.array(perf_measure(gg.flatten(), ss.flatten()), dtype=float)
         except:
-            print(gtindexes[i])
+            print("Somthing wrong with: ", segindexes[i])
             continue
         if TP == 0:
             continue
@@ -235,14 +266,14 @@ def EVAL(seg, gt, vars):
                     values.append(np.nan)
                     print(e.message)
 
-        data = pd.DataFrame([[os.path.basename(seg.get_data_source(segindexes.index(gtindexes[i]))),
+        data = pd.DataFrame([[os.path.basename(seg.get_data_source(i)),
                               os.path.basename(
                                       os.path.dirname(
-                                          seg.get_data_source(segindexes.index(gtindexes[i])))
+                                          seg.get_data_source(i))
                                   ),
                               seg._filterargs['regex'],
                               gt.get_internal_index(i),
-                              int(gtindexes[i])] + values],
+                              int(segindexes[i])] + values],
                             columns=['Filename', 'TestParentDirectory',
                                      'TestFilter', 'ImageIndex', 'Index'] +
                                     list(vars.keys()))
