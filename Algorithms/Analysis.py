@@ -134,7 +134,7 @@ def PSNR(x, y):
 
     .. math::
 
-        PSNR = 10 \cdot log_10 \left(\frac{MAX_I^2}{MSE} \right)
+        PSNR = 10 \cdot log_{10} \left(\frac{MAX_I^2}{MSE} \right)
 
     Args:
         x (np.array): Image x
@@ -164,10 +164,10 @@ def perf_measure(y_actual, y_guess):
 
     Args:
         y_actual (np.array): Actual class.
-        y_guess (np.array: Guess class.
+        y_guess (np.array): Guess class.
 
     Returns:
-        (list of int): TP, FP, TN and FN respectively
+        (list of int): Count of TP, FP, TN and FN respectively
     """
 
     y = y_actual.flatten()

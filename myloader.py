@@ -7,6 +7,55 @@ import configparser
 from MedImgDataset import *
 from MedImgDataset.Computation import *
 
+#
+# class PMD_DataLoaderBase(object):
+#     def __init__(self, in_dict, debug=False, verbose=True, logger=None):
+#         self._prop_dict = in_dict
+#         self._logger = logger
+#         self._verbose = verbose
+#
+#         if not self.check_input:
+#             raise AttributeError
+#
+#         self._run_mode = self._prop_dict['General'].get('run_mode')
+#
+#     def check_input(self):
+#         """The input dict should be checked in this function"""
+#         raise NotImplementedError
+#
+#
+#     def _load_data_set_training(self):
+#         """private method called """
+#         raise NotImplementedError
+#
+#     def _load_data_set_inference(self):
+#         raise NotImplementedError
+#
+#     def load_data_set(self):
+#         if re.match('(?=.*train.*)', self._run_mode):
+#             return self._load_data_set_training()
+#         else:
+#             return self._load_data_set_inference()
+#
+#     def write_log(self, msg, level=logging.INFO):
+#         if not self._logger is None and isinstance(self._logger, logging.getLoggerClass()):
+#             self._logger.log(self.__class__.__name__ + ": " + msg, level)
+#         if self._verbose:
+#             print(msg)
+#
+#     def read_params(self, config_file=None):
+#         import configparser
+#         if not config_file is None:
+#             config = configparser.ConfigParser()
+#             config.read_file(config_file)
+#             self._loader_params = config['LoaderParams']
+#         else:
+#             self._loader_params = self._prop_dict['LoaderParams']
+#
+# class PMD_DataLoaderImageData(PMD_DataLoaderBase):
+#     def __init__(self):
+#         pass
+#
 
 # DataLoaders
 def LoadSubbandDataset(a, debug=False):

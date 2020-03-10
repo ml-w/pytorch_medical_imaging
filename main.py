@@ -322,7 +322,7 @@ def main(a, config, logger):
 
 if __name__ == '__main__':
     # This controls the available networks
-    available_networks = {'UNet':UNet,
+    available_networks = {'UNet':UNet_p,
                           'UNetPosAware': UNetPosAware,
                           'UNetLocTexAware': UNetLocTexAware,
                           'UNetLocTexHist': UNetLocTexHist,

@@ -113,14 +113,44 @@ class SegmentationSolver(SolverBase):
         return loss
 
     def decay_optimizer(self, *args):
+        """
+        Function is called every epoch, the weight of the optimizer is fine tuned such that initially the loss
+        weights are balanced by the count of each class, the weight will quickly shift towards favoring empty pixel
+        for the first dozens of epoch until the all weights slowly converge to 1.
+
+        The weight follows the equation:
+
+        .. math::
+
+            s(x;x_0, s, d) = x_0 + \frac{(1 - x_0)}{(1 + e^{-(x - 2d) / s}}
+
+        Where:
+        * :math:`x` - Input weight.
+        * :math:`x_0` - Initial count, used when training is not starting from 0th epoch, say for after loading cp.
+        * :math:`s` - Stretch, controls the slope of the convergence
+        * :math:`d` - Delay, controls which epochs starts the convergence
+
+        Args:
+            *args:
+
+        Returns:
+
+        Todo:
+            * Allow loading parameters.
+
+        .. note::
+            Currently the coefficient :math:`s` and :math:`d` are set to 10 and 35 (epochs) respectively.
+
+        """
         super().decay_optimizer(*args)
 
-        sigmoid_plus = lambda x, init, stretch, delay: init + (1 - init) * 1. / \
-                                                       (1 + np.exp(- x / stretch + delay * 2 / stretch))
+        cap = 0.5
+        sigmoid_plus = lambda x, init, stretch, delay: (init + (1 - init) * 1. / \
+                                                       (1 + np.exp(- x / stretch + delay * 2 / stretch))) * cap
         if isinstance(self._lossfunction, nn.CrossEntropyLoss):
             self._logger.log_print_tqdm('Current weight: ' + str(self._lossfunction.weight), 20)
             offset = self._decayed_time + self._decay_init_weight
-            new_weight = torch.as_tensor([sigmoid_plus(offset, self._r[i], 10, 25) for i in range(len(self._r))])
+            new_weight = torch.as_tensor([sigmoid_plus(offset, self._r[i], 10, 35) for i in range(len(self._r))])
             self._lossfunction.weight.copy_(new_weight)
             self._logger.log_print_tqdm('New weight: ' + str(self._lossfunction.weight), 20)
 
