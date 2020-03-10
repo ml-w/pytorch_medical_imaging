@@ -5,13 +5,38 @@ import cv2
 import matplotlib.pyplot as plt
 import numpy as np
 import os
+from MedImgDataset import ImageDataSet
 
-__all__ = ['draw_overlay_heatmap', 'draw_grid', 'contour_grid_by_dir']
+__all__ = ['draw_overlay_heatmap', 'draw_grid', 'contour_grid_by_dir', 'contour_grid_by_image']
 
 
 def draw_grid(image, segmentation, ground_truth=None,
               nrow=None, padding=1, color=None, only_with_seg=False, thickness=2):
-    # Error check
+    """
+    Draw contour of segmentation and the ground_truth on the image input.
+
+    Args:
+        image (torch.Tensor):
+            Input 3D image base to draw on. Should be a float or double tensor.
+        segmentation (torch.Tensor):
+            Input 3D segmentation to contour. Will be casted to `uint8`.
+        ground_truth (torch.Tensor, Optional):
+            If `segmentation` is not the ground-truth, use this to also label the ground truth contours. This is
+            optional and will only draw if its not `None`.
+        nrow (int):
+            Number of columns in a row of image, each grid shows one image.
+        padding (int):
+            Padding option support to `make_grid` function.
+        color (list of int, Optional):
+            RGB of color for segmenation contour. Default to use `plt` color map 'Set2'.
+        only_with_seg (bool, Optional):
+            Only show image grids when there is segmentation, ignore empty slices. Default to `False`.
+        thickness (int, Opitonal):
+            Thickness of the draw contour. Default to 2.
+
+    Returns:
+        (float array)
+    """
     assert isinstance(image, torch.Tensor) and isinstance(segmentation, torch.Tensor),\
             "Wrong input type: (%s, %s)"%(str(type(image)), str(type(segmentation)))
 
@@ -74,6 +99,18 @@ def draw_grid(image, segmentation, ground_truth=None,
     return im_grid
 
 def draw_vector_image_grid(vect_im, out_prefix, nrow=5, downscale=-1):
+    """
+    Draw multi-channel input and span out its layer if its a 3D image.
+
+    Args:
+        vect_im (np.array): Multi-channel image, 2D or 3D (i.e. dim=3 or dim=4)
+        out_prefix (str): Prefix to saving directory.
+        nrow (int, Optional): Number of slices per row in output grid. Default to 5.
+        downscale (int, Optional): Down sample by this factor if its larger than 0. Default to -1.
+
+    Returns:
+
+    """
     # [C x D x W x H] or [C x W x H]
 
     vdim = vect_im.dim()
@@ -100,6 +137,18 @@ def draw_vector_image_grid(vect_im, out_prefix, nrow=5, downscale=-1):
 
 
 def draw_overlay_heatmap(baseim, heatmap):
+    """
+    Draw a heatmap thats originally ranged from 0 to 1 over an image.
+
+    Args:
+        baseim (np.array or torch.Tensor): Base `float` or `double` image.
+        heatmap (np.array or torch.Tensor):
+            A `float` or `double` heat map to draw over `baseim`. Range should be 0 to 1.
+
+    Returns:
+        (np.array): RGBA or RGB array output ranged from 0 to 255.
+    """
+
     # convert input to cv format
     baseim = np.array(baseim)
     heatmap = np.array(heatmap)
@@ -148,4 +197,48 @@ def contour_grid_by_dir(im_dir, seg_dir, output_dir, gt_dir=None, write_png=Fals
         grid = draw_grid(im.squeeze(), seg.squeeze(), ground_truth=gt, only_with_seg=True)
         cv2.imwrite(fname, grid)
 
+def contour_grid_by_image(img, seg, output_dir, ground_truth=None, write_png=False):
+    """
+    Contour image with the segmentation and, optionally, the ground truth.
 
+    Args:
+        img (:obj:`ImageDataSet`):
+            Image that the segmentation was drawn on.
+        seg (:obj:`ImageDataSet`:
+            Segmentation to draw on the image.
+        output_dir (str):
+            Output .png or .jpg are stored under this directory.
+        ground_truth (:obj:`ImageDataSet`):
+            A third set of segmentation that will be drawn on the image.
+        write_png (bool, Optional):
+            Whether to write .png or not. If `False`, this function will write images as JPEG images. Default to
+            `False`.
+
+    Returns:
+        (int): 0 if success.
+
+    """
+    assert isinstance(img, ImageDataSet) and isinstance(seg, ImageDataSet), "Input has to be ImageDataSet obj or its " \
+                                                                            "child class objects."
+
+    if not os.path.isdir(output_dir):
+        os.makedirs(output_dir, exist_ok=True)
+
+    suffix = '.png' if write_png else '.jpg'
+
+    segindex = seg.get_unique_IDs()
+
+    for index in segindex:
+        l_img = img.get_data_by_ID(index)
+        if not ground_truth is None:
+            l_gt = ground_truth.get_data_by_ID(index)
+        l_seg = seg.get_data_by_ID(index)
+
+        if l_img is None:
+            continue
+
+        grid = draw_grid(l_img.squeeze(), l_seg.squeeze(), ground_truth=l_gt.squeeze(), only_with_seg=True)
+        fname = os.path.join(output_dir, str(index) + suffix)
+        cv2.imwrite(fname, grid)
+
+    return 0
