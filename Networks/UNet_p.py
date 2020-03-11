@@ -41,7 +41,7 @@ class Down(nn.Module):
 
         self.conv = nn.Sequential(
             pool,
-            DoubleConv(in_chan, out_chan)
+            ReflectiveDoubleConv(in_chan, out_chan)
         )
 
     def forward(self, x):
@@ -87,8 +87,8 @@ class Up(nn.Module):
 
 
         self.upsample = self.upsampling[up_mode]
-        self.upconv = DoubleConv(in_chan, in_chan // 2)
-        self.conv = DoubleConv(in_chan, out_chan)
+        self.upconv = ReflectiveDoubleConv(in_chan, in_chan // 2)
+        self.conv = ReflectiveDoubleConv(in_chan, out_chan)
 
         # Delete usless modules to save some memories
         delkeys = list(self.upsampling.keys())
@@ -108,8 +108,8 @@ class Up(nn.Module):
             (torch.Tensor): Output is n-times the size of `x2` and same as `x1`
         """
         x2 = self.upconv(x2)
-        x1 = torch.cat([x1, self.upsample(x2)], dim=1)
-        return self.conv(x1)
+        x = torch.cat([x1, self.upsample(x2)], dim=1)
+        return self.conv(x)
 
 class UNet_p(nn.Module):
     """
@@ -154,10 +154,10 @@ class UNet_p(nn.Module):
 
     .. note::
         For exact implementation of the original UNet proposed in [1], use `layers=4`, `up_mode='learn'` and
-        `down_mode='max'`. This is different to our default setting.
+        `down_mode='max'`.
 
     """
-    def __init__(self, in_chan, out_chan, layers=4, down_mode='avg', up_mode='nearest'):
+    def __init__(self, in_chan, out_chan, layers=4, down_mode='avg', up_mode='learn'):
         super(UNet_p, self).__init__()
 
         self._in_chan = in_chan
@@ -167,14 +167,17 @@ class UNet_p(nn.Module):
         self._layers = layers
         self._start_chans = 64
 
-        self.inconv = DoubleConv(in_chan, self._start_chans)
+        self.inconv = ReflectiveDoubleConv(in_chan, self._start_chans)
+
+        # Downs
         self.downs = nn.ModuleList([Down(self._start_chans * 2 ** i, self._start_chans * 2 ** (i + 1), down_mode) \
                       for i in range(layers)])
 
+        # Ups
         self.ups = nn.ModuleList([Up(self._start_chans * 2 ** (layers - i), self._start_chans * 2 ** (layers - i - 1),
                        up_mode=up_mode) for i in range(layers)])
 
-        self.lastconv = DoubleConv(self._start_chans, out_chan)
+        self.lastconv = nn.Conv2d(self._start_chans, out_chan, 1)
 
     def forward(self, x):
         """
@@ -190,6 +193,7 @@ class UNet_p(nn.Module):
         short_conn = [x]
         for i, d in enumerate(self.downs):
             x = d(x)
+            # Except last layer
             if i < self._layers - 1: # 0, 1, 2
                 short_conn.append(x)
 

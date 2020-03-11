@@ -75,7 +75,7 @@ class outconv(nn.Module):
 
 
 class UNet(nn.Module):
-    def __init__(self, n_channels, outchan=None, residual=True):
+    def __init__(self, n_channels, outchan=None, residual=False):
         super(UNet, self).__init__()
         self.inc = inconv(n_channels, 64)
         self.down1 = down(64, 128)

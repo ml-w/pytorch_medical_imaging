@@ -144,13 +144,13 @@ class SegmentationSolver(SolverBase):
         """
         super().decay_optimizer(*args)
 
-        cap = 0.5
+
         sigmoid_plus = lambda x, init, stretch, delay: (init + (1 - init) * 1. / \
-                                                       (1 + np.exp(- x / stretch + delay * 2 / stretch))) * cap
+                                                       (1 + np.exp(- x / stretch + delay * 2 / stretch)))
         if isinstance(self._lossfunction, nn.CrossEntropyLoss):
             self._logger.log_print_tqdm('Current weight: ' + str(self._lossfunction.weight), 20)
             offset = self._decayed_time + self._decay_init_weight
-            new_weight = torch.as_tensor([sigmoid_plus(offset, self._r[i], 10, 35) for i in range(len(self._r))])
+            new_weight = torch.as_tensor([sigmoid_plus(offset, self._r[i], 15, 35) for i in range(len(self._r))])
             self._lossfunction.weight.copy_(new_weight)
             self._logger.log_print_tqdm('New weight: ' + str(self._lossfunction.weight), 20)
 
