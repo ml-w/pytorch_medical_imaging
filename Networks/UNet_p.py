@@ -14,7 +14,7 @@ class Down(nn.Module):
     Args:
         in_chan (int): Input channels.
         out_chan (out): Output channels.
-        pool_mode (str): {'max'|'avg'|'learn'}. Decide the pooling layers. Default to 'avg'.
+        pool_mode (str): `{'max'|'avg'|'learn'}`. Decide the pooling layers. Default to `avg`.
 
     """
     def __init__(self, in_chan, out_chan, pool_mode='avg'):
@@ -65,7 +65,7 @@ class Up(nn.Module):
     Args:
         in_chan (int): Input channels
         out_chan (int): Output channels,
-        up_mode (str, Optional): {'nearest'|'bilinear'|'cubic'|'learn'}. Mode for upsampling.
+        up_mode (str, Optional): `{'nearest'|'bilinear'|'cubic'|'learn'}`. Mode for upsampling. Default to `nearest`
     """
     def __init__(self, in_chan, out_chan, up_mode='nearest'):
         super(Up, self).__init__()
@@ -141,7 +141,18 @@ class UNet_p(nn.Module):
             * `cubic` - Use bicubic interpolation for upsapmling. Note that its possible to have overshoot values.
             * `learn` - Use learnable transpose convolutional layers with `kern_size=2` and `stride=2`.
 
-            Default to `nearest`. See module :class:`up` and :class:`down` for more details.
+            Default to `learn`. See module :class:`up` and :class:`down` for more details.
+
+
+    Examples:
+        >>> from MedImgDataset import ImageDataSet
+        >>> from Networks import UNet_p
+        >>>
+        >>> img = ImageDataSet('.', verbose=True)
+        >>> net = UNet_p(1, 2, layers=5, down_mode='max', up_mode='learn')
+        >>>
+        >>> out = net(img[0])
+
 
     References:
         .. [1]  Ronneberger, Olaf, Philipp Fischer, and Thomas Brox. "U-net: Convolutional networks for biomedical image
@@ -154,7 +165,8 @@ class UNet_p(nn.Module):
 
     .. note::
         For exact implementation of the original UNet proposed in [1], use `layers=4`, `up_mode='learn'` and
-        `down_mode='max'`.
+        `down_mode='max'`. It is also noted that there are numerous variant that are proven more useful  and
+        apparently this implementation is not the best implementation of a network with encoder-decoder structure.
 
     """
     def __init__(self, in_chan, out_chan, layers=4, down_mode='avg', up_mode='learn'):
@@ -202,3 +214,34 @@ class UNet_p(nn.Module):
         x = self.lastconv(x)
         return x
 
+
+class UNet_p_residual(UNet_p):
+    def __init__(self, *args, **kwargs):
+        """
+        Residual implementation of UNet. Basically same as :class:`UNet_p`, just the forward function is different.
+        Note that if your input channels and output channels numbers are different, it might cause some trouble but
+        is generally fine if one of them has only one channel.
+
+        Args:
+            *args: Please see :class:`UNet_p`
+            **kwargs: Please see :class:`UNet_p`
+
+        See Also:
+            :class:`UNet_p`
+        """
+        super(UNet_p_residual, self).__init__(*args, **kwargs)
+
+    def forward(self, x):
+        """
+        Forward function of :class:`UNet_p`.
+
+        Args:
+            x (Tensor): Tensor or variable with dimension: :math:`(B \\times C \\times H \\times W)`.
+
+        Returns:
+            (Tensor)
+        """
+        temp = x
+        x = super(UNet_p_residual, self).forward()
+        x = x + temp
+        return x
