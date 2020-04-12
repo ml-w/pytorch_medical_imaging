@@ -2,7 +2,7 @@ import pandas as pd
 import re
 from sklearn import model_selection
 import os
-from utils import get_unique_IDs
+from numpy import random
 
 def GenerateFileList(files):
     regex_dict = {'T1W':        "((?=.*T1.*)(?!.*FS.*)(?!.*[cC].*))",
@@ -44,12 +44,29 @@ def GenerateFileList(files):
 
 
 
-def GenerateTestBatch(ids, k_fold, outdir, prefix="Batch_", exclude_list=None, stratification_class=None):
+def GenerateTestBatch(ids, k_fold, outdir, prefix="Batch_", exclude_list=None, stratification_class=None, validation=0):
     import configparser
     try:
         ids = list(ids.tolist())
     except:
         pass
+
+    # if validation required
+    if validation > 0:
+        if stratification_class is None:
+            validation = random.choice(ids, size=validation)
+
+        else:
+            classes = list(set(stratification_class))
+            classes_prob = [stratification_class.count(c) / float(len(ids)) for c in classes]
+            p = [classes_prob[c] for c in stratification_class]
+            validation = random.choice(ids, p=p)
+
+        for v in validation:
+            ids.remove(v)
+        val_file = open(os.path.join(outdir, 'Validation.txt'), 'w')
+        val_file.writelines([v + '\n' for v in validation])
+
 
     # Set up output dictionary for writing
     out = {}
@@ -68,12 +85,12 @@ def GenerateTestBatch(ids, k_fold, outdir, prefix="Batch_", exclude_list=None, s
                     print(e, " not in list")
 
     # Determine if stratified sampling is used for class balances
-    if not stratification_class is None:
+    if stratification_class is None:
         splitter = model_selection.KFold(n_splits=k_fold, shuffle=True)
-        get_split = lambda x: splitter.split(ids)
+        get_split = lambda x: splitter.split(x)
     else:
         splitter = model_selection.StratifiedKFold(n_splits=k_fold, shuffle=True)
-        get_split = lambda x: splitter.split(ids, stratification_class)
+        get_split = lambda x: splitter.split(x, stratification_class)
 
     # Create folder if not exist
     os.makedirs(outdir, exist_ok=True)
@@ -160,20 +177,19 @@ def check_batches_files(dir, globber=None):
 
 
 if __name__ == '__main__':
-    # target_ids = get_unique_IDs(os.listdir('../NPC_Segmentation/0B.Segmentations/CE-T1W_TRA/00.First'))
-    datasheet = pd.read_excel('../NPC_Segmentation/0A.NIFTI_ALL/0A_Datasheet.xlsx', 'Patients_BenignMelignant')
-    datasheet = datasheet.set_index("IDs")
-    datasheet.index = datasheet.index.astype(str)
-    excludelist = [f.rstrip() for f in open('../NPC_Segmentation/99.Testing/CLASS_5Folds/Validation.txt', 'r').readlines()]
-    tstage = datasheet['Tstage']
-    tstage[tstage > 1] = 1
+    import configparser
+    parser = configparser.ConfigParser()
+    parser.read('../NPC_Segmentation/99.Testing/T1vT2/B00.ini')
+    testing = parser['FileList'].get('testing').split(',')
+    training = parser['FileList'].get('training').split(',')
+    validation = [r.rstrip() for r in open('../NPC_Segmentation/99.Testing/T1vT2/Validation.txt')]
+    allids = testing + training + validation
 
-    GenerateTestBatch(tstage.index,
+    GenerateTestBatch(allids,
                       5,
-                      '../NPC_Segmentation/99.Testing/CLASS_5Folds/',
-                      exclude_list=excludelist,
-                      stratification_class = tstage.tolist(),
-                      prefix="C",
+                      '../NPC_Segmentation/99.Testing/T1vT2_5Folds/',
+                      validation=6,
+                      prefix='B'
                       )
 
     # print GenerateFileList(os.listdir('../NPC_Segmentation/06.NPC_Perfect')).to_csv('~/FTP/temp/perfect_file_list.csv')
