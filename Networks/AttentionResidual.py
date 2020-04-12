@@ -84,9 +84,10 @@ class AttentionModule(nn.Module):
 
 
 class AttentionResidualNet(nn.Module):
-    def __init__(self, in_ch, out_ch, save_mask=False):
+    def __init__(self, in_ch, out_ch, save_mask=False, save_weight=False):
         super(AttentionResidualNet, self).__init__()
 
+        self.save_weight=save_weight
         self.in_conv1 = Conv3d(in_ch, 64, stride=[1, 2, 2], padding=[1, 2, 2])
         self.in_sw = Conv3d(64, 20)
 
@@ -122,6 +123,8 @@ class AttentionResidualNet(nn.Module):
         new_shape = list(x_shape[:3]) + [x_shape[-2] * x_shape[-1]]
         x = x.reshape(new_shape)
         x = x * x_w.expand_as(x)
+        if self.save_weight:
+            self.x_w = torch.tensor(x_w.data)
 
         # Resume dimension
         x = x.view(x_shape).permute([3, 0, 4, 1, 2])
