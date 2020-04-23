@@ -20,6 +20,11 @@ def ASD(seg, test, spacing):
     return np.sum(compute_average_surface_distance(
         compute_surface_distances(seg, test, spacing))) / 2.
 
+def GrossVolume_Test(seg, test, spacing):
+    return np.sum(test > 0) * np.prod(spacing)
+
+def GrossVolume_Seg(seg, test, spacing):
+    return np.sum(seg > 0) * np.prod(spacing)
 
 def SSIM(x,y, axis=None):
     r"""
@@ -224,11 +229,12 @@ def EVAL(seg, gt, vars):
     segindexes = seg.get_unique_IDs()
 
     for i, row in enumerate(tqdm(segindexes)):
+        tqdm.write("Computing {}".format(row))
         # check if both have same ID
         try:
             gtindexes.index(segindexes[i])
         except ValueError:
-            print("Skipping ", os.path.basename(gt.get_data_source(
+            tqdm.write("Skipping " + os.path.basename(gt.get_data_source(
                 i)))
             data = pd.DataFrame([[os.path.basename(gt.get_data_source(i)),
                                   'Not Found',
@@ -251,20 +257,22 @@ def EVAL(seg, gt, vars):
         try:
             TP, FP, TN, FN = np.array(perf_measure(gg.flatten(), ss.flatten()), dtype=float)
         except:
-            print("Somthing wrong with: ", segindexes[i])
+            tqdm.write("Somthing wrong with: {}".format(segindexes[i]))
             continue
         if TP == 0:
+            tqdm.write("No TP hits for {}".format(row))
             continue
         values = []
         for keys in vars:
             try:
                 values.append(vars[keys](TP, FP, TN, FN))
             except:
+                # tqdm.write("Error encounter for {}".format(keys))
                 try:
                     values.append(vars[keys](gg, ss, gt.get_spacing(i)))
                 except Exception as e:
                     values.append(np.nan)
-                    print(e.message)
+                    tqdm.write(e.message)
 
         data = pd.DataFrame([[os.path.basename(seg.get_data_source(i)),
                               os.path.basename(
@@ -301,6 +309,7 @@ if __name__ == '__main__':
     parse.add_argument('--asd', action='store', default=False, dest='asd',
                        help='add average surface distance to analysis.')
     parse.add_argument('-a', '--all', action='store_true', default=False, dest='all', help='use all available analysis.')
+    parse.add_argument('--idlist', action='store', default=None, dest='idlist', help='Read id from a txt file.')
     parse.add_argument('--append', action='store_true', default=False, dest='append', help='append datalist on save.')
     parse.add_argument('--save', action='store', default=None, dest='save', help='save analysis results as csv')
     parse.add_argument('--test-data', action='store', type=str, dest='testset', required=True)
@@ -338,25 +347,43 @@ if __name__ == '__main__':
                 'VD': VD,
                 'PPV': PercentMatch,
                 'CR': CorrespondenceRatio,
-                'Volume Ratio': Volume,
+                'GTV-test': GrossVolume_Test,
+                'GTV-seg': GrossVolume_Seg,
                 'PR': PrecisionRate,
                 'ASD': ASD}
 
+    if not args.idlist is None:
+        try:
+            idlist = [r.rstrip() for r in open(args.idlist, 'r').readlines()]
+        except:
+            print("Can't read idlist properly.")
+            idlist = None
+    else:
+        idlist=None
 
-    imset = ImageDataSet(args.testset, readmode='recursive',
-                         filtermode='regex', regex=args.testfilter,
-                         verbose=True, debugmode=False)
+    if not idlist is None:
+        imset = ImageDataSet(args.testset, readmode='recursive',
+                             filtermode='both', regex=args.testfilter, idlist=idlist,
+                             verbose=True, debugmode=False)
+    else:
+        imset = ImageDataSet(args.testset, readmode='recursive',
+                             filtermode='regex', regex=args.testfilter,
+                             verbose=True, debugmode=False)
     gtset = ImageDataSet(args.gtset, filtermode='both',
                          regex=args.gtfilter, idlist=imset.get_unique_IDs(),
                          verbose=True, debugmode=False)
 
     results = EVAL(imset, gtset, vars)
-    results = results.sort_values('Index')
-    results = results.set_index('Index')
-    results.index = results.index.astype(str)
+    try:
+        results = results.sort_values('Index')
+        results = results.set_index('Index')
+        results.index = results.index.astype(str)
 
-    print(results.to_string())
-    print(results.mean())
+        print(results.to_string())
+        print(results.mean())
+    except:
+        print(results.to_string())
+        print(results.mean())
 
     if not args.label is None:
         results['Note'] = str(args.label)
