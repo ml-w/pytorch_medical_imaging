@@ -29,6 +29,13 @@ Networks
 
    Networks/Networks.rst
 
+Loss Functions
+--------------
+.. toctree::
+   :maxdepth: 2
+
+   Loss/Loss.rst
+
 Indices and tables
 ==================
 
