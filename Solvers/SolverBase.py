@@ -55,7 +55,9 @@ class SolverBase(object):
             factor= factor,
             patience = int(patience),
             cooldown=2,
-            min_lr = 1E-6
+            min_lr = 1E-6,
+            threshold=0.05,
+            threshold_mode='rel'
         )
 
     def set_momentum_decay(self, decay):
@@ -81,14 +83,12 @@ class SolverBase(object):
 
     def decay_optimizer(self, *args):
         if not self._lr_schedular is None:
-            if len(args) > 0:
-                self._lr_schedular.step(*args)
-            else:
-                self._lr_schedular.step()
+            self._lr_schedular.step(*args)
         if not self._mom_decay is None:
             for pg in self._optimizer.param_groups:
                 pg['momentum'] = self._mom_decay_func(pg['momemtum'])
         self._decayed_time += 1
+        self._log_print("Decayed optimizer...")
 
     def inference(self, *args):
         out = self._net.forward(*list(args))
@@ -114,6 +114,14 @@ class SolverBase(object):
             loss = self._lossfunction(res, g.squeeze().long())
             validation_loss.append(loss.item())
         return [np.mean(np.array(validation_loss).flatten())]
+
+    def _log_print(self, msg, level=20):
+        if not self._logger is None:
+            try:
+                self._logger.log(level, msg)
+                tqdm.write(msg)
+            except:
+                tqdm.write(msg)
 
 
     @staticmethod

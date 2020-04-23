@@ -25,8 +25,8 @@ class SegmentationSolver(SolverBase):
         logger.log_print_tqdm("Find %i classes: %s"%(numOfClasses, classes))
 
         # calculate empty label ratio for updating loss function weight
+        self._sigmoid_params = {'delay': 5, 'stretch': 2, 'cap':0.8}
         r = []
-        sigmoid_plus = lambda x: 1. / (1. + np.exp(-x * 0.05 + 2))
         for c in classes:
             factor = float(np.prod(np.array(gt_data.size())))/float(valcountpair[c])
             r.append(factor)
@@ -37,11 +37,13 @@ class SegmentationSolver(SolverBase):
 
         # calculate init-factor
         if not param_initWeight is None:
-            factor =  sigmoid_plus(param_initWeight + 1) * 100
-        else:
-            factor = 1
-        weights = torch.as_tensor([r[0] * factor] + r[1:].tolist())
-        self.loss_init_weights = weights.cpu()
+            self._r = self.sigmoid_plus(param_initWeight + 1, self._r, self._sigmoid_params['stretch'],
+                                       self._sigmoid_params['delay'], self._sigmoid_params['cap'])
+
+        # null class can't be too low
+        self._r[0] = self._r[0] * 10
+        weights = torch.as_tensor(self._r)
+        self.loss_init_weights = weights.cpu().float()
         logger.log_print_tqdm("Initial weight factor: " + str(weights))
 
         # Create network
@@ -62,7 +64,7 @@ class SegmentationSolver(SolverBase):
         net = net(inchan, numOfClasses)
 
         # Create optimizer and loss function
-        lossfunction = nn.CrossEntropyLoss(weight=weights)
+        lossfunction = nn.CrossEntropyLoss(weight=self.loss_init_weights)
         optimizer = optim.SGD(net.parameters(), lr=param_optim['lr'], momentum=param_optim['momentum'])
         iscuda = param_iscuda
         if param_iscuda:
@@ -139,18 +141,32 @@ class SegmentationSolver(SolverBase):
             * Allow loading parameters.
 
         .. note::
-            Currently the coefficient :math:`s` and :math:`d` are set to 10 and 35 (epochs) respectively.
+            Currently the coefficient :math:`s` and :math:`d` are set in attribute `_sigmoid_params`
 
         """
         super().decay_optimizer(*args)
 
-
-        sigmoid_plus = lambda x, init, stretch, delay: (init + (1 - init) * 1. / \
-                                                       (1 + np.exp(- x / stretch + delay * 2 / stretch)))
+        s = self._sigmoid_params['stretch']
+        d = self._sigmoid_params['delay']
+        cap = self._sigmoid_params['cap']
         if isinstance(self._lossfunction, nn.CrossEntropyLoss):
             self._logger.log_print_tqdm('Current weight: ' + str(self._lossfunction.weight), 20)
             offset = self._decayed_time + self._decay_init_weight
-            new_weight = torch.as_tensor([sigmoid_plus(offset, self._r[i], 15, 45) for i in range(len(self._r))])
+            new_weight = torch.as_tensor([self.sigmoid_plus(offset, self._r[i], s, d, cap) for i in range(len(
+                self._r))])
             self._lossfunction.weight.copy_(new_weight)
             self._logger.log_print_tqdm('New weight: ' + str(self._lossfunction.weight), 20)
 
+
+    @staticmethod
+    def sigmoid_plus(x, init, stretch, delay, cap):
+        # sigmoid increase to cap.
+        out = (init + (cap - init) * 1. / (1 + np.exp(- x / stretch + delay * 2 / stretch)))
+
+        # no decrease.
+        try:
+            out[np.array(init) > cap] = init[np.array(init) > cap]
+        except TypeError:
+            if init > cap:
+                out = init
+        return out
