@@ -183,9 +183,9 @@ def main(a, config, logger):
                               param_initWeight=param_initWeight, logger=logger)
         if param_decay_on_plateau:
             logger.log_print_tqdm("Optimizer decay on plateau.")
-            solver.set_lr_decay_to_reduceOnPlateau(5, param_decay)
+            solver.set_lr_decay_to_reduceOnPlateau(3, param_decay)
         else:
-            solver.set_lr_decay(param_decay)
+            solver.set_lr_decay_exp(param_decay)
 
         trainingSet = TensorDataset(inputDataset, gtDataset)
         loader      = DataLoader(trainingSet, batch_size=param_batchsize, shuffle=True, num_workers=0, drop_last=True, pin_memory=False)
@@ -250,9 +250,10 @@ def main(a, config, logger):
                 # End of step
                 writerindex += 1
 
+            epoch_loss = np.array(E).mean()
             # Decay after each epoch
             if param_decay_on_plateau:
-                solver.decay_optimizer(lastloss)
+                solver.decay_optimizer(epoch_loss)
             else:
                 solver.decay_optimizer()
 
@@ -267,7 +268,7 @@ def main(a, config, logger):
 
 
             losses.append(E)
-            if np.array(E).mean() <= lastloss:
+            if epoch_loss <= lastloss:
                 backuppath = "./Backup/cp_%s_%s.pt"%(net_datatype, net_nettype) \
                     if checkpoint_save is None else checkpoint_save
                 torch.save(solver.get_net().module.state_dict(), backuppath)
@@ -278,7 +279,7 @@ def main(a, config, logger):
                 current_lr = next(solver.get_optimizer().param_groups)['lr']
             except:
                 current_lr = solver.get_optimizer().param_groups[0]['lr']
-            logger.log_print_tqdm("[Epoch %04d] Loss: %.010f LR: %.010f"%(i, np.array(E).mean(), current_lr))
+            logger.log_print_tqdm("[Epoch %04d] Loss: %.010f LR: %.010f"%(i, epoch_loss, current_lr))
 
 
     # Evaluation mode
