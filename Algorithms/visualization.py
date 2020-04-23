@@ -11,7 +11,7 @@ __all__ = ['draw_overlay_heatmap', 'draw_grid', 'contour_grid_by_dir', 'contour_
 
 
 def draw_grid(image, segmentation, ground_truth=None,
-              nrow=None, padding=1, color=None, only_with_seg=False, thickness=2):
+              nrow=None, padding=1, color=None, only_with_seg=False, thickness=2, crop=None, gt_color=(30, 255, 30)):
     """
     Draw contour of segmentation and the ground_truth on the image input.
 
@@ -33,6 +33,11 @@ def draw_grid(image, segmentation, ground_truth=None,
             Only show image grids when there is segmentation, ignore empty slices. Default to `False`.
         thickness (int, Opitonal):
             Thickness of the draw contour. Default to 2.
+        crop (int or list of int, Optional):
+            Crop the input image and segmentation. Default to None.
+        gt_color (int or list of int, Optional):
+            Color for drawing ground truth contour, only effective if `ground_truth` provided. Default to `(30, 255,
+            30)`.
 
     Returns:
         (float array)
@@ -46,13 +51,46 @@ def draw_grid(image, segmentation, ground_truth=None,
     if segmentation.dim() == 3:
         segmentation = segmentation.unsqueeze(1)
 
+    if not ground_truth is None:
+        if ground_truth.dim() == 3:
+            ground_truth = ground_truth.unsqueeze(1)
+
     if only_with_seg:
         seg_index = segmentation.sum([1, 2, 3]) != 0
+        if not ground_truth is None:
+            gt_index = ground_truth.sum([1, 2, 3]) != 0
+            seg_index = gt_index + seg_index
         image = image[seg_index]
         segmentation = segmentation[seg_index]
+        if not ground_truth is None:
+            ground_truth = ground_truth[seg_index]
+
 
     if nrow is None:
         nrow = np.int(np.ceil(np.sqrt(len(segmentation))))
+
+
+    if not crop is None:
+        # Find center of mass for segmentation
+        npseg = (segmentation.squeeze().numpy() != 0).astype('int')
+        im_shape = npseg.shape
+        im_grid = np.meshgrid(*[np.arange(i) for i in im_shape], indexing='ij')
+
+        z, x, y= [npseg * im_grid[i] for i in range(3)]
+        z, x, y= [X.sum() for X in [x, y, z]]
+        z, x, y= [X / float(np.sum(npseg)) for X in [x, y, z]]
+        z, x, y= np.round([x, y, z]).astype('int')
+
+        # Find cropping boundaries
+        center = (x, y)
+        size = crop if isinstance(crop, list) else (crop, crop)
+        lower_bound = [np.max([0, int(c - s // 2)]) for c, s in zip(center, size)]
+        upper_bound = [np.min([l + s, m]) for l, s, m in zip(lower_bound, size, im_shape[1:])]
+
+        # Crop
+        image = image[:,:, lower_bound[0]:upper_bound[0], lower_bound[1]:upper_bound[1]]
+        segmentation = segmentation[:,:,lower_bound[0]:upper_bound[0], lower_bound[1]:upper_bound[1]]
+        ground_truth = ground_truth[:,:,lower_bound[0]:upper_bound[0], lower_bound[1]:upper_bound[1]]
 
     # Check number of classes in the segmentaiton
     num_of_class = len(np.unique(segmentation.flatten()))
@@ -83,18 +121,13 @@ def draw_grid(image, segmentation, ground_truth=None,
         contour_color = np.array(plt.get_cmap('Set2').colors[c]) * 255. if color is None else color
         cv2.drawContours(im_grid, contours, -1, contour_color, thickness=thickness)
 
+
     if not ground_truth is None:
-        if ground_truth.dim() == 3:
-            ground_truth = ground_truth.unsqueeze(1)
-
-        if only_with_seg:
-            ground_truth = ground_truth[seg_index]
-
         gt_grid = make_grid(ground_truth, nrow=nrow, padding=padding, normalize=False)
         gt_grid_single = (gt_grid != 0).numpy()[0].astype('uint8')
         _a, contours, _b = cv2.findContours(gt_grid_single, mode=cv2.RETR_EXTERNAL,
                                             method=cv2.CHAIN_APPROX_SIMPLE)
-        cv2.drawContours(im_grid, contours, -1, [50, 255, 50], thickness=1)
+        cv2.drawContours(im_grid, contours, -1, gt_color, thickness=1)
 
     return im_grid
 
@@ -138,10 +171,11 @@ def draw_vector_image_grid(vect_im, out_prefix, nrow=5, downscale=-1):
 
 def draw_overlay_heatmap(baseim, heatmap):
     """
-    Draw a heatmap thats originally ranged from 0 to 1 over an image.
+    Draw a heatmap thats originally ranged from 0 to 1 over a greyscale image
 
     Args:
-        baseim (np.array or torch.Tensor): Base `float` or `double` image.
+        baseim (np.array or torch.Tensor):
+            Base `float` or `double` image.
         heatmap (np.array or torch.Tensor):
             A `float` or `double` heat map to draw over `baseim`. Range should be 0 to 1.
 
@@ -197,7 +231,7 @@ def contour_grid_by_dir(im_dir, seg_dir, output_dir, gt_dir=None, write_png=Fals
         grid = draw_grid(im.squeeze(), seg.squeeze(), ground_truth=gt, only_with_seg=True)
         cv2.imwrite(fname, grid)
 
-def contour_grid_by_image(img, seg, output_dir, ground_truth=None, write_png=False):
+def contour_grid_by_image(img, seg, output_dir, ground_truth=None, write_png=False, **kwargs):
     """
     Contour image with the segmentation and, optionally, the ground truth.
 
@@ -213,6 +247,9 @@ def contour_grid_by_image(img, seg, output_dir, ground_truth=None, write_png=Fal
         write_png (bool, Optional):
             Whether to write .png or not. If `False`, this function will write images as JPEG images. Default to
             `False`.
+        **kwargs:
+            Pass to function :func:`draw_grid`.
+
 
     Returns:
         (int): 0 if success.
@@ -229,15 +266,20 @@ def contour_grid_by_image(img, seg, output_dir, ground_truth=None, write_png=Fal
     segindex = seg.get_unique_IDs()
 
     for index in segindex:
-        l_img = img.get_data_by_ID(index)
-        if not ground_truth is None:
-            l_gt = ground_truth.get_data_by_ID(index)
-        l_seg = seg.get_data_by_ID(index)
+        try:
+            l_img = img.get_data_by_ID(index)
+            if not ground_truth is None:
+                l_gt = ground_truth.get_data_by_ID(index)
+            l_seg = seg.get_data_by_ID(index)
+        except:
+            print("Index missing in {}.".format(index))
+            continue
 
         if l_img is None:
             continue
 
-        grid = draw_grid(l_img.squeeze(), l_seg.squeeze(), ground_truth=l_gt.squeeze(), only_with_seg=True)
+        grid = draw_grid(l_img.squeeze(), l_seg.squeeze(), ground_truth=l_gt.squeeze(), 
+                         **kwargs)
         fname = os.path.join(output_dir, str(index) + suffix)
         cv2.imwrite(fname, grid)
 
