@@ -230,6 +230,10 @@ class ImageDataSet(Dataset):
         else:
             raise AttributeError("file_dirs is not assigned!")
 
+        if len(file_dirs) == 0:
+            self.log_print("No target files found in " + self.rootdir, logging.CRITICAL)
+            ArithmeticError("No target files found!")
+
         #==========================
         # Apply filter if specified
         #--------------------------
