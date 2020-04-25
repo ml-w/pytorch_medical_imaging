@@ -105,6 +105,10 @@ class AttentionResidualNet(nn.Module):
 
         self.out_fc1 = nn.Linear(2048, out_ch)
 
+        # initilization
+        nn.init.ones_(self.out_linear.weight)
+        nn.init.zeros_(self.out_linear.bias)
+
 
     def forward(self, x):
         while x.dim() < 5:
@@ -158,4 +162,5 @@ class AttentionResidualNet(nn.Module):
     def get_mask(self):
         #[[B,H,W,D],[B,H,W,D],[B,H,W,]]
         return [r.get_mask() for r in [self.att1, self.att2, self.att3]]
+
 
