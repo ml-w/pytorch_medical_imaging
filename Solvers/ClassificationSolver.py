@@ -1,6 +1,7 @@
 from .SolverBase import SolverBase
 from logger import Logger
 
+
 from torch import optim
 from torch.utils.data import DataLoader, TensorDataset
 import torch
@@ -11,9 +12,38 @@ from tqdm import *
 
 class ClassificationSolver(SolverBase):
     def __init__(self,in_data, gt_data, net, param_optim, param_iscuda,
-                 param_initWeight=None, logger=None):
+                 param_initWeight=None, logger=None, **kwargs):
+        """
+        Solver for classification tasks.
+
+        Args:
+            in_data (torch.Tensor):
+                Tensor of input data.
+            gt_data (torch.Tensor):
+                Tensor of output data.
+            net (torch.nn):
+                Network modules.
+            param_optim (dict):
+                Dictionary of the optimizer parameters. Should include key 'lr'.
+            param_iscuda (bool):
+                Settings to use CUDA or not.
+            param_initWeight (int, Optional):
+                Initial weight for loss function.
+            logger (Logger, Optional):
+                Logger. If no logger provide, log will be output to './temp.log'
+            **kwargs:
+                Additional dictionary item pass to base class.
+
+        Kwargs:
+            For details to kwargs, see :class:`SolverBase`.
+
+        Returns:
+            :class:`ClassificaitonSolver` object
+        """
         assert isinstance(logger, Logger) or logger is None, "Logger incorrect settings!"
 
+        if logger is None:
+            logger = Logger('./temp.log')
 
         self._decay_init_weight = param_initWeight
 
@@ -32,7 +62,8 @@ class ClassificationSolver(SolverBase):
 
         # Create optimizer and loss function
         lossfunction = nn.CrossEntropyLoss()
-        optimizer = optim.SGD(net.parameters(), lr=param_optim['lr'], momentum=param_optim['momentum'])
+        # optimizer = optim.Adam(net.parameters(), lr=param_optim['lr'], momentum=param_optim['momentum'])
+        optimizer = optim.Adam(net.parameters(), lr=param_optim['lr'])
         iscuda = param_iscuda
         if param_iscuda:
             lossfunction = lossfunction.cuda()
@@ -44,7 +75,7 @@ class ClassificationSolver(SolverBase):
         solver_configs['iscuda'] = iscuda
         solver_configs['logger'] = logger
 
-        super(ClassificationSolver, self).__init__(solver_configs)
+        super(ClassificationSolver, self).__init__(solver_configs, **kwargs)
 
 
     def _feed_forward(self, *args):

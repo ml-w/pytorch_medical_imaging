@@ -24,6 +24,7 @@ class TB_plotter(object):
         self._writer.add_scalar('Validation_Loss', args[0], writer_index)
         if len(args) >= 2:
             self._writer.add_scalar('Accuracies', args[1], writer_index)
+        return args[0]
 
     def plot_segmentation(self, gt, out, img, writer_index, Zrange=40, nrow=3):
         try:

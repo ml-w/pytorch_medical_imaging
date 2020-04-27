@@ -101,6 +101,7 @@ def main(a, config, logger):
 
     net_nettype = config['Network'].get('network_type')
     net_datatype = config['Network'].get('data_type')
+    net_init = config['Network'].get('initialization', None)
 
     dir_input = config['Data'].get('input_dir')
     dir_target = config['Data'].get('target_dir')
@@ -210,9 +211,11 @@ def main(a, config, logger):
         lastloss = 1e32
         writerindex = 0
         losses = []
+
         logger.log_print_tqdm("Start training...")
         for i in range(param_epoch):
             E = []
+            val_loss = []
             temploss = 1e32
             for index, samples in enumerate(loader):
                 s, g = samples
@@ -242,7 +245,9 @@ def main(a, config, logger):
                 if index % 500 == 0 and validation_FLAG and bool_plot:
                     try:
                         # perform validation per 500 steps
-                        writer.plot_validation_loss(writerindex, *solver.validation(valDataset, valgtDataset, param_batchsize))
+                        val_loss.append(writer.plot_validation_loss(writerindex, *solver.validation(valDataset,
+                                                                                               valgtDataset,
+                                                                                                    param_batchsize)))
                     except Exception as e:
                         traceback.print_tb(sys.exc_info()[2])
                         logger.log_print_tqdm(str(e), logging.WARNING)
@@ -268,7 +273,9 @@ def main(a, config, logger):
 
 
             losses.append(E)
-            if epoch_loss <= lastloss:
+            # use validation loss as epoch loss if it exist
+            measure_loss = np.array(val_loss).mean() if len(val_loss) > 0 else epoch_loss
+            if measure_loss <= lastloss:
                 backuppath = "./Backup/cp_%s_%s.pt"%(net_datatype, net_nettype) \
                     if checkpoint_save is None else checkpoint_save
                 torch.save(solver.get_net().module.state_dict(), backuppath)

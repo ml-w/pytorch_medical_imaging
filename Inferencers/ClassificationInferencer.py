@@ -37,8 +37,8 @@ class ClassificationInferencer(InferencerBase):
         out_chan = 2 #TODO: Temp fix
 
         try:
-            self._net = self._net(in_chan, out_chan, save_mask=False)
-            self._ATTENTION_FLAG=False
+            self._net = self._net(in_chan, out_chan, save_mask=False, save_weight=True)
+            self._ATTENTION_FLAG=True
         except:
             self._logger.log_print_tqdm("Cannot create network with 'save_mask' attribute!", 20)
             self._net = self._net(in_chan, out_chan)
@@ -81,8 +81,9 @@ class ClassificationInferencer(InferencerBase):
                 new_space = ori_spacing * ratio
 
                 write_out_image = GetImageFromArray(atten_im.transpose([2,0,1,3]))
-                write_out_image.SetOrigin(ref_im.GetOrigin())
-                write_out_image.SetDirection(ref_im.GetDirection())
+                write_out_image.CopyInformation(ref_im)
+                # write_out_image.SetOrigin(ref_im.GetOrigin())
+                # write_out_image.SetDirection(ref_im.GetDirection())
                 write_out_image.SetSpacing(new_space)
 
                 #
@@ -146,51 +147,55 @@ class ClassificationInferencer(InferencerBase):
 
 
 
-
     def write_out(self):
         out_tensor = []
         out_decisions = {}
         out_attention = []
+        out_slice_attention = []
         last_batch_dim = 0
-        for index, samples in enumerate(tqdm(self._data_loader, desc="Steps")):
-            s = samples
-            if (isinstance(s, tuple) or isinstance(s, list)) and len(s) > 1:
-                s = [Variable(ss, requires_grad=False).float() for ss in s]
+        with torch.no_grad():
+            for index, samples in enumerate(tqdm(self._data_loader, desc="Steps")):
+                s = samples
+                if (isinstance(s, tuple) or isinstance(s, list)) and len(s) > 1:
+                    s = [Variable(ss, requires_grad=False).float() for ss in s]
 
-            if self._data_loader:
-                s = [ss.cuda() for ss in s] if isinstance(s, list) else s.cuda()
+                if self._data_loader:
+                    s = [ss.cuda() for ss in s] if isinstance(s, list) else s.cuda()
 
-            torch.no_grad()
-            if isinstance(s, list):
-                out = self._net.forward(*s).squeeze()
-            else:
-                out = self._net.forward(s).squeeze()
+                if isinstance(s, list):
+                    out = self._net.forward(*s).squeeze()
+                else:
+                    out = self._net.forward(s).squeeze()
 
-            while ((out.dim() < last_batch_dim) or (out.dim()< 2)) and last_batch_dim != 0:
-                out = out.unsqueeze(0)
-                self._logger.log_print_tqdm('Unsqueezing last batch.' + str(out.shape))
+                while ((out.dim() < last_batch_dim) or (out.dim()< 2)) and last_batch_dim != 0:
+                    out = out.unsqueeze(0)
+                    self._logger.log_print_tqdm('Unsqueezing last batch.' + str(out.shape))
 
-            out_tensor.append(out.data.cpu())
+                out_tensor.append(out.data.cpu())
+                if self._ATTENTION_FLAG:
+                    # out_attention.append(self._net.get_mask())
+                    out_slice_attention.append(self._net.get_slice_attention())
+
+                last_batch_dim = out.dim()
+                del out, s
+
             if self._ATTENTION_FLAG:
-                out_attention.append(self._net.get_mask())
+                # out_attention = [a for a in zip(*out_attention)]
+                # out_attention = [torch.cat(a, dim=0) for a in out_attention]
+                out_slice_attention = torch.cat(out_slice_attention)
+                print(out_slice_attention.shape)
 
-            last_batch_dim = out.dim()
-            del out, s
+            out_tensor = torch.cat(out_tensor, dim=0)
+            dl = self._writter(out_tensor, out_attention=out_attention, out_slice_attention=out_slice_attention)
+            print(dl._data_table.to_string())
 
-        if self._ATTENTION_FLAG:
-            out_attention = [a for a in zip(*out_attention)]
-            out_attention = [torch.cat(a, dim=0) for a in out_attention]
-
-        out_tensor = torch.cat(out_tensor, dim=0)
-        dl = self._writter(out_tensor, out_attention)
-        print(dl._data_table.to_string())
-
-    def _writter(self, out_tensor, out_attention =None):
+    def _writter(self, out_tensor, out_attention =None, out_slice_attention=None):
         out_decisions = {}
         out_decision = torch.argmax(out_tensor, dim=1)
         out_tensor = F.softmax(out_tensor, dim=1)
         if self._ATTENTION_FLAG and not out_attention is None:
-            self.attention_write_out(out_attention)
+            # self.attention_write_out(out_attention)
+            pass
         if os.path.isdir(self._outdir):
             self._outdir = os.path.join(self._outdir, 'class_inf.csv')
         if not self._outdir.endswith('.csv'):
@@ -204,6 +209,10 @@ class ClassificationInferencer(InferencerBase):
         out_decisions['IDs'] = self._in_dataset.get_unique_IDs()
         for i in range(out_tensor.shape[1]):
             out_decisions['Prob_Class_%s'%i] = out_tensor[:, i].data.cpu().tolist()
+            if not out_slice_attention is None:
+                for j in range(len(out_slice_attention[0])):
+                    out_decisions['SA %02d'%j] = out_slice_attention[:,j]
+
         out_decisions['Decision'] = out_decision.tolist()
         dl = DataLabel.from_dict(out_decisions)
         dl.write(self._outdir)

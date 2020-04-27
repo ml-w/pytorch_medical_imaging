@@ -9,7 +9,18 @@ from abc import abstractmethod
 import numpy as np
 
 class SolverBase(object):
-    def __init__(self, solver_configs):
+    """
+
+    Args:
+        solver_configs (dict):
+            Child class should prepare the configuration. Some keys are compulsary.
+
+    Kwargs:
+        'net_init': Initialization method. (Not implemented)
+
+
+    """
+    def __init__(self, solver_configs, **kwargs):
         super(SolverBase, self).__init__()
 
         # required

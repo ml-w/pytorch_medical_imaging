@@ -90,6 +90,7 @@ class AttentionResidualNet(nn.Module):
         self.save_weight=save_weight
         self.in_conv1 = Conv3d(in_ch, 64, stride=[1, 2, 2], padding=[1, 2, 2])
         self.in_sw = Conv3d(64, 20)
+        self.x_w = None
 
         self.in_conv2 = ResidualBlock3d(64, 256)
 
@@ -119,6 +120,8 @@ class AttentionResidualNet(nn.Module):
         x_w = self.in_sw(x)
         x_w = F.avg_pool3d(x_w,kernel_size=x_w.shape[-3:]).squeeze()
         x_w = F.sigmoid(x_w) + 0.5
+        if self.save_weight:
+            self.x_w = torch.tensor(x_w.data.cpu())
         x_w = x_w.view([-1])
 
         # Permute the axial dimension to the last
@@ -127,8 +130,7 @@ class AttentionResidualNet(nn.Module):
         new_shape = list(x_shape[:3]) + [x_shape[-2] * x_shape[-1]]
         x = x.reshape(new_shape)
         x = x * x_w.expand_as(x)
-        if self.save_weight:
-            self.x_w = torch.tensor(x_w.data)
+
 
         # Resume dimension
         x = x.view(x_shape).permute([3, 0, 4, 1, 2])
@@ -162,5 +164,15 @@ class AttentionResidualNet(nn.Module):
     def get_mask(self):
         #[[B,H,W,D],[B,H,W,D],[B,H,W,]]
         return [r.get_mask() for r in [self.att1, self.att2, self.att3]]
+
+    def get_slice_attention(self):
+        if not self.x_w is None:
+            while self.x_w.dim() < 2:
+                self.x_w = self.x_w.unsqueeze(0)
+            return self.x_w
+        else:
+            print("Attention weight was not saved!")
+            return None
+
 
 
