@@ -15,5 +15,5 @@ class NetWrapper(object):
 	def __call__(self, x):
 		self.feature_extractor.gradients = []
 		self.feature_extractor.features = []
-		out = self.net(x)
+		out = self.feature_extractor(x)
 		return out

@@ -279,7 +279,7 @@ def main(a, config, logger):
                 backuppath = "./Backup/cp_%s_%s.pt"%(net_datatype, net_nettype) \
                     if checkpoint_save is None else checkpoint_save
                 torch.save(solver.get_net().module.state_dict(), backuppath)
-                lastloss = np.array(E).mean()
+                lastloss = measure_loss
 
 
             try:
@@ -316,7 +316,7 @@ def main(a, config, logger):
                                  bool_usecuda, logger)
 
         if write_mode == 'GradCAM':
-            inferencer.grad_cam_write_out(['att3'])
+            inferencer.grad_cam_write_out(['att2'])
         else:
             with torch.no_grad():
                 inferencer.write_out()

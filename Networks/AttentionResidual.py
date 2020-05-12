@@ -121,7 +121,7 @@ class AttentionResidualNet(nn.Module):
         x_w = F.avg_pool3d(x_w,kernel_size=x_w.shape[-3:]).squeeze()
         x_w = F.sigmoid(x_w) + 0.5
         if self.save_weight:
-            self.x_w = torch.tensor(x_w.data.cpu())
+            self.x_w = x_w.data.cpu()
         x_w = x_w.view([-1])
 
         # Permute the axial dimension to the last

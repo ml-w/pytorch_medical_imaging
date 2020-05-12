@@ -26,15 +26,24 @@ class GradCam:
 		if self.cuda:
 			one_hot = one_hot.cuda()
 
+		# Back-propagation with respect to decisions
 		for index, d in enumerate(decisions):
 			one_hot[index, d] = 1
+
+		# Decision 1 backpropagation
+		# one_hot[:,1] = 1
 
 		one_hot = Variable(one_hot, requires_grad=True)
 		one_hot = one_hot * output
 		one_hot.sum().backward()
+		# output.sum().backward()
 
 		features, grad = self.extractor.get_features_grad()
 
+		# TODO: Make this work for multiGPU, hint: use partial to pass name for hook functions
+		# Because multi-gpu setting cause the mods to load multiple times, this is needed.
+		# features = [torch.cat(features[f]) for f in features]
+		# grad = [torch.cat(grad[f]) for f in grad]
 
 		if self.threeD:
 			while input.dim() < 5:
@@ -52,11 +61,13 @@ class GradCam:
 			weight = torch.mean(g, dim=(2, 3))
 		cam = torch.zeros_like(input)
 
+
 		ff = features[0][0]
 		while ff.dim() < cam.dim():
 			ff = ff.unsqueeze(0)
 		# Batch dimension
 		for b in range(input.shape[0]):
+			# Channel dimension
 			for c, g in enumerate(weight[b]):
 				f = ff[b][c]
 				while f.dim() < cam.dim():

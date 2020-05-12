@@ -134,15 +134,24 @@ class ClassificationInferencer(InferencerBase):
         dl = self._writter(out_tensor)
         print(dl._data_table.to_string())
 
+
         ids = self._in_dataset.get_unique_IDs()
         outdir = os.path.dirname(self._outdir)
-        for i in range(len(self._in_dataset)):
-            t, c = self._in_dataset[i], cam_tensor[i]
+        for i in tqdm(range(len(self._in_dataset))):
+            t, c = self._in_dataset[i], cam_tensor[i].squeeze()
+
+            # normalize slice by slice to range 0-1
+            for j, slice in enumerate(c):
+                _tmp = c[j]
+                if not _tmp.max() == 0:
+                    _tmp = _tmp - float(_tmp.min())
+                    _tmp = _tmp / float(_tmp.max())
+                    c[j] = _tmp
             t_grid = make_grid(t.squeeze().unsqueeze(1), nrow=5, padding=1, normalize=True)
             c_grid = make_grid(c.squeeze().unsqueeze(1), nrow=5, padding=1, normalize=True)
 
             hm = draw_overlay_heatmap(t_grid, c_grid)
-            outname = os.path.join(outdir, "%s_gradcam.png"%ids[i])
+            outname = os.path.join(outdir, "%s_gradcam.jpg"%ids[i])
             imsave(outname, hm)
 
 
