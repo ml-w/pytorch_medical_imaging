@@ -70,7 +70,10 @@ class DataLabel(Dataset):
         return len(self._data_table)
 
     def __getitem__(self, item):
-        return self._data_table[self._target_column][item]
+        if self._target_column is None:
+            return torch.tensor(self._data_table.iloc[item])
+        else:
+            return torch.tensor(self._data_table[self._target_column][item])
 
     def __str__(self):
         return self._data_table.to_string()

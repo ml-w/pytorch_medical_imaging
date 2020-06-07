@@ -57,9 +57,32 @@ class SegmentationInferencer(InferencerBase):
                                        shuffle=False, num_workers=0)
         return self._data_loader
 
+
+    def _get_net_out_features(self):
+        test_in = next(iter(self._data_loader))
+        if self._iscuda:
+            if isinstance(test_in, list):
+                test_in = [ss.cuda() for ss in test_in]
+            else:
+                test_in = test_in.cuda()
+
+        if isinstance(test_in, list):
+            out = self._net(*test_in).size()[1]
+        else:
+            out = self._net(test_in).size()[1]
+        del test_in
+        return out
+
+
     def write_out(self):
         last_batch_dim = 0
-        out_tensor = []
+
+        # compute size to pass to piece_patches
+        out_size = self._in_dataset.size()
+        out_features = self._get_net_out_features()
+        out_size[1] = out_features
+
+        out_tensor = torch.zeros(out_size)
         for index, samples in enumerate(tqdm(self._data_loader, desc="Steps")):
             s = samples
             if (isinstance(s, tuple) or isinstance(s, list)) and len(s) > 1:
@@ -79,19 +102,15 @@ class SegmentationInferencer(InferencerBase):
                 self._logger.log_print_tqdm('Unsqueezing last batch.' + str(out.shape))
             # out = F.log_softmax(out, dim=1)
             # val, out = torch.max(out, 1)
-            out_tensor.append(out.data.cpu())
+            while out.dim() != out_tensor.dim():
+                out = out.unsqueeze(0)
+            out_tensor[index * self._batchsize: index * self._batchsize + out.shape[0]] = out.data.cpu()
             last_batch_dim = out.dim()
             del out
 
         if isinstance(self._in_dataset, ImagePatchesLoader) or \
                 isinstance(self._in_dataset, ImagePatchesLoader3D):
             out_tensor = self._in_dataset.piece_patches(out_tensor)
-        else:
-            # check last tensor has same dimension
-            if not len(set([o.dim() for o in out_tensor])) == 1:
-                    out_tensor[-1] = out_tensor[-1].unsqueeze(0)
-
-            out_tensor = torch.cat(out_tensor, dim=0)
 
 
         if isinstance(out_tensor, list):

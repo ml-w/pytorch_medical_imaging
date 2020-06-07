@@ -1,5 +1,6 @@
 from torch.utils.data import Dataset
 from torch import from_numpy, cat, tensor, stack, unique
+from torch.nn.functional import pad
 from tqdm import *
 import fnmatch, re
 import os
@@ -323,7 +324,7 @@ class ImageDataSet(Dataset):
                 self.length = np.sum([m.size()[self._byslices] for m in self.data])
                 # check if all sizes are the same
                 allsizes = [tuple(np.array(m.size())[np.arange(m.dim()) != self._byslices]) for m in self.data]
-                uniquesizes = set(allsizes)
+                uniquesizes = list(set(allsizes))
                 if not len(uniquesizes) == 1:
                     logging.log(logging.WARNING, "There are more than one size, attempting to crop")
                     majority_size = uniquesizes[np.argmax([allsizes.count(tup) for tup in uniquesizes])]
@@ -334,14 +335,21 @@ class ImageDataSet(Dataset):
                     for t in target:
                         target_dat = self.data[t]
                         target_size = target_dat.size()
-                        cent = np.array(target_size) // 2
-                        corner_index = cent - np.array(majority_size)
+                        cent = np.array(target_size[-2:]) // 2
+                        corner_index = np.array(cent) - np.array(majority_size) // 2
 
-                        # Crop image to standard size
-                        for dim, corn in enumerate(corner_index):
+                        # Check if majority size is greater than original size.
+                        pad = target_size[-2:] < np.array(majority_size)
+
+                        # Crop or pad image to standard size
+                        for dim, (corn, p) in enumerate(zip(corner_index, pad)):
                             t_dim = dim + 1 if dim >= self._byslices else dim
-                            temp = target_dat.narrow(t_dim, corn, majority_size[dim])
-                        self.data[t] = temp
+                            if not p:
+                                target_dat = target_dat.narrow(int(t_dim), int(corn), int(majority_size[dim]))
+                            else:
+                                pa = [abs(int(corn)) if x // 2 == t_dim else 0 for x in range(6)]
+                                target_dat = pad(target_dat, pa, mode='constant', value=0)
+                            self.data[t] = target_dat
 
 
                 self.data = cat(self.data, dim=self._byslices).transpose(0, self._byslices).unsqueeze(1)
@@ -536,10 +544,23 @@ class ImageDataSet(Dataset):
                 end=self._itemindexes[i+1]
                 # image=sitk.GetImageFromArray(td[start:end])
                 templateim = sitk.ReadImage(self.data_source_path[i])
+
+                # check if it matches the original image size
+                tmp_im = td[start:end]
+                if not np.roll(tmp_im.shape, -1).tolist() == list(templateim.GetSize()):
+                    self.log_print("Recovering size for image with ID: {}.".format(self.get_unique_IDs()[i]))
+                    cent = np.array(templateim.GetSize()) // 2
+                    diff = cent - tmp_im.shape
+                    pad = diff > 0
+                    self.log_print("Skipping...")
+                    continue
+                    
+
                 image = sitk.GetImageFromArray(td[start:end])
                 image.CopyInformation(templateim)
                 # image=self.WrapImageWithMetaData(td[start:end], self.metadata[i])
                 sitk.WriteImage(image, outputdirectory +'/' + prefix + os.path.basename(self.data_source_path[i]))
+                del tmp_im
 
         else:
             assert len(self) == len(tensor_data), "Length mismatch! %i vs %i"%(len(self), len(tensor_data))
