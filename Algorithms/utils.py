@@ -124,9 +124,44 @@ def directory_sorter(dir, sort_dict=None, pre_filter=None):
             print(e.args[0])
 
 
-if __name__ == '__main__':
-    directory_sorter('../NPC_Segmentation/0A.NIFTI_ALL/Malignant')
+def directory_index(dir, out_csv, id_globber="(^[a-zA-Z0-9]+)"):
 
+    import pandas as pd
+
+    # Folders name will be their categories
+    folders = os.listdir(dir)
+
+    idset = {}
+    for f in folders:
+        if not f in idset:
+            idset[f] = []
+
+        files = os.listdir(os.path.join(dir, f))
+        for ff in files:
+            if not ff.endswith('.gz') and not ff.endswith('.nii'):
+                continue
+            fid = re.search(id_globber, ff)
+            if not fid is None:
+                idset[f].append(fid.group())
+
+    # Obtain a list of all ids
+    allids = [idset[a] for a in idset]
+    allids = [b for a in allids for b in a]
+    allids = list(set(allids))
+
+    outdf = pd.DataFrame()
+    for ids in allids:
+        row = [ids] + ["YES" if ids in idset[key] else "NO" for key in idset]
+        col = ['Study Number'] + list(idset.keys())
+
+        row = pd.DataFrame([row], columns=col)
+        outdf = outdf.append(row)
+
+    outdf.to_csv(out_csv, index=False)
+
+if __name__ == '__main__':
+    # directory_sorter('../NPC_Segmentation/0A.NIFTI_ALL/Malignant')
+    directory_index('../NPC_Segmentation/0A.NIFTI_ALL/Malignant', '/home/lwong/FTP/temp/images.csv')
 
 
 
