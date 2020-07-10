@@ -132,8 +132,9 @@ def main(a, config, logger):
             return
 
 
-    if filters_idlist.endswith('ini'):
-        filters_idlist = parse_ini_filelist(filters_idlist, mode)
+    if not filters_idlist is None:
+        if filters_idlist.endswith('ini'):
+            filters_idlist = parse_ini_filelist(filters_idlist, mode)
 
 
     # This is for backward compatibility with myloader.py
