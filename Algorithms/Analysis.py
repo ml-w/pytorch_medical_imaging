@@ -234,9 +234,9 @@ def EVAL(seg, gt, vars):
         try:
             gtindexes.index(segindexes[i])
         except ValueError:
-            tqdm.write("Skipping " + os.path.basename(gt.get_data_source(
+            tqdm.write("Skipping " + os.path.basename(seg.get_data_source(
                 i)))
-            data = pd.DataFrame([[os.path.basename(gt.get_data_source(i)),
+            data = pd.DataFrame([[os.path.basename(seg.get_data_source(i)),
                                   'Not Found',
                                   gt.get_internal_index(i),
                                   int(segindexes[i])] + [np.nan] * len(vars)],

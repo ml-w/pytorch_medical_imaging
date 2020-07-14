@@ -1,4 +1,7 @@
 *.pyc
+*.c
+*.sh
+*.so
 Backup
 .idea
 /Doc/build/

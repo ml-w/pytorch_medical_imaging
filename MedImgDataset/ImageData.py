@@ -246,6 +246,7 @@ class ImageDataSet(Dataset):
             file_basenames = [os.path.basename(f) for f in file_dirs]
             file_ids = [re.search(self._id_globber, f) for f in file_basenames]
             file_ids = [str(mo.group()) if not mo is None else mo for mo in file_ids]
+
             if isinstance(self._filterargs['idlist'], str):
                 self._idlist = [r.strip() for r in open(self._filterargs['idlist'], 'r').readlines()]
             elif self._filterargs['idlist'] is None:
@@ -256,8 +257,10 @@ class ImageDataSet(Dataset):
 
             tmp_file_dirs = np.array(file_dirs)
             keep = [id in self._idlist for id in file_ids]
+
             file_dirs = tmp_file_dirs[keep].tolist()
             filtered_away.extend(tmp_file_dirs[np.invert(keep)])
+
         # Fitlter regex
         #--------------
         if self._filtermode == 'regex' or self._filtermode == 'both':
@@ -268,7 +271,10 @@ class ImageDataSet(Dataset):
                 self.log_print('Regex input is None!', logging.WARNING)
                 pass
             elif self._filterargs['regex'][0] == '(':
-                keep = np.invert([re.match(self._filterargs['regex'], f) is None for f in file_basenames])
+                try:
+                    keep = np.invert([re.match(self._filterargs['regex'], f) is None for f in file_basenames])
+                except:
+                    print([re.match(self._filterargs['regex'], f) is None for f in file_basenames])
                 filtered_away.extend(np.array(file_dirs)[np.invert(keep)].tolist())
                 file_dirs = np.array(file_dirs)[keep].tolist()
             else: # else use wild card

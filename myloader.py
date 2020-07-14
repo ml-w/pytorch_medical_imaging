@@ -471,7 +471,7 @@ def LoadSegmentationPatchLocMMTexHist_Aug(a, debug=False):
                                         a.loadbyfilelist,
                                         np.float32),
                                   patchsize,
-                                  random_patches=75,
+                                  random_patches=50,
                                   random_from_distribution=clip_5,
                                   renew_index=False,
                                   mode='as_histograms')
