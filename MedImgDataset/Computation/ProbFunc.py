@@ -11,4 +11,5 @@ def clip_5(image):
     nmin, nmax = np.percentile(image, [5, 95])
     clipped = np.clip(image, nmin, nmax)
     clipped -= nmin
-    return clipped.astype('float')
+    del image
+    return clipped.astype('float16')

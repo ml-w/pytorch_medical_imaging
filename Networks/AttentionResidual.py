@@ -115,26 +115,35 @@ class AttentionResidualNet(nn.Module):
         while x.dim() < 5:
             x = x.unsqueeze(0)
         x = self.in_conv1(x)
+        print("x: {}".format(x.shape))
 
         # Construct slice weight
         x_w = self.in_sw(x)
+        print("x_w0: {}".format(x_w.shape))
         x_w = F.avg_pool3d(x_w,kernel_size=x_w.shape[-3:]).squeeze()
+        print("x_w1: {}".format(x_w.shape))
         x_w = F.sigmoid(x_w) + 0.5
         if self.save_weight:
             self.x_w = x_w.data.cpu()
         x_w = x_w.view([-1])
+        print("x_w2: {}".format(x_w.shape))
 
         # Permute the axial dimension to the last
         x = F.max_pool3d(x, [1, 2, 2], stride=[1, 2, 2]).permute([1, 3, 4, 0, 2])
+        print("x_premult: {}".format(x.shape))
         x_shape = x.shape
         new_shape = list(x_shape[:3]) + [x_shape[-2] * x_shape[-1]]
         x = x.reshape(new_shape)
+        print("x_reshape: {}".format(x.shape))
         x = x * x_w.expand_as(x)
+        print("x_expand: {}".format(x.shape))
 
 
         # Resume dimension
         x = x.view(x_shape).permute([3, 0, 4, 1, 2])
+        print("x_resume: {}".format(x.shape))
         x = self.in_conv2(x)
+        print("x_in_conv2: {}".format(x.shape))
 
         x = self.att1(x)
         x = self.r1(x)

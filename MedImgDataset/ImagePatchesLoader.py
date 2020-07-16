@@ -1,4 +1,6 @@
 import torch
+import torch.multiprocessing as mpi
+from functools import partial
 from torch import cat, stack, tensor, zeros
 from torch.utils.data import Dataset
 from .ImageData import ImageDataSet
@@ -8,9 +10,47 @@ from tqdm import *
 import numpy as np
 import gc
 
-def _mpi_wrapper(arg, **kwargs):
+def _mpi_wrapper(roi, pos, p_indexes=None, semaphore=None, **kwargs):
     """This is required for mpi choose patches"""
-    return ImagePatchesLoader._choose_from_probability_map(arg, **kwargs)
+    try:
+        if p_indexes is None:
+            print("_mpi_wrapper encounters error input configurations!")
+            semaphore.release()
+            return 1
+        out = ImagePatchesLoader._choose_from_probability_map(roi, **kwargs)
+        out = np.array(out)
+        p_indexes[pos * out.shape[0]:pos * out.shape[0] + out.shape[0]].copy_(torch.from_numpy(out))
+        semaphore.release()
+        del out, roi
+        return 0
+    except Exception as e:
+        semaphore.release()
+        return 1
+
+# def _mpi_wrapper(pos, dat=None, indexes=None, semaphore=Semaphore(1), **kwargs):
+#     """This is required for mpi choose patches"""
+#     if dat is None or indexes is None or semaphore is None:
+#         # return immediately
+#         print("_mpi_wrapper encounters wrong configurations.")
+#         return
+#
+#     semaphore.accquire()
+#     roi = np.copy(dat[pos][indexes].data.numpy().astype('float16'))
+#
+#     # normalize
+#     roi = roi - roi.min()
+#     roi = roi / roi.max()
+#
+#     # if result is 3D collapse it into 2D by averaging
+#     while roi.ndim > 2:
+#         roi = np.mean(roi, axis=np.argmin(roi.shape))
+#     out = ImagePatchesLoader._choose_from_probability_map(roi, **kwargs)
+#     del roi
+#     gc.collect()
+#     semaphore.release()
+#     return out, pos
+
+
 
 class ImagePatchesLoader(Dataset):
     """
@@ -174,6 +214,8 @@ class ImagePatchesLoader(Dataset):
             np.random.shuffle(self._shuffle_index_arr)
             self._inverse_shuffle_arr = self._shuffle_index_arr.argsort()
 
+
+
     @staticmethod
     def _choose_from_probability_map(roi, func=None, pps=None):
         """This function written for parallel computation."""
@@ -191,10 +233,9 @@ class ImagePatchesLoader(Dataset):
         try:
             choices = np.random.choice(len(xy), p=prob.flatten(), size=pps)
         except Exception as e:
-            print(roi, len(xy), prob.flatten(), e.message)
+            print(roi.shape, len(xy), prob.flatten().shape, e)
         out = [xy[c] for c in choices]
-        del xy, choices, prob
-        # gc.collect()
+        del xy, choices, prob, roi
         return out
 
     def _calculate_random_patch_indexes(self):
@@ -217,11 +258,18 @@ class ImagePatchesLoader(Dataset):
             self._patch_indexes = patch_indexes
         pass
 
+
+    def _mpi_patch_index_callback(self, pos, indexes):
+        try:
+            self._patch_indexes[pos:pos + len(indexes)] = np.array(indexes)
+        except Exception as e:
+            print("Error! Callback not working correctly! {}".format(e))
+
     def _sample_patches_from_distribution(self):
         """Sample patches with probability distribution."""
         # Use multiprocessing
-        import multiprocessing as mpi
-        from functools import partial
+        # import torch.multiprocessing as mpi
+        # from functools import partial
 
         # Set up arguments
         X, Y = self._axis
@@ -246,50 +294,53 @@ class ImagePatchesLoader(Dataset):
             self._base_dataset._update_each_epoch = False
 
 
+        # release memory
+        if not self._patch_indexes is None:
+            del self._patch_indexes
+
+        self._patch_indexes = np.zeros([len(self._base_dataset) * self._patch_perslice, 2], dtype='int16')
+        self._patch_indexes = torch.from_numpy(self._patch_indexes).share_memory_()
+
+        # Non mpi
+        # wrapped_callable = partial(_mpi_wrapper, func=func, pps=self._patch_perslice, indexes=indexes,
+        #                            dat=self._base_dataset)
+        # for i in tqdm(range(len(self._base_dataset)), desc="Sampling job.", total=len(self._base_dataset)):
+        #     p_indexes, pos = wrapped_callable(i)
+        #     p_indexes = np.array(p_indexes)
+        #     self._patch_indexes[pos * p_indexes.shape[0]:pos * p_indexes.shape[0] + p_indexes.shape[0]] = p_indexes
+
+        # Semaphore will lock the memory consumption to a standard
+        sema = mpi.Manager().Semaphore(15)
         pool = mpi.Pool(mpi.cpu_count())
-        rois = []
-        patch_indexes = []
-        for i, dat in tqdm(enumerate(self._base_dataset), desc="Sampling jobs", total=len(self._base_dataset)):
-            # extract target region
-            ori_roi = torch.clone(dat[indexes])
+        ps = []
+        for i in tqdm(range(len(self._base_dataset)), total=len(self._base_dataset)):
+            dat = self._base_dataset[i]
+            sema.acquire(timeout=60)
+            roi = np.copy(dat[indexes].data.squeeze().numpy())
+            roi = (roi - roi.min()) / (roi.max() - roi.min())
+            roi = roi.astype('float16')
 
-            # convert to numpy
-            if isinstance(ori_roi, torch.Tensor):
-                roi = ori_roi.data.squeeze().numpy()
-            elif not isinstance(ori_roi, np.ndarray):
-                roi = np.array(ori_roi)
-            else:
-                roi = np.copy(ori_roi)
-
-            # if result is 3D collapse it into 2D by averaging
-            while roi.ndim > 2:
-                roi = np.mean(roi, axis=np.argmin(roi.shape))
-
-            rois.append(roi)
-
-        # Non-MPI, sometimes MPI causes some problem.
-        # for roi in tqdm(rois, desc="ROI sampling"):
-        #     patch_indexes.extend(_mpi_wrapper(roi, func=func, pps=self._patch_perslice))
-
-        # # MPI
-        results = pool.map_async(partial(_mpi_wrapper,
-                                          func=func,
+            p = pool.apply_async(partial(_mpi_wrapper,
+                                         p_indexes = self._patch_indexes,
+                                         func=func,
+                                         semaphore=sema,
                                          pps=self._patch_perslice),
-                                 rois)
+                                 (roi, i)
+                                 )
+            ps.append(p)
+            del roi
+
+        for p in ps:
+            p.get(20) # Prevent some process died without a trace and lock the thread
+
         pool.close()
         pool.join()
-
-        for r in results.get():
-            patch_indexes.extend(r)
 
         # speacial treatment required if baseclass has augmentator
         if isinstance(self._base_dataset, ImageDataSetAugment):
             self._base_dataset._update_each_epoch = temp_flag
             self._base_dataset._call_count = 0
-
-        self._patch_indexes = np.array(patch_indexes)
-        del rois
-
+        del sema
 
 
     def _calculate_patch_indexes(self):

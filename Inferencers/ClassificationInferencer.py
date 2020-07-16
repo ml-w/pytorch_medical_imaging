@@ -83,7 +83,7 @@ class ClassificationInferencer(InferencerBase):
                 write_out_image = GetImageFromArray(atten_im.transpose([2,0,1,3]))
                 write_out_image.CopyInformation(ref_im)
                 # write_out_image.SetOrigin(ref_im.GetOrigin())
-                # write_out_image.SetDirection(ref_im.GetDirection())
+                # write_out_image.SetDirection(ref_im.GetDirection())p
                 write_out_image.SetSpacing(new_space)
 
                 #
