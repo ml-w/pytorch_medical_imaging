@@ -24,6 +24,8 @@ from Solvers import *
 from Inferencers import *
 
 from tensorboardX import SummaryWriter
+import torch.autograd as autograd
+autograd.set_detect_anomaly(True)
 # import your own newtork
 
 def init_weights(m):

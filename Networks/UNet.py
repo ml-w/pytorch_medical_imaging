@@ -290,7 +290,7 @@ class UNetLocTexHistDeeper(UNet):
         X = []
         for _x, _fc in zip([x2, x3, x4, x5, x6], [self.fc2, self.fc3, self.fc4, self.fc5, self.fc6]):
             _pos = _fc(pos).expand_as(_x.permute(2, 3, 0, 1)).permute(2, 3, 0, 1)
-            _x = _x * F.relu(_pos, True)
+            _x = _x * F.relu(_pos, False)
             X.append(_x)
         x2, x3, x4, x5, x6 = X
 

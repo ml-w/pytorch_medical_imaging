@@ -270,6 +270,8 @@ class ImagePatchesLoader(Dataset):
         # Use multiprocessing
         # import torch.multiprocessing as mpi
         # from functools import partial
+        if self._has_reference:
+            return
 
         # Set up arguments
         X, Y = self._axis
@@ -293,13 +295,7 @@ class ImagePatchesLoader(Dataset):
             temp_flag = self._base_dataset._update_each_epoch
             self._base_dataset._update_each_epoch = False
 
-
-        # release memory
-        if not self._patch_indexes is None:
-            del self._patch_indexes
-
-        self._patch_indexes = np.zeros([len(self._base_dataset) * self._patch_perslice, 2], dtype='int16')
-        self._patch_indexes = torch.from_numpy(self._patch_indexes).share_memory_()
+        _patch_indexes = torch.zeros([len(self._base_dataset) * self._patch_perslice, 2], dtype=int).share_memory_()
 
         # Non mpi
         # wrapped_callable = partial(_mpi_wrapper, func=func, pps=self._patch_perslice, indexes=indexes,
@@ -321,7 +317,7 @@ class ImagePatchesLoader(Dataset):
             roi = roi.astype('float16')
 
             p = pool.apply_async(partial(_mpi_wrapper,
-                                         p_indexes = self._patch_indexes,
+                                         p_indexes = _patch_indexes,
                                          func=func,
                                          semaphore=sema,
                                          pps=self._patch_perslice),
@@ -335,12 +331,16 @@ class ImagePatchesLoader(Dataset):
 
         pool.close()
         pool.join()
+        try:
+            self._patch_indexes.copy_(_patch_indexes)
+        except:
+            self._patch_indexes = torch.clone(_patch_indexes)
 
         # speacial treatment required if baseclass has augmentator
         if isinstance(self._base_dataset, ImageDataSetAugment):
             self._base_dataset._update_each_epoch = temp_flag
             self._base_dataset._call_count = 0
-        del sema
+        del sema, pool, ps, _patch_indexes
 
 
     def _calculate_patch_indexes(self):
