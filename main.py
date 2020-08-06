@@ -245,9 +245,9 @@ def main(a, config, logger):
                 del s, g
                 gc.collect()
 
-                if index % 500 == 0 and validation_FLAG and bool_plot:
+                if index % 1000 == 0 and validation_FLAG and bool_plot:
                     try:
-                        # perform validation per 500 steps
+                        # perform validation per 1000 steps
                         val_loss.append(writer.plot_validation_loss(writerindex, *solver.validation(valDataset,
                                                                                                valgtDataset,
                                                                                                     param_batchsize)))
