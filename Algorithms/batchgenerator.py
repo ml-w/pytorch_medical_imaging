@@ -51,21 +51,30 @@ def GenerateTestBatch(ids, k_fold, outdir, prefix="Batch_", exclude_list=None, s
     except:
         pass
 
+    if not os.path.isdir(outdir):
+        os.makedirs(outdir, exist_ok=True)
+
     # if validation required
     if validation > 0:
         if stratification_class is None:
-            validation = random.choice(ids, size=validation)
-
+            validation_ids = random.choice(ids, size=validation, replace=False)
+            for v in validation_ids:
+                ids.remove(v)
         else:
             classes = list(set(stratification_class))
-            classes_prob = [stratification_class.count(c) / float(len(ids)) for c in classes]
-            p = [classes_prob[c] for c in stratification_class]
-            validation = random.choice(ids, p=p)
+            classes_prob = {c: stratification_class.count(c) / float(len(ids)) for c in classes}
+            p = [classes_prob[s] / float(stratification_class.count(s)) for s in stratification_class]
+            validation_ids = random.choice(ids, size=validation, p=p, replace=False)
 
-        for v in validation:
-            ids.remove(v)
+
+            tmp_stras = {i: stra for i, stra in zip(ids, stratification_class)}
+            for v in validation_ids:
+                tmp_stras.pop(v)
+            ids = list(tmp_stras.keys())
+            stratification_class = [tmp_stras[k] for k in tmp_stras]
+
         val_file = open(os.path.join(outdir, 'Validation.txt'), 'w')
-        val_file.writelines([v + '\n' for v in validation])
+        val_file.writelines([str(v) + '\n' for v in validation_ids])
 
 
     # Set up output dictionary for writing
@@ -94,15 +103,18 @@ def GenerateTestBatch(ids, k_fold, outdir, prefix="Batch_", exclude_list=None, s
 
     # Create folder if not exist
     os.makedirs(outdir, exist_ok=True)
-
     # Determine train test fold split
     for i, (train_index, test_index) in enumerate(get_split(ids)):
         train_ids = [ids[i] for i in train_index]
         test_ids = [ids[i] for i in test_index]
         train_ids.sort()
         test_ids.sort()
+        train_ids = [str(x) for x in train_ids]
+        test_ids = [str(x) for x in test_ids]
         print("Train: %d, Test: %d"%(len(train_ids), len(test_ids)))
         out[i] = {'train_id': train_ids, 'test_ids': test_ids}
+
+
 
     # Output files
     for k in range(k_fold):
@@ -177,18 +189,18 @@ def check_batches_files(dir, globber=None):
 
 
 if __name__ == '__main__':
-    import configparser
-    parser = configparser.ConfigParser()
-    parser.read('../NPC_Segmentation/99.Testing/T1vT2/B00.ini')
-    testing = parser['FileList'].get('testing').split(',')
-    training = parser['FileList'].get('training').split(',')
-    validation = [r.rstrip() for r in open('../NPC_Segmentation/99.Testing/T1vT2/Validation.txt')]
-    allids = testing + training + validation
+    import pandas as pd
+    df = pd.read_csv('/home/lwong/FTP/temp/Study_segmentation_438.csv')
+    allids = list(df['Study Number'])
+    classes = list(df['Tstage'])
+    print(len(allids))
+    print(len(classes))
 
     GenerateTestBatch(allids,
-                      5,
-                      '../NPC_Segmentation/99.Testing/T1vT2_5Folds/',
-                      validation=6,
+                      4,
+                      '../NPC_Segmentation/99.Testing/KFold_Perfectfff/',
+                      stratification_class=classes,
+                      validation=13,
                       prefix='B'
                       )
 
