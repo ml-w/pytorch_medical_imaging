@@ -3,8 +3,8 @@ from torchvision import transforms as tr
 from imgaug import augmenters as iaa
 
 # This prevents DataLoader hangs up
-# import cv2
-# cv2.setNumThreads(0)
+import cv2
+cv2.setNumThreads(0)
 
 import imgaug as ia
 import torch
@@ -145,20 +145,21 @@ class ImageDataSetAugment(ImageDataSet):
     def __getitem__(self, item):
         self._call_count += 1
 
+        print("1")
         # if item is within original length, return the original image
         if item < self._base_length:
             out = super(ImageDataSetAugment, self).__getitem__(item)
         else:
             # else return the augment image
             slice_index = item % self._base_length
-            baseim = super(ImageDataSetAugment, self).__getitem__(slice_index)
-
+            baseim = torch.clone(super(ImageDataSetAugment, self).__getitem__(slice_index).cpu())
             # because imgaug convention is (B, H, W, C), we have to permute it before actual augmentation
             if baseim.squeeze().ndimension() == 3:
                 baseim = baseim.permute(1, 2, 0)
 
             if self._is_segment:
-                # segmentation maps requires speacial treatments
+                # segmentation maps requires speacial treatments, !!This hangs on multithreading because cv2.resize()
+                # has problem.!!
                 segim = ia.SegmentationMapOnImage(baseim.squeeze().numpy().astype(self._augdtype),
                                                   baseim.squeeze().shape,
                                                   self._nb_of_classes)
@@ -166,7 +167,7 @@ class ImageDataSetAugment(ImageDataSet):
                 augmented = augmented.get_arr_int()
             else:
                 augmented = self._augmentators[item - self._base_length].augment_image(
-                    baseim.squeeze().numpy().astype(self._augdtype))
+                    baseim.squeeze().data.numpy().astype(self._augdtype))
 
             # convert back into pytorch tensor convention (B, C, H, W)
             if baseim.squeeze().ndimension() == 3:
@@ -180,4 +181,5 @@ class ImageDataSetAugment(ImageDataSet):
             if self._update_each_epoch:
                 self.batch_done_callback()
 
+        print("Ender")
         return out
