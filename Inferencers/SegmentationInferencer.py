@@ -54,7 +54,7 @@ class SegmentationInferencer(InferencerBase):
 
     def _create_dataloader(self):
         self._data_loader = DataLoader(self._in_dataset, batch_size=self._batchsize,
-                                       shuffle=False, num_workers=0)
+                                       shuffle=False, num_workers=8)
         return self._data_loader
 
 
