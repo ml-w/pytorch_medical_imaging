@@ -2,6 +2,7 @@ from torch.utils.data import Dataset
 from torch import from_numpy, cat, tensor, stack, unique
 from torch.nn.functional import pad
 from tqdm import *
+import tqdm.auto as auto
 import fnmatch, re
 import os
 import numpy as np
@@ -295,8 +296,8 @@ class ImageDataSet(Dataset):
         # Reading data
         #-------------
         self._itemindexes = [0] # [image index of start slice]
-        for i, f in enumerate(tqdm(file_dirs, disable=not self.verbose)) \
-                if not self._debug else enumerate(tqdm(file_dirs[:5],
+        for i, f in enumerate(auto.tqdm(file_dirs, disable=not self.verbose)) \
+                if not self._debug else enumerate(auto.tqdm(file_dirs[:5],
                                                        disable=not self.verbose)):
             if self.verbose:
                 tqdm.write("Reading from "+f)

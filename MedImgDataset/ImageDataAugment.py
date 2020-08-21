@@ -145,7 +145,6 @@ class ImageDataSetAugment(ImageDataSet):
     def __getitem__(self, item):
         self._call_count += 1
 
-        print("1")
         # if item is within original length, return the original image
         if item < self._base_length:
             out = super(ImageDataSetAugment, self).__getitem__(item)
@@ -181,5 +180,4 @@ class ImageDataSetAugment(ImageDataSet):
             if self._update_each_epoch:
                 self.batch_done_callback()
 
-        print("Ender")
         return out

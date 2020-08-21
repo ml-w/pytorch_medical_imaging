@@ -7,6 +7,7 @@ from .ImageData import ImageDataSet
 from .ImageDataMultiChannel import ImageDataSetMultiChannel
 from .ImageDataAugment import ImageDataSetAugment
 from tqdm import *
+import tqdm.auto as auto
 import numpy as np
 import gc
 
@@ -300,7 +301,7 @@ class ImagePatchesLoader(Dataset):
         # Non mpi
         # wrapped_callable = partial(_mpi_wrapper, func=func, pps=self._patch_perslice, indexes=indexes,
         #                            dat=self._base_dataset)
-        # for i in tqdm(range(len(self._base_dataset)), desc="Sampling job.", total=len(self._base_dataset)):
+        # for i in auto.tqdm(range(len(self._base_dataset)), desc="Sampling job.", total=len(self._base_dataset)):
         #     p_indexes, pos = wrapped_callable(i)
         #     p_indexes = np.array(p_indexes)
         #     self._patch_indexes[pos * p_indexes.shape[0]:pos * p_indexes.shape[0] + p_indexes.shape[0]] = p_indexes
@@ -309,7 +310,7 @@ class ImagePatchesLoader(Dataset):
         sema = mpi.Manager().Semaphore(15)
         pool = mpi.Pool(mpi.cpu_count())
         ps = []
-        for i in tqdm(range(len(self._base_dataset)), total=len(self._base_dataset)):
+        for i in auto.tqdm(range(len(self._base_dataset)), total=len(self._base_dataset)):
             dat = self._base_dataset[i]
             sema.acquire(timeout=60)
             roi = np.copy(dat[indexes].data.squeeze().numpy())
