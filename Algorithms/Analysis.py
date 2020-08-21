@@ -381,9 +381,12 @@ if __name__ == '__main__':
 
         print(results.to_string())
         print(results.mean())
+        print(results.median())
     except:
         print(results.to_string())
         print(results.mean())
+        print(results.median())
+
 
     if not args.label is None:
         results['Note'] = str(args.label)
