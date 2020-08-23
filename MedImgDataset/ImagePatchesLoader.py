@@ -310,7 +310,7 @@ class ImagePatchesLoader(Dataset):
         sema = mpi.Manager().Semaphore(15)
         pool = mpi.Pool(mpi.cpu_count())
         ps = []
-        for i in auto.tqdm(range(len(self._base_dataset)), total=len(self._base_dataset)):
+        for i in auto.tqdm(range(len(self._base_dataset)), total=len(self._base_dataset), desc="Sampling patches"):
             dat = self._base_dataset[i]
             sema.acquire(timeout=60)
             roi = np.copy(dat[indexes].data.squeeze().numpy())

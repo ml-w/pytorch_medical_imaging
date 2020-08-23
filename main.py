@@ -191,8 +191,10 @@ def main(a, config, logger):
         else:
             solver.set_lr_decay_exp(param_decay)
 
+        numcpu = torch.multiprocessing.cpu_count()
         trainingSet = TensorDataset(inputDataset, gtDataset)
-        loader      = DataLoader(trainingSet, batch_size=param_batchsize, shuffle=True, num_workers=0, drop_last=True, pin_memory=False)
+        loader      = DataLoader(trainingSet, batch_size=param_batchsize, shuffle=True, num_workers=16,
+                                 drop_last=True, pin_memory=False)
 
 
         # Read tensorboard dir from env, disable plot if it fails
@@ -245,9 +247,10 @@ def main(a, config, logger):
                 del s, g
                 gc.collect()
 
-                if index % 500 == 0 and validation_FLAG and bool_plot:
+                if index % 1000 == 0 and validation_FLAG and bool_plot:
                     try:
-                        # perform validation per 500 steps
+                        logger.log_print_tqdm("Initiate validation.")
+                        # perform validation per 1000 steps
                         val_loss.append(writer.plot_validation_loss(writerindex, *solver.validation(valDataset,
                                                                                                valgtDataset,
                                                                                                     param_batchsize)))

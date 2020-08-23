@@ -296,9 +296,10 @@ class ImageDataSet(Dataset):
         # Reading data
         #-------------
         self._itemindexes = [0] # [image index of start slice]
-        for i, f in enumerate(auto.tqdm(file_dirs, disable=not self.verbose)) \
+        for i, f in enumerate(auto.tqdm(file_dirs, disable=not self.verbose, desc="Load Images")) \
                 if not self._debug else enumerate(auto.tqdm(file_dirs[:5],
-                                                       disable=not self.verbose)):
+                                                       disable=not self.verbose,
+                                                            desc="Load Images")):
             if self.verbose:
                 tqdm.write("Reading from "+f)
             im = sitk.ReadImage(f)

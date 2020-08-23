@@ -25,7 +25,7 @@ class SegmentationSolver(SolverBase):
         logger.log_print_tqdm("Find %i classes: %s"%(numOfClasses, classes))
 
         # calculate empty label ratio for updating loss function weight
-        self._sigmoid_params = {'delay': 5, 'stretch': 2, 'cap':0.8}
+        self._sigmoid_params = {'delay': 5, 'stretch': 2, 'cap':0.5}
         r = []
         for c in classes:
             factor = float(np.prod(np.array(gt_data.size())))/float(valcountpair[c])
@@ -64,7 +64,7 @@ class SegmentationSolver(SolverBase):
         net = net(inchan, numOfClasses)
 
         # Create optimizer and loss function
-        lossfunction = nn.CrossEntropyLoss(weight=self.loss_init_weights)
+        lossfunction = nn.CrossEntropyLoss(weight=self.loss_init_weights) #TODO: Allow custom loss function
         optimizer = optim.SGD(net.parameters(), lr=param_optim['lr'], momentum=param_optim['momentum'])
         iscuda = param_iscuda
         if param_iscuda:
