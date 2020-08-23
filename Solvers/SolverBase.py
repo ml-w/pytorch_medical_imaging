@@ -102,28 +102,29 @@ class SolverBase(object):
         self._log_print("Decayed optimizer...")
 
     def inference(self, *args):
-        out = self._net.forward(*list(args))
+        with torch.no_grad():
+            out = self._net.forward(*list(args))
         return out
 
 
     def validation(self, val_set, gt_set, batch_size):
+        validation_loss = []
         with torch.no_grad():
             dataset = TensorDataset(val_set, gt_set)
-        dl = DataLoader(dataset, batch_size=batch_size, shuffle=False, num_workers=0, drop_last=False, pin_memory=False)
+            dl = DataLoader(dataset, batch_size=batch_size, shuffle=False, num_workers=0, drop_last=False, pin_memory=False)
 
-        validation_loss = []
-        for s, g in tqdm(dl, desc="Validation", position=2):
-            if self._iscuda:
-                    s = [ss.cuda() for ss in s] if isinstance(s, list) else s.cuda()
-                    g = [gg.cuda() for gg in g] if isinstance(g, list) else g.cuda()
+            for s, g in tqdm(dl, desc="Validation", position=2):
+                if self._iscuda:
+                        s = [ss.cuda() for ss in s] if isinstance(s, list) else s.cuda()
+                        g = [gg.cuda() for gg in g] if isinstance(g, list) else g.cuda()
 
-            if isinstance(s, list):
-                res = self._net(*s)
-            else:
-                res = self._net(s)
-            res = F.log_softmax(res, dim=1)
-            loss = self._lossfunction(res, g.squeeze().long())
-            validation_loss.append(loss.item())
+                if isinstance(s, list):
+                    res = self._net(*s)
+                else:
+                    res = self._net(s)
+                res = F.log_softmax(res, dim=1)
+                loss = self._lossfunction(res, g.squeeze().long())
+                validation_loss.append(loss.item())
         return [np.mean(np.array(validation_loss).flatten())]
 
     def _log_print(self, msg, level=20):
