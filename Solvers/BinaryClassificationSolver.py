@@ -1,22 +1,132 @@
 from .ClassificationSolver import ClassificationSolver
+from logger import Logger
 
+from torch import optim
+from torch.utils.data import DataLoader, TensorDataset
+import torch
 import torch.nn as nn
+import numpy as np
+from tqdm import *
+import tqdm.auto as auto
+
 
 class BinaryClassificationSolver(ClassificationSolver):
-    def __init__(self, *args, **kwargs):
-        super(BinaryClassificationSolver, self).__init__(*args, **kwargs)
+    def __init__(self, in_data, gt_data, net, param_optim, param_iscuda,
+                 param_initWeight=None, logger=None, **kwargs):
+        """
+        Solver for classification tasks.
 
-        in_data = args[0]
-        gt_data = args[1]
-        net = args[2]
+        Args:
+           in_data (torch.Tensor):
+               Tensor of input data.
+           gt_data (torch.Tensor):
+               Tensor of output data.
+           net (torch.nn):
+               Network modules.
+           param_optim (dict):
+               Dictionary of the optimizer parameters. Should include key 'lr'.
+           param_iscuda (bool):
+               Settings to use CUDA or not.
+           param_initWeight (int, Optional):
+               Initial weight for loss function.
+           logger (Logger, Optional):
+               Logger. If no logger provide, log will be output to './temp.log'
+           **kwargs:
+               Additional dictionary item pass to base class.
 
+        Kwargs:
+           For details to kwargs, see :class:`SolverBase`.
+
+        Returns:
+           :class:`ClassificaitonSolver` object
+        """
+        assert isinstance(logger, Logger) or logger is None, "Logger incorrect settings!"
+
+        if logger is None:
+            logger = Logger('./temp.log')
 
         # Recalculate number of one_hot slots and rebuild the lab
+        self._logger = logger
         self._log_print("Rebuilding classification solver to binary classification.")
-        numberOfClasses = gt_data[0].size()[1]
+        numberOfClasses = gt_data[0].size()[0] # (B X C), where C is the number of binary questions
         inchan = in_data[0].size()[0]
         self._log_print("Found number of binary classes {}.".format(numberOfClasses))
 
+        # Define the network
         net = net(inchan, numberOfClasses)
-
         self._net = net
+
+        optimizer = optim.AdamW(net.parameters(), lr=param_optim['lr'])
+        lossfunction = nn.BCEWithLogitsLoss(reduction='mean') # Combined with sigmoid.
+        iscuda = param_iscuda
+        if param_iscuda:
+            lossfunction = lossfunction.cuda()
+            net = net.cuda()
+
+        solver_configs = {}
+        solver_configs['optimizer'] = optimizer
+        solver_configs['lossfunction'] = lossfunction
+        solver_configs['net'] = net
+        solver_configs['iscuda'] = iscuda
+        solver_configs['logger'] = logger
+
+
+        # Call the creater in SolverBase instead.
+        super(ClassificationSolver, self).__init__(solver_configs, **kwargs)
+
+
+    def validation(self, val_set, gt_set, batch_size):
+        with torch.no_grad():
+            dataset = TensorDataset(val_set, gt_set)
+            dl = DataLoader(dataset, batch_size=batch_size, shuffle=False, num_workers=0, drop_last=False, pin_memory=False)
+            self._net.eval()
+
+            decisions = None # (B x N)
+            validation_loss = []
+
+            for s, g in auto.tqdm(dl, desc="Validation", position=2):
+                s = self._match_type_with_network(s)
+                g = self._match_type_with_network(g)
+                # if self._iscuda:
+                    # s = [ss.cuda() for ss in s] if isinstance(s, list) else s.cuda() # Done by match_type
+                    # g = [gg.cuda() for gg in g] if isinstance(g, list) else g.cuda()
+
+                if isinstance(s, list):
+                    res = self._net(*s)
+                else:
+                    res = self._net(s)
+                # res = torch.(res, dim=1)
+                while res.dim() < 2:
+                    res = res.unsqueeze(0)
+
+                # Suppose loss is BCEWithLogitsLoss, so no sigmoid function
+                loss = self._lossfunction(res, g)
+
+                # Decision were made by checking whether value is > 0.5 after sigmoid
+                dic = torch.zeros_like(res)
+                pos = torch.where(torch.sigmoid(res) > 0.5)
+                dic[pos] = 1
+
+                if decisions is None:
+                    decisions = dic.cpu() == g.cpu()
+                else:
+                    decisions = torch.cat([decisions, dic.cpu() == g.cpu()], dim=0)
+                validation_loss.append(loss.item())
+
+                # tqdm.write(str(torch.stack([torch.stack([a, b, c]) for a, b, c, in zip(dic, torch.sigmoid(res), g)])))
+                del dic, pos, s, g
+
+            # Compute accuracies
+            acc = float(torch.sum(decisions > 0).item()) / float(len(decisions.flatten()))
+            validation_loss = np.mean(np.array(validation_loss).flatten())
+            self._logger.log_print_tqdm("Validation Result - ACC: %.05f, VAL: %.05f"%(acc, validation_loss))
+
+        self._net.train()
+        return validation_loss, acc
+
+    def _loss_eval(self, *args):
+        out, s, g = args
+        #out (B x C) g (B x C)
+        g = self._match_type_with_network(g)
+        loss = self._lossfunction(out.squeeze(), g.squeeze())
+        return loss

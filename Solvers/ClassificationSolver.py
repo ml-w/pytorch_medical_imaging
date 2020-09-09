@@ -4,10 +4,13 @@ from logger import Logger
 
 from torch import optim
 from torch.utils.data import DataLoader, TensorDataset
+from torch.autograd import Variable
 import torch
 import torch.nn as nn
 import numpy as np
 from tqdm import *
+
+import pandas as pd
 
 class ClassificationSolver(SolverBase):
     def __init__(self,in_data, gt_data, net, param_optim, param_iscuda,
@@ -78,11 +81,23 @@ class ClassificationSolver(SolverBase):
 
     def _feed_forward(self, *args):
         s, g = args
-
+        # s = self._match_type_with_network(s)
         if self._iscuda:
-            s = self._force_cuda(s)
+            s = self._force_cuda(s.float())
+
+        # if isinstance(s, list):
+        #      [ss.requires_grad_() for ss in s]
+        # else:
+        #     s.requires_grad_()
+        # Variable is deprecated in pyTorch v1.5
+        # s = [Variable(ss) for ss in s] if isinstance(s, list) else Variable(s)
+        # g = [Variable(gg) for gg in g] if isinstance(g, list) else Variable(g)
 
         out = self._net.forward(s)
+        # _pairs = zip(out.flatten().data.cpu(), g.flatten().data.cpu(), torch.sigmoid(out).flatten().data.cpu())
+        # _df = pd.DataFrame(_pairs, columns=['res', 'g', 'sig_res'], dtype=float)
+        # print(_df.to_string())
+        # del _pairs, _df
         return out
 
     def _loss_eval(self, *args):
@@ -97,6 +112,7 @@ class ClassificationSolver(SolverBase):
         with torch.no_grad():
             dataset = TensorDataset(val_set, gt_set)
             dl = DataLoader(dataset, batch_size=batch_size, shuffle=False, num_workers=0, drop_last=False, pin_memory=False)
+            self._net.eval()
 
             decisions = []
             validation_loss = []
@@ -121,5 +137,6 @@ class ClassificationSolver(SolverBase):
             acc = float(decisions.count(True)) / float(len(decisions))
             validation_loss = np.mean(np.array(validation_loss).flatten())
             self._logger.log_print_tqdm("Validation Result - ACC: %.05f, VAL: %.05f"%(acc, validation_loss))
-            return validation_loss, acc
+
+        return validation_loss, acc
 
