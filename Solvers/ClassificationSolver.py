@@ -94,10 +94,10 @@ class ClassificationSolver(SolverBase):
         # g = [Variable(gg) for gg in g] if isinstance(g, list) else Variable(g)
 
         out = self._net.forward(s)
-        # _pairs = zip(out.flatten().data.cpu(), g.flatten().data.cpu(), torch.sigmoid(out).flatten().data.cpu())
-        # _df = pd.DataFrame(_pairs, columns=['res', 'g', 'sig_res'], dtype=float)
-        # print(_df.to_string())
-        # del _pairs, _df
+        _pairs = zip(out.flatten().data.cpu(), g.flatten().data.cpu(), torch.sigmoid(out).flatten().data.cpu())
+        _df = pd.DataFrame(_pairs, columns=['res', 'g', 'sig_res'], dtype=float)
+        print(_df.to_string())
+        del _pairs, _df
         return out
 
     def _loss_eval(self, *args):

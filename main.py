@@ -13,6 +13,7 @@ import traceback
 import configparser
 import numpy as np
 from tqdm import *
+from PMIDataLoader import PMIDataFactory
 
 # This package
 from Networks import *
@@ -27,6 +28,24 @@ from tensorboardX import SummaryWriter
 import torch.autograd as autograd
 autograd.set_detect_anomaly(True)
 # import your own newtork
+
+# This controls the available networks
+available_networks = {'UNet':UNet_p,
+                      'UNetPosAware': UNetPosAware,
+                      'UNetLocTexAware': UNetLocTexAware,
+                      'UNetLocTexHist': UNetLocTexHist,
+                      'UNetLocTexHistDeeper': UNetLocTexHistDeeper,
+                      'UNetLocTexHist_MM': partial(UNetLocTexHist, fc_inchan=204),
+                      'UNetLocTexHistDeeper_MM': partial(UNetLocTexHistDeeper, fc_inchan=204),
+                      'DenseUNet': DenseUNet2D,
+                      'AttentionUNet': AttentionUNet,
+                      'AttentionDenseUNet': AttentionDenseUNet2D,
+                      'AttentionUNetPosAware': AttentionUNetPosAware,
+                      'AttentionUNetLocTexAware': AttentionUNetLocTexAware,
+                      'LLinNet': LLinNet,
+                      'AttentionResidual': AttentionResidualNet,
+                      'AxialAttentionResidual/64': AttentionResidualNet_64
+                      }
 
 def init_weights(m):
     if type(m) == nn.Conv2d:
@@ -102,7 +121,6 @@ def main(a, config, logger):
     checkpoint_save = config['Checkpoint'].get('cp_save_dir', "")
 
     net_nettype = config['Network'].get('network_type')
-    net_datatype = config['Network'].get('data_type')
     net_init = config['Network'].get('initialization', None)
 
     dir_input = config['Data'].get('input_dir')
@@ -116,42 +134,74 @@ def main(a, config, logger):
     filters_validation_lsuffix = config['Filters'].get('validation_re_suffix', filters_lsuffix)
     filters_validation_id = config['Filters'].get('validation_id_list', None)
 
+    # [LoaderParams] section is not useful to load here except this (for naming).
+    data_pmi_data_type = config['LoaderParams']['PMI_datatype_name']
+
     # Config override
     #-----------------
+    # Updated parameters need to be written back into config
     if a.train:
         mode = 0
+        config['General']['run_mode'] = 'training'
     if a.inference:
         mode = 1
+        config['General']['run_mode'] = 'inference'
+    if a.batch_size:
+        config['RunParams']['batch_size'] = str(a.batch_size)
+        param_batchsize = int(a.batch_size)
+    if a.epoch:
+        config['RunParams']['num_of_epochs'] = str(a.epoch)
+        param_epoch = int(a.epoch)
+    if a.lr:
+        config['RunParams']['learning_rate'] = str(a.lr)
+        param_lr = float(a.lr)
+    if a.debug:
+        config['General']['debug'] = str(a.debug)
+
 
     # Try to make outputdir first if it exist
-    os.makedirs(dir_output, exist_ok=True)
+
+    if dir_output.endswith('.csv'):
+        os.makedirs(os.path.dirname(dir_output), exist_ok=True)
+    else:
+        os.makedirs(dir_output, exist_ok=True)
+
+    # This is in PMIDataLoader already.
+    # if not filters_idlist is None:
+    #     if filters_idlist.endswith('ini'):
+    #         filters_idlist = parse_ini_filelist(filters_idlist, mode)
+    #         config['Filters']['id_list'] = filters_idlist
 
     # Check directories
     for key in list(config['Data']):
         d = config['Data'].get(key)
         if not os.path.isfile(d) and not os.path.isdir(d):
+            if d.endswith('.csv'):
+                continue
             logger.log_print_tqdm("Cannot locate %s: %s"%(key, d), logging.CRITICAL)
             return
 
 
-    if not filters_idlist is None:
-        if filters_idlist.endswith('ini'):
-            filters_idlist = parse_ini_filelist(filters_idlist, mode)
 
-
-    # This is for backward compatibility with myloader.py
-    bc = backward_compatibility(dir_target,
-                                dir_input,
-                                filters_lsuffix,
-                                filters_idlist)
+    # Create data object
+    try:
+        pmi_factory = PMIDataFactory()
+        pmi_data = pmi_factory.produce_object(config)
+    except Exception as e:
+        logger.log_print_tqdm("Error creating target object!", logging.FATAL)
+        logger.log_print_tqdm("Original error: {}".format(e))
+        return
 
     validation_FLAG=False
     if not filters_validation_id is None and bool_plot:
         logger.log_print_tqdm("Recieved validation parameters.")
-        bc_val = backward_compatibility(dir_validation_target,
-                                        dir_validation_input,
-                                        filters_validation_lsuffix,
-                                        filters_validation_id)
+        val_config = configparser.ConfigParser()
+        val_config.read_dict(config)
+        val_config.set('Filters', 're_suffix', filters_validation_lsuffix)
+        val_config.set('Filters', 'id_list', filters_validation_id)
+        val_config['Data']['input_dir'] = dir_validation_input
+        val_config['Data']['target_dir'] = dir_validation_target
+        pmi_data_val = pmi_factory.produce_object(val_config)
         validation_FLAG=True
 
     ##############################
@@ -160,17 +210,13 @@ def main(a, config, logger):
     assert os.path.isdir(dir_input), "Input data directory not exist!"
     if dir_target is None:
         mode = 1 # Eval mode
-    if net_datatype not in ml.datamap:
-        logger.log_print_tqdm("Specified datatype doesn't exist! Retreating to default datatype: %s"%list(ml.datamap.keys())[0],
-                 logging.WARNING)
-        net_datatype = list(ml.datamap.keys())[0]
 
     ##############################
     # Training Mode
     if not mode:
         logger.log_print_tqdm("Start training...")
-        inputDataset, gtDataset = ml.datamap[net_datatype](bc)
-        valDataset, valgtDataset = ml.datamap[net_datatype](bc_val) if validation_FLAG else (None, None)
+        inputDataset, gtDataset = pmi_data.load_dataset()
+        valDataset, valgtDataset = pmi_data_val.load_dataset() if validation_FLAG else (None, None)
 
         #------------------------
         # Create training solver
@@ -178,6 +224,8 @@ def main(a, config, logger):
             solver_class = SegmentationSolver
         elif run_type == 'Classification':
             solver_class = ClassificationSolver
+        elif run_type == 'BinaryClassification':
+            solver_class = BinaryClassificationSolver
         else:
             logger.log_print_tqdm('Wrong run_type setting!', logging.ERROR)
             return
@@ -240,9 +288,9 @@ def main(a, config, logger):
                         pass
 
                 if loss.data.cpu() <= temploss:
-                    backuppath = "./Backup/cp_%s_%s_temp.pt"%(net_datatype, net_nettype) \
+                    backuppath = "./Backup/cp_%s_%s_temp.pt"%(data_pmi_data_type, net_nettype) \
                         if checkpoint_save is None else checkpoint_save.replace('.pt', '_temp.pt')
-                    torch.save(solver.get_net().module.state_dict(), backuppath)
+                    torch.save(solver.get_net().state_dict(), backuppath)
                     temploss = loss.data.cpu()
                 del s, g
                 gc.collect()
@@ -282,9 +330,9 @@ def main(a, config, logger):
             # use validation loss as epoch loss if it exist
             measure_loss = np.array(val_loss).mean() if len(val_loss) > 0 else epoch_loss
             if measure_loss <= lastloss:
-                backuppath = "./Backup/cp_%s_%s.pt"%(net_datatype, net_nettype) \
+                backuppath = "./Backup/cp_%s_%s.pt"%(data_pmi_data_type, net_nettype) \
                     if checkpoint_save is None else checkpoint_save
-                torch.save(solver.get_net().module.state_dict(), backuppath)
+                torch.save(solver.get_net().state_dict(), backuppath)
                 lastloss = measure_loss
 
 
@@ -294,14 +342,17 @@ def main(a, config, logger):
                 current_lr = solver.get_optimizer().param_groups[0]['lr']
             logger.log_print_tqdm("[Epoch %04d] Loss: %.010f LR: %.010f"%(i, epoch_loss, current_lr))
 
+            # Plot network weight into histograms
+            if bool_plot:
+                writer.plot_weight_histogram(solver.get_net(), i)
+
 
     # Evaluation mode
     else:
         logger.log_print_tqdm("Starting evaluation...")
 
-        bc.train = None # ensure going into inference mode
-        inputDataset= ml.datamap[net_datatype](bc)
-        os.makedirs(dir_output, exist_ok=True)
+        inputDataset= pmi_data.load_dataset()
+
 
         #=============================
         # Perform inference
@@ -313,9 +364,11 @@ def main(a, config, logger):
             infer_class = SegmentationInferencer
         elif run_type == 'Classification':
             infer_class = ClassificationInferencer
+        elif run_type == 'BinaryClassification':
+            infer_class = BinaryClassificationInferencer
         else:
             logger.log_print_tqdm('Wrong run_type setting!', logging.ERROR)
-            return
+            raise NotImplementedError("Not implemented inference type!")
 
         inferencer = infer_class(inputDataset, dir_output, param_batchsize,
                                  available_networks[net_nettype], checkpoint_load,
@@ -335,31 +388,24 @@ def main(a, config, logger):
 
 
 if __name__ == '__main__':
-    # This controls the available networks
-    available_networks = {'UNet':UNet_p,
-                          'UNetPosAware': UNetPosAware,
-                          'UNetLocTexAware': UNetLocTexAware,
-                          'UNetLocTexHist': UNetLocTexHist,
-                          'UNetLocTexHistDeeper': UNetLocTexHistDeeper,
-                          'UNetLocTexHist_MM': partial(UNetLocTexHist, fc_inchan=204),
-                          'UNetLocTexHistDeeper_MM': partial(UNetLocTexHistDeeper, fc_inchan=204),
-                          'DenseUNet': DenseUNet2D,
-                          'AttentionUNet': AttentionUNet,
-                          'AttentionDenseUNet': AttentionDenseUNet2D,
-                          'AttentionUNetPosAware': AttentionUNetPosAware,
-                          'AttentionUNetLocTexAware': AttentionUNetLocTexAware,
-                          'LLinNet': LLinNet,
-                          'AttentionResidual': AttentionResidualNet
-                          }
+
 
 
     parser = argparse.ArgumentParser(description="Training reconstruction from less projections.")
-    parser.add_argument("config", metavar='config', action='store',
+    parser.add_argument("--config", metavar='config', action='store',
                         help="Config .ini file.", type=str)
     parser.add_argument("-t", "--train", dest='train', action='store_true', default=False,
                         help="Set this to force training mode. (Implementing)")
     parser.add_argument("-i", "--inference", dest="inference", action='store_true', default=False,
                         help="Set this to force inference mode. If used with -t option, will still go into inference. (Implementing")
+    parser.add_argument("-b", "--batch-size", dest='batch_size', type=int, default=None,
+                        help="Set this to override batch-size setting in loaded config.")
+    parser.add_argument("-e", "--epoch", dest="epoch", type=int, default=None,
+                        help="Set this to override number of epoch when loading config.")
+    parser.add_argument("-l", "--lr", dest='lr', type=float, default=None,
+                        help="Set this to override learning rate.")
+    parser.add_argument('--debug', dest='debug', action='store_true', default=None,
+                        help="Set this to initiate the config with debug setting.")
 
     a = parser.parse_args()
 
@@ -371,6 +417,8 @@ if __name__ == '__main__':
 
     # Parameters check
     log_dir = config['General'].get('log_dir', './Backup/Log/')
+    if os.path.isfile(log_dir):
+        pass
     if os.path.isdir(log_dir):
         log_dir = os.path.join(log_dir, "%s_%s.log"%(config['General'].get('run_mode', 'training'),
                                                      datetime.datetime.now().strftime("%Y%m%d-%H%M%S")))

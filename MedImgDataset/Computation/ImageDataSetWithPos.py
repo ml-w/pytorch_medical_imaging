@@ -3,13 +3,13 @@ from numpy import argmax
 
 from torch.utils.data import Dataset
 from ..ImageData import ImageDataSet
-from ..ImageDataMultiChannel import ImageDataSetMultiChannel
+from ..ImageDataMultiChannel import ImageDataMultiChannel
 
 class ImageDataSetWithPos(Dataset):
     def __init__(self, imagedataset):
         super(ImageDataSetWithPos, self).__init__()
 
-        assert isinstance(imagedataset, ImageDataSet) or isinstance(imagedataset, ImageDataSetMultiChannel)
+        assert isinstance(imagedataset, ImageDataSet) or isinstance(imagedataset, ImageDataMultiChannel)
         assert imagedataset._byslices >= 0, "Loading with position only supports by slice position currently."
 
         self._basedataset = imagedataset

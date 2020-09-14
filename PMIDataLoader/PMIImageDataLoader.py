@@ -51,7 +51,7 @@ class PMIImageDataLoader(PMIDataLoaderBase):
     def _read_params(self, config_file=None):
         """
         Defines attributes. Called when object is created. Extra attributes are declared in super function,
-        see the super class for more details.
+        see the super class for more details. Params are read from `[LoaderParams]` section of the ini.
 
         Args:
             config_file (str or dict, Optional): See :func:`PMIDataLoaderBase._read_params`.
@@ -62,14 +62,19 @@ class PMIImageDataLoader(PMIDataLoaderBase):
         """
 
         super(PMIImageDataLoader, self)._read_params(config_file)
-
-        self._regex = self.get_from_prop_dict('regex', None)
-        self._idlist = self.get_from_prop_dict('idlist', None)
+        self._regex = self.get_from_config('Filters', 're_suffix', None)
+        self._idlist = self.get_from_config('Filters', 'id_list', None)
         if isinstance(self._idlist, str):
-            self.idlist = self.parse_ini_filelist(self._idlist, self._run_mode)
+            if self._idlist.endswith('.ini'):
+                self._idlist = self.parse_ini_filelist(self._idlist, self._run_mode)
+            elif self._idlist.endswith('.txt'):
+                self._idlist = [r.rstrip() for r in open(self._idlist).readlines()]
+            else:
+                self._idlist = self._idlist.split(',')
+            self._idlist.sort()
 
-        self._augmentation = self.get_from_prop_dict('augmentation', 0)
-        self._load_by_slices = self.get_from_prop_dict('load_by_slices', -1)
+        self._augmentation = self.get_from_loader_params_with_eval('augmentation', 0)
+        self._load_by_slices = self.get_from_loader_params_with_eval('load_by_slices', -1)
 
     def _read_image(self, root_dir, **kwargs):
         """
@@ -94,7 +99,7 @@ class PMIImageDataLoader(PMIDataLoaderBase):
         else:
             self._image_class = ImageDataSet
 
-        return self._image_class(root_dir, verbose=self._verbose, debug=self._debug, filtermode='both',
+        return self._image_class(root_dir, verbose=self._verbose, debugmode=self._debug, filtermode='both',
                                  regex=self._regex, idlist=self._idlist, loadBySlices=self._load_by_slices,
                                  aug_factor=self._augmentation, **kwargs)
 

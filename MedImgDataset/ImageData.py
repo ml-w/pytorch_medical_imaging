@@ -1,6 +1,6 @@
-from torch.utils.data import Dataset
-from torch import from_numpy, cat, tensor, stack, unique
+from torch import from_numpy, cat, stack, unique
 from torch.nn.functional import pad
+from .PMIDataBase import PMIDataBase
 from tqdm import *
 import tqdm.auto as auto
 import fnmatch, re
@@ -57,7 +57,7 @@ NIFTI_DICT = {
     "magic": str
 }
 
-class ImageDataSet(Dataset):
+class ImageDataSet(PMIDataBase):
     """
     ImageDataSet class that reads and load nifty in a specified directory.
 
@@ -83,7 +83,7 @@ class ImageDataSet(Dataset):
                 * `recursive` - search all subdirectories excluding softlinks, use with causion.
                 * `explicit` - specifying directories of the files to load.
             Default is `normal`.
-        filtermode (str):
+        filtermode (str, Optional):
             After grabbing file directories, they are filtered by either ID, regex or both. Corresponding att needed. \n
             Usage:
                 * `idlist`: Extract images that is on a specified list, globbed with `idGlobber`. Requires att `idlist`.
@@ -91,25 +91,25 @@ class ImageDataSet(Dataset):
                 * `both': Use both `idlist` and `regex` as filtering method. Requires both att specified.
                 * None: No filter, read all .nii.gz images in the directory.
             Default is `None`.
-        idlist (str or list):
+        idlist (str or list, Optional):
             If its `str`, it should be directory to a file containing IDs, one in each line, otherwise,
             an explicit list of strings. Need if filtermode is 'idlist'. Globber of id can be specified with attribute
             idGlobber.
-        regex (str):
+        regex (str, Optional):
             Regex that is used to match file directories. Un-matched ones are discarded. Effective when
             `filtermode='idlist'`.Must start with paranthesis. Otherwise, its treated as wild cards, e.g. `'*nii.gz'`
-        idGlobber (str):
+        idGlobber (str, Optional):
             Regex string to search ID. Effective when filtermode='idlist', optional. If none specified
             the default globber is `'(^[a-ZA-Z0-9]+)`, globbing the first one matches the regex in file basename. .
-        loadBySlices (int):
+        loadBySlices (int, Optional):
             If its < 0, images are loaded as 3D volumes. If its >= 0, the slices along i-th dimension loaded. Default is `-1`
-        verbose (bool):
+        verbose (bool, Optional):
             Whether to report loading progress or not. Default to `False`.
-        dtype (str or type):
+        dtype (str or type, Optional):
             Cast loaded data element to the specified type. Default is `float`.
-        debugmode (bool):
+        debugmode (bool, Optional):
             For debug only. Default is `False`
-        recursiveSearch (bool):
+        recursiveSearch (bool, Optional):
             Whether to load files recursively into subdirectories. Default is `False`
 
 
@@ -119,7 +119,7 @@ class ImageDataSet(Dataset):
 
         1. Load all nii images in a folder:
 
-            >>> from MedImgDataset.rst import ImageDataSet
+            >>> from MedImgDataset import ImageDataSet
             >>> imgset = ImageDataSet('/some/dir/')
 
         2. Load all nii images, filtered by string 'T2W' in string:
@@ -159,8 +159,8 @@ class ImageDataSet(Dataset):
     """
     def __init__(self, rootdir, readmode='normal', filtermode=None, loadBySlices=-1, verbose=False, dtype=float,
                  debugmode=False, **kwargs):
-        super(Dataset, self)
-        assert os.path.isdir(rootdir), "Cannot access directory!"
+        super(ImageDataSet, self)
+        assert os.path.isdir(rootdir), "Cannot access directory: {}".format(rootdir)
         assert loadBySlices <= 2, "This class only handle 3D data!"
         self.rootdir = rootdir
         self.data_source_path = []
@@ -297,7 +297,7 @@ class ImageDataSet(Dataset):
         #-------------
         self._itemindexes = [0] # [image index of start slice]
         for i, f in enumerate(auto.tqdm(file_dirs, disable=not self.verbose, desc="Load Images")) \
-                if not self._debug else enumerate(auto.tqdm(file_dirs[:5],
+                if not self._debug else enumerate(auto.tqdm(file_dirs[:10],
                                                        disable=not self.verbose,
                                                             desc="Load Images")):
             if self.verbose:

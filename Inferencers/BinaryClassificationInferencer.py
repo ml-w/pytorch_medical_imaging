@@ -88,6 +88,7 @@ class BinaryClassificationInferencer(ClassificationInferencer):
         sig_out = torch.sigmoid(out_tensor)
         out_decision = (sig_out > .5).int()
         print(out_decision)
+        print(self._outdir)
         if os.path.isdir(self._outdir):
             self._outdir = os.path.join(self._outdir, 'class_inf.csv')
         if not self._outdir.endswith('.csv'):

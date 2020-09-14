@@ -44,11 +44,12 @@ class PMIDataLoaderBase(object):
         self._logger = logger if logger is None else logging.getLogger('__main__')
         self._verbose = verbose
         self._debug = debug
+        print(self._debug, type(debug))
+        self._run_mode = run_mode
         if not self._check_input:
             raise AttributeError
 
         self._read_params(prop_dict)
-        self._run_mode = run_mode
 
     @abstractmethod
     def _check_input(self):
@@ -89,21 +90,21 @@ class PMIDataLoaderBase(object):
                 training=ID_a,ID_b,...,ID_m
 
         """
-        assert os.path.isfile(filelist)
+        assert os.path.isfile(filelist), "Cannot locate filelist"
 
         fparser = configparser.ConfigParser()
         fparser.read(filelist)
 
         # test
-        if re.match('(?=.*train.*)', mode):
-            return fparser['FileList'].get('testing').split(',')
-        else:
+        if re.match('(?=.*train.*)', mode) is not None:
             return fparser['FileList'].get('training').split(',')
+        else:
+            return fparser['FileList'].get('testing').split(',')
 
-    def load_data_set(self):
+    def load_dataset(self):
         """
         Called in solver or inferencer to load arguments for the network training or actual inference. Normally you
-        would need to inherit this but you can do so to added some custom features.
+        would need not to inherit this but you can do so to added some custom features.
 
         Returns:
             (ImageDataSet or [ImageDataSet, ImageDataSet]): Depend on whether `self._run_mode` is `training` or
@@ -135,9 +136,12 @@ class PMIDataLoaderBase(object):
                 Default to `None`.
 
         """
-        self._datatype = self._prop_dict['data_type']
-        self._input_dir = self._prop_dict['input_dir']
-        self._target_dir = self.get_from_prop_dict('target_dir', None)
+        try:
+            self._input_dir = self._prop_dict['Data']['input_dir']
+            self._target_dir = self._prop_dict['Data']['target_dir']
+        except IndexError as e:
+            self.write_log("Can't read {} from input config".format(e))
+            raise IndexError(e)
 
         if not config_file is None:
             if isinstance(config_file, str):
@@ -148,7 +152,7 @@ class PMIDataLoaderBase(object):
                 self._loader_params = config_file
 
 
-    def get_from_prop_dict(self, key, default_value=None, tar_dict=None):
+    def get_from_config(self, section, key, default_value=None, tar_dict=None):
         """
         Method for convenient value extraction. Read from self._prop_dict or specified dictionary with default
         parameters if the key doesn't exist.
@@ -159,9 +163,14 @@ class PMIDataLoaderBase(object):
             tar_dict (dict): Target dictionary. Default to `self._prop_dict`
         """
         tar_dict = self._prop_dict if tar_dict is None else tar_dict
-        return tar_dict[key] if key in tar_dict else default_value
+        try:
+            out = tar_dict[section][key]
+            return out
+        except:
+            return default_value
 
-    def get_from_prop_dict_with_eval(self, key, default_value=None, tar_dict=None):
+
+    def get_from_config_with_eval(self, section, key, default_value=None, tar_dict=None):
         """
         Method for convenient value extraction. Read from self._prop_dict or specified dictionary with default
         parameters if the key doesn't exist.
@@ -174,14 +183,54 @@ class PMIDataLoaderBase(object):
             tar_dict (dict): Target dictionary. Default to `self._prop_dict`
         """
         tar_dict = self._prop_dict if tar_dict is None else tar_dict
-        out = tar_dict[key] if key in tar_dict else default_value
-        if isinstance(out, str):
-            out = eval(out)
-        return out
+        try:
+            out = tar_dict[section][key]
+            if isinstance(out, str):
+                out = eval(out)
+            return out
+        except:
+            return default_value
+
+
+    def get_from_loader_params(self, key, default_value=None):
+        """
+        Method for convenient value extraction. Read from self._prop_dict[LoaderParams] with default
+        parameters if the key doesn't exist.
+
+        Args:
+            key (obj): Key to read from self.
+            default_value (Optional): Value to fill in if the key is not found in `tar_dict`. Default to `None`.
+            tar_dict (dict): Target dictionary. Default to `self._prop_dict`
+        """
+        try:
+            tar_dict = self._prop_dict['LoaderParams']
+            out = tar_dict[key]
+            return out
+        except:
+            return default_value
+
+
+    def get_from_loader_params_with_eval(self, key, default_value=None):
+        """
+        Same as :func:`get_from_loader_params` with eval().
+
+        Args:
+            key (obj): Key to read from self.
+            default_value (Optional): Value to fill in if the key is not found in `tar_dict`. Default to `None`.
+            tar_dict (dict): Target dictionary. Default to `self._prop_dict`
+        """
+        try:
+            tar_dict = self._prop_dict['LoaderParams']
+            out = tar_dict[key]
+            if isinstance(out, str):
+                out = eval(out)
+            return out
+        except:
+            return default_value
 
     def get_target_attributes(self, tar_keys, tar_def_values=None, tar_eval_flag=None, tar_dict=None):
         """
-        Get attributes from target dictioary with default values in batch.
+        Get attributes from target dictionary with default values in batch.
 
         Args:
             tar_keys (list of str):
@@ -196,9 +245,9 @@ class PMIDataLoaderBase(object):
         out_dict = {}
         for k, default_value, eval_flag in zip(tar_keys, tar_def_values, tar_eval_flag):
             if eval_flag:
-                _func = self.get_from_prop_dict_with_eval
+                _func = self.get_from_loader_params_with_eval
             else:
-                _func = self.get_from_prop_dict
+                _func = self.get_from_config
             out_dict[k] = _func(k, default_value=default_value, tar_dict=tar_dict)
         return out_dict
 

@@ -7,6 +7,12 @@ __all__ = ['Logger']
 
 class Logger(object):
     global_logger = None
+    DEBUG = logging.DEBUG
+    INFO = logging.INFO
+    WARNING = logging.WARNING
+    CRITICAL = logging.CRITICAL
+    FATAL = logging.FATAL
+    ERROR = logging.ERROR
 
     def __init__(self, log_dir):
         super(Logger, self).__init__()

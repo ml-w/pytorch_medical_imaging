@@ -65,7 +65,8 @@ class SegmentationSolver(SolverBase):
 
         # Create optimizer and loss function
         lossfunction = nn.CrossEntropyLoss(weight=self.loss_init_weights) #TODO: Allow custom loss function
-        optimizer = optim.SGD(net.parameters(), lr=param_optim['lr'], momentum=param_optim['momentum'])
+        # optimizer = optim.SGD(net.parameters(), lr=param_optim['lr'], momentum=param_optim['momentum'])
+        optimizer = optim.Adam(net.parameters(), lr=param_optim['lr'])
         iscuda = param_iscuda
         if param_iscuda:
             lossfunction = lossfunction.cuda()

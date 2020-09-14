@@ -3,7 +3,7 @@ from .ImagePatchesLoader3D import ImagePatchesLoader3D
 from .ImageFeaturePair import ImageFeaturePair
 from .ImageData import ImageDataSet
 from .ImageDataAugment import ImageDataSetAugment
-from .ImageDataMultiChannel import ImageDataSetMultiChannel
+from .ImageDataMultiChannel import ImageDataMultiChannel
 from .DataLabel import DataLabel
 from .Subbands import Subbands
 from .Landmarks import Landmarks
@@ -27,4 +27,4 @@ for row in f.readlines():
 
 __all__ = ['ImageFeaturePair', 'Landmarks', 'ImageDataSet',
            'Projection', 'Subbands', 'ImagePatchesLoader',
-           'ImageDataSetAugment', 'ImageDataSetMultiChannel', 'ImagePatchesLoader3D', 'DataLabel']
+           'ImageDataSetAugment', 'ImageDataMultiChannel', 'ImagePatchesLoader3D', 'DataLabel']

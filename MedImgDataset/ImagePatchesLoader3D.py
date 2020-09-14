@@ -2,7 +2,7 @@ import torch
 from torch import cat, stack, tensor, zeros
 from torch.utils.data import Dataset
 from .ImageData import ImageDataSet
-from .ImageDataMultiChannel import ImageDataSetMultiChannel
+from .ImageDataMultiChannel import ImageDataMultiChannel
 from .ImageDataAugment import ImageDataSetAugment
 from tqdm import *
 import numpy as np
@@ -18,7 +18,7 @@ class ImagePatchesLoader3D(Dataset):
         """
         super(ImagePatchesLoader3D, self).__init__()
 
-        assert isinstance(base_dataset, ImageDataSet) or isinstance(base_dataset, ImageDataSetMultiChannel)
+        assert isinstance(base_dataset, ImageDataSet) or isinstance(base_dataset, ImageDataMultiChannel)
         assert reference_dataset is None or isinstance(reference_dataset, ImagePatchesLoader3D)
         assert not (patch_stride == -1 and random_patches == -1), \
             "You must select a patch stride if not using random patches."

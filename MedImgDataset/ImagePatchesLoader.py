@@ -4,7 +4,7 @@ from functools import partial
 from torch import cat, stack, tensor, zeros
 from torch.utils.data import Dataset
 from .ImageData import ImageDataSet
-from .ImageDataMultiChannel import ImageDataSetMultiChannel
+from .ImageDataMultiChannel import ImageDataMultiChannel
 from .ImageDataAugment import ImageDataSetAugment
 from tqdm import *
 import tqdm.auto as auto
@@ -155,7 +155,7 @@ class ImagePatchesLoader(Dataset):
 
         assert axis is None or len(axis) == 2, \
             "Axis argument should contain the two axises that forms the base image."
-        assert isinstance(base_dataset, ImageDataSet) or isinstance(base_dataset, ImageDataSetMultiChannel)
+        assert isinstance(base_dataset, ImageDataSet) or isinstance(base_dataset, ImageDataMultiChannel)
         assert reference_dataset is None or isinstance(reference_dataset, ImagePatchesLoader)
         assert not (patch_stride == -1 and random_patches == -1), \
             "You must select a patch stride if not using random patches."

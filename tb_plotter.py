@@ -1,6 +1,7 @@
 import torch
 import gc
 from logger import Logger
+from tensorboardX import SummaryWriter
 # from torchvision.utils import make_grid
 from Algorithms.visualization import draw_grid
 
@@ -9,6 +10,7 @@ __all__ = ['TB_plotter']
 class TB_plotter(object):
     def __init__(self, tb_writer, logger):
         super(TB_plotter, self).__init__()
+        assert isinstance(tb_writer, SummaryWriter), "Writter error/"
         assert isinstance(logger, Logger), "Incorrect logger!"
         self._writer = tb_writer
         self._logger = logger
@@ -19,6 +21,16 @@ class TB_plotter(object):
 
     def plot_loss(self, loss, writer_index):
         self._writer.add_scalar('Loss', loss, writer_index)
+
+    def plot_weight_histogram(self, net, writer_index):
+        for name, m in net.named_modules():
+            if hasattr(m, 'weight'):
+                self._writer.add_histogram(name.replace('.','/'), m.weight.cpu().flatten(),
+                                           global_step=writer_index)
+
+    def plot_histogram(self, values, name, writer_index):
+        self._writer.add_histogram(name, values.gpu().flatten(), global_step=writer_index)
+
 
     def plot_validation_loss(self, writer_index, *args):
         self._writer.add_scalar('Validation_Loss', args[0], writer_index)

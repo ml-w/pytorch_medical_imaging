@@ -3,5 +3,6 @@
 *.sh
 *.so
 Backup
+*.pt
 .idea
-/Doc/build/
+*build
