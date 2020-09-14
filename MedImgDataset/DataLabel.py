@@ -65,6 +65,8 @@ class DataLabel(Dataset):
     def write(self, out_fname):
         self._data_table.to_csv(out_fname)
 
+    def to_numpy(self):
+        return self._data_table.to_numpy()
 
     def __len__(self):
         return len(self._data_table)

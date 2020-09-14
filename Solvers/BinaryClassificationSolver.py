@@ -52,12 +52,21 @@ class BinaryClassificationSolver(ClassificationSolver):
         inchan = in_data[0].size()[0]
         self._log_print("Found number of binary classes {}.".format(numberOfClasses))
 
+        # Compute class weight
+        self._pos_weights = torch.zeros(numberOfClasses)
+        gts = gt_data.to_numpy()
+        bsize = len(gt_data)
+        for c in range(numberOfClasses):
+            self._pos_weights[c] = (bsize - gts[:,c].sum()) / float(gts[:,c].sum())
+        self._log_print("Computed loss pos_weight: {}".format(self._pos_weights), 10)
+
         # Define the network
         net = net(inchan, numberOfClasses)
         self._net = net
 
-        optimizer = optim.AdamW(net.parameters(), lr=param_optim['lr'])
+        optimizer = optim.Adam(net.parameters(), lr=param_optim['lr'])
         lossfunction = nn.BCEWithLogitsLoss(reduction='mean') # Combined with sigmoid.
+        lossfunction.pos_weight = self._pos_weights
         iscuda = param_iscuda
         if param_iscuda:
             lossfunction = lossfunction.cuda()
@@ -79,7 +88,7 @@ class BinaryClassificationSolver(ClassificationSolver):
         with torch.no_grad():
             dataset = TensorDataset(val_set, gt_set)
             dl = DataLoader(dataset, batch_size=batch_size, shuffle=False, num_workers=0, drop_last=False, pin_memory=False)
-            self._net.eval()
+            self._net = self._net.eval()
 
             decisions = None # (B x N)
             validation_loss = []
@@ -121,8 +130,27 @@ class BinaryClassificationSolver(ClassificationSolver):
             validation_loss = np.mean(np.array(validation_loss).flatten())
             self._logger.log_print_tqdm("Validation Result - ACC: %.05f, VAL: %.05f"%(acc, validation_loss))
 
-        self._net.train()
+        self._net = self._net.train()
         return validation_loss, acc
+
+    def step(self, *args):
+        s, g = args
+        out = self._feed_forward(*args)
+        loss = self._loss_eval(out, *args)
+
+        # Skip if all ground-truth have the same type
+        if g.unique().shape[0] == 1:
+            self._optimizer.zero_grad()
+            loss.backward()
+            self._logger.log_print_tqdm("Skipping grad, all input are the same class.")
+            self._called_time += 1
+            return out, loss.cpu().data
+        else:
+            self._optimizer.zero_grad()
+            loss.backward()
+            self._optimizer.step()
+            return out, loss.cpu().data
+
 
     def _loss_eval(self, *args):
         out, s, g = args
