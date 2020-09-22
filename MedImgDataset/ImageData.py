@@ -159,7 +159,7 @@ class ImageDataSet(PMIDataBase):
     """
     def __init__(self, rootdir, readmode='normal', filtermode=None, loadBySlices=-1, verbose=False, dtype=float,
                  debugmode=False, **kwargs):
-        super(ImageDataSet, self)
+        super(ImageDataSet, self).__init__(verbose=verbose)
         assert os.path.isdir(rootdir), "Cannot access directory: {}".format(rootdir)
         assert loadBySlices <= 2, "This class only handle 3D data!"
         self.rootdir = rootdir
@@ -273,8 +273,12 @@ class ImageDataSet(PMIDataBase):
             elif self._filterargs['regex'][0] == '(':
                 try:
                     keep = np.invert([re.match(self._filterargs['regex'], f) is None for f in file_basenames])
-                except:
-                    print([re.match(self._filterargs['regex'], f) is None for f in file_basenames])
+                except Exception as e:
+                    import sys, traceback as tr
+                    cl, exc, tb = sys.exc_info()
+                    self._logger.error("Error encountered when performing regex filtering.")
+                    self._logger.error(tr.extract_tb(tb))
+                    self._logger.error([re.match(self._filterargs['regex'], f) is None for f in file_basenames])
                 filtered_away.extend(np.array(file_dirs)[np.invert(keep)].tolist())
                 file_dirs = np.array(file_dirs)[keep].tolist()
             else: # else use wild card
@@ -300,7 +304,7 @@ class ImageDataSet(PMIDataBase):
                                                        disable=not self.verbose,
                                                             desc="Load Images")):
             if self.verbose:
-                tqdm.write("Reading from "+f)
+                self._logger.info("Reading from "+f)
             im = sitk.ReadImage(f)
             self.data_source_path.append(f)
             imarr = sitk.GetArrayFromImage(im).astype(self.dtype)
@@ -321,19 +325,22 @@ class ImageDataSet(PMIDataBase):
                     metadata[key] = im.GetMetaData(key)
             self.metadata.append(metadata)
         self.length = len(self.data_source_path)
+        self._logger.info("Finished loading. Loaded {} files.".format(self.length))
 
         #=====================================
         # Option to load 3D images as 2D slice
         #-------------------------------------
         if self._byslices >= 0:
             try:
+                self._logger.info("Load by slice...")
                 self._itemindexes = np.cumsum(self._itemindexes)
                 self.length = np.sum([m.size()[self._byslices] for m in self.data])
                 # check if all sizes are the same
                 allsizes = [tuple(np.array(m.size())[np.arange(m.dim()) != self._byslices]) for m in self.data]
                 uniquesizes = list(set(allsizes))
                 if not len(uniquesizes) == 1:
-                    self._logger.warning("There are more than one size, attempting to crop")
+                    self._logger.debug("Detected slice sizes: {}".format(uniquesizes))
+                    self._logger.warning("There are more than one slice size, attempting to crop")
                     majority_size = uniquesizes[np.argmax([allsizes.count(tup) for tup in uniquesizes])]
                     # Get all index of image that is not of majority size
                     target = [ss != majority_size for ss in allsizes]
@@ -360,8 +367,10 @@ class ImageDataSet(PMIDataBase):
 
 
                 self.data = cat(self.data, dim=self._byslices).transpose(0, self._byslices).unsqueeze(1)
+                self._logger.info("Finished load by slice.")
             except IndexError:
-                print("Wrong Index is used!")
+                self._logger.warning("Wrong Index is used in load by slices option!")
+                self._logger.warning("Retreating...")
                 self.length = len(self.data_source_path)
         else:
             try:
@@ -421,7 +430,9 @@ class ImageDataSet(PMIDataBase):
             self.data = self.data.type(t)
             self.dtype = t
         except Exception as e:
-            print(e)
+            self._logger.log_traceback(e)
+            self._logger.error("Error encounted during type cast.")
+            self._logger.error("Original error is {}.".format(e))
 
     def get_data_source(self, i):
         """Get directory of the source of the i-th element."""
