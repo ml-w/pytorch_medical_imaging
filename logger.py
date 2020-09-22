@@ -48,6 +48,7 @@ class Logger(object):
 
     def log_traceback(self, e):
         import sys
+        import traceback as tr
 
         cl, exc, tb = sys.exc_info()
         self.error(tr.extract_tb(tb))
