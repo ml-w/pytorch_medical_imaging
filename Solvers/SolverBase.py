@@ -7,7 +7,7 @@ from tqdm import *
 from abc import abstractmethod
 
 import numpy as np
-import logging
+from logging import Logger
 
 class SolverBase(object):
     """
@@ -31,7 +31,7 @@ class SolverBase(object):
         self._iscuda            = solver_configs['iscuda']
 
         # optional
-        self._logger            = solver_configs['logger'] if 'logger' in solver_configs else None
+        self._logger            = solver_configs['logger'] if 'logger' in solver_configs else Logger['Solver']
         self._lr_decay          = solver_configs['lrdecay'] if 'lrdecay' in solver_configs else None
         self._mom_decay         = solver_configs['momdecay'] if 'momdecay' in solver_configs else None
 

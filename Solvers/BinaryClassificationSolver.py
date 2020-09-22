@@ -3,6 +3,7 @@ from logger import Logger
 
 from torch import optim
 from torch.utils.data import DataLoader, TensorDataset
+from Loss import ClassWeightedBCEWithLogitLoss
 import torch
 import torch.nn as nn
 import numpy as np
@@ -43,7 +44,7 @@ class BinaryClassificationSolver(ClassificationSolver):
         assert isinstance(logger, Logger) or logger is None, "Logger incorrect settings!"
 
         if logger is None:
-            logger = Logger('./temp.log')
+            logger = Logger['Solver']
 
         # Recalculate number of one_hot slots and rebuild the lab
         self._logger = logger
@@ -57,7 +58,7 @@ class BinaryClassificationSolver(ClassificationSolver):
         gts = gt_data.to_numpy()
         bsize = len(gt_data)
         for c in range(numberOfClasses):
-            self._pos_weights[c] = (bsize - gts[:,c].sum()) / float(gts[:,c].sum())
+            self._pos_weights[c] = (bsize - gts[:,c].sum()) / float(gts[:,c].sum()) / 5.
         self._log_print("Computed loss pos_weight: {}".format(self._pos_weights), 10)
 
         # Define the network
@@ -65,8 +66,7 @@ class BinaryClassificationSolver(ClassificationSolver):
         self._net = net
 
         optimizer = optim.Adam(net.parameters(), lr=param_optim['lr'])
-        lossfunction = nn.BCEWithLogitsLoss(reduction='mean') # Combined with sigmoid.
-        lossfunction.pos_weight = self._pos_weights
+        lossfunction = nn.BCEWithLogitsLoss(reduction='mean', pos_weight=self._pos_weights) # Combined with sigmoid.
         iscuda = param_iscuda
         if param_iscuda:
             lossfunction = lossfunction.cuda()
@@ -136,7 +136,7 @@ class BinaryClassificationSolver(ClassificationSolver):
     def step(self, *args):
         s, g = args
         out = self._feed_forward(*args)
-        loss = self._loss_eval(out, *args)
+        loss = self._loss_eval(out, *args) * 5.
 
         # Skip if all ground-truth have the same type
         if g.unique().shape[0] == 1:

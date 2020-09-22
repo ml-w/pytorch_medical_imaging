@@ -14,6 +14,9 @@ class SegmentationSolver(SolverBase):
                  param_initWeight=None, logger=None):
         assert isinstance(logger, Logger) or logger is None, "Logger incorrect settings!"
 
+        if logger is None:
+            logger = Logger['Solver']
+
         self._decay_init_weight = param_initWeight if not param_initWeight is None else 0
 
         solver_configs = {}

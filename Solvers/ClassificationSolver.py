@@ -45,7 +45,7 @@ class ClassificationSolver(SolverBase):
         assert isinstance(logger, Logger) or logger is None, "Logger incorrect settings!"
 
         if logger is None:
-            logger = Logger('./temp.log')
+            logger = Logger['Solver']
 
         self._decay_init_weight = param_initWeight
 
