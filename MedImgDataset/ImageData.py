@@ -196,18 +196,17 @@ class ImageDataSet(PMIDataBase):
         if self._filtermode == 'both':
             assert all([ k in self._filterargs for k in ['idlist', 'regex']]), 'No filter arguments.'
 
-    def log_print(self, msg, level=logging.INFO):
-        logging.getLogger('__main__').log(level, msg)
-        if self.verbose:
-            print(msg)
+    # def log_print(self, msg, level=logging.INFO):
+    #     logging.getLogger('__main__').log(level, msg)
+    #     if self.verbose:
+    #         print(msg)
 
     def _parse_root_dir(self):
         """
         Main parsing function.
         """
 
-        if self.verbose:
-            self.log_print("Parsing root path: " + self.rootdir)
+        self._logger.info("Parsing root path: " + self.rootdir)
 
         #===================================
         # Read all nii.gz files exist first.
@@ -233,8 +232,8 @@ class ImageDataSet(PMIDataBase):
             raise AttributeError("file_dirs is not assigned!")
 
         if len(file_dirs) == 0:
-            self.log_print("No target files found in " + self.rootdir, logging.CRITICAL)
-            ArithmeticError("No target files found!")
+            self._logger.error("No target files found in " + self.rootdir)
+            raise ArithmeticError("No target files found!")
 
         #==========================
         # Apply filter if specified
@@ -243,7 +242,7 @@ class ImageDataSet(PMIDataBase):
         # Filter idlist
         #--------------
         if self._filtermode == 'idlist' or self._filtermode == 'both':
-            self.log_print("Globbing ID with globber: " + self._id_globber + " ...")
+            self._logger.info("Globbing ID with globber: " + self._id_globber + " ...")
             file_basenames = [os.path.basename(f) for f in file_dirs]
             file_ids = [re.search(self._id_globber, f) for f in file_basenames]
             file_ids = [str(mo.group()) if not mo is None else mo for mo in file_ids]
@@ -251,7 +250,7 @@ class ImageDataSet(PMIDataBase):
             if isinstance(self._filterargs['idlist'], str):
                 self._idlist = [r.strip() for r in open(self._filterargs['idlist'], 'r').readlines()]
             elif self._filterargs['idlist'] is None:
-                self.log_print('Idlist input is None!')
+                self._logger.warning('Idlist input is None!')
                 pass
             else:
                 self._idlist = self._filterargs['idlist']
@@ -269,7 +268,7 @@ class ImageDataSet(PMIDataBase):
             # use REGEX if find paranthesis
             if self._filterargs['regex'] is None:
                 # do nothing if regex is Nonw
-                self.log_print('Regex input is None!', logging.WARNING)
+                self._logger.warning('Regex input is None!')
                 pass
             elif self._filterargs['regex'][0] == '(':
                 try:
@@ -284,12 +283,12 @@ class ImageDataSet(PMIDataBase):
         if len(removed_fnames) > 0:
             removed_fnames.sort()
             for fs in removed_fnames:
-                self.log_print("Cannot find " + fs + " in " + self.rootdir, logging.WARNING)
+                self._logger.warning("Cannot find " + fs + " in " + self.rootdir)
 
         file_dirs.sort()
 
-        self.log_print("Found %s nii.gz files..."%len(file_dirs))
-        self.log_print("Start Loading")
+        self._logger.info("Found %s nii.gz files..."%len(file_dirs))
+        self._logger.info("Start Loading")
 
 
         #=============
@@ -334,7 +333,7 @@ class ImageDataSet(PMIDataBase):
                 allsizes = [tuple(np.array(m.size())[np.arange(m.dim()) != self._byslices]) for m in self.data]
                 uniquesizes = list(set(allsizes))
                 if not len(uniquesizes) == 1:
-                    logging.log(logging.WARNING, "There are more than one size, attempting to crop")
+                    self._logger.warning("There are more than one size, attempting to crop")
                     majority_size = uniquesizes[np.argmax([allsizes.count(tup) for tup in uniquesizes])]
                     # Get all index of image that is not of majority size
                     target = [ss != majority_size for ss in allsizes]
@@ -368,10 +367,9 @@ class ImageDataSet(PMIDataBase):
             try:
                 self.data = stack(self.data, dim=0).unsqueeze(1)
             except:
-                logging.log(logging.WARNING, "Cannot stack data due to non-uniform shapes.")
-                logging.log(logging.INFO, "%s"%[d.shape for d in self.data])
-                self.log_print("Cannot stack data due to non-uniform shapes. Some function might be impaired.",
-                               logging.WARNING)
+                self._logger.warning("Cannot stack data due to non-uniform shapes.")
+                self._logger.info("%s"%[d.shape for d in self.data])
+                self._logger.warning("Some function might be impaired.")
 
 
     def get_raw_data_shape(self):
@@ -386,7 +384,7 @@ class ImageDataSet(PMIDataBase):
         target_shape = target_imset.get_raw_data_shape()
 
         if len(self_shape) != len(target_shape):
-            logging.log(logging.WARNING, "Difference data length!")
+            self._logger.warning("Difference data length!")
             return False
 
         assert type(self_shape) == type(target_shape), "There are major discrepancies in dimension!"
@@ -394,7 +392,7 @@ class ImageDataSet(PMIDataBase):
         if not all(truth_list):
             discrip = np.argwhere(np.array(truth_list) == False)
             for x in discrip:
-                logging.log(logging.WARNING,
+                self._logger.warning(
                             "Discripency in element %i, ID: %s, File:[%s, %s]" % (
                                 x,
                                 self.get_unique_IDs(x),
@@ -447,7 +445,7 @@ class ImageDataSet(PMIDataBase):
 
         ids = self.get_unique_IDs(globber)
         if len(set(ids)) != len(ids) and not get_all:
-            self.log_print("IDs are not unique using this globber: %s!"%globber, logging.WARNING)
+            self._logger.warning("IDs are not unique using this globber: %s!"%globber)
 
         if ids.count(id) <= 1 or not get_all:
             return self.__getitem__(ids.index(id))
@@ -556,11 +554,11 @@ class ImageDataSet(PMIDataBase):
                 # check if it matches the original image size
                 tmp_im = td[start:end]
                 if not np.roll(tmp_im.shape, -1).tolist() == list(templateim.GetSize()):
-                    self.log_print("Recovering size for image with ID: {}.".format(self.get_unique_IDs()[i]))
+                    self._logger.info("Recovering size for image with ID: {}.".format(self.get_unique_IDs()[i]))
                     cent = np.array(templateim.GetSize()) // 2
                     diff = cent - tmp_im.shape
                     pad = diff > 0
-                    self.log_print("Skipping...")
+                    self._logger.info("Skipping...")
                     continue
                     
 
