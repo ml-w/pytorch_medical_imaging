@@ -7,6 +7,7 @@ __all__ = ['Logger']
 
 class Logger(object):
     global_logger = None
+    all_loggers = {}
     DEBUG = logging.DEBUG
     INFO = logging.INFO
     WARNING = logging.WARNING
@@ -14,31 +15,87 @@ class Logger(object):
     FATAL = logging.FATAL
     ERROR = logging.ERROR
 
-    def __init__(self, log_dir):
+    def __init__(self, log_dir, logger_name=__name__, verbose=False):
+        """
+        This is the logger
+        Args:
+            log_dir:
+            verbose:
+        """
+
         super(Logger, self).__init__()
         self._log_dir = log_dir
+        self._verbose = verbose
 
         # Check and create directory for log
         os.makedirs(os.path.dirname(log_dir), exist_ok=True)
 
 
-        self._logger = logging.getLogger(__name__)
-        logging.basicConfig(format="[%(asctime)-12s-%(levelname)s] %(message)s", filename=log_dir, level=logging.DEBUG)
+        self._logger = logging.getLogger(logger_name)
+        formatter = logging.Formatter("[%(asctime)-12s-%(levelname)s] (%(name)s) %(message)s")
+        handler = logging.FileHandler(log_dir)
+        handler.setFormatter(formatter)
+        self._logger.addHandler(handler)
+        self._logger.setLevel(level=logging.DEBUG)
+
+        self.info("Created log file at: {}".format(os.path.abspath(log_dir)))
         sys.excepthook= self.exception_hook
 
-        Logger.global_logger = self
+        # First logger created is the global logger.
+        if Logger.global_logger is None:
+            Logger.global_logger = self
+            Logger.all_loggers[logger_name] = self
+
+    def log_traceback(self, e):
+        import sys
+
+        cl, exc, tb = sys.exc_info()
+        self.error(tr.extract_tb(tb))
+        self.error("Original message: {}".format(e))
 
     def log_print(self, msg, level=logging.INFO):
         self._logger.log(level, msg)
-        print(msg)
+        if self._verbose:
+            print(msg)
 
     def log_print_tqdm(self, msg, level=logging.INFO):
         self._logger.log(level, msg)
-        tqdm.write(msg)
+        if self._verbose:
+            tqdm.write(msg)
+
+    def info(self, msg):
+        self.log_print_tqdm(msg, level=logging.INFO)
+
+    def debug(self, msg):
+        self.log_print_tqdm(msg, level=logging.DEBUG)
+
+    def warning(self, msg):
+        self.log_print_tqdm(msg, level=logging.WARNING)
+
+    def error(self, msg):
+        self.log_print_tqdm(msg, level=logging.ERROR)
+
+    def critical(self, msg):
+        self.log_print_tqdm(msg, level=logging.critical())
 
     def exception_hook(self, *args):
         self._logger.error('Uncaught exception:', exc_info=args)
         traceback.print_tb(args[0])
+
+    def __class_getitem__(cls, item):
+        if cls.global_logger is None:
+            raise AttributeError("Global logger was not created.")
+        elif not item in cls.all_loggers:
+            cls.global_logger.log_print("Requesting logger [{}] not exist, creating...".format(
+                str(item)
+            ))
+            cls.all_loggers[item] = Logger(cls.global_logger._log_dir,
+                                          logger_name=str(item),
+                                          verbose=cls.global_logger._verbose)
+            return cls.all_loggers[item]
+        else:
+            return cls.all_loggers[item]
+
 
     @staticmethod
     def Log_Print(msg, level=logging.INFO):
