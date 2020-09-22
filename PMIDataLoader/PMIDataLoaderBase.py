@@ -41,7 +41,7 @@ class PMIDataLoaderBase(object):
     """
     def __init__(self, prop_dict, run_mode='training', debug=False, verbose=True, logger=None, **kwargs):
         self._prop_dict = prop_dict
-        self._logger = logger if logger is None else logging.getLogger('__main__')
+        self._logger = logger if logger is not None else logging.Logger['PMIDataLoader']
         self._verbose = verbose
         self._debug = debug
         print(self._debug, type(debug))
@@ -137,8 +137,8 @@ class PMIDataLoaderBase(object):
 
         """
         try:
-            self._input_dir = self._prop_dict['Data']['input_dir']
-            self._target_dir = self._prop_dict['Data']['target_dir']
+            self._input_dir = self.get_from_config('Data', 'input_dir')
+            self._target_dir = self.get_from_config('Data', 'target_dir', default_value=None)
         except IndexError as e:
             self.write_log("Can't read {} from input config".format(e))
             raise IndexError(e)
@@ -249,5 +249,3 @@ class PMIDataLoaderBase(object):
             else:
                 _func = self.get_from_config
             out_dict[k] = _func(k, default_value=default_value, tar_dict=tar_dict)
-        return out_dict
-

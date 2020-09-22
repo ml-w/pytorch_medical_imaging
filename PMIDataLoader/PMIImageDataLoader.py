@@ -114,6 +114,9 @@ class PMIImageDataLoader(PMIDataLoaderBase):
             (ImageDataSet or ImageDataSetAugment)
 
         """
+        if self._target_dir is None:
+            raise AttributeError("Object failed to load _target_dir.")
+
         img_out = self._read_image(self._input_dir)
         if not re.match("(?=.*seg.*)", self._datatype, re.IGNORECASE) is None:
             gt_out = self._read_image(self._target_dir, dtype='uint8', is_seg=True, reference_dataset=img_out)
