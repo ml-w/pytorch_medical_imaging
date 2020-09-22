@@ -10,6 +10,7 @@ from tqdm import *
 import tqdm.auto as auto
 import numpy as np
 import gc
+from logger import Logger
 
 def _mpi_wrapper(roi, pos, p_indexes=None, semaphore=None, **kwargs):
     """This is required for mpi choose patches"""
@@ -160,6 +161,8 @@ class ImagePatchesLoader(Dataset):
         assert not (patch_stride == -1 and random_patches == -1), \
             "You must select a patch stride if not using random patches."
 
+        self._logger = Logger[self.__class__.__name__]
+
         if isinstance(patch_size, int):
             patch_size = [patch_size, patch_size]
         if isinstance(patch_stride, int):
@@ -203,6 +206,7 @@ class ImagePatchesLoader(Dataset):
             pass
         else:
             assert isinstance(reference_dataset, ImagePatchesLoader)
+            self._logger.info("Set reference dataset to {}".format(reference_dataset))
             self._patch_indexes = reference_dataset._patch_indexes
             self._random_patches = reference_dataset._random_patches
             self._patch_perslice = reference_dataset._patch_perslice
@@ -210,6 +214,7 @@ class ImagePatchesLoader(Dataset):
 
         # Pre-shuffle the patch indexes so that each mini-batch would have similar data-statistics as the training input
         if self._pre_shuffle:
+            self._logger.info("Perform pre-shuffle.")
             assert self._random_patches == 0, "Pre-shuffle cannot be used with random patches."
             self._shuffle_index_arr = np.arange(self.__len__())
             np.random.shuffle(self._shuffle_index_arr)
@@ -254,8 +259,14 @@ class ImagePatchesLoader(Dataset):
                                  -1)
 
         try:
-            np.copyto(self._patch_indexes, patch_indexes)
+            if hasattr(self, '_patch_indexes'):
+                np.copyto(self._patch_indexes, patch_indexes)
+            else:
+                self._patch_indexes = patch_indexes
         except Exception as e:
+            self._logger.error("Encounter error when trying to copy patches indexes. Covering old index with new "
+                               "index.")
+            self._logger.log_traceback(e)
             self._patch_indexes = patch_indexes
         pass
 
@@ -264,7 +275,8 @@ class ImagePatchesLoader(Dataset):
         try:
             self._patch_indexes[pos:pos + len(indexes)] = np.array(indexes)
         except Exception as e:
-            print("Error! Callback not working correctly! {}".format(e))
+            self._logger.error("Error! Callback not working correctly!")
+            self._logger.log_traceback(e)
 
     def _sample_patches_from_distribution(self):
         """Sample patches with probability distribution."""
@@ -421,7 +433,8 @@ class ImagePatchesLoader(Dataset):
             length = len(inpatches)
             channels = inpatches.size()[1]
         if length != self.__len__():
-            print("Warning! Size mismatch: " + str(len(inpatches)) + ',' + str(self.__len__()))
+            self._logger.warning("Warning! Size mismatch during piece_patches: " + str(len(inpatches)) + ','
+                                                                                               '' + str(self.__len__()))
 
         temp_slice = torch.cat([torch.zeros(self._base_dataset.data.shape, dtype=torch.float)
                                   for i in range(channels)], dim=1)
