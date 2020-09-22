@@ -100,11 +100,12 @@ class ImageDataMultiChannel(PMIDataBase):
         # check input
         self._rootdir = args[0]
         if not os.path.isdir(self._rootdir):
-            self.log_print("Root dir specified {} not found.".format(self._rootdir), 50)
+            self._logger.error("Root dir specified {} not found.".format(self._rootdir))
             raise AssertionError("Root dir specified {} not found.".format(self._rootdir))
 
         self._channel_subdirs = None
         if 'channel_subdirs' in kwargs:
+            self._logger.info("Using subdir options.")
             self._channel_subdirs = kwargs['channel_subdirs']
 
 
@@ -114,10 +115,10 @@ class ImageDataMultiChannel(PMIDataBase):
             for d in os.listdir(self._rootdir):
                 # check if its a directory, if so, load as ImageDataSet
                 if os.path.isdir(os.path.join(self._rootdir, d)):
-                    self.log_print("Loading from subdir: {}".format(d), 10)
+                    self._logger.info("Loading from subdir: {}".format(d))
                     self._channel_subdirs.append(self._rootdir, d)
                 else:
-                    self.log_print("Excluding non-directories: {}".format(d), 10)
+                    self._logger.info("Excluding non-directories in subdir: {}".format(d))
         else:
             assert all([os.path.isdir(os.path.join(self._rootdir, d)) for d in self._channel_subdirs]), \
                     "Cannot open specified directory when loading subdirectories. {}".format(
@@ -126,13 +127,16 @@ class ImageDataMultiChannel(PMIDataBase):
 
 
         # obtain first batch of ids
+        self._logger.info("Testing first set of sub-dir data to define IDs.")
         self._basedata.append(ImageDataSet(os.path.join(self._rootdir,
                                                         self._channel_subdirs[0]),
                                            **kwargs))
         self._itemindexes = self._basedata[0]._itemindexes
         ids = self._basedata[0].get_unique_IDs()
+        self._logger.debug("Extracted ids: {}".format(ids))
 
         # Use it to load remaining ids
+        self._logger.info("Using extracted IDs for loading remaining data in {}.".format(self._channel_subdirs[1:]))
         for i in range(1, len(self._channel_subdirs)):
             _temp_dict = dict(kwargs)
             if _temp_dict['filtermode'] == None:
@@ -158,19 +162,23 @@ class ImageDataMultiChannel(PMIDataBase):
         self._size[1] = len(self._basedata)
 
         # Check if dtype are the same
+        self._logger.info("Checking if data are all the same datatype...")
         self._UNIQUE_DTYPE = np.all([dat.type() == self._basedata[0].type() for dat in self._basedata])
+        self._logger.info("{}".format(self._UNIQUE_DTYPE))
 
     def get_unique_IDs(self, globber=None):
         return self._basedata[0].get_unique_IDs(globber)
 
-    def size(self, int=None):
+    def size(self, int=slice(None)):
         return self._size[int]
 
     def Write(self, *args):
         try:
             self._basedata[0].Write(*args)
         except Exception as e:
-            print(e)
+            self._logger.log_traceback(e)
+            self._logger.error("Seems like basedata {} have no Write() method.".format(
+                self._basedata[0].__class__.__name__))
             raise NotImplementedError("Base data have no Write() method")
 
     def __len__(self):
@@ -189,4 +197,5 @@ class ImageDataMultiChannel(PMIDataBase):
             if self._UNIQUE_DTYPE:
                 return cat([dat[item] for dat in self._basedata])
             else:
+                self._debug("Performing type-case for item {}.".format(item))
                 return cat([dat[item].type_as(self._basedata[0][item]) for dat in self._basedata])
