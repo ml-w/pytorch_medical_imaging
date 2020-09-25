@@ -86,7 +86,10 @@ def dicom2nii(folder, out_dir=None, seq_filters=None):
         headerreader.SetFileName(reader.GetFileNames()[0])
         headerreader.LoadPrivateTagsOn()
         headerreader.ReadImageInformation()
-        outname = out_dir + '/%s-%s.nii.gz'%(prefix1, headerreader.GetMetaData('0008|103e').rstrip().replace(' ', '_'))
+        outname = out_dir + '/%s-%s+%s.nii.gz'%(prefix1,
+                                              headerreader.GetMetaData('0008|103e').rstrip().replace(' ','_'),
+                                              headerreader.GetMetaData('0020|0011').rstrip()[0])
+
         if not seq_filters is None:
             if isinstance(seq_filters, list):
                 regex = "("
@@ -350,8 +353,8 @@ if __name__ == '__main__':
     # folders = RecursiveListDir(5, '../NPC_Segmentation/00.RAW/MMX/840/')
     # batch_dicom2nii(folders, out_dir='../NPC_Segmentation/00.RAW/NIFTI/All')
     # dicom2nii('../NPC_Segmentation/00.RAW/MMX/769/S', '../NPC_Segmentation/00.RAW/NIFTI/MMX')
-    batch_dicom2nii(RecursiveListDir(3, '../NPC_Segmentation/00.RAW/Jun16'),
-                    '../NPC_Segmentation/0A.NIFTI_ALL/Malignant')
+    batch_dicom2nii(RecursiveListDir(3, '../NPC_Segmentation/00.RAW/Jun16/779'),
+                    '../NPC_Segmentation/0A.NIFTI_ALL/Malignant_2')
     # dicom2nii('../NPC_Segmentation/00.RAW/Transfer/Benign/NPC147/Orignial Scan/DICOM', '../NPC_Segmentation/0A.NIFTI_ALL/Benign')
     # main(sys.argv)
     # make_mask_from_dir('../NPC_Segmentation/06.NPC_Perfect/temp_t2/', '../NPC_Segmentation/06.NPC_Perfect/temp_mask')
