@@ -44,7 +44,8 @@ available_networks = {'UNet':UNet_p,
                       'AttentionUNetLocTexAware': AttentionUNetLocTexAware,
                       'LLinNet': LLinNet,
                       'AttentionResidual': AttentionResidualNet,
-                      'AxialAttentionResidual/64': AttentionResidualNet_64
+                      'AxialAttentionResidual/64': AttentionResidualNet_64,
+                      'AxialAttentionResidual/SW': AttentionResidualNet_SW
                       }
 
 def init_weights(m):
@@ -98,7 +99,7 @@ class backward_compatibility(object):
             self.loadbyfilelist = loadbyfilelist
 
 def main(a, config, logger):
-    logger.log_print_tqdm("Recieve arguments: %s"%dict(({section: dict(config[section]) for section in config.sections()})))
+    logger.info("Recieve arguments: %s"%dict(({section: dict(config[section]) for section in config.sections()})))
     ##############################
     # Parse config
     #-----------------
@@ -232,7 +233,7 @@ def main(a, config, logger):
 
         solver = solver_class(inputDataset, gtDataset, available_networks[net_nettype],
                               {'lr': param_lr, 'momentum': param_momentum}, bool_usecuda,
-                              param_initWeight=param_initWeight, logger=logger)
+                              param_initWeight=param_initWeight)
         if param_decay_on_plateau:
             logger.log_print_tqdm("Optimizer decay on plateau.")
             solver.set_lr_decay_to_reduceOnPlateau(3, param_decay)
@@ -297,14 +298,14 @@ def main(a, config, logger):
 
                 if index % 1000 == 0 and validation_FLAG and bool_plot:
                     try:
-                        logger.log_print_tqdm("Initiate validation.")
+                        logger.info("Initiate validation.")
                         # perform validation per 1000 steps
                         val_loss.append(writer.plot_validation_loss(writerindex, *solver.validation(valDataset,
-                                                                                               valgtDataset,
+                                                                                                    valgtDataset,
                                                                                                     param_batchsize)))
                     except Exception as e:
-                        traceback.print_tb(sys.exc_info()[2])
-                        logger.log_print_tqdm(str(e), logging.WARNING)
+                        logger.warning("Validation encounters error!")
+                        logger.log_traceback(e)
 
                 # End of step
                 writerindex += 1
@@ -319,11 +320,11 @@ def main(a, config, logger):
 
             # Call back after each epoch
             try:
-                logger.log_print_tqdm("Initiate batch done callback.")
+                logger.log_print_tqdm("Initiate batch done callback.", logging.DEBUG)
                 inputDataset.batch_done_callback()
-                logger.log_print_tqdm("Done")
+                logger.log_print_tqdm("Done", logging.DEBUG)
             except:
-                logger.log_print_tqdm("Input dataset has no batch done callback.", logging.WARNING)
+                logger.log_print_tqdm("Input dataset has no batch done callback.", logging.DEBUG)
 
 
             losses.append(E)
@@ -340,7 +341,7 @@ def main(a, config, logger):
                 current_lr = next(solver.get_optimizer().param_groups)['lr']
             except:
                 current_lr = solver.get_optimizer().param_groups[0]['lr']
-            logger.log_print_tqdm("[Epoch %04d] Loss: %.010f LR: %.010f"%(i, epoch_loss, current_lr))
+            logger.log_print_tqdm("[Epoch %04d] EpochLoss: %.010f LR: %.010f"%(i, epoch_loss, current_lr))
 
             # Plot network weight into histograms
             if bool_plot:
@@ -351,7 +352,6 @@ def main(a, config, logger):
     else:
         logger.log_print_tqdm("Starting evaluation...")
 
-        inputDataset= pmi_data.load_dataset()
 
 
         #=============================
@@ -370,9 +370,18 @@ def main(a, config, logger):
             logger.log_print_tqdm('Wrong run_type setting!', logging.ERROR)
             raise NotImplementedError("Not implemented inference type!")
 
-        inferencer = infer_class(inputDataset, dir_output, param_batchsize,
-                                 available_networks[net_nettype], checkpoint_load,
-                                 bool_usecuda, logger)
+
+        try:
+            inputDataset, gtDataset = pmi_data._load_data_set_training()
+            inferencer = infer_class(inputDataset, dir_output, param_batchsize,
+                                     available_networks[net_nettype], checkpoint_load,
+                                     bool_usecuda, logger, target_data=gtDataset)
+        except AttributeError as e:
+            logger.log_print("Falling back to just doing inference", logger.DEBUG)
+            inputDataset= pmi_data.load_dataset()
+            inferencer = infer_class(inputDataset, dir_output, param_batchsize,
+                                     available_networks[net_nettype], checkpoint_load,
+                                     bool_usecuda, logger)
 
         if write_mode == 'GradCAM':
             inferencer.grad_cam_write_out(['att2'])
@@ -380,7 +389,11 @@ def main(a, config, logger):
             with torch.no_grad():
                 inferencer.write_out()
 
-
+        # Output summary of results if implemented
+        try:
+            inferencer.display_summary()
+        except AttributeError as e:
+            logger.log_print_tqdm("No summary for the class: {}".format(str(type(inferencer))), logger.DEBUG)
 
     pass
 
@@ -406,6 +419,8 @@ if __name__ == '__main__':
                         help="Set this to override learning rate.")
     parser.add_argument('--debug', dest='debug', action='store_true', default=None,
                         help="Set this to initiate the config with debug setting.")
+    parser.add_argument('--verbose', dest='verbose', action='store_true', default=False,
+                        help="Print message to stdout.")
 
     a = parser.parse_args()
 
@@ -420,9 +435,12 @@ if __name__ == '__main__':
     if os.path.isfile(log_dir):
         pass
     if os.path.isdir(log_dir):
+        print(f"Log file not designated, creating under {log_dir}")
         log_dir = os.path.join(log_dir, "%s_%s.log"%(config['General'].get('run_mode', 'training'),
                                                      datetime.datetime.now().strftime("%Y%m%d-%H%M%S")))
 
-
-    logger = Logger(log_dir)
+    print(f"Log designated to {log_dir}")
+    print(f"Fullpath: {os.path.abspath(log_dir)}")
+    logger = Logger(log_dir, logger_name='main', verbose=a.verbose)
+    print(logger.global_logger)
     main(a, config, logger)

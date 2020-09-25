@@ -17,10 +17,17 @@ class Logger(object):
 
     def __init__(self, log_dir, logger_name=__name__, verbose=False):
         """
-        This is the logger
+        This is the logger. This is typically passed to all modules for logging. Use class method Logger['str'] to get a
+        logger named 'str'.
+
         Args:
-            log_dir:
-            verbose:
+            log_dir (str):
+                Filename of the log file.
+            verbose (boolean, Optional):
+                If True, messages will be printed to stdout alongside being logged. Default to False.
+
+        Returns:
+            :class:`Logger` object
         """
 
         super(Logger, self).__init__()
@@ -38,7 +45,7 @@ class Logger(object):
         self._logger.addHandler(handler)
         self._logger.setLevel(level=logging.DEBUG)
 
-        self.info("Created log file at: {}".format(os.path.abspath(log_dir)))
+        self.info("Loging to file at: {}".format(os.path.abspath(log_dir)))
         sys.excepthook= self.exception_hook
 
         # First logger created is the global logger.
@@ -110,6 +117,8 @@ class Logger(object):
     @staticmethod
     def get_global_logger():
         if not Logger.global_logger is None:
+            # Attempts to create a global logger
+            Logger.global_logger = Logger('./default_logdir.log', logger_name='default_logname')
             return Logger.global_logger
         else:
             raise AttributeError("Global logger was not created.")
