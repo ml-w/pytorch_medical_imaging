@@ -19,13 +19,16 @@ def get_unique_IDs(fnames, globber=None):
 
 def get_fnames_by_IDs(fnames, idlist, globber=None):
     if globber is None:
-        globber = "(?=.*%s.*)"
+        globber = "([0-9]{3,5})"
 
     outfnames = {}
     for id in idlist:
         flist = []
         for f in fnames:
-            if not re.match(globber%id, f) is None:
+            l = re.findall(globber, f)
+            if not len(l):
+                continue
+            if l[0] == id:
                 flist.append(f)
         outfnames[id] = flist
     return outfnames
