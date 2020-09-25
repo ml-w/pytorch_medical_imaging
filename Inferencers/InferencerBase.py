@@ -20,6 +20,12 @@ class InferencerBase(object):
         self._logger = inferencer_configs['logger'] if 'logger' in inferencer_configs else None
         assert isinstance(self._logger, Logger) or self._logger is None, "Incorrect logger."
 
+        if 'target_data' in inferencer_configs:
+            self._target_dataset = inferencer_configs['target_data']
+            self._TARGET_DATASET_EXIST_FLAG = True
+        else:
+            self._TARGET_DATASET_EXIST_FLAG = False
+
         self._input_check()
         self._create_net()
         self._create_dataloader()
@@ -38,4 +44,8 @@ class InferencerBase(object):
 
     @abstractmethod
     def _create_dataloader(self):
+        raise NotImplementedError
+
+    @abstractmethod
+    def display_summary(self):
         raise NotImplementedError

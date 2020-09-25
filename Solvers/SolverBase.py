@@ -31,7 +31,8 @@ class SolverBase(object):
         self._iscuda            = solver_configs['iscuda']
 
         # optional
-        self._logger            = solver_configs['logger'] if 'logger' in solver_configs else Logger['Solver']
+        self._logger            = solver_configs['logger'] if 'logger' in solver_configs else \
+                                                                        Logger[self.__class__.__name__]
         self._lr_decay          = solver_configs['lrdecay'] if 'lrdecay' in solver_configs else None
         self._mom_decay         = solver_configs['momdecay'] if 'momdecay' in solver_configs else None
 

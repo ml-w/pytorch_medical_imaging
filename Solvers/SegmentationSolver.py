@@ -15,7 +15,7 @@ class SegmentationSolver(SolverBase):
         assert isinstance(logger, Logger) or logger is None, "Logger incorrect settings!"
 
         if logger is None:
-            logger = Logger['Solver']
+            logger = Logger[self.__class__.__name__]
 
         self._decay_init_weight = param_initWeight if not param_initWeight is None else 0
 
@@ -57,12 +57,12 @@ class SegmentationSolver(SolverBase):
                 inchan = in_data[0].size()[0]
         except AttributeError:
             # retreat to 1 channel
-            logger.log_print_tqdm("Retreating to 1 channel.", 30)
+            logger.warning("Retreating to 1 channel.")
             inchan = 1
         except Exception as e:
-            logger.log_print_tqdm(str(e), 40)
-            logger.log_print_tqdm("Terminating", 40)
-            raise ArithmeticError("Cannot compute in channel!")
+            logger.log_traceback(e)
+            logger.warning("Error encountered when calculating number of channels.")
+            raise ArithmeticError("Error encountered when calculating number of channels.")
 
         net = net(inchan, numOfClasses)
 

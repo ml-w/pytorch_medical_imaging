@@ -3,10 +3,11 @@ from logger import Logger
 
 from torch import optim
 from torch.utils.data import DataLoader, TensorDataset
-from Loss import ClassWeightedBCEWithLogitLoss
+from Loss import TverskyDiceLoss
 import torch
 import torch.nn as nn
 import numpy as np
+import pandas as pd
 from tqdm import *
 import tqdm.auto as auto
 
@@ -44,33 +45,38 @@ class BinaryClassificationSolver(ClassificationSolver):
         assert isinstance(logger, Logger) or logger is None, "Logger incorrect settings!"
 
         if logger is None:
-            logger = Logger['Solver']
+            logger = Logger[self.__class__.__name__]
 
         # Recalculate number of one_hot slots and rebuild the lab
         self._logger = logger
-        self._log_print("Rebuilding classification solver to binary classification.")
+        self._logger.info("Rebuilding classification solver to binary classification.")
         numberOfClasses = gt_data[0].size()[0] # (B X C), where C is the number of binary questions
         inchan = in_data[0].size()[0]
-        self._log_print("Found number of binary classes {}.".format(numberOfClasses))
+        self._logger.info("Found number of binary classes {}.".format(numberOfClasses))
 
         # Compute class weight
         self._pos_weights = torch.zeros(numberOfClasses)
         gts = gt_data.to_numpy()
         bsize = len(gt_data)
         for c in range(numberOfClasses):
-            self._pos_weights[c] = (bsize - gts[:,c].sum()) / float(gts[:,c].sum()) / 5.
-        self._log_print("Computed loss pos_weight: {}".format(self._pos_weights), 10)
+            self._pos_weights[c] = (bsize - gts[:,c].sum()) * 3 / float(gts[:,c].sum()) # N_0 / N_1
+        self._logger.debug("Computed loss pos_weight: {}".format(self._pos_weights))
 
         # Define the network
         net = net(inchan, numberOfClasses)
         self._net = net
 
         optimizer = optim.Adam(net.parameters(), lr=param_optim['lr'])
-        lossfunction = nn.BCEWithLogitsLoss(reduction='mean', pos_weight=self._pos_weights) # Combined with sigmoid.
+        lossfunction_a = nn.BCEWithLogitsLoss(reduction='mean', pos_weight=self._pos_weights) # Combined with sigmoid.
+        lossfunction_b = TverskyDiceLoss(weight=[1. - self._pos_weights.mean(), self._pos_weights.mean()])
         iscuda = param_iscuda
         if param_iscuda:
-            lossfunction = lossfunction.cuda()
+            # lossfunction = lossfunction.cuda()
+            lossfunction_a = lossfunction_a.cuda()
+            lossfunction_b = lossfunction_b.cuda()
             net = net.cuda()
+        lossfunction = lambda s, g: lossfunction_a(s, g) + lossfunction_b(s, g)
+
 
         solver_configs = {}
         solver_configs['optimizer'] = optimizer
@@ -109,8 +115,14 @@ class BinaryClassificationSolver(ClassificationSolver):
                     res = res.unsqueeze(0)
 
                 # Suppose loss is BCEWithLogitsLoss, so no sigmoid function
-                loss = self._lossfunction(res, g)
-
+                loss = self._loss_eval(res, s, g)
+                _pairs = zip(res.flatten().data.cpu().numpy(),
+                             g.flatten().data.cpu().numpy(),
+                             torch.sigmoid(res).flatten().data.cpu().numpy())
+                _df = pd.DataFrame(_pairs, columns=['res', 'g', 'sig_res'])
+                self._logger.debug("_val_res:\n" + _df.to_string())
+                self._logger.debug("_val_step_loss: {}".format(loss.data.item()))
+                del _pairs, _df
                 # Decision were made by checking whether value is > 0.5 after sigmoid
                 dic = torch.zeros_like(res)
                 pos = torch.where(torch.sigmoid(res) > 0.5)
@@ -128,24 +140,27 @@ class BinaryClassificationSolver(ClassificationSolver):
             # Compute accuracies
             acc = float(torch.sum(decisions > 0).item()) / float(len(decisions.flatten()))
             validation_loss = np.mean(np.array(validation_loss).flatten())
-            self._logger.log_print_tqdm("Validation Result - ACC: %.05f, VAL: %.05f"%(acc, validation_loss))
+            self._logger.info("Validation Result - ACC: %.05f, VAL: %.05f"%(acc, validation_loss))
 
         self._net = self._net.train()
         return validation_loss, acc
 
     def step(self, *args):
         s, g = args
-        out = self._feed_forward(*args)
-        loss = self._loss_eval(out, *args) * 5.
 
         # Skip if all ground-truth have the same type
         if g.unique().shape[0] == 1:
-            self._optimizer.zero_grad()
-            loss.backward()
-            self._logger.log_print_tqdm("Skipping grad, all input are the same class.")
-            self._called_time += 1
+            with torch.no_grad():
+                out = self._feed_forward(*args)
+                loss = self._loss_eval(out, *args)
+                # loss.backward()
+                # Cope with extreme data imbalance.
+                self._logger.warning("Skipping grad, all input are the same class.")
+                self._called_time += 1
             return out, loss.cpu().data
         else:
+            out = self._feed_forward(*args)
+            loss = self._loss_eval(out, *args)
             self._optimizer.zero_grad()
             loss.backward()
             self._optimizer.step()

@@ -1,5 +1,5 @@
 from .InferencerBase import InferencerBase
-from MedImgDataset import ImageDataSet, DataLabel
+from MedImgDataset import ImageDataSet, DataLabel, ImageDataMultiChannel
 from torch.utils.data import DataLoader
 from tqdm import *
 from torch.autograd import Variable
@@ -11,12 +11,11 @@ from SimpleITK import WriteImage, ReadImage, GetImageFromArray
 from Networks.GradCAM import *
 from torchvision.utils import make_grid
 from matplotlib.pyplot import imsave
-import cv2
 from Algorithms.visualization import draw_overlay_heatmap
 
 
 class ClassificationInferencer(InferencerBase):
-    def __init__(self, input_data, out_dir, batch_size, net, checkpoint_dir, iscuda, logger):
+    def __init__(self, input_data, out_dir, batch_size, net, checkpoint_dir, iscuda, logger, target_data=None):
         inference_configs = {}
         inference_configs['indataset']      = input_data
         inference_configs['batchsize']      = batch_size
@@ -25,11 +24,13 @@ class ClassificationInferencer(InferencerBase):
         inference_configs['logger']         = logger
         inference_configs['outdir']         = out_dir
         inference_configs['iscuda']         = iscuda
+        inference_configs['target_data']    = target_data
 
         super(ClassificationInferencer, self).__init__(inference_configs)
 
     def _input_check(self):
-        assert isinstance(self._in_dataset, ImageDataSet), "Type is %s"%(type(self._in_dataset))
+        assert isinstance(self._in_dataset, ImageDataSet) or isinstance(self._in_dataset, ImageDataMultiChannel),\
+                 "Type is %s"%(type(self._in_dataset))
         return 0
 
     def _create_net(self):
@@ -132,7 +133,6 @@ class ClassificationInferencer(InferencerBase):
         cam_tensor = torch.cat(cam_tensor, dim=0)
 
         dl = self._writter(out_tensor)
-        print(dl._data_table.to_string())
 
 
         ids = self._in_dataset.get_unique_IDs()

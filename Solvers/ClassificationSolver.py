@@ -45,16 +45,16 @@ class ClassificationSolver(SolverBase):
         assert isinstance(logger, Logger) or logger is None, "Logger incorrect settings!"
 
         if logger is None:
-            logger = Logger['Solver']
+            logger = Logger[self.__class__.__name__]
 
         self._decay_init_weight = param_initWeight
 
         solver_configs = {}
         # check unique class in gt
-        logger.log_print_tqdm("Detecting number of classes...")
+        logger.info("Detecting number of classes...")
         numOfClasses = len(gt_data.get_unique_values())
         numOfClasses = 2 if numOfClasses < 2 else numOfClasses
-        logger.log_print_tqdm("Find %i classes.."%(numOfClasses))
+        logger.info("Find %i classes.."%(numOfClasses))
 
 
         inchan = in_data[0].size()[0]
@@ -96,7 +96,7 @@ class ClassificationSolver(SolverBase):
         out = self._net.forward(s)
         _pairs = zip(out.flatten().data.cpu(), g.flatten().data.cpu(), torch.sigmoid(out).flatten().data.cpu())
         _df = pd.DataFrame(_pairs, columns=['res', 'g', 'sig_res'], dtype=float)
-        print(_df.to_string())
+        self._logger.debug('\n' + _df.to_string())
         del _pairs, _df
         return out
 
@@ -130,7 +130,7 @@ class ClassificationSolver(SolverBase):
                     res = res.unsqueeze(0)
                 dic = torch.argmax(torch.softmax(res, dim=1), dim=1)
                 decisions.extend([guess == truth for guess, truth in zip(dic.tolist(), g.tolist())])
-                loss = self._lossfunction(res, g.long())
+                loss = self._loss_eval(res, s, g)
                 validation_loss.append(loss.item())
 
             # Compute accuracies
