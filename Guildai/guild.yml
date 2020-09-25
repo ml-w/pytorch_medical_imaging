@@ -1,0 +1,75 @@
+train:
+    description: Train a model.
+    main: main
+    flags:
+        config: "Configs/Survival/Test.ini"
+        epoch: 50
+        batch-size: 4
+        lr: 1E-4
+    output-scalars:
+        loss: 'EpochLoss: (\value)'
+        accuracy: 'ACC: (\value)'
+        validation_loss: 'VAL: (\value)'
+        step: 'Epoch (\step)'
+        step_lr: 'LR: (\value)'
+    sourcecode:
+        root: ../
+        select: 
+            - exclude:
+                dir: 'NPC_Segmentation'
+            - exclude:
+                dir: 'Backup'
+            - exclude:
+                dir: '__pycache__'
+            - exclude: 
+                dir: "Guildai"
+            - '*.py'
+            - '*.pyx'
+            - '*.txt'
+            - '*.so'
+    requires:
+        - file: '../Configs'
+        - file: '../NPC_Segmentation'
+        - file: '../Backup/Log'
+
+validation:
+    decription: Validate the trained model. Should be used in pipeline, otherwise it won't find the checkpoint.
+    main: main --inference
+    flags:
+        batch-size: 4
+        config: "Configs/Survival/Test.ini"
+    sourcecode:
+        root: ../
+        select:
+            - exclude:
+                dir: 'NPC_Segmentation'
+            - exclude:
+                dir: '__pycache__'
+            - exclude:
+                dir: "Guildai"
+            - '*.py'
+            - '*.pyx'
+            - '*.txt'
+            - '*.so'
+    requires:
+        - file: '../Configs'
+        - file: '../NPC_Segmentation'
+        - operation: train
+          select: 'Backup'
+    output-scalars:
+        sensitivity: 'Sensitivity: (\value)'
+        specificity: 'Specificity: (\value)'
+        PPV: 'PPV: (\value)'
+        NPV: 'NPV: (\value)'
+        ACC: 'OverallACC: (\value)'
+
+pipeline:
+    flags:
+        config: "Configs/Survival/Test.ini"
+        epoch: 50
+        batch-size: 4
+        lr: 1E-4
+    steps:
+        - train config=${config} epoch=${epoch} batch-size=${batch-size} lr=${lr}
+        - validation config=${config} batch-size=${batch-size}
+
