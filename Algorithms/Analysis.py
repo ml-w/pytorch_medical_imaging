@@ -319,7 +319,7 @@ if __name__ == '__main__':
     parse.add_argument('--gt-filter', action='store', type=str,
                        dest='gtfilter', default=None, help='Filter for ground truth data.')
     parse.add_argument('--added-label', action='store', type=str, dest='label',
-                       help='Additional label that will be marked under the colume "Note"')
+                       help='Additional label that will be marked under the column "Note"')
     args = parse.parse_args()
     assert os.path.isdir(args.testset) and os.path.isdir(args.gtset), "Path error!"
 
@@ -329,11 +329,11 @@ if __name__ == '__main__':
     if args.jac:
         vars['JAC'] = JAC
     if args.pm:
-        vars['PPV'] = PercentMatch
+        vars['PPV'] = PrecisionRate
     if args.vr:
         vars['VR'] = Volume
     if args.pr:
-        vars['PR'] = PrecisionRate
+        vars['PM'] = PercentMatch
     if args.gce:
         vars['GCE'] = GCE
     if args.cr:
@@ -345,11 +345,11 @@ if __name__ == '__main__':
                 'JAC': JAC,
                 'DSC': DICE,
                 'VD': VD,
-                'PPV': PercentMatch,
+                'PPV': PrecisionRate,
                 'CR': CorrespondenceRatio,
                 'GTV-test': GrossVolume_Test,
                 'GTV-seg': GrossVolume_Seg,
-                'PR': PrecisionRate,
+                'PM': PercentMatch,
                 'ASD': ASD}
 
     if not args.idlist is None:
@@ -364,14 +364,14 @@ if __name__ == '__main__':
     if not idlist is None:
         imset = ImageDataSet(args.testset, readmode='recursive',
                              filtermode='both', regex=args.testfilter, idlist=idlist,
-                             verbose=True, debugmode=False)
+                             verbose=True, debugmode=False, dtype='uint8')
     else:
         imset = ImageDataSet(args.testset, readmode='recursive',
                              filtermode='regex', regex=args.testfilter,
-                             verbose=True, debugmode=False)
+                             verbose=True, debugmode=False, dtype='uint8')
     gtset = ImageDataSet(args.gtset, filtermode='both',
                          regex=args.gtfilter, idlist=imset.get_unique_IDs(),
-                         verbose=True, debugmode=False)
+                         verbose=True, debugmode=False, dtype='uint8')
 
     results = EVAL(imset, gtset, vars)
     try:
