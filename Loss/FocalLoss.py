@@ -4,7 +4,7 @@ import torch.nn.functional as F
 from logger import Logger
 
 class FocalLoss(nn.Module):
-    def __init__(self, with_sigmoid=True, gamma=2, reduction='mean', weight=0.8):
+    def __init__(self, with_sigmoid=True, gamma=2., reduction='mean', weight=0.8):
         super(FocalLoss, self).__init__()
 
         assert reduction in [None, 'mean', 'sum'], "Incorrect reduction method specified {}".format(reduction)
