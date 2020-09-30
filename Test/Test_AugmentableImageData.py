@@ -1,7 +1,6 @@
 import matplotlib as mpl
 mpl.use('Qt5Agg')
 from MedImgDataset import ImageDataSetAugment, ImagePatchLocTex, ImagePatchesLoader
-import numpy as np
 import matplotlib.pyplot as plt
 
 from torchvision.utils import make_grid

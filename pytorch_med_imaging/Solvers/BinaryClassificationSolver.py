@@ -1,14 +1,12 @@
 from .ClassificationSolver import ClassificationSolver
-from logger import Logger
+from pytorch_med_imaging.logger import Logger
 
 from torch import optim
 from torch.utils.data import DataLoader, TensorDataset
-from Loss import TverskyDiceLoss
+from Loss import FocalLoss
 import torch
-import torch.nn as nn
 import numpy as np
 import pandas as pd
-from tqdm import *
 import tqdm.auto as auto
 
 
@@ -59,7 +57,8 @@ class BinaryClassificationSolver(ClassificationSolver):
         gts = gt_data.to_numpy()
         bsize = len(gt_data)
         for c in range(numberOfClasses):
-            self._pos_weights[c] = (bsize - gts[:,c].sum()) * 3 / float(gts[:,c].sum()) # N_0 / N_1
+            # self._pos_weights[c] = (bsize - gts[:,c].sum()) / float(gts[:,c].sum()) # N_0 / N_1
+            self._pos_weights[c] = 5
         self._logger.debug("Computed loss pos_weight: {}".format(self._pos_weights))
 
         # Define the network
@@ -67,16 +66,17 @@ class BinaryClassificationSolver(ClassificationSolver):
         self._net = net
 
         optimizer = optim.Adam(net.parameters(), lr=param_optim['lr'])
-        lossfunction_a = nn.BCEWithLogitsLoss(reduction='mean', pos_weight=self._pos_weights) # Combined with sigmoid.
-        lossfunction_b = TverskyDiceLoss(weight=[1. - self._pos_weights.mean(), self._pos_weights.mean()])
+        # lossfunction_a = nn.BCEWithLogitsLoss(reduction='mean', pos_weight=self._pos_weights) # Combined with sigmoid.
+        # lossfunction_b = TverskyDiceLoss(weight=[1. - self._pos_weights.mean(), self._pos_weights.mean()])
+        # lossfunction_b = FocalLoss()
+        lossfunction = FocalLoss()
         iscuda = param_iscuda
         if param_iscuda:
-            # lossfunction = lossfunction.cuda()
-            lossfunction_a = lossfunction_a.cuda()
-            lossfunction_b = lossfunction_b.cuda()
+            lossfunction = lossfunction.cuda()
+            # lossfunction_a = lossfunction_a.cuda()
+            # lossfunction_b = lossfunction_b.cuda()
             net = net.cuda()
-        lossfunction = lambda s, g: lossfunction_a(s, g) + lossfunction_b(s, g)
-
+        # lossfunction = lambda s, g: lossfunction_a(s, g) + lossfunction_b(s, g)
 
         solver_configs = {}
         solver_configs['optimizer'] = optimizer

@@ -1,10 +1,9 @@
 from .SolverBase import SolverBase
-from logger import Logger
+from pytorch_med_imaging.logger import Logger
 
 
 from torch import optim
 from torch.utils.data import DataLoader, TensorDataset
-from torch.autograd import Variable
 import torch
 import torch.nn as nn
 import numpy as np

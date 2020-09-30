@@ -1,18 +1,10 @@
 from .ClassificationInferencer import ClassificationInferencer
-from MedImgDataset import ImageDataSet, DataLabel
+from MedImgDataset import DataLabel
 from torch.utils.data import DataLoader
 from tqdm import *
-from torch.autograd import Variable
 import os
 import torch
-import torch.nn.functional as F
-import numpy as np
-from SimpleITK import WriteImage, ReadImage, GetImageFromArray
 from Networks.GradCAM import *
-from torchvision.utils import make_grid
-from matplotlib.pyplot import imsave
-import cv2
-from Algorithms.visualization import draw_overlay_heatmap
 
 
 class BinaryClassificationInferencer(ClassificationInferencer):

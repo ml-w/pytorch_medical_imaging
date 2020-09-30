@@ -2,7 +2,6 @@ import os
 from functools import partial
 
 import numpy as np
-import configparser
 
 from MedImgDataset import *
 from MedImgDataset.Computation import *

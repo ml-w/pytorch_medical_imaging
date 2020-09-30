@@ -1,6 +1,4 @@
 import torch
-import torch.nn as nn
-import torch.nn.functional as F
 
 from torch.autograd import Variable
 from torch.utils.data import DataLoader
@@ -10,7 +8,6 @@ from MedImgDataset import ImagePatchLocMMTex, ImageDataSet, ImagePatchesLoader
 from MedImgDataset.Computation import clip_5
 from Networks import *
 
-import pandas as pd
 import matplotlib.pyplot as plt
 
 def main():

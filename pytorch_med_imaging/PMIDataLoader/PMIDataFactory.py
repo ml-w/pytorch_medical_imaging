@@ -2,7 +2,7 @@ from .PMIImagePatchesLoader import PMIImagePatchesLoader
 from .PMIImageFeaturePair import PMIImageFeaturePair
 from .PMIImageDataLoader import PMIImageDataLoader
 from .PMIImageMCFeaturePair import PMIImageMCFeaturePair
-from logger import Logger
+from pytorch_med_imaging.logger import Logger
 import traceback as tr
 
 class PMIDataFactory(object):

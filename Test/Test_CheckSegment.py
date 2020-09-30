@@ -2,7 +2,6 @@ from MedImgDataset import ImageDataSet
 from torchvision.utils import make_grid
 import torch
 import matplotlib.pyplot as plt
-import numpy as np
 
 
 def save_fig(im, name):

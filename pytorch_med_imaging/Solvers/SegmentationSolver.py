@@ -1,12 +1,11 @@
 import numpy as np
 import torch
 import torch.nn as nn
-import torch.nn.functional as F
 from torch import optim
 from torch.autograd import Variable
 
 from .SolverBase import SolverBase
-from logger import Logger
+from pytorch_med_imaging.logger import Logger
 
 
 class SegmentationSolver(SolverBase):

@@ -1,6 +1,6 @@
 # System
 import argparse
-import os, gc, sys
+import os, gc
 import logging
 import datetime
 
@@ -9,18 +9,15 @@ from functools import partial
 import torch
 import torch.nn as nn
 from torch.utils.data import DataLoader, TensorDataset
-import traceback
 import configparser
 import numpy as np
-from tqdm import *
 from PMIDataLoader import PMIDataFactory
 
 # This package
 from Networks import *
-from tb_plotter import TB_plotter
-import myloader as ml
+from pytorch_med_imaging.tb_plotter import TB_plotter
 
-from logger import Logger
+from pytorch_med_imaging.logger import Logger
 from Solvers import *
 from Inferencers import *
 

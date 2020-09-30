@@ -1,4 +1,4 @@
-from logger import Logger
+from pytorch_med_imaging.logger import Logger
 from torch.utils.data import Dataset
 from abc import *
 

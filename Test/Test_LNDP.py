@@ -1,5 +1,5 @@
 from MedImgDataset import ImageDataSet
-from MedImgDataset.Computation import ImagePatchLocMMTex, ImagePatchLocTex
+from MedImgDataset.Computation import ImagePatchLocMMTex
 from torch.utils.data.dataloader import DataLoader
 import timeit
 

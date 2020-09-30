@@ -1,7 +1,6 @@
-import torch
 import os
 from abc import abstractmethod
-from logger import Logger
+from pytorch_med_imaging.logger import Logger
 
 class InferencerBase(object):
     def __init__(self, inferencer_configs):

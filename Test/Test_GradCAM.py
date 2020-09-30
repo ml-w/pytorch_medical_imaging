@@ -1,11 +1,9 @@
 from MedImgDataset import ImageDataSet
 from Networks import AttentionResidualNet
 import torch
-import torch.nn.functional as F
 from torch.autograd import Variable
 from torchvision.utils import make_grid
 from Networks.GradCAM import *
-import numpy as np
 import matplotlib.pyplot as plt
 
 def main():

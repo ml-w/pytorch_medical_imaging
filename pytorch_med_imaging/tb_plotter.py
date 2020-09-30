@@ -1,6 +1,6 @@
 import torch
 import gc
-from logger import Logger
+from pytorch_med_imaging.logger import Logger
 from tensorboardX import SummaryWriter
 # from torchvision.utils import make_grid
 from Algorithms.visualization import draw_grid

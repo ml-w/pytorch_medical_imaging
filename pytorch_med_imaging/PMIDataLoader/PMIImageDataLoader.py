@@ -2,8 +2,7 @@ from .PMIDataLoaderBase import PMIDataLoaderBase
 from MedImgDataset import ImageDataSet, ImageDataSetAugment
 
 import re
-import os
-import configparser
+
 
 class PMIImageDataLoader(PMIDataLoaderBase):
     """

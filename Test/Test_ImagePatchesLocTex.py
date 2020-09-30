@@ -1,10 +1,7 @@
 from MedImgDataset.Computation import ImagePatchLocTex, ImageDataSet
 from MedImgDataset import ImagePatchesLoader
-from torchvision.utils import make_grid
-import matplotlib.pyplot as plt
 
 from torch.utils.data import DataLoader, TensorDataset
-import numpy as np
 
 if __name__ == '__main__':
     imset = ImageDataSet('../NPC_Segmentation/01.NPC_dx', verbose=True, debugmode=True,

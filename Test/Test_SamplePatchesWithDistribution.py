@@ -1,13 +1,9 @@
-from MedImgDataset import ImageDataSetAugment, ImagePatchLocTex, ImagePatchLocMMTex, ImageDataSet
+from MedImgDataset import ImagePatchLocMMTex, ImageDataSet
 from MedImgDataset.Computation import clip_5
-from torch import from_numpy
 from torchvision.utils import make_grid
 import numpy as np
 import torch
 import matplotlib.pyplot as plt
-
-import os
-import multiprocessing as mpi
 
 
 def prob_func(image):

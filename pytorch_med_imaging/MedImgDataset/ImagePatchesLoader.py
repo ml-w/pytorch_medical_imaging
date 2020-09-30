@@ -1,16 +1,14 @@
 import torch
 import torch.multiprocessing as mpi
 from functools import partial
-from torch import cat, stack, tensor, zeros
+from torch import stack, tensor
 from torch.utils.data import Dataset
 from .ImageData import ImageDataSet
 from .ImageDataMultiChannel import ImageDataMultiChannel
 from .ImageDataAugment import ImageDataSetAugment
-from tqdm import *
 import tqdm.auto as auto
 import numpy as np
-import gc
-from logger import Logger
+from pytorch_med_imaging.logger import Logger
 
 def _mpi_wrapper(roi, pos, p_indexes=None, semaphore=None, **kwargs):
     """This is required for mpi choose patches"""
