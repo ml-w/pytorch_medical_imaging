@@ -76,7 +76,8 @@ class BinaryClassificationSolver(ClassificationSolver):
             # lossfunction_a = lossfunction_a.cuda()
             # lossfunction_b = lossfunction_b.cuda()
             net = net.cuda()
-        # lossfunction = lambda s, g: lossfunction_a(s, g) + lossfunction_b(s, g)
+        # lossfunction = lambda s, g: lossfunction_a(s, g) +
+        # lossfunction_b(s, g)
 
         solver_configs = {}
         solver_configs['optimizer'] = optimizer

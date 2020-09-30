@@ -70,7 +70,7 @@ class FocalLoss(nn.Module):
         s = s.view(-1)
         g = g.view(-1)
 
-        bce = F.binary_cross_entropy(s, g, reduction='mean')
+        bce = F.binary_cross_entropy(s, g, reduction='none')
         bce_exp = torch.exp(-bce)
 
         return self.weight * (1 - bce_exp) ** self.gamma * bce

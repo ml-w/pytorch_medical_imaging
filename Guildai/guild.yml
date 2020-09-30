@@ -39,7 +39,7 @@ validation:
         batch-size: 4
         config: "Configs/Survival/Test.ini"
     sourcecode:
-        root: ../
+        root: ../pytorch_med_imaging
         select:
             - exclude:
                 dir: 'NPC_Segmentation'

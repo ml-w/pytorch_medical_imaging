@@ -439,5 +439,5 @@ if __name__ == '__main__':
     print(f"Log designated to {log_dir}")
     print(f"Fullpath: {os.path.abspath(log_dir)}")
     logger = Logger(log_dir, logger_name='main', verbose=a.verbose)
-    print(logger.global_logger)
+    logger.info("Global logger: {}".format(logger))
     main(a, config, logger)
