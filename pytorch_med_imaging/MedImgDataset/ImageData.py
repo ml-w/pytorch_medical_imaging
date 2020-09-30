@@ -119,7 +119,7 @@ class ImageDataSet(PMIDataBase):
 
         1. Load all nii images in a folder:
 
-            >>> from MedImgDataset import ImageDataSet
+            >>> from pytorch_med_imaging.MedImgDataset import ImageDataSet
             >>> imgset = ImageDataSet('/some/dir/')
 
         2. Load all nii images, filtered by string 'T2W' in string:

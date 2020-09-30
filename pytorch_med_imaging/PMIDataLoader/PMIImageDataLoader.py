@@ -1,5 +1,5 @@
 from .PMIDataLoaderBase import PMIDataLoaderBase
-from MedImgDataset import ImageDataSet, ImageDataSetAugment
+from ..MedImgDataset import ImageDataSet, ImageDataSetAugment
 
 import re
 

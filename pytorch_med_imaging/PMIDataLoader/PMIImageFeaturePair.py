@@ -1,5 +1,5 @@
 from .PMIImageDataLoader import PMIImageDataLoader
-from MedImgDataset import DataLabel
+from ..MedImgDataset import DataLabel
 
 class PMIImageFeaturePair(PMIImageDataLoader):
     """

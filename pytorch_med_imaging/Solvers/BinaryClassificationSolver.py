@@ -3,7 +3,7 @@ from pytorch_med_imaging.logger import Logger
 
 from torch import optim
 from torch.utils.data import DataLoader, TensorDataset
-from Loss import FocalLoss
+from ..Loss import FocalLoss
 import torch
 import numpy as np
 import pandas as pd

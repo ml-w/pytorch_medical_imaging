@@ -1,5 +1,5 @@
 from .PMIImageDataLoader import PMIImageDataLoader
-from MedImgDataset import ImagePatchesLoader
+from ..MedImgDataset import ImagePatchesLoader
 
 
 class PMIImagePatchesLoader(PMIImageDataLoader):

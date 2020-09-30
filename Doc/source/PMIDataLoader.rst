@@ -18,3 +18,15 @@ PMIImagePatchesLoader
 .. autoclass:: PMIDataLoader.PMIImagePatchesLoader
    :members:
    :private-members:
+
+PMIImageFeaturePair
+---------------------
+.. autoclass:: PMIImageFeaturePair.PMIImagePatchesLoader
+   :members:
+   :private-members:
+
+PMIImageMCFeaturePair
+---------------------
+.. autoclass:: PMIImageMCFeaturePair.PMIImagePatchesLoader
+   :members:
+   :private-members:
