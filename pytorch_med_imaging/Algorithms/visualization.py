@@ -5,7 +5,7 @@ import cv2
 import matplotlib.pyplot as plt
 import numpy as np
 import os
-from MedImgDataset import ImageDataSet
+from ..MedImgDataset import ImageDataSet
 
 __all__ = ['draw_overlay_heatmap', 'draw_grid', 'contour_grid_by_dir', 'contour_grid_by_image']
 

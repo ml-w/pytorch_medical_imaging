@@ -1,5 +1,5 @@
 from .InferencerBase import InferencerBase
-from MedImgDataset import ImageDataSet, DataLabel, ImageDataMultiChannel
+from ..MedImgDataset import ImageDataSet, DataLabel, ImageDataMultiChannel
 from torch.utils.data import DataLoader
 from tqdm import *
 from torch.autograd import Variable
@@ -8,10 +8,10 @@ import torch
 import torch.nn.functional as F
 import numpy as np
 from SimpleITK import WriteImage, ReadImage, GetImageFromArray
-from Networks.GradCAM import *
+from ..Networks.GradCAM import *
 from torchvision.utils import make_grid
 from matplotlib.pyplot import imsave
-from pytorch_med_imaging.Algorithms import draw_overlay_heatmap
+from pytorch_med_imaging.Algorithms.visualization import draw_overlay_heatmap
 
 
 class ClassificationInferencer(InferencerBase):

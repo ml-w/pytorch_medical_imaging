@@ -1,10 +1,10 @@
 from .ClassificationInferencer import ClassificationInferencer
-from MedImgDataset import DataLabel
+from ..MedImgDataset import DataLabel
 from torch.utils.data import DataLoader
 from tqdm import *
 import os
 import torch
-from Networks.GradCAM import *
+#from ..Networks.GradCAM import *
 
 
 class BinaryClassificationInferencer(ClassificationInferencer):

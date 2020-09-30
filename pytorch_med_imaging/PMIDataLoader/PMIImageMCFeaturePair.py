@@ -1,5 +1,5 @@
 from .PMIImageDataLoader import PMIImageDataLoader
-from ..MedImgDataset import DataLabel, ImageDataMultiChannel
+from .. import MedImgDataset
 
 class PMIImageMCFeaturePair(PMIImageDataLoader):
     """
@@ -70,7 +70,7 @@ class PMIImageMCFeaturePair(PMIImageDataLoader):
             :class:`MedImgDataset.ImageDataSet`
         """
         # default reader func
-        self._image_class = ImageDataMultiChannel
+        self._image_class = MedImgDataset.ImageDataMultiChannel
 
         return self._image_class(root_dir, channel_subdirs=self._channel_subdirs, verbose=self._verbose,
                                  debugmode=self._debug, filtermode='both', regex=self._regex, idlist=self._idlist,
@@ -89,9 +89,9 @@ class PMIImageMCFeaturePair(PMIImageDataLoader):
         print(img_out[0].shape)
 
         if not self.get_from_config('excel_sheetname', None) is None:
-            gt_dat = DataLabel.from_xlsx(self._target_dir, self.get_from_config('excel_sheetname', ))
+            gt_dat = MedImgDataset.DataLabel.from_xlsx(self._target_dir, self.get_from_config('excel_sheetname', ))
         else:
-            gt_dat = DataLabel.from_csv(self._target_dir)
+            gt_dat = MedImgDataset.DataLabel.from_csv(self._target_dir)
         gt_dat.map_to_data(img_out)
         return img_out, gt_dat
 

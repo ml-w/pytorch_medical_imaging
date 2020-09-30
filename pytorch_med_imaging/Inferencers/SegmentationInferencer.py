@@ -1,4 +1,4 @@
-from MedImgDataset import ImageDataSet, ImagePatchesLoader, ImagePatchesLoader3D
+from ..MedImgDataset import ImageDataSet, ImagePatchesLoader, ImagePatchesLoader3D
 from .InferencerBase import InferencerBase
 from torch.utils.data import DataLoader
 from torch.autograd import Variable

@@ -1,5 +1,5 @@
 from .PMIImageDataLoader import PMIImageDataLoader
-from ..MedImgDataset import ImagePatchesLoader
+from .. import MedImgDataset
 
 
 class PMIImagePatchesLoader(PMIImageDataLoader):
@@ -80,8 +80,8 @@ class PMIImagePatchesLoader(PMIImageDataLoader):
         """
         img_out, gt_out = super(PMIImagePatchesLoader, self)._load_data_set_training()
 
-        img_out = ImagePatchesLoader(img_out, self._patch_size, pre_shuffle=True, **self._patch_loader_params)
-        seg_out = ImagePatchesLoader(gt_out, self._patch_size, pre_shuffle=True, reference_dataset=img_out)
+        img_out = MedImgDataset.ImagePatchesLoader(img_out, self._patch_size, pre_shuffle=True, **self._patch_loader_params)
+        seg_out = MedImgDataset.ImagePatchesLoader(gt_out, self._patch_size, pre_shuffle=True, reference_dataset=img_out)
 
         return img_out, seg_out
 
@@ -94,5 +94,5 @@ class PMIImagePatchesLoader(PMIImageDataLoader):
             (:class:`MedImgDataset.ImagePatchesLoader`): Input to network.
         """
         img_out = super(PMIImagePatchesLoader, self)._load_data_set_inference()
-        img_out = ImagePatchesLoader(img_out, self._patch_size, pre_shuffle=False **self._patch_loader_params)
+        img_out = MedImgDataset.ImagePatchesLoader(img_out, self._patch_size, pre_shuffle=False **self._patch_loader_params)
         return img_out

@@ -3,30 +3,30 @@ PMIDataLoader
 
 PMIDataLoaderBase
 -----------------
-.. autoclass:: PMIDataLoader.PMIDataLoaderBase
+.. autoclass:: pytorch_med_imaging.PMIDataLoader.PMIDataLoaderBase
    :members:
    :private-members:
 
 PMIImageDataLoader
 ------------------
-.. autoclass:: PMIDataLoader.PMIImageDataLoader
+.. autoclass:: pytorch_med_imaging.PMIDataLoader.PMIImageDataLoader
    :members:
    :private-members:
 
 PMIImagePatchesLoader
 ---------------------
-.. autoclass:: PMIDataLoader.PMIImagePatchesLoader
+.. autoclass:: pytorch_med_imaging.PMIDataLoader.PMIImagePatchesLoader
    :members:
    :private-members:
 
 PMIImageFeaturePair
 ---------------------
-.. autoclass:: PMIImageFeaturePair.PMIImagePatchesLoader
+.. autoclass:: pytorch_med_imaging.PMIDataLoader.PMIImagePatchesLoader
    :members:
    :private-members:
 
 PMIImageMCFeaturePair
 ---------------------
-.. autoclass:: PMIImageMCFeaturePair.PMIImagePatchesLoader
+.. autoclass:: pytorch_med_imaging.PMIDataLoader.PMIImagePatchesLoader
    :members:
    :private-members:

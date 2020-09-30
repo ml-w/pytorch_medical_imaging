@@ -7,8 +7,8 @@ Segmentation
 
 Soft Dice Loss
 --------------
-.. autofunction:: Loss.SoftDice.SoftDiceLoss
+.. autofunction:: pytorch_med_imaging.Loss.SoftDice.SoftDiceLoss
 
 Focal Loss
 ----------
-.. autofunction:: Loss.FocalLoss.FocalLoss
+.. autofunction:: pytorch_med_imaging.Loss.FocalLoss.FocalLoss

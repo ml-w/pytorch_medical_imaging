@@ -4,7 +4,7 @@ import numpy as np
 import os
 import pandas as pd
 
-from MedImgDataset import ImageDataSet
+from ..MedImgDataset import ImageDataSet
 from tqdm import *
 from surface_distance import compute_surface_distances, compute_average_surface_distance
 import argparse

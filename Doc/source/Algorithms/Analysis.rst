@@ -3,20 +3,20 @@ Analysis
 
 SSIM
 ----
-.. autofunction:: Algorithms.Analysis.SSIM
+.. autofunction:: pytorch_med_imaging.Algorithms.Analysis.SSIM
 
 CNR
 ---
-.. autofunction:: Algorithms.Analysis.CNR
+.. autofunction:: pytorch_med_imaging.Algorithms.Analysis.CNR
 
 RMSE
 ----
-.. autofunction:: Algorithms.Analysis.RMSE
+.. autofunction:: pytorch_med_imaging.Algorithms.Analysis.RMSE
 
 PSNR
 ----
-.. autofunction:: Algorithms.Analysis.PSNR
+.. autofunction:: pytorch_med_imaging.Algorithms.Analysis.PSNR
 
 perf_measure
 ------------
-.. autofunction:: Algorithms.Analysis.perf_measure
+.. autofunction:: pytorch_med_imaging.Algorithms.Analysis.perf_measure

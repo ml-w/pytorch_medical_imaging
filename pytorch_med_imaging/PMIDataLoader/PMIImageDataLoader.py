@@ -1,5 +1,5 @@
 from .PMIDataLoaderBase import PMIDataLoaderBase
-from ..MedImgDataset import ImageDataSet, ImageDataSetAugment
+from .. import MedImgDataset
 
 import re
 
@@ -94,9 +94,9 @@ class PMIImageDataLoader(PMIDataLoaderBase):
         """
         # default reader func
         if self._augmentation > 0 and not re.match('(?=.*train.*)', self._run_mode) is None:
-            self._image_class = ImageDataSetAugment
+            self._image_class = MedImgDataset.ImageDataSetAugment
         else:
-            self._image_class = ImageDataSet
+            self._image_class = MedImgDataset.ImageDataSet
 
         return self._image_class(root_dir, verbose=self._verbose, debugmode=self._debug, filtermode='both',
                                  regex=self._regex, idlist=self._idlist, loadBySlices=self._load_by_slices,

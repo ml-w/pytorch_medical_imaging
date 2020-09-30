@@ -13,8 +13,8 @@
 import os
 import sys
 import solar_theme
-sys.path.insert(0, os.path.abspath('../../pytorch_med_imaging'))
-
+sys.path.insert(0, os.path.abspath('../../'))
+import pytorch_med_imaging
 
 
 # -- Project information -----------------------------------------------------
@@ -33,7 +33,8 @@ mathjax_path="https://cdn.mathjax.org/mathjax/latest/MathJax.js?config=TeX-AMS-M
 extensions = [
     'sphinx.ext.autodoc',
     'sphinx.ext.napoleon',
-    'sphinx.ext.mathjax'
+    'sphinx.ext.mathjax',
+    # 'pytorch_med_imaging'
 ]
 
 # Add any paths that contain templates here, relative to this directory.
@@ -46,7 +47,8 @@ exclude_patterns = []
 
 
 # prefix
-modindex_common_prefix = ['pytorch_medical_imaging']
+modindex_common_prefix = ['pytorch_med_imaging']
+# add_module_names = False
 
 # -- Options for HTML output -------------------------------------------------
 

@@ -3,15 +3,15 @@ MedImgDataset
 
 ImageDataSet
 -------------
-.. autoclass:: MedImgDataset.ImageDataSet
+.. autoclass:: pytorch_med_imaging.MedImgDataset.ImageDataSet
    :members:
 
 ImageDataSetAugment
 -------------------
-.. autoclass:: MedImgDataset.ImageDataSetAugment
+.. autoclass:: pytorch_med_imaging.MedImgDataset.ImageDataSetAugment
    :members:
 
 ImagePatchesLoader
 ------------------
-.. autoclass:: MedImgDataset.ImagePatchesLoader
+.. autoclass:: pytorch_med_imaging.MedImgDataset.ImagePatchesLoader
    :members:

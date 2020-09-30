@@ -1,5 +1,5 @@
 from .PMIImageDataLoader import PMIImageDataLoader
-from ..MedImgDataset import DataLabel
+from .. import MedImgDataset
 
 class PMIImageFeaturePair(PMIImageDataLoader):
     """
@@ -53,9 +53,9 @@ class PMIImageFeaturePair(PMIImageDataLoader):
         img_out = self._read_image(self._input_dir)
 
         if not self.get_from_config('excel_sheetname', None) is None:
-            gt_dat = DataLabel.from_xlsx(self._target_dir, self.get_from_config('excel_sheetname', ))
+            gt_dat = MedImgDataset.DataLabel.from_xlsx(self._target_dir, self.get_from_config('excel_sheetname', ))
         else:
-            gt_dat = DataLabel.from_csv(self._target_dir)
+            gt_dat = MedImgDataset.DataLabel.from_csv(self._target_dir)
         gt_dat.map_to_data(img_out)
         return img_out, gt_dat
 

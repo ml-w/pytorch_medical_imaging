@@ -13,7 +13,13 @@ Module List
    :maxdepth: 2
 
    MedImgDataset.rst
-   PMIDataLoader.rst
+
+PMIDataLoader
+-------------
+.. toctree::
+   :maxdepth: 2
+
+   PMIDataLoader/PMIDataLoader.rst
 
 Utilities
 ---------

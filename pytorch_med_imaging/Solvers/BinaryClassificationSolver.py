@@ -1,5 +1,5 @@
 from .ClassificationSolver import ClassificationSolver
-from pytorch_med_imaging.logger import Logger
+from ..logger import Logger
 
 from torch import optim
 from torch.utils.data import DataLoader, TensorDataset
