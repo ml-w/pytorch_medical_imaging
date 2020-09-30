@@ -17,18 +17,14 @@ def transform_label(label_im, transform):
     return out_im
 
 
-def align_image_to_symmetry_plane(image):
+def align_image_to_symmetry_plane(image, center = None):
     assert isinstance(image, sitk.Image)
 
     ssfactor    = 4
-    # map = sitk.MaximumProjection(image, 2)
     eros_res    = eros.eros(sitk.GetArrayFromImage(image)[:,::ssfactor,::ssfactor], 2, angle_range=[-10, 10])
     best_angle  = eros_res.get_mean_angle()
-    com         = eros_res.get_mean_com() * ssfactor
-    print(com)
+    com         = eros_res.get_mean_com() * ssfactor if center is None else center
 
-    # best_angle, com = eros.eros(sitk.GetArrayFromImage(map)[:,::ssfactor,::ssfactor], 2, angle_range=[-10, 10])[0]
-    #
     # strip directional information
     newim = sitk.GetImageFromArray(sitk.GetArrayFromImage(image))
     s = np.array(newim.GetSize())

@@ -11,15 +11,15 @@ import torch.nn as nn
 from torch.utils.data import DataLoader, TensorDataset
 import configparser
 import numpy as np
-from PMIDataLoader import PMIDataFactory
+from .PMIDataLoader import PMIDataFactory
 
 # This package
-from Networks import *
+from .Networks import *
 from pytorch_med_imaging.tb_plotter import TB_plotter
 
 from pytorch_med_imaging.logger import Logger
-from Solvers import *
-from Inferencers import *
+from .Solvers import *
+from .Inferencers import *
 
 from tensorboardX import SummaryWriter
 import torch.autograd as autograd

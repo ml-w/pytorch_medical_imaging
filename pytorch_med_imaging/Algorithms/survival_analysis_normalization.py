@@ -173,8 +173,8 @@ def main(inputdir ,outputdir, idlist, segdir, globber=None):
 if __name__ == '__main__':
     # main('../NPC_Segmentation/41.Benign/T2WFS/',
     #      '../NPC_Segmentation/42.Benign_upright/T2WFS')
-    main('../NPC_Segmentation/0A.NIFTI_ALL/Malignant/CE-T1WFS_TRA/',
-         '../NPC_Segmentation/50.NPC_SurvivalAnalysis/CE-T1WFS_TRA/Images_Upright',
+    main('../NPC_Segmentation/0A.NIFTI_ALL/Malignant/CE-T1W_TRA/',
+         '../NPC_Segmentation/50.NPC_SurvivalAnalysis/CE-T1W_TRA/Images_Upright',
          '../NPC_Segmentation/99.Testing/Survival_analysis/all_case.txt',
          '../NPC_Segmentation/98.Output/Survival_analysis_seg')
     # '../NPC_Segmentation/21.NPC_Perfect_SegT2/00.First',

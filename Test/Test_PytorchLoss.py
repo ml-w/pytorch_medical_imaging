@@ -2,7 +2,7 @@ import torch
 from torch.nn import CrossEntropyLoss
 from torch.autograd import Variable
 from Loss import *
-from Algorithms.Analysis import DICE, perf_measure
+from pytorch_med_imaging.Algorithms import DICE, perf_measure
 
 
 def test_Dice_loss():

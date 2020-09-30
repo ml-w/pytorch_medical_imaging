@@ -11,7 +11,7 @@ from SimpleITK import WriteImage, ReadImage, GetImageFromArray
 from Networks.GradCAM import *
 from torchvision.utils import make_grid
 from matplotlib.pyplot import imsave
-from Algorithms.visualization import draw_overlay_heatmap
+from pytorch_med_imaging.Algorithms import draw_overlay_heatmap
 
 
 class ClassificationInferencer(InferencerBase):

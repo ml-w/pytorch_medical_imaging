@@ -190,17 +190,12 @@ def check_batches_files(dir, globber=None):
 
 if __name__ == '__main__':
     import pandas as pd
-    df = pd.read_csv('/home/lwong/FTP/temp/Study_segmentation_438.csv')
-    allids = list(df['Study Number'])
-    classes = list(df['Tstage'])
-    print(len(allids))
-    print(len(classes))
+    allids = open('../NPC_Segmentation/99.Testing/Survival_analysis/all_case.txt').readlines()[0].rstrip().split(',')
 
     GenerateTestBatch(allids,
-                      4,
-                      '../NPC_Segmentation/99.Testing/KFold_Perfectfff/',
-                      stratification_class=classes,
-                      validation=13,
+                      5,
+                      '../NPC_Segmentation/99.Testing/KFold_Survival_5_Folds/',
+                      validation=29,
                       prefix='B'
                       )
 

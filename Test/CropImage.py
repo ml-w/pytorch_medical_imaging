@@ -1,9 +1,8 @@
-import numpy as np
 import SimpleITK as sitk
 import pandas as pd
 import os
 import numpy as np
-from utils import get_unique_IDs, get_fnames_by_IDs
+from utils import get_fnames_by_IDs
 from tqdm import *
 
 def crop_image(im, center, size):

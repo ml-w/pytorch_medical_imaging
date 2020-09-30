@@ -2,13 +2,11 @@ import SimpleITK as sitk
 import os
 import numpy as np
 import re
-import sys
 import multiprocessing as mpi
 from tqdm import *
-from functools import partial
 import random
 sitk.ProcessObject_GlobalWarningDisplayOff()
-from logger import Logger
+from pytorch_med_imaging.logger import Logger
 logger = Logger('./batch_job.log')
 
 
@@ -269,7 +267,6 @@ def batch_nii2dicom(filelist, out_dir, workers = 8, blind_out = False):
 
 def batch_dicom2nii(folderlist, out_dir, workers=8, seq_fileters=None):
     import multiprocessing as mpi
-    from functools import partial
 
     pool = mpi.Pool(workers)
     # pool.map_async(partial(dicom2nii, out_dir=out_dir, seq_fileters=seq_fileters),

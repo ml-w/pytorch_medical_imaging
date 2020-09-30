@@ -2,7 +2,6 @@ import matplotlib as mpl
 mpl.use('Qt5Agg')
 import numpy as np
 import os
-import SimpleITK as sitk
 import pandas as pd
 
 from MedImgDataset import ImageDataSet

@@ -1,9 +1,9 @@
 import torch
 import gc
-from pytorch_med_imaging.logger import Logger
+from .logger import Logger
 from tensorboardX import SummaryWriter
 # from torchvision.utils import make_grid
-from Algorithms.visualization import draw_grid
+from pytorch_med_imaging.Algorithms import draw_grid
 
 __all__ = ['TB_plotter']
 

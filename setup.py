@@ -17,17 +17,17 @@ ext_modules = []
 if use_cython:
     ext_modules += [
         Extension("MedImgDataset.Computation._LocalNeighborhoodDifferencePattern",
-                  ["MedImgDataset/Computation/_LocalNeighborhoodDifferencePattern.pyx"],
+                  ["pytorch_med_imaging/MedImgDataset/Computation/_LocalNeighborhoodDifferencePattern.pyx"],
                   include_dirs=[numpy.get_include()]),
     ]
     ext_modules += [
         Extension("MedImgDataset.Computation._interpolation",
-                  ["MedImgDataset/Computation/_interpolation.pxd"],
+                  ["pytorch_med_imaging/MedImgDataset/Computation/_interpolation.pxd"],
                   include_dirs=[numpy.get_include()]),
     ]
     ext_modules += [
         Extension("MedImgDataset.Computation._prob_func",
-                  ["MedImgDataset/Computation/_prob_func.pyx"],
+                  ["pytorch_med_imaging/MedImgDataset/Computation/_prob_func.pyx"],
                   include_dirs=[numpy.get_include()]),
     ]
     cmdclass.update({'build_ext': build_ext})
@@ -36,7 +36,7 @@ if use_cython:
 setup(
     name='NPC_Segment',
     version='0.1',
-    packages=['Loss', 'Networks', 'Networks.Layers', 'Algorithms', 'MedImgDataset', 'MedImgDataset.Computation'],
+    packages=['pytorch_med_imaging'],
     url='https://github.com/alabamagan/pytorch_medical_imaging/tree/NPC_Segment',
     license='',
     author='Wong Matthew Lun',

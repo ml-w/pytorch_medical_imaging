@@ -1,6 +1,5 @@
 import pandas as pd
 import torch
-import numpy as ny
 from tqdm import *
 from MedImgDataset import ImageDataSet
 
