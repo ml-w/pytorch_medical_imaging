@@ -80,7 +80,7 @@ class ImageDataMultiChannel(PMIDataBase):
         2. If `channel_subdirs` was not set, three :class:`ImageDataSet` objects will be created, each inherits all the
             remaining tags and options from the input arguments, with their `root_dir` set to the subdirs.
 
-            >>> from MedImgDataset import ImageDataMultiChannel
+            >>> from pytorch_med_imaging.MedImgDataset import ImageDataMultiChannel
             >>> rootdir = 'rootdir'
             >>> imset = ImageDataSetMultiChannel(rootdir)
 

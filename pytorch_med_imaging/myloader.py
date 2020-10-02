@@ -3,8 +3,8 @@ from functools import partial
 
 import numpy as np
 
-from MedImgDataset import *
-from MedImgDataset.Computation import *
+from .MedImgDataset import *
+from .MedImgDataset.Computation import *
 
 #
 # class PMD_DataLoaderBase(object):

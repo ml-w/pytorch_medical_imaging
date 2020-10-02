@@ -2,7 +2,7 @@ from torch.utils.data import Dataset
 
 class ImageFeaturePair(Dataset):
     """
-    Data set wrapping like Tensor Dataset, except this also accept a mask.
+    Deprecated. Use :class:`PMIImageFeaturePair` instead.
     """
 
     def __init__(self, image_Dataset, landmarkDataset):

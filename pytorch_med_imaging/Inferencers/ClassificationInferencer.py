@@ -10,7 +10,7 @@ import numpy as np
 from SimpleITK import WriteImage, ReadImage, GetImageFromArray
 from ..Networks.GradCAM import *
 from torchvision.utils import make_grid
-from matplotlib.pyplot import imsave
+from imageio import imsave
 from pytorch_med_imaging.Algorithms.visualization import draw_overlay_heatmap
 
 

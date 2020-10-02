@@ -109,7 +109,7 @@ class ImagePatchesLoader(Dataset):
 
     Examples:
 
-        >>> from MedImgDataset import ImageDataSet, ImageDataSetAugment, ImagePatchesLoader
+        >>> from pytorch_med_imaging.MedImgDataset import ImageDataSet, ImageDataSetAugment, ImagePatchesLoader
         >>>
         >>> # Read images
         >>> imset = ImageDataSet('.', verbose=True)

@@ -1,5 +1,4 @@
 from .ImageData import ImageDataSet
-from torchvision import transforms as tr
 from imgaug import augmenters as iaa
 
 # This prevents DataLoader hangs up

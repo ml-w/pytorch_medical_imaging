@@ -2,10 +2,9 @@ from torchvision.utils import make_grid
 import torch
 import torch.nn.functional as F
 import cv2
-import matplotlib.pyplot as plt
 import numpy as np
 import os
-from ..MedImgDataset import ImageDataSet
+from pytorch_med_imaging.MedImgDataset import ImageDataSet
 
 __all__ = ['draw_overlay_heatmap', 'draw_grid', 'contour_grid_by_dir', 'contour_grid_by_image']
 
@@ -44,6 +43,8 @@ def draw_grid(image, segmentation, ground_truth=None,
     """
     assert isinstance(image, torch.Tensor) and isinstance(segmentation, torch.Tensor),\
             "Wrong input type: (%s, %s)"%(str(type(image)), str(type(segmentation)))
+
+    import matplotlib.pyplot as plt
 
     # Handle dimensions
     if image.dim() == 3:
@@ -145,6 +146,7 @@ def draw_vector_image_grid(vect_im, out_prefix, nrow=5, downscale=-1):
 
     """
     # [C x D x W x H] or [C x W x H]
+    import matplotlib.pyplot as plt
 
     vdim = vect_im.dim()
     if vdim == 3:
@@ -206,7 +208,7 @@ def draw_overlay_heatmap(baseim, heatmap):
 
 
 def contour_grid_by_dir(im_dir, seg_dir, output_dir, gt_dir=None, write_png=False):
-    from MedImgDataset import ImageDataSet
+    from pytorch_med_imaging.MedImgDataset import ImageDataSet
 
     if not os.path.isdir(output_dir):
         os.makedirs(output_dir, exist_ok=True)
