@@ -25,7 +25,9 @@ def GrossVolume_Test(seg, test, spacing):
 def GrossVolume_Seg(seg, test, spacing):
     return np.sum(seg > 0) * np.prod(spacing)
 
-def SSIM(x,y, axis=None):
+def SSIM(x: np.ndarray,
+         y: np.ndarray,
+         axis=None):
     r"""
     Calculate the structual similarity of the two image patches using the following
     equation:
@@ -45,8 +47,12 @@ def SSIM(x,y, axis=None):
         To facilitate comparison, the bit length constant is set to min(x.dtype.itemsize*8, 16)
 
     Args:
-        x (np.ndarray): Image 1
-        y (np.ndarray): Image 2
+        x (np.ndarray):
+            Image 1
+        y (np.ndarray):
+            Image 2
+        axis (list of int, Optional):
+            If not none, reduce output to 1D, otherwise, reduce along the provided dimensions
 
     Return:
         np.ndarray

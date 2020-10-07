@@ -14,6 +14,7 @@ import os
 import sys
 import solar_theme
 sys.path.insert(0, os.path.abspath('../../'))
+sys.path.insert(0, os.path.abspath('../../ThirdParty/surface-distance'))
 import pytorch_med_imaging
 
 
@@ -48,7 +49,7 @@ exclude_patterns = []
 
 # prefix
 modindex_common_prefix = ['pytorch_med_imaging']
-# add_module_names = False
+add_module_names = False
 
 # -- Options for HTML output -------------------------------------------------
 

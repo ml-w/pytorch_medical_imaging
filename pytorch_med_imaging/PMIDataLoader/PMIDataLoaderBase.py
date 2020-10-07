@@ -44,7 +44,6 @@ class PMIDataLoaderBase(object):
         self._logger = logger if logger is not None else logging.Logger['PMIDataLoader']
         self._verbose = verbose
         self._debug = debug
-        print(self._debug, type(debug))
         self._run_mode = run_mode
         if not self._check_input:
             raise AttributeError

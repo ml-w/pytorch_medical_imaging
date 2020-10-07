@@ -42,7 +42,8 @@ available_networks = {'UNet':UNet_p,
                       'LLinNet': LLinNet,
                       'AttentionResidual': AttentionResidualNet,
                       'AxialAttentionResidual/64': AttentionResidualNet_64,
-                      'AxialAttentionResidual/SW': AttentionResidualNet_SW
+                      'AxialAttentionResidual/SW': AttentionResidualNet_SW,
+                      'AxialAttentionResGRUNet': AttentionResidualGRUNet
                       }
 
 def init_weights(m):

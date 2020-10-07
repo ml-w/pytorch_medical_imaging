@@ -10,4 +10,5 @@ from .AttentionResidual import *
 __all__ = ['UNet', 'TightFrameUNet', 'DenseUNet2D', 'AttentionUNet', 'UNetPosAware',
            'AttentionUNetPosAware', 'AttentionDenseUNet2D', 'AttentionUNetLocTexAware',
            'UNetLocTexAware', 'UNetLocTexHist', 'UNetLocTexHistDeeper', 'LLinNet',
-           'AttentionResidualNet', 'UNet_p', 'AttentionResidualNet_64', 'AttentionResidualNet_SW']
+           'AttentionResidualNet', 'UNet_p', 'AttentionResidualNet_64', 'AttentionResidualNet_SW',
+           'AttentionResidualGRUNet']

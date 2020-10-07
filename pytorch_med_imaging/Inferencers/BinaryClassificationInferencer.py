@@ -12,14 +12,21 @@ class BinaryClassificationInferencer(ClassificationInferencer):
         super(BinaryClassificationInferencer, self).__init__(*args, **kwargs)
 
     def _create_net(self):
-        in_chan = self._in_dataset[0].size()[0]
 
         # TODO: make this more robust
         state_dict = torch.load(self._net_state_dict, map_location=torch.device('cpu'))
         last_module = list(state_dict)[-1]
-        out_chan = state_dict.get(last_module).shape[0]
 
-        self._logger.log_print_tqdm("Cannot create network with 'save_mask' attribute!", 20)
+        in_chan = self._in_dataset[0].size()[0] if not 'in_ch' in state_dict else \
+            int(state_dict['in_ch'].item())
+        out_chan = state_dict.get(last_module).shape[0] if not 'out_ch' in state_dict else \
+            int(state_dict['out_ch'].item())
+
+
+        if hasattr(self, 'save_mask'):
+            self._logger.log_print_tqdm("Cannot create network with 'save_mask' attribute!", 20)
+
+        self._logger.info("Creating net with in_chan: {} out_chan: {}".format(in_chan, out_chan))
         self._net = self._net(in_chan, out_chan)
 
         self._logger.log_print_tqdm("Loading checkpoint from: " + self._net_state_dict, 20)

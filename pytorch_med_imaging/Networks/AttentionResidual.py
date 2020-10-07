@@ -2,7 +2,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
-from .Layers import ResidualBlock3d, Conv3d, InvertedConv3d
+from .Layers import ResidualBlock3d, Conv3d, InvertedConv3d, BGRUStack, BGRUCell
 
 
 class SoftMaskBranch_aed2d(nn.Module):
@@ -341,9 +341,8 @@ class AttentionResidualNet_SW(nn.Module):
         self.save_weight=save_weight
         self.in_conv1 = Conv3d(in_ch, 64, stride=[1, 2, 2], padding=[1, 2, 2])
         self.in_sw = nn.Sequential(
-            Conv3d(64, 20),
-            Conv3d(20, 20, stride=[1,3,3], kern_size=3),
-            Conv3d(20, 20, stride=[1,3,3], kern_size=3)
+            Conv3d(64, 128, stride=[1, 2, 2], kern_size=2),
+            Conv3d(128, 20, stride=[1,3,3], kern_size=3),
         )
         self.x_w = None
 
@@ -354,14 +353,11 @@ class AttentionResidualNet_SW(nn.Module):
         self.r1 = ResidualBlock3d(256, 512, p=0.3)
         self.att2 = AttentionModule_Modified(512, 512, save_mask=save_mask)
         self.r2 = ResidualBlock3d(512, 1024, p=0.3)
-        self.att3 = AttentionModule_Modified(1024, 1024, save_mask=save_mask)
-
         self.out_conv1 = ResidualBlock3d(1024, 2048, p=0.3)
         self.out_linear = nn.Linear(20, 1)
 
         self.out_fc1 = nn.Sequential(
             nn.Linear(2048, 1024),
-            # nn.BatchNorm1d(1024),
             nn.ReLU()
         )
         self.out_fc2 = nn.Linear(1024, out_ch)
@@ -382,24 +378,18 @@ class AttentionResidualNet_SW(nn.Module):
         x_w = (torch.sigmoid(x_w) - 0.5) * 10 + 5. # make the range larger.
         if self.save_weight:
             self.x_w = x_w.data.cpu()
-        # print("x_w2: {}".format(x_w.shape))
 
         # Permute the axial dimension to the last
         x = F.max_pool3d(x, [1, 2, 2], stride=[1, 2, 2]).permute([1, 3, 4, 0, 2])
-        # print("x_premult: {}".format(x.shape))
         x_shape = x.shape
         new_shape = list(x_shape[:3]) + [x_shape[-2] * x_shape[-1]]
         x = x.reshape(new_shape)
-        # print("x_reshape: {}".format(x.shape))
         x = x * x_w.view([-1]).expand_as(x)
-        # print("x_expand: {}".format(x.shape))
 
 
         # Resume dimension
         x = x.view(x_shape).permute([3, 0, 4, 1, 2])
-        # print("x_resume: {}".format(x.shape))
         x = self.in_conv2(x)
-        # print("x_in_conv2: {}".format(x.shape))
 
         x = self.att1(x)
         x = self.r1(x)
@@ -417,7 +407,7 @@ class AttentionResidualNet_SW(nn.Module):
         x = x.permute([1, 0, 2])
         x = self.out_linear(x).squeeze(dim=-1)
         x = self.out_fc1(x)
-        x = torch.sigmoid(x) * 10. - 5.
+        x = torch.sigmoid(x)
         x = self.out_fc2(x)
         while x.dim() < 2:
             x = x.unsqueeze(0)
@@ -437,3 +427,74 @@ class AttentionResidualNet_SW(nn.Module):
             print("Attention weight was not saved!")
             return None
 
+class AttentionResidualGRUNet(nn.Module):
+    def __init__(self, in_ch, out_ch, save_mask=False, save_weight=False):
+        super(AttentionResidualGRUNet, self).__init__()
+
+        self._in_ch = in_ch
+        self._out_ch = out_ch
+        self._embeding_size = [5, 5]
+
+        self.save_weight=save_weight
+        self.in_conv1 = Conv3d(in_ch, 64, stride=[1, 2, 2], padding=[0, 1, 1])
+        self.in_conv2 = ResidualBlock3d(64, 128)
+
+        self.att1 = AttentionModule_Modified(128, 256, save_mask=save_mask)
+        self.r1 = ResidualBlock3d(256, 256, p=0.3)
+        self.att2 = AttentionModule_Modified(256, 512, save_mask=save_mask)
+        self.r2 = ResidualBlock3d(512, 1024, p=0.3)
+
+        self.adaptive_pool = nn.AdaptiveMaxPool3d([20] + self._embeding_size)
+
+        self.grus = BGRUStack(self._embeding_size[0] * self._embeding_size[1],
+                              out_ch, 1024)
+        self.gru_out = BGRUCell(out_ch * 20 * 2, out_ch)
+
+
+        self.register_buffer('in_ch', torch.Tensor([in_ch]))
+        self.register_buffer('out_ch', torch.Tensor([out_ch]))
+
+    def forward(self, x):
+        while x.dim() < 5:
+            x = x.unsqueeze(0)
+        x = F.max_pool3d(self.in_conv1(x), [1, 2, 2])
+        x = self.in_conv2(x)
+
+        x = self.att1(x)
+        x = self.r1(x)
+        x = self.att2(x)
+        x = self.r2(x)
+
+        # Embedding
+        x = self.adaptive_pool(x)
+        x = x.view(*(list(x.shape[:-2]) + [-1]))
+        x = x.contiguous()
+
+        # Sort by channels to get largest `self._num_grus` sequences of features
+        # x, _ = x.sort(dim=1, descending=True)
+        # x = x.narrow(1, 0, self._num_grus)
+        # x = torch.stack([self.grus[i](x[:,i])[0] for i in range(len(self.grus))], dim=-2)
+        x = self.grus(x)
+        x = x.permute(0, 2, 1, 3)
+        x = x.contiguous()
+        x = x.view(*(list(x.shape[:-2]) + [-1]))
+        x, _ = self.gru_out(x)
+        x = x.view(*(list(x.shape[:-1]) + [2, -1]))
+        x = x.mean(axis=[-2, -3])
+        while x.dim() < 2:
+            x = x.unsqueeze(0)
+        return x
+
+
+    def get_mask(self):
+        #[[B,H,W,D],[B,H,W,D],[B,H,W,]]
+        return [r.get_mask() for r in [self.att1, self.att2, self.att3]]
+
+    def get_slice_attention(self):
+        if not self.x_w is None:
+            while self.x_w.dim() < 2:
+                self.x_w = self.x_w.unsqueeze(0)
+            return self.x_w
+        else:
+            print("Attention weight was not saved!")
+            return None
