@@ -14,20 +14,21 @@ class PMIDataFactory(object):
             'PMIImageMCFeaturePair': PMIImageMCFeaturePair
         }
 
+        self._logger = Logger[__class__.__name__]
+
 
     def produce_object(self, config):
         requested_datatype = config['LoaderParams']['PMI_datatype_name']
         run_mode = config['General'].get('run_mode', 'training')
         debug = config['General'].getboolean('debug', False)
-        logger = Logger['PMIDataFactory']
-        logger.log_print_tqdm("Creating object: {}".format(requested_datatype))
+        self._logger.log_print_tqdm("Creating object: {}".format(requested_datatype))
 
         try:
             product = eval(requested_datatype)(config,
                                                run_mode,
                                                debug=debug,
-                                               verbose=True,
-                                               logger=logger)
+                                               verbose=True
+                                               )
             product.class_name = requested_datatype
             return product
         except Exception as e:
