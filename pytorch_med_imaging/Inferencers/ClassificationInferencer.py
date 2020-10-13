@@ -15,7 +15,7 @@ from pytorch_med_imaging.Algorithms.visualization import draw_overlay_heatmap
 
 
 class ClassificationInferencer(InferencerBase):
-    def __init__(self, input_data, out_dir, batch_size, net, checkpoint_dir, iscuda, logger, target_data=None):
+    def __init__(self, input_data, out_dir, batch_size, net, checkpoint_dir, iscuda, logger=None, target_data=None):
         inference_configs = {}
         inference_configs['indataset']      = input_data
         inference_configs['batchsize']      = batch_size
