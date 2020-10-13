@@ -302,8 +302,8 @@ def main(a, config, logger):
                                                                                                     valgtDataset,
                                                                                                     param_batchsize)))
                     except Exception as e:
-                        logger.warning("Validation encounters error!")
-                        logger.log_traceback(e)
+                        logger.exception("Validation encounters error!")
+                        solver.get_net().train()
 
                 # End of step
                 writerindex += 1
@@ -373,13 +373,13 @@ def main(a, config, logger):
             inputDataset, gtDataset = pmi_data._load_data_set_training()
             inferencer = infer_class(inputDataset, dir_output, param_batchsize,
                                      available_networks[net_nettype], checkpoint_load,
-                                     bool_usecuda, logger, target_data=gtDataset)
+                                     bool_usecuda, target_data=gtDataset)
         except AttributeError as e:
             logger.log_print("Falling back to just doing inference", logger.DEBUG)
             inputDataset= pmi_data.load_dataset()
             inferencer = infer_class(inputDataset, dir_output, param_batchsize,
                                      available_networks[net_nettype], checkpoint_load,
-                                     bool_usecuda, logger)
+                                     bool_usecuda)
 
         if write_mode == 'GradCAM':
             inferencer.grad_cam_write_out(['att2'])
