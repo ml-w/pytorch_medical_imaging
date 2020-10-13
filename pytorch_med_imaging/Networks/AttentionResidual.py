@@ -2,7 +2,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
-from .Layers import ResidualBlock3d, Conv3d, InvertedConv3d, BGRUStack, BGRUCell
+from .Layers import ResidualBlock3d, Conv3d, InvertedConv3d, BGRUStack, BGRUCell, DoubleConv3d
 
 
 class SoftMaskBranch_aed2d(nn.Module):
@@ -436,20 +436,26 @@ class AttentionResidualGRUNet(nn.Module):
         self._embeding_size = [5, 5]
 
         self.save_weight=save_weight
-        self.in_conv1 = Conv3d(in_ch, 64, stride=[1, 2, 2], padding=[0, 1, 1])
-        self.in_conv2 = ResidualBlock3d(64, 128)
+        self.in_conv1 = DoubleConv3d(in_ch, 32)
+        self.in_conv2 = DoubleConv3d(32, 64, stride=[1, 2, 2], kern_size=[1, 3, 3], padding=[0, 1, 1], dropout=.3)
+        self.in_conv3 = DoubleConv3d(64, 128, stride=[1, 2, 2], kern_size=[1, 3, 3], padding=[0, 1, 1], dropout=.3)
+        self.in_conv4 = DoubleConv3d(128, 256, stride=[1, 2, 2], kern_size=[1, 3, 3], padding=[0, 1, 1], dropout=.3)
+        self.in_conv5 = DoubleConv3d(256, 512, stride=[1, 2, 2], kern_size=[1, 3, 3], padding=[0, 1, 1], dropout=.3)
+        # self.in_conv2 = ResidualBlock3d(32, 64)
 
-        self.att1 = AttentionModule_Modified(128, 256, save_mask=save_mask)
-        self.r1 = ResidualBlock3d(256, 256, p=0.3)
-        self.att2 = AttentionModule_Modified(256, 512, save_mask=save_mask)
-        self.r2 = ResidualBlock3d(512, 1024, p=0.3)
+
+        # self.att1 = AttentionModule_Modified(64, 128, save_mask=save_mask)
+        # self.r1 = ResidualBlock3d(128, 256, p=0.3)
+        # self.att2 = AttentionModule_Modified(256, 512, save_mask=save_mask)
+        # self.r2 = ResidualBlock3d(512, 1024, p=0.3)
 
         self.adaptive_pool = nn.AdaptiveMaxPool3d([20] + self._embeding_size)
 
         self.grus = BGRUStack(self._embeding_size[0] * self._embeding_size[1],
-                              out_ch, 1024)
+                              out_ch, 512)
         self.gru_out = BGRUCell(out_ch * 20 * 2, out_ch)
 
+        self.fc_out = nn.Linear(512, 1)
 
         self.register_buffer('in_ch', torch.Tensor([in_ch]))
         self.register_buffer('out_ch', torch.Tensor([out_ch]))
@@ -457,18 +463,35 @@ class AttentionResidualGRUNet(nn.Module):
     def forward(self, x):
         while x.dim() < 5:
             x = x.unsqueeze(0)
-        x = F.max_pool3d(self.in_conv1(x), [1, 2, 2])
+        x = self.in_conv1(x)
         x = self.in_conv2(x)
+        x = self.in_conv3(x)
+        x = self.in_conv4(x)
+        x = self.in_conv5(x)
 
-        x = self.att1(x)
-        x = self.r1(x)
-        x = self.att2(x)
-        x = self.r2(x)
+        # x = self.att1(x)
+        # x = self.r1(x)
+        # x = self.att2(x)
+        # x = self.r2(x)
 
         # Embedding
         x = self.adaptive_pool(x)
         x = x.view(*(list(x.shape[:-2]) + [-1]))
         x = x.contiguous()
+
+        # ----------------------------------------------------------------------------------
+        # Layer (type)               Output Shape         Param #     Tr. Param #
+        # ==================================================================================
+        # DoubleConv3d-1      [1, 32, 22, 444, 444]          28,704          28,704
+        # DoubleConv3d-2      [1, 64, 22, 222, 222]          55,680          55,680
+        # DoubleConv3d-3     [1, 128, 22, 111, 111]         221,952         221,952
+        # DoubleConv3d-4       [1, 256, 22, 56, 56]         886,272         886,272
+        # DoubleConv3d-5       [1, 512, 22, 28, 28]       3,542,016       3,542,016
+        # AdaptiveMaxPool3d-6         [1, 512, 20, 5, 5]               0               0
+        # BGRUStack-7            [1, 20, 512, 6]         276,480         276,480
+        # BGRUCell-8     [1, 512, 6], [2, 1, 3]           2,250           2,250
+        # Linear-9                  [1, 3, 1]             513             513
+        # ==================================================================================
 
         # Sort by channels to get largest `self._num_grus` sequences of features
         # x, _ = x.sort(dim=1, descending=True)
@@ -480,9 +503,15 @@ class AttentionResidualGRUNet(nn.Module):
         x = x.view(*(list(x.shape[:-2]) + [-1]))
         x, _ = self.gru_out(x)
         x = x.view(*(list(x.shape[:-1]) + [2, -1]))
-        x = x.mean(axis=[-2, -3])
+        x = x.mean(axis=[-2])
+        x = self.fc_out(x.permute(0, 2, 1)).squeeze()
+
+        # Expand dim to (BxC)
         while x.dim() < 2:
-            x = x.unsqueeze(0)
+            if self._out_ch == 1:
+                x = x.unsqueeze(-1)
+            else:
+                x = x.unsqueeze(0)
         return x
 
 

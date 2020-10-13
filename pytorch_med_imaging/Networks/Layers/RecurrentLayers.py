@@ -2,18 +2,18 @@ import torch
 import torch.nn as nn
 
 class BGRUCell(nn.Module):
-    def __init__(self, in_chan, out_chan, num_layers=1):
+    def __init__(self, in_chan, out_chan, num_layers=1, dropout=0):
         super(BGRUCell, self).__init__()
 
         self._gru = nn.GRU(in_chan, out_chan, num_layers=num_layers,
-                           batch_first=True, bidirectional=True)
+                           batch_first=True, bidirectional=True, dropout=dropout)
 
     def forward(self, *input):
         self._gru.flatten_parameters()
         return self._gru(*input)
 
 class BGRUStack(nn.Module):
-    def __init__(self, in_chan: int, out_chan: int, stack_length: int, num_layers: int = 1):
+    def __init__(self, in_chan: int, out_chan: int, stack_length: int, num_layers: int = 1, dropout: float = 0):
         super(BGRUStack, self).__init__()
 
         self._in_chan = in_chan
@@ -21,7 +21,7 @@ class BGRUStack(nn.Module):
         self._stack_length = stack_length
         self._num_layers = num_layers
 
-        self._grus = nn.ModuleList([BGRUCell(in_chan, out_chan, num_layers) for i in range(stack_length)])
+        self._grus = nn.ModuleList([BGRUCell(in_chan, out_chan, num_layers, dropout) for i in range(stack_length)])
 
 
     def __len__(self):

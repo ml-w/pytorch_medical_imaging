@@ -28,11 +28,12 @@ class Conv3d(nn.Module):
 
 
 class DoubleConv3d(nn.Module):
-    def __init__(self, in_ch, out_ch):
+    def __init__(self, in_ch, out_ch, kern_size=3, stride=1, padding=1, bias=True, dropout=0):
         super(DoubleConv3d, self).__init__()
         self.conv = nn.Sequential(
-            Conv3d(in_ch, out_ch),
-            Conv3d(out_ch, out_ch)
+            Conv3d(in_ch, out_ch, kern_size=kern_size, stride=stride, padding=padding, bias=bias),
+            Conv3d(out_ch, out_ch, kern_size=kern_size, padding=padding, bias=bias),
+            nn.Dropout3d(p = dropout, inplace=False)
         )
 
     def forward(self, x):

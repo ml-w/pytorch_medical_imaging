@@ -428,9 +428,8 @@ class ImageDataSet(PMIDataBase):
             self.data = self.data.type(t)
             self.dtype = t
         except Exception as e:
-            self._logger.log_traceback(e)
             self._logger.error("Error encounted during type cast.")
-            self._logger.error("Original error is {}.".format(e))
+            self._logger.log_traceback()
 
     def get_data_source(self, i):
         """Get directory of the source of the i-th element."""

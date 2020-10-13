@@ -12,11 +12,10 @@ class BinaryClassificationInferencer(ClassificationInferencer):
         super(BinaryClassificationInferencer, self).__init__(*args, **kwargs)
 
     def _create_net(self):
-
-        # TODO: make this more robust
         state_dict = torch.load(self._net_state_dict, map_location=torch.device('cpu'))
         last_module = list(state_dict)[-1]
 
+        # Read from state dict the input and output num of channels
         in_chan = self._in_dataset[0].size()[0] if not 'in_ch' in state_dict else \
             int(state_dict['in_ch'].item())
         out_chan = state_dict.get(last_module).shape[0] if not 'out_ch' in state_dict else \
@@ -59,10 +58,13 @@ class BinaryClassificationInferencer(ClassificationInferencer):
                 if self._iscuda:
                     s = [ss.cuda() for ss in s] if isinstance(s, list) else s.cuda()
 
+                # Squeezing output directly cause problem if the output has only one output channel.
                 if isinstance(s, list):
-                    out = self._net.forward(*s).squeeze()
+                    out = self._net.forward(*s)
                 else:
-                    out = self._net.forward(s).squeeze()
+                    out = self._net.forward(s)
+                if out.shape[-1] > 1:
+                    out = out.squeeze()
 
                 while ((out.dim() < last_batch_dim) or (out.dim()< 2)) and last_batch_dim != 0:
                     out = out.unsqueeze(0)

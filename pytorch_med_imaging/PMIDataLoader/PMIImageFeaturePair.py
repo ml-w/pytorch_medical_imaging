@@ -56,6 +56,9 @@ class PMIImageFeaturePair(PMIImageDataLoader):
             gt_dat = MedImgDataset.DataLabel.from_xlsx(self._target_dir, self.get_from_config('excel_sheetname', ))
         else:
             gt_dat = MedImgDataset.DataLabel.from_csv(self._target_dir)
+        if not self.get_from_loader_params('column') is None:
+            self._logger.info("Selecting target column: {}".format(self.get_from_loader_params('column')))
+            gt_dat.set_target_column(self.get_from_loader_params('column'))
         gt_dat.map_to_data(img_out)
         return img_out, gt_dat
 

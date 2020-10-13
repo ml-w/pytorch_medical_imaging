@@ -176,8 +176,7 @@ class ImageDataMultiChannel(PMIDataBase):
         try:
             self._basedata[0].Write(*args)
         except Exception as e:
-            self._logger.log_traceback(e)
-            self._logger.error("Seems like basedata {} have no Write() method.".format(
+            self._logger.exception("Seems like basedata {} have no Write() method.".format(
                 self._basedata[0].__class__.__name__))
             raise NotImplementedError("Base data have no Write() method")
 

@@ -375,6 +375,7 @@ def main(a, config, logger):
                                      available_networks[net_nettype], checkpoint_load,
                                      bool_usecuda, target_data=gtDataset)
         except AttributeError as e:
+            logger.exception(e)
             logger.log_print("Falling back to just doing inference", logger.DEBUG)
             inputDataset= pmi_data.load_dataset()
             inferencer = infer_class(inputDataset, dir_output, param_batchsize,

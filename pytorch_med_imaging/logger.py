@@ -53,13 +53,8 @@ class Logger(object):
             Logger.global_logger = self
             Logger.all_loggers[logger_name] = self
 
-    def log_traceback(self, e):
-        import sys
-        import traceback as tr
-
-        cl, exc, tb = sys.exc_info()
-        self.error(tr.extract_tb(tb))
-        self.error("Original message: {}".format(e))
+    def log_traceback(self):
+        self.exception()
 
     def log_print(self, msg, level=logging.INFO):
         self._logger.log(level, msg)
@@ -85,6 +80,9 @@ class Logger(object):
 
     def critical(self, msg):
         self.log_print_tqdm(msg, level=logging.critical())
+
+    def exception(self, msg=""):
+        self._logger.exception(msg)
 
     def exception_hook(self, *args):
         self._logger.error('Uncaught exception:', exc_info=args)

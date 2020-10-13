@@ -262,9 +262,8 @@ class ImagePatchesLoader(Dataset):
             else:
                 self._patch_indexes = patch_indexes
         except Exception as e:
-            self._logger.error("Encounter error when trying to copy patches indexes. Covering old index with new "
+            self._logger.exception("Encounter error when trying to copy patches indexes. Covering old index with new "
                                "index.")
-            self._logger.log_traceback(e)
             self._patch_indexes = patch_indexes
         pass
 
@@ -273,8 +272,7 @@ class ImagePatchesLoader(Dataset):
         try:
             self._patch_indexes[pos:pos + len(indexes)] = np.array(indexes)
         except Exception as e:
-            self._logger.error("Error! Callback not working correctly!")
-            self._logger.log_traceback(e)
+            self._logger.exception("Error! Callback not working correctly!")
 
     def _sample_patches_from_distribution(self):
         """Sample patches with probability distribution."""

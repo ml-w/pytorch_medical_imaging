@@ -16,7 +16,10 @@ class InferencerBase(object):
         assert os.path.isfile(self._net_state_dict), "Cannot open network checkpoint!"
 
         # optional
-        self._logger = inferencer_configs['logger'] if 'logger' in inferencer_configs else Logger[__class__.__name__]
+        self._logger = inferencer_configs['logger'] if 'logger' in inferencer_configs else None
+        if self._logger is None:
+            self._logger = Logger[__class__.__name__]
+
         assert isinstance(self._logger, Logger) or self._logger is None, "Incorrect logger."
 
         if 'target_data' in inferencer_configs:

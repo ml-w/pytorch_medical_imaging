@@ -1,8 +1,8 @@
 import torch
-from torch.utils.data import Dataset
 import pandas as pd
+from .PMIDataBase import PMIDataBase
 
-class DataLabel(Dataset):
+class DataLabel(PMIDataBase):
     def __init__(self, data_table):
         """
         Datasheet should b arrange with rows of values
@@ -21,7 +21,7 @@ class DataLabel(Dataset):
 
 
     def set_target_column(self, target):
-        assert target in self._data_table.columns
+        assert target in self._data_table.columns, "Target column not in imported data table."
         self._target_column = target
 
     @staticmethod
@@ -75,7 +75,11 @@ class DataLabel(Dataset):
         if self._target_column is None:
             return torch.tensor(self._data_table.iloc[item])
         else:
-            return torch.tensor(self._data_table[self._target_column][item])
+            try:
+                return torch.tensor(self._data_table[self._target_column][item])
+            except IndexError:
+                self.log_print("Falling back to integer index.", 30)
+                return torch.tensor(self._data_table.iloc[item])
 
     def __str__(self):
         return self._data_table.to_string()
