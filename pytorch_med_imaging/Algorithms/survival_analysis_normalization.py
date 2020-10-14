@@ -2,18 +2,15 @@ from eros import *
 from tqdm import *
 import SimpleITK as sitk
 import numpy as np
-import re
 import sys, os
 from utils import *
 
-def transform_label(label_im, transform):
-    assert isinstance(label_im, sitk.Image)
-    assert isinstance(transform, sitk.AffineTransform)
-
-    tempim = sitk.GetImageFromArray(sitk.GetArrayFromImage(label_im))
+def transform_image(im: sitk.Image,
+                    transform: sitk.AffineTransform):
+    tempim = sitk.GetImageFromArray(sitk.GetArrayFromImage(im))
 
     out_im = sitk.Resample(tempim, transform)
-    out_im.CopyInformation(label_im)
+    out_im.CopyInformation(im)
     return out_im
 
 
@@ -45,8 +42,6 @@ def compute_com(im):
     return com
 
 def align_image_to_symmetry_plane(image, center = None):
-    assert isinstance(image, sitk.Image)
-
     ssfactor    = 4
     eros_res    = eros.eros(sitk.GetArrayFromImage(image)[:,::ssfactor,::ssfactor], 2, angle_range=[-10, 10])
     best_angle  = eros_res.get_mean_angle()
@@ -125,16 +120,24 @@ def crop_by_directory(src_dir, out_dir, crop_size = [444,444,20], idlist = None,
         # save image as the same name as the input in the output dir.
         sitk.WriteImage(cropped, os.path.join(out_dir, f))
 
-def main(inputdir ,outputdir, idlist, segdir, globber=None):
-    os.makedirs(outputdir, exist_ok=True)
-    os.makedirs(outputdir+"_cropped", exist_ok=True)
+def main(source_output_pair: list, idlist, segdir, globber=None):
+    for source, output in source_output_pair:
+        os.makedirs(output , exist_ok=True)
+        os.makedirs(output + "_cropped", exist_ok=True)
 
     crop_size = [444, 444, 20]
 
 
-    # load segmentations for computing image crop center
+    # load segmentations for computing image crop center, eros align based on first in dict
+    first_input = source_output_pair[0][0]
+    first_output = source_output_pair[0][1]
+    seg_out_dir = first_output + '/../../Segmentation'
+    seg_out_dir_cropped = first_output + "/../../Segmentation_cropped"
+    os.makedirs(seg_out_dir, exist_ok = True)
+    os.makedirs(seg_out_dir_cropped, exist_ok = True)
+
     ids = open(idlist, 'r').readline().rstrip().split(',')
-    infiles, segfiles = load_supervised_pair_by_IDs(inputdir, segdir, ids)
+    infiles, segfiles = load_supervised_pair_by_IDs(first_input, segdir, ids)
 
     # load images to rotate and center
     coms = []
@@ -146,39 +149,92 @@ def main(inputdir ,outputdir, idlist, segdir, globber=None):
             print(e)
             coms.append(None)
 
-
-    for i, f in enumerate(tqdm(infiles, desc="Aligning")):
+    # pool = ThreadPool(12)
+    a_transforms = []
+    for i, (f,s) in enumerate(tqdm(zip(infiles, segfiles), desc="Aligning")):
         tqdm.write(f)
-        inim_fname = inputdir + '/' + f
+        inim_fname = first_input + '/' + f
         inim = sitk.ReadImage(inim_fname)
 
         # Z-score normalization
         inim = sitk.Normalize(sitk.Cast(inim, sitk.sitkFloat64))
         inim = sitk.ShiftScale(inim, scale=256)
-        center = coms[i]
+
+        try:
+            seg_im = sitk.ReadImage(os.path.join(segdir, s))
+            com = compute_com(seg_im)
+            coms.append(com)
+        except IndexError as e:
+            print("Error in computing com for {}".format(s))
+            coms.append(None)
+
+        center = com
         if center is None:
             continue
-        # outim, transform = align_image_to_symmetry_plane(inim, center = center[:2])
+
         outim, transform = align_image_to_symmetry_plane(inim, center = None)
-        sitk.WriteImage(sitk.Cast(outim, sitk.sitkFloat32), outputdir + '/' + f)
+
+        # Transform label
+        try:
+            segout = transform_image(seg_im, transform)
+        except Exception as e:
+            print("Cannot transform seg image")
+
+        # Write image and label
+        sitk.WriteImage(sitk.Cast(outim, sitk.sitkFloat32), first_output + '/' + f)
+        sitk.WriteImage(sitk.Cast(segout, sitk.sitkUInt8), seg_out_dir + '/' + f)
 
         im_size = outim.GetSize()
         crop_center = [im_size[0] / 2, im_size[1] / 2, center[2]]
         cropped = crop_image(outim, crop_center, crop_size)
-        sitk.WriteImage(sitk.Cast(cropped, sitk.sitkFloat32), outputdir + '_cropped/' + f)
+        segcropped = crop_image(segout, crop_center, crop_size)
+        sitk.WriteImage(sitk.Cast(cropped, sitk.sitkFloat32), first_output + '_cropped/' + f)
+        sitk.WriteImage(sitk.Cast(segcropped, sitk.sitkUInt8), seg_out_dir_cropped + '/' + f)
+
+
+        # record transform for later use
+        a_transforms.append(transform)
+
+    for i, (source, output) in enumerate(tqdm(source_output_pair)):
+        if source == first_input:
+            continue
+
+        imfiles, _ = load_supervised_pair_by_IDs(source, segdir, ids)
+        for j, f in enumerate(tqdm(imfiles, desc="Aligning")):
+            tqdm.write(f)
+            inim_fname = source + '/' + f
+            inim = sitk.ReadImage(inim_fname)
+            center = coms[i]
+
+            # Z-score normalization
+            inim = sitk.Normalize(sitk.Cast(inim, sitk.sitkFloat64))
+            inim = sitk.ShiftScale(inim, scale=256)
+
+            transform = a_transforms[j]
+            outim = transform_image(inim, transform)
+            sitk.WriteImage(sitk.Cast(outim, sitk.sitkFloat32), os.path.join(output, f))
+
+            im_size = outim.GetSize()
+            crop_center = [im_size[0] / 2, im_size[1] / 2, center[2]]
+            cropped = crop_image(outim, crop_center, crop_size)
+            sitk.WriteImage(sitk.Cast(cropped, sitk.sitkFloat32), output + '_cropped/' + f)
 
 
     pass
 
 if __name__ == '__main__':
-    # main('../NPC_Segmentation/41.Benign/T2WFS/',
-    #      '../NPC_Segmentation/42.Benign_upright/T2WFS')
-    main('../NPC_Segmentation/0A.NIFTI_ALL/Malignant/CE-T1W_TRA/',
-         '../NPC_Segmentation/50.NPC_SurvivalAnalysis/CE-T1W_TRA/Images_Upright',
-         '../NPC_Segmentation/99.Testing/Survival_analysis/all_case.txt',
-         '../NPC_Segmentation/98.Output/Survival_analysis_seg')
-    # '../NPC_Segmentation/21.NPC_Perfect_SegT2/00.First',
-    # globber="(?=.*T2.*)(?=.*FS.*)(?!.*[cC].*)")
+    so_pair = [
+        ('../../NPC_Segmentation/0A.NIFTI_ALL/Malignant/T2WFS_TRA/',
+         '../../NPC_Segmentation/50.NPC_SurvivalAnalysis/T2WFS_TRA/Images_Upright'),
+        ('../../NPC_Segmentation/0A.NIFTI_ALL/Malignant/CE-T1W_TRA/',
+         '../../NPC_Segmentation/50.NPC_SurvivalAnalysis/CE-T1W_TRA/Images_Upright'),
+        ('../../NPC_Segmentation/0A.NIFTI_ALL/Malignant/CE-T1WFS_TRA/',
+        '../../NPC_Segmentation/50.NPC_SurvivalAnalysis/CE-T1WFS_TRA/Images_Upright')
+    ]
+
+    main(so_pair,
+         '../../NPC_Segmentation/99.Testing/Survival_analysis/all_case.txt',
+         '../../NPC_Segmentation/98.Output/Survival_analysis_seg')
 
 
 
