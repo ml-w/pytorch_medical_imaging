@@ -22,8 +22,8 @@ class BinaryClassificationSolver(ClassificationSolver):
                Tensor of input data.
            gt_data (torch.Tensor):
                Tensor of output data.
-           net (torch.nn):
-               Network modules.
+           net (class or nn.Module):
+               Network modules or the already-created-network.
            param_optim (dict):
                Dictionary of the optimizer parameters. Should include key 'lr'.
            param_iscuda (bool):
@@ -67,7 +67,8 @@ class BinaryClassificationSolver(ClassificationSolver):
         self._logger.debug("Computed loss pos_weight: {}".format(self._pos_weights))
 
         # Define the network
-        net = net(inchan, numberOfClasses)
+        if not hasattr(net, 'forward'):
+            net = net(inchan, numberOfClasses)
         self._net = net
 
         optimizer = optim.Adam(net.parameters(), lr=param_optim['lr'])

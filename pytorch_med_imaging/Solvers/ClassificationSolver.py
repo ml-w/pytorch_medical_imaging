@@ -22,7 +22,7 @@ class ClassificationSolver(SolverBase):
                 Tensor of input data.
             gt_data (torch.Tensor):
                 Tensor of output data.
-            net (torch.nn):
+            net (class):
                 Network modules.
             param_optim (dict):
                 Dictionary of the optimizer parameters. Should include key 'lr'.
@@ -56,9 +56,11 @@ class ClassificationSolver(SolverBase):
         logger.info("Find %i classes.."%(numOfClasses))
 
 
-        inchan = in_data[0].size()[0]
 
-        net = net(inchan, numOfClasses)
+        if not hasattr(net, 'forward'):
+            self._logger.info("Creating network object...")
+            inchan = in_data[0].size()[0]
+            net = net(inchan, numOfClasses)
 
         # Create optimizer and loss function
         lossfunction = nn.CrossEntropyLoss()

@@ -49,21 +49,21 @@ class SegmentationSolver(SolverBase):
         logger.log_print_tqdm("Initial weight factor: " + str(weights))
 
         # Create network
-        try:
-            if isinstance(in_data[0], tuple) or isinstance(in_data[0], list):
-                inchan = in_data[0][0].shape[0]
-            else:
-                inchan = in_data[0].size()[0]
-        except AttributeError:
-            # retreat to 1 channel
-            logger.warning("Retreating to 1 channel.")
-            inchan = 1
-        except Exception as e:
-            logger.log_traceback(e)
-            logger.warning("Error encountered when calculating number of channels.")
-            raise ArithmeticError("Error encountered when calculating number of channels.")
-
-        net = net(inchan, numOfClasses)
+        if not hasattr(net, 'forward'):
+            try:
+                if isinstance(in_data[0], tuple) or isinstance(in_data[0], list):
+                    inchan = in_data[0][0].shape[0]
+                else:
+                    inchan = in_data[0].size()[0]
+            except AttributeError:
+                # retreat to 1 channel
+                logger.warning("Retreating to 1 channel.")
+                inchan = 1
+            except Exception as e:
+                logger.log_traceback(e)
+                logger.warning("Error encountered when calculating number of channels.")
+                raise ArithmeticError("Error encountered when calculating number of channels.")
+            net = net(inchan, numOfClasses)
 
         # Create optimizer and loss function
         lossfunction = nn.CrossEntropyLoss(weight=self.loss_init_weights) #TODO: Allow custom loss function

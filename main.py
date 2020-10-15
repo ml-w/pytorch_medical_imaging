@@ -1,6 +1,7 @@
 # System
 import argparse
 import os, gc
+import re
 import logging
 import datetime
 
@@ -26,25 +27,25 @@ import torch.autograd as autograd
 autograd.set_detect_anomaly(True)
 # import your own newtork
 
-# This controls the available networks
-available_networks = {'UNet':UNet_p,
-                      'UNetPosAware': UNetPosAware,
-                      'UNetLocTexAware': UNetLocTexAware,
-                      'UNetLocTexHist': UNetLocTexHist,
-                      'UNetLocTexHistDeeper': UNetLocTexHistDeeper,
-                      'UNetLocTexHist_MM': partial(UNetLocTexHist, fc_inchan=204),
-                      'UNetLocTexHistDeeper_MM': partial(UNetLocTexHistDeeper, fc_inchan=204),
-                      'DenseUNet': DenseUNet2D,
-                      'AttentionUNet': AttentionUNet,
-                      'AttentionDenseUNet': AttentionDenseUNet2D,
-                      'AttentionUNetPosAware': AttentionUNetPosAware,
-                      'AttentionUNetLocTexAware': AttentionUNetLocTexAware,
-                      'LLinNet': LLinNet,
-                      'AttentionResidual': AttentionResidualNet,
-                      'AxialAttentionResidual/64': AttentionResidualNet_64,
-                      'AxialAttentionResidual/SW': AttentionResidualNet_SW,
-                      'AxialAttentionResGRUNet': AttentionResidualGRUNet
-                      }
+# This controls the available networks (Deprecated)
+# available_networks = {'UNet':UNet_p,
+#                       'UNetPosAware': UNetPosAware,
+#                       'UNetLocTexAware': UNetLocTexAware,
+#                       'UNetLocTexHist': UNetLocTexHist,
+#                       'UNetLocTexHistDeeper': UNetLocTexHistDeeper,
+#                       'UNetLocTexHist_MM': partial(UNetLocTexHist, fc_inchan=204),
+#                       'UNetLocTexHistDeeper_MM': partial(UNetLocTexHistDeeper, fc_inchan=204),
+#                       'DenseUNet': DenseUNet2D,
+#                       'AttentionUNet': AttentionUNet,
+#                       'AttentionDenseUNet': AttentionDenseUNet2D,
+#                       'AttentionUNetPosAware': AttentionUNetPosAware,
+#                       'AttentionUNetLocTexAware': AttentionUNetLocTexAware,
+#                       'LLinNet': LLinNet,
+#                       'AttentionResidual': AttentionResidualNet,
+#                       'AxialAttentionResidual/64': AttentionResidualNet_64,
+#                       'AxialAttentionResidual/SW': AttentionResidualNet_SW,
+#                       'AxialAttentionResGRUNet': AttentionResidualGRUNet
+#                       }
 
 def init_weights(m):
     if type(m) == nn.Conv2d:
@@ -159,18 +160,13 @@ def main(a, config, logger):
 
 
     # Try to make outputdir first if it exist
-
     if dir_output.endswith('.csv'):
         os.makedirs(os.path.dirname(dir_output), exist_ok=True)
     else:
         os.makedirs(dir_output, exist_ok=True)
 
-    # This is in PMIDataLoader already.
-    # if not filters_idlist is None:
-    #     if filters_idlist.endswith('ini'):
-    #         filters_idlist = parse_ini_filelist(filters_idlist, mode)
-    #         config['Filters']['id_list'] = filters_idlist
-
+    # Error check
+    #-----------------
     # Check directories
     for key in list(config['Data']):
         d = config['Data'].get(key)
@@ -179,6 +175,18 @@ def main(a, config, logger):
                 continue
             logger.log_print_tqdm("Cannot locate %s: %s"%(key, d), logging.CRITICAL)
             return
+    # Check network type
+    try:
+        net = eval(net_nettype)
+        so = re.search('.+?(?=\()', net_nettype)
+        if not so is None:
+            net_name = so.group()
+        else:
+            net_name = "unknownnetwork"
+    except:
+        logger.exception("Fail creating network.")
+        logger.critical("Terminate.")
+        return 2
 
 
 
@@ -229,7 +237,7 @@ def main(a, config, logger):
             logger.log_print_tqdm('Wrong run_type setting!', logging.ERROR)
             return
 
-        solver = solver_class(inputDataset, gtDataset, available_networks[net_nettype],
+        solver = solver_class(inputDataset, gtDataset, net,
                               {'lr': param_lr, 'momentum': param_momentum}, bool_usecuda,
                               param_initWeight=param_initWeight)
         if param_decay_on_plateau:
@@ -245,7 +253,7 @@ def main(a, config, logger):
 
 
         # Read tensorboard dir from env, disable plot if it fails
-        bool_plot, writer = prepare_tensorboard_writer(bool_plot, filters_lsuffix, net_nettype, logger)
+        bool_plot, writer = prepare_tensorboard_writer(bool_plot, filters_lsuffix, net_name, logger)
 
         # Load Checkpoint or create new network
         #-----------------------------------------
@@ -287,7 +295,7 @@ def main(a, config, logger):
                         pass
 
                 if loss.data.cpu() <= temploss:
-                    backuppath = "./Backup/cp_%s_%s_temp.pt"%(data_pmi_data_type, net_nettype) \
+                    backuppath = "./Backup/cp_%s_%s_temp.pt"%(data_pmi_data_type, net_name) \
                         if checkpoint_save is None else checkpoint_save.replace('.pt', '_temp.pt')
                     torch.save(solver.get_net().state_dict(), backuppath)
                     temploss = loss.data.cpu()
@@ -372,14 +380,14 @@ def main(a, config, logger):
         try:
             inputDataset, gtDataset = pmi_data._load_data_set_training()
             inferencer = infer_class(inputDataset, dir_output, param_batchsize,
-                                     available_networks[net_nettype], checkpoint_load,
+                                     net, checkpoint_load,
                                      bool_usecuda, target_data=gtDataset)
         except AttributeError as e:
             logger.exception(e)
             logger.log_print("Falling back to just doing inference", logger.DEBUG)
             inputDataset= pmi_data.load_dataset()
             inferencer = infer_class(inputDataset, dir_output, param_batchsize,
-                                     available_networks[net_nettype], checkpoint_load,
+                                     net, checkpoint_load,
                                      bool_usecuda)
 
         if write_mode == 'GradCAM':
