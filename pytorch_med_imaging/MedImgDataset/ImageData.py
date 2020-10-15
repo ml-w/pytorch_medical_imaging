@@ -56,7 +56,7 @@ NIFTI_DICT = {
 }
 
 class ImageDataSet(PMIDataBase):
-    """
+    r"""
     ImageDataSet class that reads and load nifty in a specified directory.
 
     Attributes:
@@ -200,7 +200,7 @@ class ImageDataSet(PMIDataBase):
     #         print(msg)
 
     def _parse_root_dir(self):
-        """
+        r"""
         Main parsing function.
         """
 
@@ -380,11 +380,11 @@ class ImageDataSet(PMIDataBase):
 
 
     def get_raw_data_shape(self):
-        """Get shape of all files as a list (ignore load by slice option)."""
+        r"""Get shape of all files as a list (ignore load by slice option)."""
         return [self.get_size(i) for i in range(len(self.metadata))]
 
     def check_shape_identical(self, target_imset):
-        """Check if file shape is identical to another ImageDataSet."""
+        r"""Check if file shape is identical to another ImageDataSet."""
         assert isinstance(target_imset, ImageDataSet), "Target is not image dataset."
 
         self_shape = self.get_raw_data_shape()
@@ -409,7 +409,7 @@ class ImageDataSet(PMIDataBase):
         return all(truth_list)
 
     def size(self, i=None):
-        """Required by pytorch."""
+        r"""Required by pytorch."""
         if i is None:
             try:
                 return self.data.shape
@@ -419,11 +419,11 @@ class ImageDataSet(PMIDataBase):
             return self.length
 
     def type(self):
-        """Return datatype of the elements."""
+        r"""Return datatype of the elements."""
         return self.data[0].type()
 
     def as_type(self, t):
-        """Cast all elements to specified type."""
+        r"""Cast all elements to specified type."""
         try:
             self.data = self.data.type(t)
             self.dtype = t
@@ -432,14 +432,14 @@ class ImageDataSet(PMIDataBase):
             self._logger.log_traceback()
 
     def get_data_source(self, i):
-        """Get directory of the source of the i-th element."""
+        r"""Get directory of the source of the i-th element."""
         if self._byslices >=0:
             return self.data_source_path[int(np.argmax(self._itemindexes > i)) - 1]
         else:
             return self.data_source_path[i]
 
     def get_internal_index(self, i):
-        """If load by slice, get the slice number of the i-th 2D element in
+        r"""If load by slice, get the slice number of the i-th 2D element in
         its original image."""
         if self._byslices >= 0:
             return i - self._itemindexes[int(np.argmax(self._itemindexes > i)) - 1]
@@ -447,7 +447,7 @@ class ImageDataSet(PMIDataBase):
             return i
 
     def get_data_by_ID(self, id, globber=None, get_all=False):
-        """Get data by globbing ID from the basename of files."""
+        r"""Get data by globbing ID from the basename of files."""
         if globber is None:
             globber = self._id_globber
 
@@ -462,7 +462,7 @@ class ImageDataSet(PMIDataBase):
 
 
     def get_unique_IDs(self, globber=None):
-        """Get all IDs globbed by the specified globber. If its None,
+        r"""Get all IDs globbed by the specified globber. If its None,
         default globber used. If its not None, the class globber will be
         updated to the specified one.
         """
@@ -481,7 +481,7 @@ class ImageDataSet(PMIDataBase):
         return outlist
 
     def get_size(self, id):
-        """Get the size of the original image. Ignores load by slice and
+        r"""Get the size of the original image. Ignores load by slice and
         gives 3D size."""
         id = id % len(self.metadata)
         if self._byslices >= 0:
@@ -490,7 +490,7 @@ class ImageDataSet(PMIDataBase):
             return [int(self.metadata[id]['dim[%d]'%(i+1)]) for i in range(3)]
 
     def get_spacing(self, id):
-        """Get the spacing of the original image. Ignores load by slice and
+        r"""Get the spacing of the original image. Ignores load by slice and
         gives 3D spacing."""
         id = id % len(self.metadata)
         if self._byslices >= 0:
@@ -540,14 +540,17 @@ class ImageDataSet(PMIDataBase):
         return s
 
     def Write(self, tensor_data, outputdirectory, prefix=''):
-        """Write data array to the output directory accordining to the image
+        r"""Write data array to the output directory accordining to the image
         properties of the loaded images.
 
         Args:
-            tensor_data (:obj:`torch.tensor`): Data arrays to save, has to
-                be arranged identically as the attribute self.data of the object.
-            outputdirectory (str): Folder to output nii files
-            prefix (str): Prefix to add before saved files. Default to ''.
+            tensor_data (:obj:`torch.tensor`):
+                Data arrays to save, has to be arranged identically as the attribute self.data
+                of the object.
+            outputdirectory (str):
+                Folder to output nii files.
+            prefix (str):
+                Prefix to add before saved files. Default to ''.
         """
         if self._byslices > -1:
             assert self._itemindexes[-1] == tensor_data.size()[0], \
@@ -589,7 +592,8 @@ class ImageDataSet(PMIDataBase):
 
     @staticmethod
     def WrapImageWithMetaData(inImage, metadata):
-        """Depreicated"""
+        r"""Depreicated"""
+        DeprecationWarning("This function is deprecated. Use sitk.CopyInformation instead.")
 
         im = inImage
         if isinstance(inImage, np.ndarray):
@@ -617,7 +621,7 @@ class ImageDataSet(PMIDataBase):
             return im
 
     def get_unique_values(self):
-        """Get the tensor of all unique values in basedata. Only for integer tensors
+        r"""Get the tensor of all unique values in basedata. Only for integer tensors
         """
         assert self.data[0].is_floating_point() == False, \
             "This function is for integer tensors. Current datatype is: %s"%(self.data[0].dtype)
@@ -637,3 +641,4 @@ class ImageDataSet(PMIDataBase):
                 else:
                     out_dict[v.item()] += c.item()
         return out_dict
+
