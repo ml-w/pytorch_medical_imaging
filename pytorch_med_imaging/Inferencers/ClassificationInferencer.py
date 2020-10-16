@@ -34,16 +34,16 @@ class ClassificationInferencer(InferencerBase):
         return 0
 
     def _create_net(self):
-        in_chan = self._in_dataset[0].size()[0]
-        out_chan = 2 #TODO: Temp fix
-
-        try:
-            self._net = self._net(in_chan, out_chan, save_mask=False, save_weight=True)
-            self._ATTENTION_FLAG=True
-        except:
-            self._logger.log_print_tqdm("Cannot create network with 'save_mask' attribute!", 20)
-            self._net = self._net(in_chan, out_chan)
-            self._ATTENTION_FLAG=False
+        if not hasattr(self._net, 'forward'):
+            in_chan = self._in_dataset[0].size()[0]
+            out_chan = 2 #TODO: Temp fix
+            try:
+                self._net = self._net(in_chan, out_chan, save_mask=False, save_weight=True)
+                self._ATTENTION_FLAG=True
+            except:
+                self._logger.log_print_tqdm("Cannot create network with 'save_mask' attribute!", 20)
+                self._net = self._net(in_chan, out_chan)
+                self._ATTENTION_FLAG=False
 
         self._logger.log_print_tqdm("Loading checkpoint from: " + self._net_state_dict, 20)
         self._net.load_state_dict(torch.load(self._net_state_dict), strict=False)

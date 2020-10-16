@@ -3,6 +3,22 @@ from abc import abstractmethod
 from pytorch_med_imaging.logger import Logger
 
 class InferencerBase(object):
+    """
+    This is the base class of all inferencer, the inferencer needs to be configured first before use.
+    The configueration is done through passing the dictionary.
+
+    Parameters keys are:
+        'indataset' (Dataset):
+        'net' (nn.Module):
+        'netstatedict' (torch.statedict):
+        'batchsize' (int):
+        'iscuda' (bool):
+
+
+    Attributes
+        _logger (logger.Logger):
+            Use this logger to log anything or print anything.
+    """
     def __init__(self, inferencer_configs):
         super(InferencerBase, self).__init__()
 

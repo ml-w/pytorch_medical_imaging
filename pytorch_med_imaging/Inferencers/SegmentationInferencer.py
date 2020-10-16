@@ -27,20 +27,23 @@ class SegmentationInferencer(InferencerBase):
         return 0
 
     def _create_net(self):
-        try:
-            if isinstance(self._in_dataset[0], tuple) or isinstance(self._in_dataset[0], list):
-                inchan = self._in_dataset[0][0].shape[0]
-            else:
-                inchan = self._in_dataset[0].size()[0]
+        if not hasattr(self._net, 'forward'):
+            self._logger.info("Creating network.")
+            try:
+                if isinstance(self._in_dataset[0], tuple) or isinstance(self._in_dataset[0], list):
+                    inchan = self._in_dataset[0][0].shape[0]
+                else:
+                    inchan = self._in_dataset[0].size()[0]
 
-        except AttributeError:
-            self._logger.log_print_tqdm("Retreating to indim=3, inchan=1.", 30)
-            inchan = 1
-        except Exception as e:
-            self._logger.log_print_tqdm(str(e), 40)
-            self._logger.log_print_tqdm("Terminating", 40)
-            return
-        self._net = self._net(inchan, 2)
+            except AttributeError:
+                self._logger.log_print_tqdm("Retreating to indim=3, inchan=1.", 30)
+                inchan = 1
+            except Exception as e:
+                self._logger.log_print_tqdm(str(e), 40)
+                self._logger.log_print_tqdm("Terminating", 40)
+                return
+            self._net = self._net(inchan, 2)
+
         # net = nn.DataParallel(net)
         self._logger.log_print_tqdm("Loading checkpoint from: " + self._net_state_dict, 20)
         self._net.load_state_dict(torch.load(self._net_state_dict))
