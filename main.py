@@ -421,7 +421,7 @@ if __name__ == '__main__':
                         help="Set this to override number of epoch when loading config.")
     parser.add_argument("-l", "--lr", dest='lr', type=float, default=None,
                         help="Set this to override learning rate.")
-    parser.add_argument("--log-level", dest='log_level', type='str', choices=('debug', 'info', 'warning','error'),
+    parser.add_argument("--log-level", dest='log_level', type=str, choices=('debug', 'info', 'warning','error'),
                         default='info', help="Set log-level of the logger.")
     parser.add_argument('--debug', dest='debug', action='store_true', default=None,
                         help="Set this to initiate the config with debug setting.")
