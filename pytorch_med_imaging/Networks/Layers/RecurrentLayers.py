@@ -13,9 +13,32 @@ class BGRUCell(nn.Module):
         return self._gru(*input)
 
 class BGRUStack(nn.Module):
+    r"""
+    This module contains a stack of GRUs. Purpose of this is to process sequence with channel dimension.
+
+    Expected input dim: (B x C x N x I)
+        - B is the batch size
+        - C is the GRU stack length
+        - N is the number of sequences
+        - I is the input sequence length (in channels)
+    Expected output dim: (B x N x C x O)
+        - O is the output sequence length (out channels)
+
+
+    Args:
+        in_chan (int):
+            Input channels of the sequence, equivalent to I.
+        out_chan:
+            Output channels desired, equivalent to O.
+        stack_length:
+            Number of GRUs in the stack, equivalent to C.
+        num_layers:
+            Number of layers in each GRUs.
+        dropout:
+            Dropouts for the GRUs.
+    """
     def __init__(self, in_chan: int, out_chan: int, stack_length: int, num_layers: int = 1, dropout: float = 0):
         super(BGRUStack, self).__init__()
-
         self._in_chan = in_chan
         self._out_chan = out_chan
         self._stack_length = stack_length
