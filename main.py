@@ -62,10 +62,12 @@ def prepare_tensorboard_writer(bool_plot, dir_lsuffix, net_nettype, logger):
                          logging.WARNING)
                 tensorboard_rootdir = "/media/storage/PytorchRuns"
 
+
+            logger.info("Creating TB writer, writing to directory: {}".format(tensorboard_rootdir))
             writer = SummaryWriter(tensorboard_rootdir + "/%s-%s-%s" % (net_nettype,
                                                                      dir_lsuffix,
                                                                      datetime.datetime.now().strftime("%Y%m%d-%H%M%S")))
-            writer = TB_plotter(writer, logger)
+            writer = TB_plotter(writer)
 
 
 
