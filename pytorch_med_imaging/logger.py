@@ -79,7 +79,7 @@ class Logger(object):
         self.log_print_tqdm(msg, level=logging.ERROR)
 
     def critical(self, msg):
-        self.log_print_tqdm(msg, level=logging.critical())
+        self.log_print_tqdm(msg, level=logging.CRITICAL)
 
     def exception(self, msg=""):
         self._logger.exception(msg)
