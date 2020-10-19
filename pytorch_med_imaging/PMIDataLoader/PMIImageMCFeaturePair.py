@@ -86,12 +86,17 @@ class PMIImageMCFeaturePair(PMIImageDataLoader):
 
         """
         img_out = self._read_image(self._input_dir)
-        print(img_out[0].shape)
 
         if not self.get_from_config('excel_sheetname', None) is None:
-            gt_dat = MedImgDataset.DataLabel.from_xlsx(self._target_dir, self.get_from_config('excel_sheetname', ))
+            gt_dat = MedImgDataset.DataLabel.from_xlsx(self._target_dir, self.get_from_config('excel_sheetname', None))
         else:
             gt_dat = MedImgDataset.DataLabel.from_csv(self._target_dir)
+
+        # Load selected columns only
+        if not self.get_from_loader_params('column') is None:
+            self._logger.info("Selecting target column: {}".format(self.get_from_loader_params('column')))
+            gt_dat.set_target_column(self.get_from_loader_params('column'))
+
         gt_dat.map_to_data(img_out)
         return img_out, gt_dat
 
