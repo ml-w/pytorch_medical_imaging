@@ -15,7 +15,7 @@ class Logger(object):
     FATAL = logging.FATAL
     ERROR = logging.ERROR
 
-    def __init__(self, log_dir, logger_name=__name__, verbose=False):
+    def __init__(self, log_dir, logger_name=__name__, verbose=False, log_level='debug'):
         """
         This is the logger. This is typically passed to all modules for logging. Use class method Logger['str'] to get a
         logger named 'str'.
@@ -34,6 +34,16 @@ class Logger(object):
         self._log_dir = log_dir
         self._verbose = verbose
 
+        log_levels={
+            'debug': logging.DEBUG,
+            'info': logging.INFO,
+            'warning': logging.WARNING,
+            'error': logging.ERROR
+        }
+        assert log_level in log_levels, "Expected argument log_level in one of {}, got {} instead.".format(
+            list(log_levels.keys()), log_level
+        )
+
         # Check and create directory for log
         os.makedirs(os.path.dirname(log_dir), exist_ok=True)
 
@@ -43,7 +53,7 @@ class Logger(object):
         handler = logging.FileHandler(log_dir)
         handler.setFormatter(formatter)
         self._logger.addHandler(handler)
-        self._logger.setLevel(level=logging.DEBUG)
+        self._logger.setLevel(level=log_levels[log_level])
 
         self.info("Loging to file at: {}".format(os.path.abspath(log_dir)))
         sys.excepthook= self.exception_hook
