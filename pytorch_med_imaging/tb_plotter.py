@@ -11,7 +11,6 @@ class TB_plotter(object):
     def __init__(self, tb_writer, logger=None):
         super(TB_plotter, self).__init__()
         assert isinstance(tb_writer, SummaryWriter), "Writter error"
-        assert isinstance(logger, Logger), "Incorrect logger!"
         self._writer = tb_writer
         self._logger = logger if not logger is None else Logger[__class__.__name__]
 
