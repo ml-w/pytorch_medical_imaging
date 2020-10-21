@@ -375,7 +375,7 @@ class ImageDataSet(PMIDataBase):
                 self.data = stack(self.data, dim=0).unsqueeze(1)
             except:
                 self._logger.warning("Cannot stack data due to non-uniform shapes.")
-                self._logger.info("%s"%[d.shape for d in self.data])
+                self._logger.debug("Shapes are: \n%s"%[str(d.shape) + '\n' for d in self.data])
                 self._logger.warning("Some function might be impaired.")
 
 
