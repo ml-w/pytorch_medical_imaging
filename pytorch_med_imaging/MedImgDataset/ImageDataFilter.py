@@ -1,5 +1,6 @@
+import tqdm.auto as auto
 import torch
-from pytorch_med_imaging.MedImgDataset import PMIDataBase
+from .PMIDataBase import PMIDataBase
 
 
 class ImageDataSetFilter(PMIDataBase):
@@ -33,6 +34,24 @@ class ImageDataSetFilter(PMIDataBase):
         for f in self._func:
             if not callable(f):
                 self._logger.error("A funciton is not callable: {}".format(f))
+
+        # Pre-compute
+        self._data = None
+        if pre_compute:
+            self._logger.info("Pre-compute outputs.")
+            for i, dat in enumerate(auto.tqdm(self._im_data)):
+                _im = dat.clone()
+                for f in self._func:
+                    try:
+                        _im = f(_im)
+                    except:
+                        self._logger.error("Function {} encounter error.".format(f))
+                        self._logger.exception("Error when pre-computing item: {}".format(i))
+                if self._cat_to_ch:
+                    d = torch.cat([dat, _im], dim=1)
+                else:
+                    d = [dat, _im]
+                self._data.append(d)
 
 
     def add_filter(self, func):
