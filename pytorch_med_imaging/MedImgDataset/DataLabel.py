@@ -21,7 +21,9 @@ class DataLabel(PMIDataBase):
 
 
     def set_target_column(self, target):
-        assert target in self._data_table.columns, "Target column not in imported data table."
+        if not target in self._data_table.columns:
+            self._logger.warning("Cannot found specified target column in data table!"  
+                                 "Available columns are {}".format(self._data_table.columns))
         self._target_column = target
 
     @staticmethod
