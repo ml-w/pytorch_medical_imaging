@@ -107,6 +107,8 @@ class ImageDataMultiChannel(PMIDataBase):
         if 'channel_subdirs' in kwargs:
             self._logger.info("Using subdir options.")
             self._channel_subdirs = kwargs['channel_subdirs']
+        else:
+            self._logger.info("Using all sub directories in specified root directory.")
 
 
         self._basedata = []
