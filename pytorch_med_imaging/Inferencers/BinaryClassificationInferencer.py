@@ -63,6 +63,7 @@ class BinaryClassificationInferencer(ClassificationInferencer):
                 if out.shape[-1] > 1:
                     out = out.squeeze()
 
+
                 while ((out.dim() < last_batch_dim) or (out.dim()< 2)) and last_batch_dim != 0:
                     out = out.unsqueeze(0)
                     self._logger.log_print_tqdm('Unsqueezing last batch.' + str(out.shape))
@@ -165,8 +166,8 @@ class BinaryClassificationInferencer(ClassificationInferencer):
         row = pd.Series(_get_sum_perf([TP, FP, TN, FN]), name='Overall')
         perf = perf.append(row)
 
-        self._logger.log_print_tqdm(perf.to_string(), 20)
-        self._logger.log_print_tqdm("Sensitivity: %.3f Specificity: %.3f NPV: %.3f PPV: %.3f OverallACC: %.3f"%(
+        self._logger.info('\n' + perf.to_string())
+        self._logger.info("Sensitivity: %.3f Specificity: %.3f NPV: %.3f PPV: %.3f OverallACC: %.3f"%(
             perf.loc['Overall']['Sensitivity'], perf.loc['Overall']['Specificity'],
             perf.loc['Overall']['NPV'], perf.loc['Overall']['PPV'], perf.loc['Overall']['ACC']
         ))

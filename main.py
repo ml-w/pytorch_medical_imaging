@@ -341,8 +341,12 @@ def main(a, config, logger):
             if measure_loss <= lastloss:
                 backuppath = "./Backup/cp_%s_%s.pt"%(data_pmi_data_type, net_nettype) \
                     if checkpoint_save is None else checkpoint_save
+                logger.info("New loss ({.03f}) is smaller than previous loss ({.03f})".format(measure_loss, lastloss))
+                logger.info("Saving new checkpoint to: {}".format(backuppath))
+                logger.info("Iteration number is: {}".format(i))
                 torch.save(solver.get_net().state_dict(), backuppath)
                 lastloss = measure_loss
+                logger.info("Update benchmark loss.")
 
 
             try:
