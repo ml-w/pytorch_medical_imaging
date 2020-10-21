@@ -196,5 +196,5 @@ class ImageDataMultiChannel(PMIDataBase):
             if self._UNIQUE_DTYPE:
                 return cat([dat[item] for dat in self._basedata])
             else:
-                self._debug("Performing type-cast for item {}.".format(item))
+                self._logger.debug("Performing type-cast for item {}.".format(item))
                 return cat([dat[item].type_as(self._basedata[0][item]) for dat in self._basedata])
