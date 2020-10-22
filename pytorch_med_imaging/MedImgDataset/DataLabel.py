@@ -19,12 +19,21 @@ class DataLabel(PMIDataBase):
         self._original_table = data_table
         self._target_column = None
 
+    def set_computed_column(self, func, name='computed'):
+        if not callable(func):
+            self._logger.error("Input function {} is not callable.".format(func))
+            return 1
+
+        self._data_table[name] = self._data_table.apply(func, axis=1)
+        self.set_target_column(name)
+        return 0
 
     def set_target_column(self, target):
         if not target in self._data_table.columns:
             self._logger.warning("Cannot found specified target column in data table!"  
                                  "Available columns are {}".format(self._data_table.columns))
         self._target_column = target
+        return 0
 
     @staticmethod
     def from_csv(fname, **kwargs):
@@ -80,7 +89,7 @@ class DataLabel(PMIDataBase):
             try:
                 return torch.tensor(self._data_table[self._target_column][item])
             except IndexError:
-                self.log_print("Falling back to integer index.", 30)
+                self._logger.warning("Falling back to integer index.")
                 return torch.tensor(self._data_table.iloc[item])
 
     def __str__(self):
