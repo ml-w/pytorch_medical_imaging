@@ -28,4 +28,14 @@ class PMIDataBase(Dataset):
     @abstractmethod
     def __len__(self):
         raise NotImplementedError("Unfinished class implementation.")
-    
+
+    def apply_hook(self, func):
+        r"""
+        Apply this function to all output before it is returned.
+
+        Args:
+            func (callable):
+                A function that returns a tensor or a list of tensors.
+        """
+        assert callable(func)
+        self._get_item_hook = func
