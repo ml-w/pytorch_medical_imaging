@@ -89,7 +89,7 @@ class PMIDataLoaderBase(object):
                 training=ID_a,ID_b,...,ID_m
 
         """
-        assert os.path.isfile(filelist), "Cannot locate filelist"
+        assert os.path.isfile(filelist), "Cannot locate filelist {}".format(filelist)
 
         fparser = configparser.ConfigParser()
         fparser.read(filelist)
