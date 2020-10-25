@@ -1,5 +1,7 @@
 import tqdm.auto as auto
 import torch
+import os
+import multiprocessing as mpi
 from .PMIDataBase import PMIDataBase
 
 
@@ -50,11 +52,11 @@ class ImageDataSetFilter(PMIDataBase):
         if pre_compute:
             self._data = []
             self._logger.info("Pre-compute outputs.")
-            self.pre_compute_filters()
+            self._pre_compute_filters()
 
         self._length = len(im_data)
 
-    def pre_compute_filters(self):
+    def _pre_compute_filters(self):
         """
         Pre-compute output.
         """
@@ -71,6 +73,39 @@ class ImageDataSetFilter(PMIDataBase):
             else:
                 d = [dat, _im]
             self._data.append(d)
+
+    def _mpi_pre_compute_filters(self):
+        """
+        Pre-compute output using multi-threading
+        """
+        import multiprocessing as mpi
+
+        # check if environment is slurm
+        try:
+            cpu_count = int(os.environ['SLURM_JOB_CPUS_PER_NODE'])
+        except IndexError:
+            self._logger.debug("Slurm environ NOT detected. Falling back to mpi.cpu_count().")
+            cpu_count = mpi.cpu_count()
+        except Exception as e:
+            self._logger.exception("Error when performing pre-computation for {}".format(self.__class__.__name__))
+            self._logger.error("Original error is: {}".format(e))
+            return 1
+
+        self._logger.info("Got number of cpus: {}".format(cpu_count))
+        self._logger.info("Creating process pool.")
+        pool = mpi.Pool(cpu_count)
+
+        self._logger.info("Initiate computation.")
+        res = pool.map_async(self._im_data, self._func)
+        pool.close()
+        pool.join()
+        self._logger.info("Finished.")
+
+        if self._cat_to_ch:
+            self._data = [torch.cat([_im, _res]) for _im, _res in zip(self._im_data, res)]
+        else:
+            self._data = [[_im, _res] for _im, _res in zip(self._im_data, res)]
+
 
     def size(self, i=None):
         """
