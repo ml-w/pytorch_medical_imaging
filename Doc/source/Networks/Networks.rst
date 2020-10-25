@@ -1,6 +1,12 @@
 Networks
 ========
 
+
+GNNGRU
+------
+.. autoclass:: pytorch_med_imaging.Networks.CnnRnn.CNNGRU
+    :members:
+
 UNet_p
 ------
 .. autoclass:: pytorch_med_imaging.Networks.UNet_p.Up
