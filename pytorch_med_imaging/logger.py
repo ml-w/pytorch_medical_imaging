@@ -1,6 +1,6 @@
 import logging
 import traceback
-import os, sys
+import os, sys, traceback
 from tqdm import *
 
 __all__ = ['Logger']
@@ -52,7 +52,11 @@ class Logger(object):
         formatter = logging.Formatter("[%(asctime)-12s-%(levelname)s] (%(name)s) %(message)s")
         handler = logging.FileHandler(log_dir)
         handler.setFormatter(formatter)
+
+        stream_handler = TqdmLoggingHandler(verbose=verbose)
+        stream_handler.setFormatter(formatter)
         self._logger.addHandler(handler)
+        self._logger.addHandler(stream_handler)
         self._logger.setLevel(level=log_levels[log_level])
 
         self.info("Loging to file at: {}".format(os.path.abspath(log_dir)))
@@ -68,13 +72,13 @@ class Logger(object):
 
     def log_print(self, msg, level=logging.INFO):
         self._logger.log(level, msg)
-        if self._verbose:
-            print(msg)
+        # if self._verbose:
+        #     print(msg)
 
     def log_print_tqdm(self, msg, level=logging.INFO):
         self._logger.log(level, msg)
-        if self._verbose:
-            tqdm.write(msg)
+        # if self._verbose:
+        #     tqdm.write(msg)
 
     def info(self, msg):
         self.log_print_tqdm(msg, level=logging.INFO)
@@ -94,13 +98,16 @@ class Logger(object):
     def exception(self, msg=""):
         self._logger.exception(msg)
 
+
     def exception_hook(self, *args):
         self._logger.error('Uncaught exception:', exc_info=args)
-        traceback.print_tb(args[0])
+        traceback.print_tb(args[-1])
 
     def __class_getitem__(cls, item):
         if cls.global_logger is None:
-            raise AttributeError("Global logger was not created.")
+            cls.global_logger = Logger('./default.log', logger_name='default')
+            return Logger[item]
+
         elif not item in cls.all_loggers:
             cls.global_logger.log_print("Requesting logger [{}] not exist, creating...".format(
                 str(item)
@@ -111,7 +118,6 @@ class Logger(object):
             return cls.all_loggers[item]
         else:
             return cls.all_loggers[item]
-
 
     @staticmethod
     def Log_Print(msg, level=logging.INFO):
@@ -130,3 +136,21 @@ class Logger(object):
             return Logger.global_logger
         else:
             raise AttributeError("Global logger was not created.")
+
+
+
+class TqdmLoggingHandler(logging.Handler):
+    def __init__(self, level=logging.NOTSET, verbose=False):
+        super().__init__(level)
+        self.verbose = verbose
+
+    def emit(self, record):
+        try:
+            msg = self.format(record)
+            if self.verbose:
+                tqdm.write(msg)
+                self.flush()
+        except (KeyboardInterrupt, SystemExit):
+            raise
+        except:
+            self.handleError(record)

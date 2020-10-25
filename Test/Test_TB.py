@@ -1,57 +1,52 @@
-
-import torch
-import torchvision.utils as vutils
-import numpy as np
-import torchvision.models as models
-from torchvision import datasets
-from tensorboardX import SummaryWriter
 import os
+import torch
+import torch.nn as nn
+from torchvision.utils import make_grid
+from torch.utils.data import TensorDataset, DataLoader
 
-resnet18 = models.resnet18(False)
-print(os.environ)
-tensorboard_rootdir = "/media/storage/PytorchRuns/"
-writer = SummaryWriter(tensorboard_rootdir + "/Demo")
-sample_rate = 44100
-freqs = [262, 294, 330, 349, 392, 440, 440, 440, 440, 440, 440]
+from pytorch_med_imaging.PMIDataLoader import PMIImageMCFeaturePair, PMIDataFactory
+from pytorch_med_imaging.tb_plotter import TB_plotter
+from pytorch_med_imaging.logger import Logger
+from pytorch_med_imaging.Networks.Layers import *
+from pytorch_med_imaging.Networks import CNNGRU
+from tensorboardX import SummaryWriter
 
-for n_iter in range(100):
+import configparser as cf
 
-    dummy_s1 = torch.rand(1)
-    dummy_s2 = torch.rand(1)
-    # data grouping by `slash`
-    writer.add_scalar('data/scalar1', dummy_s1[0], n_iter)
-    writer.add_scalar('data/scalar2', dummy_s2[0], n_iter)
+os.chdir('../')
 
-    writer.add_scalars('data/scalar_group', {'xsinx': n_iter * np.sin(n_iter),
-                                             'xcosx': n_iter * np.cos(n_iter),
-                                             'arctanx': np.arctan(n_iter)}, n_iter)
+main_logger = Logger('./Test_TB.log', logger_name='main', verbose=True, log_level='debug')
 
-    dummy_img = torch.rand(32, 3, 64, 64)  # output from network
-    if n_iter % 10 == 0:
-        x = vutils.make_grid(dummy_img, normalize=True, scale_each=True)
-        writer.add_image('Image', x, n_iter)
+parser = cf.ConfigParser()
+parser.read('./Configs/Survival/GRU/Survival_MC_5Fold_00_l3_LR.ini')
+parser['General']['debug'] = 'True'
 
-        dummy_audio = torch.zeros(sample_rate * 2)
-        for i in range(x.size(0)):
-            # amplitude of sound should in [-1, 1]
-            dummy_audio[i] = np.cos(freqs[n_iter // 10] * np.pi * float(i) / float(sample_rate))
-        writer.add_audio('myAudio', dummy_audio, n_iter, sample_rate=sample_rate)
 
-        writer.add_text('Text', 'text logged at step:' + str(n_iter), n_iter)
+pmi_data = PMIDataFactory().produce_object(parser)
 
-        for name, param in resnet18.named_parameters():
-            writer.add_histogram(name, param.clone().cpu().data.numpy(), n_iter)
+net = CNNGRU(4,1,first_conv_out_ch=32,decode_layers=3,embedding_size=(20,20,20),gru_layers=2,dropout=0.2)
+net.load_state_dict(torch.load(parser['Checkpoint']['cp_load_dir']))
 
-        # needs tensorboard 0.4RC or later
-        writer.add_pr_curve('xoxo', np.random.randint(2, size=100), np.random.rand(100), n_iter)
 
-dataset = datasets.MNIST('mnist', train=False, download=True)
-images = dataset.test_data[:100].float()
-label = dataset.test_labels[:100]
+writer = SummaryWriter('/media/storage/PytorchRuns/Test_GRU')
+tb_plotter = TB_plotter(tb_writer=writer)
 
-features = images.view(100, 784)
-writer.add_embedding(features, metadata=label, label_img=images.unsqueeze(1))
+tb_plotter.register_modules(net.in_conv1, 'in_conv1', None)
+tb_plotter.register_modules(net.decode[0], 'decode1', None)
 
-# export scalar data to JSON for external processing
-writer.export_scalars_to_json("./all_scalars.json")
-writer.close()
+net = nn.DataParallel(net)
+net = net.cuda()
+
+s, g = pmi_data._load_data_set_training()
+dataset = TensorDataset(s, g)
+loader = DataLoader(dataset, batch_size=int(parser['RunParams']['batch_size']), shuffle=False, drop_last=False)
+
+with torch.no_grad():
+    for i, (ss, gg) in enumerate(loader):
+        ss = ss.float().cuda()
+        net(ss)
+
+        tb_plotter.plot_collected_module_output(i)
+
+        if i == 5:
+            break

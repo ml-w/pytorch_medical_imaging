@@ -71,7 +71,9 @@ def prepare_tensorboard_writer(bool_plot, dir_lsuffix, net_nettype, logger):
 
 
 
-        except OSError:
+        except:
+            logger.warning("Logger creation encounters failure, falling back to no writer.")
+            logger.exception("Logger creation encounters failure.")
             writer = None
             bool_plot = False
     else:
