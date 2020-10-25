@@ -3,10 +3,22 @@ from . import lndp, lbp
 from functools import partial
 import torch
 import numpy as np
+import multiprocessing as mpi
 
 class ImageDataSetWithTexture(ImageDataSetFilter):
     """
-    Compute textures.
+    Compute local binary patter and local neighbourhood pattern textures descriptors.
+
+    Args:
+        im_data (ImageDataSet):
+            Input base_dataset.
+        pre_compute(bool, Optional):
+            Whether to precompute the features on create or compute them on the go. Default to False.
+        mode('str', Optional):
+            Options are {'as_histograms'|'as_channels'}. Whether the textures are computed as image or computed as
+            histogram vectors. Default to 'as_histograms'.
+        cat_to_ch(bool, Optional):
+            Whether to cancatenate the result to the original array. Effective when `mode='as_channels`.
 
     """
     def __init__(self, im_data: ImageDataSet, **kwargs):
