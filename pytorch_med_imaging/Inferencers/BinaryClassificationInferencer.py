@@ -75,7 +75,7 @@ class BinaryClassificationInferencer(ClassificationInferencer):
 
             out_tensor = torch.cat(out_tensor, dim=0) #(NxC)
             dl = self._writter(out_tensor)
-            print(dl._data_table.to_string())
+            self._logger.debug('\n' + dl._data_table.to_string())
 
 
     def _writter(self, out_tensor):
