@@ -137,3 +137,46 @@ class CNNGRU(nn.Module):
                 x = x.unsqueeze(0)
         return x
 
+class CNNGRU_test(CNNGRU):
+    def __init__(self,
+                 in_ch: int,
+                 out_ch: int,
+                 in_feat_ch: int,
+                 first_conv_out_ch: int = 32,
+                 decode_layers: int = 3,
+                 embedding_size: tuple = (20, 5, 5),
+                 gru_layers: int = 1,
+                 dropout: float = 0.2
+                 ):
+        super(CNNGRU_test, self).__init__()
+
+        self._config = {
+            'in_ch': torch.Tensor([in_ch]),
+            'out_ch': torch.Tensor([out_ch]),
+            'first_conv_out_ch': torch.Tensor([first_conv_out_ch]),
+            'decode_layers': torch.Tensor([decode_layers]),
+            'embeding_size': torch.Tensor(embedding_size),
+            'drop_out': torch.Tensor([dropout])
+        }
+
+        for name in self._config:
+            self.register_buffer(name, self._config[name])
+
+        self.in_conv1 = DoubleConv3d(in_ch, first_conv_out_ch)
+        _decode_layers = [
+            DoubleConv3d(2 ** i * first_conv_out_ch,
+                         2 ** (i + 1) * first_conv_out_ch,
+                         stride=[1, 2, 2], kern_size=[1, 3, 3], padding=[0, 1, 1], dropout=dropout)
+            for i in range(decode_layers)
+        ]
+        self.decode = nn.Sequential(*_decode_layers)
+        self.adaptive_pool = nn.AdaptiveMaxPool3d(list(embedding_size))
+        self.grus = BGRUStack(embedding_size[0] * embedding_size[1],
+                              out_ch, first_conv_out_ch * 2 ** decode_layers,
+                              num_layers=gru_layers)
+        self.gru_out = BGRUCell(out_ch * embedding_size[0] * 2, out_ch, num_layers=gru_layers)
+
+        self.fc_out = nn.Linear(first_conv_out_ch * 2 ** decode_layers, 1)
+
+    def forward(self, x):
+        return
