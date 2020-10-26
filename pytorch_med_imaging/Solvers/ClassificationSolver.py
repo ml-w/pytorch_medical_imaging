@@ -18,9 +18,9 @@ class ClassificationSolver(SolverBase):
         Solver for classification tasks.
 
         Args:
-            in_data (torch.Tensor):
+            in_data (PMIDataBase):
                 Tensor of input data.
-            gt_data (torch.Tensor):
+            gt_data (PMIDataBase):
                 Tensor of output data.
             net (class):
                 Network modules.
@@ -82,9 +82,9 @@ class ClassificationSolver(SolverBase):
 
     def _feed_forward(self, *args):
         s, g = args
-        # s = self._match_type_with_network(s)
         if self._iscuda:
-            s = self._force_cuda(s.float())
+            s = self._force_cuda(s)
+
 
         # if isinstance(s, list):
         #      [ss.requires_grad_() for ss in s]
@@ -94,7 +94,10 @@ class ClassificationSolver(SolverBase):
         # s = [Variable(ss) for ss in s] if isinstance(s, list) else Variable(s)
         # g = [Variable(gg) for gg in g] if isinstance(g, list) else Variable(g)
 
-        out = self._net.forward(s)
+        if isinstance(s, list):
+            out = self._net.forward(*s)
+        else:
+            out = self._net.forward(s)
         _pairs = zip(out.flatten().data.cpu(), g.flatten().data.cpu(), torch.sigmoid(out).flatten().data.cpu())
         _df = pd.DataFrame(_pairs, columns=['res', 'g', 'sig_res'], dtype=float)
         self._logger.debug('\n' + _df.to_string())

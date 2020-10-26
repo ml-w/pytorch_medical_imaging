@@ -176,8 +176,11 @@ class SolverBase(object):
             self._net_weight_type = torch.FloatTensor
 
         # Do nothing if type is already correct.
-        if tensor.type() == self._net_weight_type or all([t.type() == self._net_weight_type for t in tensor]):
-            return tensor
+        try:
+            if tensor.type() == self._net_weight_type or all([t.type() == self._net_weight_type for t in tensor]):
+                return tensor
+        except:
+            self._logger.warning("Can't determine if type is already followed.")
 
         # We also expect list input too.
         out = [ss.type(self._net_weight_type) for ss in tensor] if isinstance(tensor, list) else \
@@ -187,7 +190,7 @@ class SolverBase(object):
 
     @staticmethod
     def _force_cuda(arg):
-        return [a.cuda() for a in arg] if isinstance(arg, list) else arg.cuda()
+        return [a.float().cuda() for a in arg] if isinstance(arg, list) else arg.cuda()
 
     @abstractmethod
     def _feed_forward(self, *args):

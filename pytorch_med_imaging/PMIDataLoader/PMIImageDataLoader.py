@@ -1,5 +1,6 @@
 from .PMIDataLoaderBase import PMIDataLoaderBase
 from .. import MedImgDataset
+from ..MedImgDataset.Computation import ImageDataSetWithTexture
 
 import re
 
@@ -74,6 +75,7 @@ class PMIImageDataLoader(PMIDataLoaderBase):
 
         self._augmentation = self.get_from_loader_params_with_eval('augmentation', 0)
         self._load_by_slices = self.get_from_loader_params_with_eval('load_by_slices', -1)
+        self._load_with_filter = self.get_from_loader_params('load_with_filter', "")
 
     def _read_image(self, root_dir, **kwargs):
         """
@@ -98,9 +100,13 @@ class PMIImageDataLoader(PMIDataLoaderBase):
         else:
             self._image_class = MedImgDataset.ImageDataSet
 
-        return self._image_class(root_dir, verbose=self._verbose, debugmode=self._debug, filtermode='both',
+        img_data =  self._image_class(root_dir, verbose=self._verbose, debugmode=self._debug, filtermode='both',
                                  regex=self._regex, idlist=self._idlist, loadBySlices=self._load_by_slices,
                                  aug_factor=self._augmentation, **kwargs)
+
+        if re.search("texture", self._load_with_filter, flags=re.IGNORECASE) is not None:
+            img_data = ImageDataSetWithTexture(img_data)
+        return img_data
 
     def _load_data_set_training(self):
         """

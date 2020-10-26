@@ -135,3 +135,15 @@ class ReflectiveDoubleConv(nn.Module):
 
     def forward(self, x):
         return self.conv(x)
+
+
+class PermuteTensor(nn.Module):
+    def __init__(self, permute_order):
+        super(PermuteTensor, self).__init__()
+        if not isinstance(permute_order, torch.Tensor):
+            permute_order = torch.Tensor(permute_order)
+
+        self.register_buffer('permute_order', permute_order.int(), True)
+
+    def forward(self, x):
+        return x.permute(*self.permute_order.tolist())

@@ -29,8 +29,6 @@ class ClassificationInferencer(InferencerBase):
         super(ClassificationInferencer, self).__init__(inference_configs)
 
     def _input_check(self):
-        assert isinstance(self._in_dataset, ImageDataSet) or isinstance(self._in_dataset, ImageDataMultiChannel),\
-                 "Type is %s"%(type(self._in_dataset))
         return 0
 
     def _create_net(self):

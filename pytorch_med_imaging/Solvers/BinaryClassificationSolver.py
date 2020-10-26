@@ -54,8 +54,7 @@ class BinaryClassificationSolver(ClassificationSolver):
         except IndexError:
             self._logger.warning("Ground-truth data has 0-dimension. Assuming number of class is 1.")
             numberOfClasses = 1
-        inchan = in_data[0].size()[0]
-        self._logger.info("Found number of binary classes {}.".format(numberOfClasses))
+
 
         # Compute class weight
         self._pos_weights = torch.zeros(numberOfClasses)
@@ -68,6 +67,12 @@ class BinaryClassificationSolver(ClassificationSolver):
 
         # Define the network
         if not hasattr(net, 'forward'):
+            self._logger.info("Net is not created yet, trying to create it.")
+            if isinstance(in_data[0], list):
+                inchan = in_data[0][0].size()[1]
+            else:
+                inchan = in_data[0][0].size()[1]
+            self._logger.info("Found number of binary classes {}.".format(numberOfClasses))
             net = net(inchan, numberOfClasses)
         self._net = net
 
@@ -109,7 +114,10 @@ class BinaryClassificationSolver(ClassificationSolver):
                 s = self._match_type_with_network(s)
                 g = self._match_type_with_network(g)
 
-                self._logger.debug(f"Before call s_size = {s.shape}; g_size = {g.shape}")
+                try:
+                    self._logger.debug(f"Before call s_size = {s.shape}; g_size = {g.shape}")
+                except:
+                    pass
                 # if self._iscuda:
                     # s = [ss.cuda() for ss in s] if isinstance(s, list) else s.cuda() # Done by match_type
                     # g = [gg.cuda() for gg in g] if isinstance(g, list) else g.cuda()
@@ -161,7 +169,10 @@ class BinaryClassificationSolver(ClassificationSolver):
 
     def step(self, *args):
         s, g = args
-        self._logger.debug(f"step(): s_size = {s.shape};g_size = {g.shape}")
+        try:
+            self._logger.debug(f"step(): s_size = {s.shape};g_size = {g.shape}")
+        except:
+            pass
 
         # Skip if all ground-truth have the same type
         if g.unique().shape[0] == 1:

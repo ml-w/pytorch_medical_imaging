@@ -56,6 +56,9 @@ class ImageDataSetFilter(PMIDataBase):
 
         self._length = len(im_data)
 
+        # Forward passes to data object
+        self.__setattr__('get_unique_IDs', im_data.get_unique_IDs)
+
     def _pre_compute_filters(self):
         """
         Pre-compute output.

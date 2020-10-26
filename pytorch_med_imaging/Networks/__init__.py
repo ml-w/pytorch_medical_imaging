@@ -13,4 +13,4 @@ __all__ = ['UNet', 'TightFrameUNet', 'DenseUNet2D', 'AttentionUNet', 'UNetPosAwa
            'AttentionUNetPosAware', 'AttentionDenseUNet2D', 'AttentionUNetLocTexAware',
            'UNetLocTexAware', 'UNetLocTexHist', 'UNetLocTexHistDeeper', 'LLinNet',
            'AttentionResidualNet', 'UNet_p', 'AttentionResidualNet_64', 'AttentionResidualNet_SW',
-           'AttentionResidualGRUNet', 'CNNGRU', 'LiNet3D']
+           'AttentionResidualGRUNet', 'CNNGRU', 'LiNet3D', 'LiNet3D_FCA']
