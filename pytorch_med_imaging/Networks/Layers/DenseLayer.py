@@ -1,6 +1,8 @@
 import torch
 import torch.nn as nn
 
+__all__ = ['DenseConv', 'DenseConv3D','DenseLayer', 'DenseBlock', 'DenseBlock3D', 'DenseLayer3D']
+
 class DenseConv(nn.Module):
     def __init__(self, inchan, outchan, kernsize=3, stride=1, pad=True):
         super(DenseConv, self).__init__()

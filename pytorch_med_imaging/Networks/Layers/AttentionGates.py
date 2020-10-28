@@ -10,6 +10,8 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
+__all__ = ['AttentionBlock', 'AttentionGating']
+
 class AttentionBlock(nn.Module):
     def __init__(self, inchan, gating_chan, subsample=2):
         super(AttentionBlock, self).__init__()

@@ -1,6 +1,8 @@
 import torch
 import torch.nn as nn
 
+__all__ = ['BGRUStack', 'BGRUCell']
+
 class BGRUCell(nn.Module):
     def __init__(self, in_chan, out_chan, num_layers=1, dropout=0):
         super(BGRUCell, self).__init__()

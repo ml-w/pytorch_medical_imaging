@@ -2,6 +2,16 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
+__all__ = ['DoubleConv', 'LinearDoubleConv', 'CircularDoubleConv', 'ReflectiveDoubleConv', 'PermuteTensor',
+           'FC']
+
+_activation = {
+    'relu': nn.ReLU,
+    'leaky-relu': nn.LeakyReLU,
+    'relu6': nn.ReLU6,
+    'tanh': nn.Tanh
+}
+
 class DoubleConv(nn.Module):
     '''(conv => BN => ReLU) * 2'''
     def __init__(self, in_ch, out_ch):
@@ -147,3 +157,25 @@ class PermuteTensor(nn.Module):
 
     def forward(self, x):
         return x.permute(*self.permute_order.tolist())
+
+
+class FC(nn.Module):
+    def __init__(self, in_ch, out_ch, activation='relu', dropout=0.2):
+        super(FC, self).__init__()
+
+
+        if not activation in _activation:
+            raise AttributeError("Activation layer requested ({})is not in list. Available activations are:"
+                                 "{}".format(activation, list(_activation.keys())))
+
+        self._activation = _activation[activation]
+
+        self._fc = nn.Sequential(
+            nn.Linear(in_ch, out_ch),
+            nn.BatchNorm1d(out_ch),
+            self._activation(),
+            nn.Dropout(p = dropout)
+        )
+
+    def forward(self, x):
+        return self._fc(x)
