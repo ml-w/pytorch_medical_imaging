@@ -185,9 +185,31 @@ class PMIDataLoaderBase(object):
         try:
             out = tar_dict[section][key]
             if isinstance(out, str):
-                out = eval(out)
+                try:
+                    out = eval(out)
+                except:
+                    self._logger.warning("Failed when trying to evaluate {}.".format(key))
+                    raise ValueError("Cannot evaluate target key.")
             return out
         except:
+            return default_value
+
+
+    def get_from_config_with_boolean(self, section, key, default_value=None, tar_dict=None):
+        """
+        Same as :func:`get_from_loader_params` with getboolean().
+
+        Args:
+            key (obj): Key to read from self.
+            default_value (Optional): Value to fill in if the key is not found in `tar_dict`. Default to `None`.
+            tar_dict (dict): Target dictionary. Default to `self._prop_dict`
+        """
+        tar_dict = self._prop_dict if tar_dict is None else tar_dict
+        try:
+            out = tar_dict[section].getboolean(key)
+            return out
+        except:
+            self._logger.warning("Cannot getboolean from target section {} with key {}".format(section, key))
             return default_value
 
 
@@ -222,7 +244,31 @@ class PMIDataLoaderBase(object):
             tar_dict = self._prop_dict['LoaderParams']
             out = tar_dict[key]
             if isinstance(out, str):
-                out = eval(out)
+                try:
+                    out = eval(out)
+                except:
+                    self._logger.warning("Failed when trying to evaluate {}.".format(key))
+                    raise ValueError("Cannot evalute target key.")
+            return out
+        except:
+            return default_value
+
+    def get_from_loader_params_with_boolean(self, key, default_value=None):
+        """
+        Same as :func:`get_from_loader_params` with getboolean().
+
+        Args:
+            key (obj): Key to read from self.
+            default_value (Optional): Value to fill in if the key is not found in `tar_dict`. Default to `None`.
+            tar_dict (dict): Target dictionary. Default to `self._prop_dict`
+        """
+        try:
+            tar_dict = self._prop_dict['LoaderParams']
+            try:
+                out = tar_dict.getboolean(key, default_value)
+            except:
+                self._logger.warning('Cannot get boolean value from key {}'.format(key))
+                raise ValueError("Cannot get boolean value from key {}".format(key))
             return out
         except:
             return default_value
