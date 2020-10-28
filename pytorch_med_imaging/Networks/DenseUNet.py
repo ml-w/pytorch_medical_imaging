@@ -3,6 +3,8 @@ import torch.nn as nn
 
 from .Layers import DenseBlock, DenseConv
 
+__all__ = ['DenseUNet2D']
+
 class Transition(nn.Module):
     def __init__(self, n_channels):
         super(Transition, self).__init__()

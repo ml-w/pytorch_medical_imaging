@@ -137,22 +137,24 @@ class CNNGRU(nn.Module):
                 x = x.unsqueeze(0)
         return x
 
-class CNNGRU_test(CNNGRU):
+class CNNGRU_FCA(CNNGRU):
     def __init__(self,
                  in_ch: int,
                  out_ch: int,
-                 in_feat_ch: int,
+                 fca_ch: int,
                  first_conv_out_ch: int = 32,
                  decode_layers: int = 3,
                  embedding_size: tuple = (20, 5, 5),
                  gru_layers: int = 1,
                  dropout: float = 0.2
                  ):
-        super(CNNGRU_test, self).__init__()
+        super(CNNGRU_FCA, self).__init__()
 
         self._config = {
             'in_ch': torch.Tensor([in_ch]),
             'out_ch': torch.Tensor([out_ch]),
+            'fca_ch': torch.Tensor([fca_ch]),
+                                                                                                                           
             'first_conv_out_ch': torch.Tensor([first_conv_out_ch]),
             'decode_layers': torch.Tensor([decode_layers]),
             'embeding_size': torch.Tensor(embedding_size),
@@ -169,7 +171,7 @@ class CNNGRU_test(CNNGRU):
                          stride=[1, 2, 2], kern_size=[1, 3, 3], padding=[0, 1, 1], dropout=dropout)
             for i in range(decode_layers)
         ]
-        self.decode = nn.Sequential(*_decode_layers)
+        self.decode = nn.ModuleList(_decode_layers)
         self.adaptive_pool = nn.AdaptiveMaxPool3d(list(embedding_size))
         self.grus = BGRUStack(embedding_size[0] * embedding_size[1],
                               out_ch, first_conv_out_ch * 2 ** decode_layers,

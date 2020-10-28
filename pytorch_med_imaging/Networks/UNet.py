@@ -7,6 +7,8 @@ import torch.nn.functional as F
 
 from .Layers import ReflectiveDoubleConv as double_conv
 
+__all__ = ['UNet', 'UNetLocTexAware', 'UNetLocTexHistDeeper', 'UNetLocTexHist', 'UNetPosAware']
+
 class inconv(nn.Module):
     def __init__(self, in_ch, out_ch):
         super(inconv, self).__init__()

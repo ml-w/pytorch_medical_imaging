@@ -3,6 +3,8 @@ from .DenseUNet import DenseBlock, DenseConv, Transition, Down, Up
 
 import torch.nn as nn
 
+__all__ = ['AttentionDenseUNet2D']
+
 class AttentionDenseUNet2D(nn.Module):
     def __init__(self, n_channels, n_classes, gen_attmap=False):
         super(AttentionDenseUNet2D, self).__init__()

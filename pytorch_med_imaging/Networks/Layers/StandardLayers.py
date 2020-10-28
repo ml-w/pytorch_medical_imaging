@@ -3,7 +3,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 
 __all__ = ['DoubleConv', 'LinearDoubleConv', 'CircularDoubleConv', 'ReflectiveDoubleConv', 'PermuteTensor',
-           'FC']
+           'StandardFC', 'StandardFC2d']
 
 _activation = {
     'relu': nn.ReLU,
@@ -148,20 +148,25 @@ class ReflectiveDoubleConv(nn.Module):
 
 
 class PermuteTensor(nn.Module):
-    def __init__(self, permute_order):
+    def __init__(self, permute_order: list or tuple or torch.Tensor):
         super(PermuteTensor, self).__init__()
-        if not isinstance(permute_order, torch.Tensor):
-            permute_order = torch.Tensor(permute_order)
+        if isinstance(permute_order, list) or isinstance(permute_order, tuple):
+            _permute_order = torch.Tensor(permute_order)
+        elif isinstance(permute_order, torch.Tensor):
+            _permute_order = permute_order.int()
+        elif not isinstance(permute_order, torch.Tensor):
+            raise TypeError("Input should be a list, tuple or torch.Tensor, "
+                            "got {} instead.".format(type(permute_order)))
 
-        self.register_buffer('permute_order', permute_order.int(), True)
+        self.register_buffer('_permute_order', permute_order, True)
 
-    def forward(self, x):
-        return x.permute(*self.permute_order.tolist())
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        return x.permute(*self._permute_order.tolist())
 
 
-class FC(nn.Module):
+class StandardFC(nn.Module):
     def __init__(self, in_ch, out_ch, activation='relu', dropout=0.2):
-        super(FC, self).__init__()
+        super(StandardFC, self).__init__()
 
 
         if not activation in _activation:
@@ -178,4 +183,42 @@ class FC(nn.Module):
         )
 
     def forward(self, x):
+        return self._fc(x)
+
+
+class StandardFC2d(nn.Module):
+    r"""
+    Standard FC for $(B x S x C)$ inputs where S is an arbitrary dimension such that each of the elements in
+    the batch hold S extra set of C-lengthed 1d vector features.
+
+    Args:
+        in_ch (int):
+            Number of input channels, should equal the length of last dimension of expected input.
+        out_ch (int):
+            Number of desired output channels.
+        activation (str, Optional):
+            Which activation to use. Default to `relu`.
+        dropout (float, Optional):
+            Drop out probability. Default to 0.2
+    """
+    def __init__(self, in_ch, out_ch, activation='relu', dropout=0.2):
+        super(StandardFC2d, self).__init__()
+
+        if not activation in _activation:
+            raise AttributeError("Activation layer requested ({})is not in list. Available activations are:"
+                                 "{}".format(activation, list(_activation.keys())))
+        self.activation = _activation[activation]
+
+        self._fc = nn.Sequential(
+            nn.Linear(in_ch, out_ch),
+            PermuteTensor([0, 2, 1]),
+            nn.BatchNorm1d(out_ch),
+            PermuteTensor([0, 2, 1]),
+            self.activation(),
+            nn.Dropout(p = dropout)
+        )
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        if not x.dim() == 3:
+            raise ArithmeticError("Expect dim to be 3, got {} instead.".format(x.dim()))
         return self._fc(x)

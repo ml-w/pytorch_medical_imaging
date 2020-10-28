@@ -4,6 +4,8 @@ import torch.nn as nn
 from .Layers import DoubleConv, AttentionBlock, AttentionGating
 from .UNet import up, down, outconv, inconv
 
+__all__ = ['AttentionUNet', 'AttentionUNetLocTexAware', 'AttentionUNetPosAware', 'AttentionUNetLocTexAware']
+
 class AttentionUNet(nn.Module):
     def __init__(self, n_channels, outchan=None, gen_attmap=False):
         super(AttentionUNet, self).__init__()

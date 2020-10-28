@@ -3,6 +3,8 @@ import torch.nn as nn
 import torch.nn.functional as F
 from .Layers import DoubleConv3d, PermuteTensor
 
+__all__ = ['LiNet3D', 'LiNet3D_FCA']
+
 class LiNet3D(nn.Module):
     def __init__(self,
                  in_ch: int,

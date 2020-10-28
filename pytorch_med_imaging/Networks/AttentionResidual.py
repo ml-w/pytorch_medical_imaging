@@ -4,6 +4,8 @@ import torch.nn.functional as F
 
 from .Layers import ResidualBlock3d, Conv3d, InvertedConv3d, BGRUStack, BGRUCell, DoubleConv3d
 
+__all__ = ['AttentionResidualGRUNet', 'AttentionResidualNet', 'AttentionResidualNet_SW',
+           'AttentionResidualNet_64', 'AttentionDenseUNet']
 
 class SoftMaskBranch_aed2d(nn.Module):
     def __init__(self, in_ch, out_ch, r=1):
