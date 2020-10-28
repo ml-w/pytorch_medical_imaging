@@ -8,4 +8,5 @@ from .LLinNet import *
 from .LiNet import *
 from .AttentionResidual import *
 from .CnnRnn import *
+from .SimpleFCNet import *
 

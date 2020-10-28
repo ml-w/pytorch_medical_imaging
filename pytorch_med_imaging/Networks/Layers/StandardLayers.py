@@ -151,14 +151,14 @@ class PermuteTensor(nn.Module):
     def __init__(self, permute_order: list or tuple or torch.Tensor):
         super(PermuteTensor, self).__init__()
         if isinstance(permute_order, list) or isinstance(permute_order, tuple):
-            _permute_order = torch.Tensor(permute_order)
+            _permute_order = torch.Tensor(permute_order).int()
         elif isinstance(permute_order, torch.Tensor):
             _permute_order = permute_order.int()
-        elif not isinstance(permute_order, torch.Tensor):
+        else:
             raise TypeError("Input should be a list, tuple or torch.Tensor, "
                             "got {} instead.".format(type(permute_order)))
 
-        self.register_buffer('_permute_order', permute_order, True)
+        self.register_buffer('_permute_order', _permute_order, True)
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         return x.permute(*self._permute_order.tolist())
