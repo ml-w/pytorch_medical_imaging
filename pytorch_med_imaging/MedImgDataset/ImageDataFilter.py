@@ -15,7 +15,10 @@ class ImageDataSetFilter(PMIDataBase):
             This is the base data.
         filter_func (list or callable):
             A callable function that accepts input and returns a tensor or a list of tensors.
-        cat_to_ch (bool):
+        results_only (bool, Optional):
+            If True, the option `cat_to_ch` will be ignored and iterator will only return the
+            filter results instead of both the filter input and filter result. Default to False.
+        cat_to_ch (bool, Optional):
             If True, the output will be concatenated together. Default to False.
         pre_compute (bool, Optional):
             If True, the output will be computed on object creation. Default to False.
@@ -28,12 +31,13 @@ class ImageDataSetFilter(PMIDataBase):
     >>> im_filter = ImageDataSetFilter(im, func)
 
     """
-    def __init__(self, im_data, filter_func, cat_to_ch=False, pre_compute=False):
+    def __init__(self, im_data, filter_func, results_only=False, cat_to_ch=False, pre_compute=False):
         super(ImageDataSetFilter, self).__init__()
 
         self._cat_to_ch = cat_to_ch
         self._pre_compute = pre_compute
         self._im_data = im_data
+        self._results_only = results_only
 
         self._logger.info("Constructing filters: {}".format(filter_func))
         if not (isinstance(filter_func, list) or isinstance(filter_func, tuple)):
