@@ -73,6 +73,7 @@ class PMIImageDataLoader(PMIDataLoaderBase):
                 self._idlist = self._idlist.split(',')
             self._idlist.sort()
 
+        self._data_subtype = self.get_from_loader_params('data_subtype', None)
         self._augmentation = self.get_from_loader_params_with_eval('augmentation', 0)
         self._load_by_slices = self.get_from_loader_params_with_eval('load_by_slices', -1)
         self._load_with_filter = self.get_from_loader_params('load_with_filter', "")
@@ -124,8 +125,10 @@ class PMIImageDataLoader(PMIDataLoaderBase):
             raise AttributeError("Object failed to load _target_dir.")
 
         img_out = self._read_image(self._input_dir)
-        if not re.match("(?=.*seg.*)", self._datatype, re.IGNORECASE) is None:
+        if not re.match("(?=.*seg.*)", self._data_subtype, re.IGNORECASE) is None:
             gt_out = self._read_image(self._target_dir, dtype='uint8', is_seg=True, reference_dataset=img_out)
+        elif not re.match("(?=.*encoder.*)", self._data_subtype, re.IGNORECASE) is None:
+            gt_out = img_out
         else:
             gt_out = self._read_image(self._target_dir, reference_dataset=img_out)
 
