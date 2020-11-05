@@ -39,6 +39,9 @@ class ImageDataSetFilter(PMIDataBase):
         self._im_data = im_data
         self._results_only = results_only
 
+        if self._results_only:
+            self._logger.info("Running in results_only mode.")
+
         self._logger.info("Constructing filters: {}".format(filter_func))
         if not (isinstance(filter_func, list) or isinstance(filter_func, tuple)):
             self._logger.debug("Input filters are not a list, wrapping the filter as a list.")
@@ -61,7 +64,7 @@ class ImageDataSetFilter(PMIDataBase):
         self._length = len(im_data)
 
         # Forward passes to data object
-        self.__setattr__('get_unique_IDs', im_data.get_unique_IDs)
+        setattr(self, '__str__', im_data.__str__)
 
     def _pre_compute_filters(self):
         """
@@ -75,11 +78,15 @@ class ImageDataSetFilter(PMIDataBase):
                 except:
                     self._logger.error("Function {} encounter error.".format(f))
                     self._logger.exception("Error when pre-computing item: {}".format(i))
-            if self._cat_to_ch:
-                d = torch.cat([dat, _im], dim=1)
+
+            if self._results_only:
+                self._data.append(_im)
             else:
-                d = [dat, _im]
-            self._data.append(d)
+                if self._cat_to_ch:
+                    d = torch.cat([dat, _im], dim=1)
+                else:
+                    d = [dat, _im]
+                self._data.append(d)
 
     def _mpi_pre_compute_filters(self):
         """
@@ -151,7 +158,10 @@ class ImageDataSetFilter(PMIDataBase):
                 except:
                     self._logger.error("Function {} encounter error.".format(f))
                     self._logger.exception("Error when getting item: {}".format(item))
-            if self._cat_to_ch:
+
+            if self._results_only:
+                return _im
+            elif self._cat_to_ch:
                 im = torch.cat([im, _im], dim=1)
                 return im
             else:
@@ -160,5 +170,12 @@ class ImageDataSetFilter(PMIDataBase):
             return self._data[item]
 
 
-
+    def __getattribute__(self, item):
+        """
+        This pass all unknown function calls to im_data, save us some trouble.
+        """
+        try:
+            return super(ImageDataSetFilter, self).__getattribute__(item)
+        except AttributeError:
+            return getattr(self._im_data, item)
 

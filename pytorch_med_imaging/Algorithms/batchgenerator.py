@@ -190,11 +190,17 @@ def check_batches_files(dir, globber=None):
 
 if __name__ == '__main__':
     import pandas as pd
-    allids = open('../NPC_Segmentation/99.Testing/Survival_analysis/all_case.txt').readlines()[0].rstrip().split(',')
+    allids = open('../../NPC_Segmentation/99.Testing/Survival_analysis/all_case.txt').readlines()[0].rstrip().split(',')
+    datasheet = pd.read_csv('../../NPC_Segmentation/50.NPC_SurvivalAnalysis/survival_analysis_data_table.csv',
+                            index_col=0)
+    datasheet.index = datasheet.index.astype(str)
+    relasped = datasheet.apply(sum, axis=1)[allids]
+    relasped = (relasped > 0).astype('int').to_list()
 
     GenerateTestBatch(allids,
                       5,
-                      '../NPC_Segmentation/99.Testing/KFold_Survival_5_Folds/',
+                      '../../NPC_Segmentation/99.Testing/KFold_Survival_5_Folds/',
+                      stratification_class=relasped,
                       validation=29,
                       prefix='B'
                       )

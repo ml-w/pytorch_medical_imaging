@@ -13,7 +13,7 @@ class FCNet(nn.Module):
             'in_ch': torch.Tensor([in_ch]).int(),
             'out_ch': torch.Tensor([out_ch]).int(),
             'num_layers': torch.Tensor(num_layers).int(),
-            'drop_out': torch.Tensor([dropout])
+            'drop_out': torch.Tensor([dropout]).float()
         }
         for name in self._config:
             self.register_buffer(name, self._config[name])
@@ -42,7 +42,7 @@ class FCNet2d(nn.Module):
             'in_ch': torch.Tensor([in_ch]).int(),
             'out_ch': torch.Tensor([out_ch]).int(),
             'num_layers': torch.Tensor(num_layers).int(),
-            'drop_out': torch.Tensor([dropout])
+            'drop_out': torch.Tensor([dropout]).float()
         }
         for name in self._config:
             self.register_buffer(name, self._config[name])

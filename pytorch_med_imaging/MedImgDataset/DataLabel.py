@@ -29,10 +29,22 @@ class DataLabel(PMIDataBase):
         return 0
 
     def set_target_column(self, target):
-        if not target in self._data_table.columns:
-            self._logger.warning("Cannot found specified target column in data table!"  
-                                 "Available columns are {}".format(self._data_table.columns))
-        self._target_column = target
+        if target.find(','):
+            self._target_column = []
+            self._logger.debug("Multiple columns specified.")
+            for t in target.split(','):
+                if not t in self._data_table.columns:
+                    self._logger.warning("Cannot found specified target column {} in data table!"  
+                                         "Available columns are {}".format(t, self._data_table.columns))
+                else:
+                    self._target_column.append(t)
+        else:
+            if not target in self._data_table.columns:
+                self._logger.warning("Cannot found specified target column {} in data table!"
+                                     "Available columns are {}".format(target, self._data_table.columns))
+                self._logger.warning("Setting target to {} anyways.".format(target))
+            self._target_column = target
+        self._logger.debug("columns are: {}".format(self._target_column))
         return 0
 
     @staticmethod
@@ -83,14 +95,18 @@ class DataLabel(PMIDataBase):
         return len(self._data_table)
 
     def __getitem__(self, item):
-        if self._target_column is None:
-            return torch.tensor(self._data_table.iloc[item])
-        else:
-            try:
-                return torch.tensor(self._data_table[self._target_column][item])
-            except IndexError:
-                self._logger.warning("Falling back to integer index.")
+        if isinstance(item, int):
+            if self._target_column is None:
                 return torch.tensor(self._data_table.iloc[item])
+            else:
+                return torch.tensor(self._data_table[self._target_column].iloc[item])
+        elif isinstance(item, str):
+            if self._target_column is None:
+                return torch.tensor(self._data_table.loc[item])
+            else:
+                return torch.tensor(self._data_table[self._target_column].loc[item])
+        else:
+            return torch.tensor(self._data_table.loc[item])
 
     def __str__(self):
         return self._data_table.to_string()

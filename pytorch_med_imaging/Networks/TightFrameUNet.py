@@ -5,7 +5,7 @@ from torch.autograd import Variable
 from torch import cat, stack, tensor
 from numpy import sqrt
 
-from .Layers import DoubleConv, CircularDoubleConv
+from .Layers import DoubleConv2d, CircularDoubleConv
 
 
 class HaarDown(nn.Module):
@@ -85,7 +85,7 @@ class Haar(nn.Module):
 class Down(nn.Module):
     def __init__(self, inchan, outchan, circular=False):
         super(Down, self).__init__()
-        conv = CircularDoubleConv if circular else DoubleConv
+        conv = CircularDoubleConv if circular else DoubleConv2d
         self.d = nn.Sequential(
             nn.AvgPool2d(2),
             conv(inchan, outchan)
@@ -105,7 +105,7 @@ class Up(nn.Module):
         else:
             self.up = nn.ConvTranspose2d(inchan//2, outchan//2, 2, stride=2)
 
-        self.conv = CircularDoubleConv(inchan, outchan) if circular else DoubleConv(inchan, outchan)
+        self.conv = CircularDoubleConv(inchan, outchan) if circular else DoubleConv2d(inchan, outchan)
 
     def forward(self, x1, x2, x3):
         x1 = self.up(x1)
@@ -135,7 +135,7 @@ class OutConv(nn.Module):
 class TightFrameUNet(nn.Module):
     def __init__(self, chan, residual=False, circular=False):
         super(TightFrameUNet, self).__init__()
-        self.inc = CircularDoubleConv(chan, 64) if circular else DoubleConv(chan, 64)
+        self.inc = CircularDoubleConv(chan, 64) if circular else DoubleConv2d(chan, 64)
         self.outc = OutConv(64, chan)
         self.down1 = Down(64, 128, circular=circular)
         self.down2 = Down(128, 256, circular=circular)

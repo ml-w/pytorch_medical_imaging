@@ -433,6 +433,9 @@ if __name__ == '__main__':
                         help="Set this to initiate the config with debug setting.")
     parser.add_argument('--verbose', dest='verbose', action='store_true', default=False,
                         help="Print message to stdout.")
+    parser.add_argument('--override', dest='override', action='store', type=str, default='',
+                        help="Use syntax '(section1,key1)=value1;(section2,key2)=value' to override any"
+                             "settings specified in the config file. Note that no space is allowed.")
 
     a = parser.parse_args()
 
@@ -440,6 +443,25 @@ if __name__ == '__main__':
 
     config = configparser.ConfigParser()
     config.read(a.config)
+
+    # Override config settings
+    pre_log_message = []
+    if not a.override == '':
+        # try:
+        for substring in a.override.split(';'):
+            substring = substring.replace(' ', '')
+            mo = re.match("\((?P<section>.+),(?P<key>.+)\)\=(?P<value>.+)",substring)
+            if mo is None:
+                pre_log_message.append("Overriding failed for substring {}".format(substring))
+            else:
+                mo_dict = mo.groupdict()
+                _section, _key, _val = [mo_dict[k] for k in ['section', 'key', 'value']]
+                print(_section,_key,_val)
+                if not _section in config:
+                    config.add_section(_section)
+                config.set(_section, _key, _val)
+        # except:
+        #     pre_log_message.append("Something went wrong when overriding settings.")
 
 
     # Parameters check
@@ -455,4 +477,8 @@ if __name__ == '__main__':
     print(f"Fullpath: {os.path.abspath(log_dir)}")
     logger = Logger(log_dir, logger_name='main', verbose=a.verbose)
     logger.info("Global logger: {}".format(logger))
+
+    for msg in pre_log_message:
+        logger.info(msg)
+
     main(a, config, logger)

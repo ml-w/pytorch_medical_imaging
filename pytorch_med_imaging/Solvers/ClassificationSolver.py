@@ -82,8 +82,14 @@ class ClassificationSolver(SolverBase):
 
     def _feed_forward(self, *args):
         s, g = args
-        if self._iscuda:
-            s = self._force_cuda(s)
+        try:
+            s = self._match_type_with_network(s)
+        except:
+            self._logger.exception("Failed to match input to network type. Falling back.")
+            if self._iscuda:
+                s = self._force_cuda(s)
+                self._logger.debug("_force_cuda() typed data as: {}".format(
+                    [ss.dtype for ss in s] if isinstance(s, list) else s.dtype))
 
 
         # if isinstance(s, list):

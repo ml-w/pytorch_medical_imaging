@@ -15,6 +15,7 @@ class TverskyDiceLoss(nn.Module):
         self._with_sigmoid = with_sigmoid
         self._logger = Logger[self.__class__.__name__]
         self._logger.debug("Set up loss with gamma: {}".format(self._gamma))
+
         self.register_buffer('weight', self._weight)
         self.register_buffer('gamma', self._gamma)
 

@@ -507,11 +507,12 @@ class ImageDataSet(PMIDataBase):
     def __str__(self):
         from pandas import DataFrame as df
         s = "==========================================================================================\n" \
+            "Datatype: %s \n" \
             "Root Path: %s \n" \
             "Number of loaded images: %i\n" \
             "Load By Slice: %i \n" \
             "Image Details:\n" \
-            "--------------\n"%(self.rootdir, self.length, self._byslices)
+            "--------------\n"%(__class__.__name__, self.rootdir, self.length, self._byslices)
         # "File Paths\tSize\t\tSpacing\t\tOrigin\n"
         # printable = {'File Name': []}
         printable = {'ID': [], 'File Name': [], 'Size': [], 'Spacing': [], 'Origin': []}

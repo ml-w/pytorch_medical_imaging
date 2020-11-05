@@ -164,6 +164,7 @@ class SolverBase(object):
         for name, module in self._net.named_modules():
             try:
                 self._net_weight_type = module.weight.type()
+                self._logger.debug("Module type is: {}".format(self._net_weight_type))
                 break
             except AttributeError:
                 continue
@@ -177,8 +178,12 @@ class SolverBase(object):
 
         # Do nothing if type is already correct.
         try:
-            if tensor.type() == self._net_weight_type or all([t.type() == self._net_weight_type for t in tensor]):
-                return tensor
+            if isinstance(tensor, list) or isinstance(tensor, tuple):
+                if all([t.type() == self._net_weight_type for t in tensor]):
+                    return tensor
+            else:
+                if tensor.type() == self._net_weight_type:
+                    return tensor
         except:
             self._logger.warning("Can't determine if type is already followed.")
 

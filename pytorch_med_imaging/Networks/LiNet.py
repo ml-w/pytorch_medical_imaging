@@ -3,9 +3,9 @@ import torch.nn as nn
 import torch.nn.functional as F
 from .Layers import DoubleConv3d, PermuteTensor
 
-__all__ = ['LiNet3D', 'LiNet3D_FCA']
+__all__ = ['LiNet3d', 'LiNet3d_FCA']
 
-class LiNet3D(nn.Module):
+class LiNet3d(nn.Module):
     def __init__(self,
                  in_ch: int,
                  out_ch: int,
@@ -14,7 +14,7 @@ class LiNet3D(nn.Module):
                  fc_layers: int = 3 ,
                  dropout: float = 0.2
                  ):
-        super(LiNet3D, self).__init__()
+        super(LiNet3d, self).__init__()
 
         self._config = {
             'in_ch': torch.Tensor([in_ch]),
@@ -58,7 +58,7 @@ class LiNet3D(nn.Module):
         x = self.fcs(x)
         return self.fc_out(x)
 
-class LiNet3D_FCA(nn.Module):
+class LiNet3d_FCA(nn.Module):
     def __init__(self,
                  in_ch: int,
                  out_ch: int,
@@ -68,7 +68,7 @@ class LiNet3D_FCA(nn.Module):
                  fc_layers: int = 3,
                  dropout: float = 0.2
                  ):
-        super(LiNet3D_FCA, self).__init__()
+        super(LiNet3d_FCA, self).__init__()
 
         self._config = {
             'in_ch': torch.Tensor([in_ch]),

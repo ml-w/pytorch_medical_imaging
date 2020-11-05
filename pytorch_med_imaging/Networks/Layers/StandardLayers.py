@@ -2,7 +2,8 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
-__all__ = ['DoubleConv', 'LinearDoubleConv', 'CircularDoubleConv', 'ReflectiveDoubleConv', 'PermuteTensor',
+__all__ = ['DoubleConv1d','DoubleConv2d', 'LinearDoubleConv', 'CircularDoubleConv', 'ReflectiveDoubleConv',
+           'PermuteTensor',
            'StandardFC', 'StandardFC2d']
 
 _activation = {
@@ -12,10 +13,28 @@ _activation = {
     'tanh': nn.Tanh
 }
 
-class DoubleConv(nn.Module):
+
+class DoubleConv1d(nn.Module):
     '''(conv => BN => ReLU) * 2'''
     def __init__(self, in_ch, out_ch):
-        super(DoubleConv, self).__init__()
+        super(DoubleConv1d, self).__init__()
+        self.conv = nn.Sequential(
+            nn.Conv1d(in_ch, out_ch, 3, padding=1),
+            nn.BatchNorm1d(out_ch),
+            nn.ReLU(inplace=True),
+            nn.Conv1d(out_ch, out_ch, 3, padding=1),
+            nn.BatchNorm1d(out_ch),
+            nn.ReLU(inplace=True)
+        )
+
+    def forward(self, x):
+        x = self.conv(x)
+        return x
+
+class DoubleConv2d(nn.Module):
+    '''(conv => BN => ReLU) * 2'''
+    def __init__(self, in_ch, out_ch):
+        super(DoubleConv2d, self).__init__()
         self.conv = nn.Sequential(
             nn.Conv2d(in_ch, out_ch, 3, padding=1),
             nn.BatchNorm2d(out_ch),
@@ -217,6 +236,7 @@ class StandardFC2d(nn.Module):
             self.activation(),
             nn.Dropout(p = dropout)
         )
+
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         if not x.dim() == 3:

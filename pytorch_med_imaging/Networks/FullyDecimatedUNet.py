@@ -2,7 +2,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
-from .Layers import DoubleConv, CircularDoubleConv, LinearDoubleConv
+from .Layers import DoubleConv2d, CircularDoubleConv, LinearDoubleConv
 
 class Decimation(nn.Module):
     def __init__(self, inchan):
@@ -47,7 +47,7 @@ class Down(nn.Module):
         self.decimation = Decimation(inchan)
 
         if not linear:
-            conv = DoubleConv
+            conv = DoubleConv2d
         else:
             conv = LinearDoubleConv
 
@@ -99,7 +99,7 @@ class Up(nn.Module):
         self.up = nn.Upsample(scale_factor=2, align_corners=True, mode='bilinear')
 
         if not linear:
-            conv = DoubleConv
+            conv = DoubleConv2d
         else:
             conv = LinearDoubleConv
         self.conv = conv(inchan, outchan)
@@ -149,9 +149,14 @@ class DUnet(nn.Module):
         return x
 
 class LinearDUnet(nn.Module):
-    def __init__(self, inchan):
+    def __init__(self, inchan, num_layers=3):
         super(LinearDUnet, self).__init__()
         self.indown = LinearDoubleConv(inchan, 64)
+
+        _down = nn.Sequential(
+
+        )
+
         self.down1 = LastDown(64, 256, linear=True)
         self.down2 = LastDown(256, 1024, linear=True)
         self.down3 = LastDown(1024, 1024, linear=True)

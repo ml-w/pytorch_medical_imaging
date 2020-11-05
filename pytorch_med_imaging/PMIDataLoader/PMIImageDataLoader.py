@@ -76,6 +76,7 @@ class PMIImageDataLoader(PMIDataLoaderBase):
         self._augmentation = self.get_from_loader_params_with_eval('augmentation', 0)
         self._load_by_slices = self.get_from_loader_params_with_eval('load_by_slices', -1)
         self._load_with_filter = self.get_from_loader_params('load_with_filter', "")
+        self._results_only = self.get_from_loader_params_with_boolean('results_only', False)
 
     def _read_image(self, root_dir, **kwargs):
         """
@@ -105,7 +106,7 @@ class PMIImageDataLoader(PMIDataLoaderBase):
                                  aug_factor=self._augmentation, **kwargs)
 
         if re.search("texture", self._load_with_filter, flags=re.IGNORECASE) is not None:
-            img_data = ImageDataSetWithTexture(img_data)
+            img_data = ImageDataSetWithTexture(img_data, results_only=self._results_only)
         return img_data
 
     def _load_data_set_training(self):

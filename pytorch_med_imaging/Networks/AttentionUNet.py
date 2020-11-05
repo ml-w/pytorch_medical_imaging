@@ -1,7 +1,7 @@
 import torch
 import torch.nn as nn
 
-from .Layers import DoubleConv, AttentionBlock, AttentionGating
+from .Layers import DoubleConv2d, AttentionBlock, AttentionGating
 from .UNet import up, down, outconv, inconv
 
 __all__ = ['AttentionUNet', 'AttentionUNetLocTexAware', 'AttentionUNetPosAware', 'AttentionUNetLocTexAware']
