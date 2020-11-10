@@ -16,13 +16,13 @@ _activation = {
 
 class DoubleConv1d(nn.Module):
     '''(conv => BN => ReLU) * 2'''
-    def __init__(self, in_ch, out_ch):
+    def __init__(self, in_ch, out_ch, padding=1, **kwargs):
         super(DoubleConv1d, self).__init__()
         self.conv = nn.Sequential(
-            nn.Conv1d(in_ch, out_ch, 3, padding=1),
+            nn.Conv1d(in_ch, out_ch, 3, padding=1, **kwargs),
             nn.BatchNorm1d(out_ch),
             nn.ReLU(inplace=True),
-            nn.Conv1d(out_ch, out_ch, 3, padding=1),
+            nn.Conv1d(out_ch, out_ch, 3, padding=1, **kwargs),
             nn.BatchNorm1d(out_ch),
             nn.ReLU(inplace=True)
         )
@@ -33,13 +33,13 @@ class DoubleConv1d(nn.Module):
 
 class DoubleConv2d(nn.Module):
     '''(conv => BN => ReLU) * 2'''
-    def __init__(self, in_ch, out_ch):
+    def __init__(self, in_ch, out_ch, padding= 1, **kwargs):
         super(DoubleConv2d, self).__init__()
         self.conv = nn.Sequential(
-            nn.Conv2d(in_ch, out_ch, 3, padding=1),
+            nn.Conv2d(in_ch, out_ch, 3, padding=1, **kwargs),
             nn.BatchNorm2d(out_ch),
             nn.ReLU(inplace=True),
-            nn.Conv2d(out_ch, out_ch, 3, padding=1),
+            nn.Conv2d(out_ch, out_ch, 3, padding=1, **kwargs),
             nn.BatchNorm2d(out_ch),
             nn.ReLU(inplace=True)
         )
@@ -51,12 +51,12 @@ class DoubleConv2d(nn.Module):
 
 class LinearDoubleConv(nn.Module):
     '''(conv => BN => ReLU) * 2'''
-    def __init__(self, in_ch, out_ch):
+    def __init__(self, in_ch, out_ch, padding=1, **kwargs):
         super(LinearDoubleConv, self).__init__()
         self.conv = nn.Sequential(
-            nn.Conv2d(in_ch, out_ch, 3, padding=1),
+            nn.Conv2d(in_ch, out_ch, 3, padding=padding, **kwargs),
             nn.BatchNorm2d(out_ch),
-            nn.Conv2d(out_ch, out_ch, 3, padding=1),
+            nn.Conv2d(out_ch, out_ch, 3, padding=padding, **kwargs),
             nn.BatchNorm2d(out_ch)
         )
 
