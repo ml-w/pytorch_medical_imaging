@@ -6,6 +6,7 @@ train:
         epoch: 50
         batch-size: 4
         lr: 1E-4
+        debug: no
     output-scalars:
         loss: 'EpochLoss: (\value)'
         accuracy: 'ACC: (\value)'
@@ -39,7 +40,7 @@ validation:
         batch-size: 4
         config: "Configs/Survival/Test.ini"
     sourcecode:
-        root: ../pytorch_med_imaging
+        root: ../
         select:
             - exclude:
                 dir: 'NPC_Segmentation'
