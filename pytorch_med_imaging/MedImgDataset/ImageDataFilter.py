@@ -31,13 +31,15 @@ class ImageDataSetFilter(PMIDataBase):
     >>> im_filter = ImageDataSetFilter(im, func)
 
     """
-    def __init__(self, im_data, filter_func, results_only=False, cat_to_ch=False, pre_compute=False):
+    def __init__(self, im_data, filter_func, results_only=False, cat_to_ch=False, pre_compute=False,
+                 channel_first=False):
         super(ImageDataSetFilter, self).__init__()
 
         self._cat_to_ch = cat_to_ch
         self._pre_compute = pre_compute
         self._im_data = im_data
         self._results_only = results_only
+        self._channel_first = channel_first
 
         if self._results_only:
             self._logger.info("Running in results_only mode.")
@@ -158,6 +160,10 @@ class ImageDataSetFilter(PMIDataBase):
                 except:
                     self._logger.error("Function {} encounter error.".format(f))
                     self._logger.exception("Error when getting item: {}".format(item))
+
+            # don't use this for as_image
+            if self._channel_first:
+                _im = _im.transpose(1, 0)
 
             if self._results_only:
                 return _im
