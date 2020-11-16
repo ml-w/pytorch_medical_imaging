@@ -93,6 +93,10 @@ class SolverBase(object):
         if torch.cuda.device_count()  > 1:
             self._net = nn.DataParallel(self._net)
 
+    def set_loss_function(self, func: callable):
+        self._logger.debug("Loss functioning override.")
+        self._lossfunction = func
+
 
     def step(self, *args):
         out = self._feed_forward(*args)
