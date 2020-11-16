@@ -4,6 +4,7 @@ from ..MedImgDataset.Computation import ImageDataSetWithTexture
 
 import re
 
+__all__ = ['PMIImageDataLoader']
 
 class PMIImageDataLoader(PMIDataLoaderBase):
     """

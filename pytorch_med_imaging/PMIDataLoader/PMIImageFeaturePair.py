@@ -1,6 +1,8 @@
 from .PMIImageDataLoader import PMIImageDataLoader
 from .. import MedImgDataset
 
+__all__ = ['PMIImageFeaturePair']
+
 class PMIImageFeaturePair(PMIImageDataLoader):
     """
     This class load :class:ImageDataSet related image data together with features written in a csv file.

@@ -4,6 +4,8 @@ import configparser
 from abc import *
 from ..logger import Logger
 
+__all__ = ['PMIDataLoaderBase']
+
 class PMIDataLoaderBase(object):
     """
     This is the base class to allow automatic loading from main.py. All custom class should inherit this class such

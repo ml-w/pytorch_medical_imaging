@@ -4,8 +4,7 @@ from .PMIDataFactory import *
 from .PMIImageFeaturePair import *
 from .PMIImageMCFeaturePair import *
 
-__all__ = ['PMIImageDataLoader', 'PMIImagePatchesLoader', 'PMIDataFactory', 'PMIImageFeaturePair',
-           'PMIImageMCFeaturePair']
+__all__ = ['DatatypeDictionary']
 
 DatatypeDictionary = {
     'seg': PMIImageDataLoader,

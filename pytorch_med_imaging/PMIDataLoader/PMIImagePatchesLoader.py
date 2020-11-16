@@ -1,6 +1,7 @@
 from .PMIImageDataLoader import PMIImageDataLoader
 from .. import MedImgDataset
 
+__all__ = ['PMIImagePatchesLoader']
 
 class PMIImagePatchesLoader(PMIImageDataLoader):
     """
