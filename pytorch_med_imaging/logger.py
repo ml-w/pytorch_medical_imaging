@@ -45,7 +45,11 @@ class Logger(object):
         )
 
         # Check and create directory for log
-        os.makedirs(os.path.dirname(log_dir), exist_ok=True)
+        try:
+            os.makedirs(os.path.dirname(log_dir), exist_ok=True)
+        except:
+            pass
+        self._log_dir = os.path.abspath(log_dir)
 
 
         self._logger = logging.getLogger(logger_name)
