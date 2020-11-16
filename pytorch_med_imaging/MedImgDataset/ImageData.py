@@ -502,7 +502,15 @@ class ImageDataSet(PMIDataBase):
         return self.length
 
     def __getitem__(self, item):
-        return self.data[item]
+        if self._byslices >= 0:
+            out_dim = 3
+        else:
+            out_dim = 4
+
+        out = self.data[item]
+        while out.dim() < out_dim:
+            out = out.unsqueeze(0)
+        return out
 
     def __str__(self):
         from pandas import DataFrame as df
