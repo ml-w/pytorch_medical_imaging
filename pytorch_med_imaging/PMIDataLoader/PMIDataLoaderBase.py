@@ -273,7 +273,7 @@ class PMIDataLoaderBase(object):
         except:
             return default_value
 
-    def get_target_attributes(self, tar_keys, tar_def_values=None, tar_eval_flag=None, tar_dict=None):
+    def get_target_attributes(self, section, tar_keys, tar_def_values=None, tar_eval_flag=None, tar_dict=None):
         """
         Get attributes from target dictionary with default values in batch.
 
@@ -293,4 +293,5 @@ class PMIDataLoaderBase(object):
                 _func = self.get_from_config_with_eval
             else:
                 _func = self.get_from_config
-            out_dict[k] = _func(k, default_value=default_value, tar_dict=tar_dict)
+            out_dict[k] = _func(section, k, default_value=default_value, tar_dict=tar_dict)
+        return out_dict
