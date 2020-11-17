@@ -79,13 +79,13 @@ class DenseLayer3D(nn.Module):
 
 
 class DenseBlock3D(nn.Module):
-    def __init__(self, inchan:int, k:int, num_layers:int , dropout:float =0.2):
+    def __init__(self, inchan:int, k:int, num_layers:int , kernsize: int or [int] = 3, dropout:float =0.2):
         super(DenseBlock3D, self).__init__()
 
         convs = []
         for i in range(num_layers):
             convs.append(
-                DenseLayer3D(inchan + (i+1)*k, k, 4, dropout=dropout)
+                DenseLayer3D(inchan + (i+1)*k, k, 4, dropout=dropout, kernsize=kernsize)
             )
         self.convs = nn.Sequential(*convs)
 

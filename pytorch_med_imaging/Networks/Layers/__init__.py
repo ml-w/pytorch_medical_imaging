@@ -3,6 +3,7 @@ from .StandardLayers import *
 from .AttentionGates import *
 from .StandardLayers3D import *
 from .RecurrentLayers import *
+from .Transitions import *
 
 # __all__ = ['DoubleConv', 'CircularDoubleConv', 'DenseBlock', 'DenseLayer', 'AttentionBlock', 'DenseConv',
 #            'AttentionGating', 'ReflectiveDoubleConv', 'DoubleConv3d', 'Conv3d', 'InvertedConv3d',
