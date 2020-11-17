@@ -64,12 +64,13 @@ class DenseConv3D(nn.Module):
 
 
 class DenseLayer3D(nn.Module):
-    def __init__(self, inchan, k, bn_size):
+    def __init__(self, inchan, k, bn_size, kernsize=3, dropout=0.2):
         super(DenseLayer3D, self).__init__()
 
         self.convs = nn.Sequential(
             DenseConv3D(inchan, bn_size * k, kernsize=1),
-            DenseConv3D(bn_size * k, k)
+            DenseConv3D(bn_size * k, k, kernsize=kernsize),
+            nn.Dropout3d(p=dropout)
         )
 
     def forward(self, x):
@@ -78,15 +79,13 @@ class DenseLayer3D(nn.Module):
 
 
 class DenseBlock3D(nn.Module):
-    def __init__(self, inchan, k, num_layers):
+    def __init__(self, inchan:int, k:int, num_layers:int , dropout:float =0.2):
         super(DenseBlock3D, self).__init__()
 
-        inconv = DenseLayer3D(inchan, k, 4)
-
-        convs = [inconv]
-        for i in range(num_layers - 1):
+        convs = []
+        for i in range(num_layers):
             convs.append(
-                DenseLayer3D(inchan + (i+1)*k, k, 4)
+                DenseLayer3D(inchan + (i+1)*k, k, 4, dropout=dropout)
             )
         self.convs = nn.Sequential(*convs)
 
