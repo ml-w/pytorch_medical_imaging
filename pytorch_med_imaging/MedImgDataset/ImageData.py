@@ -230,8 +230,8 @@ class ImageDataSet(PMIDataBase):
             raise AttributeError("file_dirs is not assigned!")
 
         if len(file_dirs) == 0:
-            self._logger.error("No target files found in " + self.rootdir)
-            raise ArithmeticError("No target files found!")
+            self._logger.error("No target files found in {}.".format(self.rootdir))
+            raise ArithmeticError("No target files found in {}.".format(self.rootdir))
 
         #==========================
         # Apply filter if specified

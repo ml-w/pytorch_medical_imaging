@@ -130,9 +130,8 @@ class SolverBase(object):
             dl = DataLoader(dataset, batch_size=batch_size, shuffle=False, num_workers=0, drop_last=False, pin_memory=False)
 
             for s, g in tqdm(dl, desc="Validation", position=2):
-                if self._iscuda:
-                        s = [ss.cuda() for ss in s] if isinstance(s, list) else s.cuda()
-                        g = [gg.cuda() for gg in g] if isinstance(g, list) else g.cuda()
+                s = self._match_type_with_network(s)
+                g = self._match_type_with_network(g) # no assumption but should be long in segmentation only.
 
                 if isinstance(s, list):
                     res = self._net(*s)
