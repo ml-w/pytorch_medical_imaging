@@ -4,8 +4,6 @@ import configparser
 from abc import *
 from ..logger import Logger
 
-__all__ = ['PMIDataLoaderBase']
-
 class PMIDataLoaderBase(object):
     """
     This is the base class to allow automatic loading from main.py. All custom class should inherit this class such
@@ -292,7 +290,7 @@ class PMIDataLoaderBase(object):
         out_dict = {}
         for k, default_value, eval_flag in zip(tar_keys, tar_def_values, tar_eval_flag):
             if eval_flag:
-                _func = self.get_from_loader_params_with_eval
+                _func = self.get_from_config_with_eval
             else:
                 _func = self.get_from_config
             out_dict[k] = _func(k, default_value=default_value, tar_dict=tar_dict)
