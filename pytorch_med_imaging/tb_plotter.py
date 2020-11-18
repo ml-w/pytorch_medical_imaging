@@ -149,7 +149,7 @@ class TB_plotter(object):
         try:
             Zrange = out.shape[0] if out.shape[0] < 40 else Zrange
 
-            val, ar = torch.max(out, 1)
+            ar = torch.argmax(out, 1)
             ss = img[0] if isinstance(img, list) else img
 
             grid = draw_grid(ss[:Zrange].cpu(), ar[:Zrange].cpu(), ground_truth=gt[:Zrange].cpu(), thickness=2)
