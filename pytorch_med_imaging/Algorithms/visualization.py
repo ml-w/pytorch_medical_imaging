@@ -115,20 +115,47 @@ def draw_grid(image, segmentation, ground_truth=None,
         seg_grid_single = (seg_grid == val).numpy()[0].astype('uint8')
 
         # Fid Contours
-        _a, contours, _b = cv2.findContours(seg_grid_single, mode=cv2.RETR_EXTERNAL,
+        res = cv2.findContours(seg_grid_single, mode=cv2.RETR_EXTERNAL,
                                             method=cv2.CHAIN_APPROX_SIMPLE)
+
+        # opencv > 4.5.0 change the findContours function.
+        try:
+            _a, contours, _ = res
+        except ValueError:
+            contours, _ = res
 
         # Draw contour on image grid
         contour_color = np.array(plt.get_cmap('Set2').colors[c]) * 255. if color is None else color
-        cv2.drawContours(im_grid, contours, -1, contour_color, thickness=thickness)
+        try:
+            cv2.drawContours(im_grid, contours, -1, contour_color, thickness=thickness)
+        except:
+            cv2.putText(im_grid,
+                        f"No contour_s {val}",
+                        (5, 20 * c), cv2.FONT_HERSHEY_COMPLEX_SMALL, 1, contour_color)
+            pass
+
 
 
     if not ground_truth is None:
         gt_grid = make_grid(ground_truth, nrow=nrow, padding=padding, normalize=False)
         gt_grid_single = (gt_grid != 0).numpy()[0].astype('uint8')
-        _a, contours, _b = cv2.findContours(gt_grid_single, mode=cv2.RETR_EXTERNAL,
-                                            method=cv2.CHAIN_APPROX_SIMPLE)
-        cv2.drawContours(im_grid, contours, -1, gt_color, thickness=1)
+
+        res = cv2.findContours(gt_grid_single, mode=cv2.RETR_EXTERNAL,
+                               method=cv2.CHAIN_APPROX_SIMPLE)
+
+        # opencv > 4.5.0 change the findContours function.
+        try:
+            _a, contours = res
+        except ValueError:
+            contours, _ = res
+
+        try:
+            cv2.drawContours(im_grid, contours, -1, gt_color, thickness=1)
+        except:
+            cv2.putText(im_grid,
+                        f"No contour_g {val}",
+                        (5, 20 * c), cv2.FONT_HERSHEY_COMPLEX_SMALL, 1, contour_color)
+            pass
 
     return im_grid
 
