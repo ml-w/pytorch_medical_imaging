@@ -262,6 +262,7 @@ class ImageDataSet(PMIDataBase):
         # Fitlter regex
         #--------------
         if self._filtermode == 'regex' or self._filtermode == 'both':
+            self._logger.info("Filtering ID with filter: {}".format(self._filterargs['regex']))
             file_basenames = [os.path.basename(f) for f in file_dirs]
             # use REGEX if find paranthesis
             if self._filterargs['regex'] is None:
@@ -460,7 +461,6 @@ class ImageDataSet(PMIDataBase):
         else:
             return [self.__getitem__(i) for i in np.where(np.array(ids)==id)[0]]
 
-
     def get_unique_IDs(self, globber=None):
         r"""Get all IDs globbed by the specified globber. If its None,
         default globber used. If its not None, the class globber will be
@@ -566,6 +566,8 @@ class ImageDataSet(PMIDataBase):
                 "Dimension mismatch! (%s vs %s)"%(self._itemindexes[-1], tensor_data.size()[0])
             td=tensor_data.numpy()
             for i in range(len(self.data_source_path)):
+                self._logger.info("Writing for {} with source image: {}".format(self.get_unique_IDs()[self._itemindexes[i]],
+                                                                                self.data_source_path[i]))
                 start=self._itemindexes[i]
                 end=self._itemindexes[i+1]
                 # image=sitk.GetImageFromArray(td[start:end])
@@ -574,15 +576,42 @@ class ImageDataSet(PMIDataBase):
                 # check if it matches the original image size
                 tmp_im = td[start:end]
                 if not np.roll(tmp_im.shape, -1).tolist() == list(templateim.GetSize()):
-                    self._logger.info("Recovering size for image with ID: {}.".format(self.get_unique_IDs()[i]))
-                    cent = np.array(templateim.GetSize()) // 2
-                    diff = cent - tmp_im.shape
-                    pad = diff > 0
-                    self._logger.info("Skipping...")
-                    continue
-                    
+                    self._logger.info("Recovering size for image with ID: {}.".format(
+                        self.get_unique_IDs()[self._itemindexes[i]]))
 
-                image = sitk.GetImageFromArray(td[start:end])
+                    target_dat = templateim
+                    target_size = np.array(target_dat.GetSize())[:2]
+                    tmp_im_shape = np.array(tmp_im.shape)
+                    pad_size_left = (target_size - tmp_im_shape[-2:]) // 2
+                    pad_size_right = target_size - pad_size_left - tmp_im_shape[-2:]
+
+                    self._logger.debug("Current size: {}".format(tmp_im.shape))
+                    self._logger.debug("Target size: {}".format(target_size))
+
+                    # Check if majority size is greater than original size.
+                    need_pad = target_size[-2:] > tmp_im_shape[-2:]
+
+                    tmp_im = from_numpy(tmp_im)
+                    # Crop or pad image to standard size
+                    for dim, (ps_l, ps_r, p) in enumerate(zip(pad_size_left, pad_size_right, need_pad)):
+                        t_dim = dim + 1 if dim >= self._byslices else dim # since by slice eats a dimension
+                        if not p:
+                            tmp_im = tmp_im.narrow(int(t_dim), int(ps_l), int(tmp_im_shape[dim]))
+                        else:
+                            pa = [0] * tmp_im.ndim * 2
+                            pa[t_dim * 2] = abs(int(ps_l))
+                            pa[t_dim * 2 + 1] = abs(int(ps_r))
+                            self._logger.debug("Padding: {}".format(pa))
+                            # pa = [abs(int(ps_l)) if x // 2 == t_dim else 0 for x in range(6)]
+                            # if len(pa) == 4: (left, right, top, bot)
+                            # if len(pa) == 6: (left, right, top, bot, front, back)
+                            tmp_im = pad(tmp_im, pa[-4:], mode='constant', value=0)
+                    tmp_im = tmp_im.numpy()
+
+                    self._logger.info("Resized to shape: {}".format(tmp_im.shape))
+
+
+                image = sitk.GetImageFromArray(tmp_im)
                 image.CopyInformation(templateim)
                 # image=self.WrapImageWithMetaData(td[start:end], self.metadata[i])
                 sitk.WriteImage(image, outputdirectory +'/' + prefix + os.path.basename(self.data_source_path[i]))
