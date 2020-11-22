@@ -14,15 +14,13 @@ class HaarDown(nn.Module):
         self.haar_matrix = torch.tensor([[1., -1., -1., 1.],
                                          [1., -1., 1., -1.],
                                          [1., 1., -1., -1.]]).float().view(3, 2, 2) / 2.
-        self.weights = torch.zeros([inchan*3, inchan, 2, 2])
+        weights = torch.zeros([inchan*3, inchan, 2, 2])
+        self.register_buffer('weight', weights)
         for i in range(inchan):
             self.weights[3*i:3*i+3, i] = self.haar_matrix
 
     def forward(self, x):
-        if x.is_cuda:
-            x = F.conv2d(x, self.weights.cuda(), stride=2)
-        else:
-            x = F.conv2d(x, self.weights, stride=2)
+        x = F.conv2d(x, self.weights, stride=2)
         return x
 
 
@@ -34,19 +32,15 @@ class HaarUp(nn.Module):
                                          [1., 1., -1., -1.]]).float().view(3, 2, 2) / 2.
 
         if reduce:
-            self.weights = torch.zeros([inchan*3, inchan, 2, 2])
-            for i in range(inchan):
-                self.weights[3*i:3*i+3, i] = self.haar_matrix
+            weights = torch.zeros([inchan*3, inchan, 2, 2])
         else:
-            self.weights = torch.zeros([inchan*3, inchan*3, 2, 2])
-            for i in range(inchan):
-                self.weights[i, 3*i:3*i+3] = self.haar_matrix
+            weights = torch.zeros([inchan*3, inchan*3, 2, 2])
+        self.register_buffer('weights', weights)
+        for i in range(inchan):
+            self.weights[3*i:3*i+3, i] = self.haar_matrix
 
     def forward(self, x):
-        if x.is_cuda:
-            x = F.conv_transpose2d(x, self.weights.cuda(), stride=2)
-        else:
-            x = F.conv_transpose2d(x, self.weights, stride=2)
+        x = F.conv_transpose2d(x, self.weights, stride=2)
         return x
 
 
@@ -131,10 +125,29 @@ class OutConv(nn.Module):
         x = self.conv(x)
         return x
 
-
 class TightFrameUNet(nn.Module):
-    def __init__(self, chan, residual=False, circular=False):
+    def __init__(self, in_ch, out_ch, num_of_layers=3):
         super(TightFrameUNet, self).__init__()
+
+        _convs = [
+            DoubleConv2d(in_ch * 2 ** i, in_ch ** (i + 1), padding_mode='circular')
+            for i in range(num_of_layers)
+        ]
+
+        _haar = [
+            Haar(in_ch * 2 ** i)
+            for i in range(num_of_layers)
+        ]
+
+        _ups = [
+
+        ]
+
+
+
+class TightFrameUNet_64_5(nn.Module):
+    def __init__(self, chan, residual=False, circular=False):
+        super(TightFrameUNet_64_5, self).__init__()
         self.inc = CircularDoubleConv(chan, 64) if circular else DoubleConv2d(chan, 64)
         self.outc = OutConv(64, chan)
         self.down1 = Down(64, 128, circular=circular)
