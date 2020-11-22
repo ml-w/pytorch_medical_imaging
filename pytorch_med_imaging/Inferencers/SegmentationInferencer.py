@@ -4,10 +4,13 @@ from torch.utils.data import DataLoader
 from torch.autograd import Variable
 import torch
 import torch.nn.functional as F
+import numpy as np
 from tqdm import *
+from ..logger import Logger
 
 class SegmentationInferencer(InferencerBase):
-    def __init__(self, input_data, out_dir, batch_size, net, checkpoint_dir, iscuda, logger):
+    def __init__(self, input_data, out_dir, batch_size, net, checkpoint_dir, iscuda, logger=None, target_data=None,
+                 **kwargs):
         inference_configs = {}
         inference_configs['indataset']      = input_data
         inference_configs['batchsize']      = batch_size
@@ -16,6 +19,9 @@ class SegmentationInferencer(InferencerBase):
         inference_configs['logger']         = logger
         inference_configs['outdir']         = out_dir
         inference_configs['iscuda']         = iscuda
+        inference_configs['target_data']    = target_data
+
+        self._out_dataset = None # For storing result of inference
 
         super(SegmentationInferencer, self).__init__(inference_configs)
 
@@ -62,18 +68,16 @@ class SegmentationInferencer(InferencerBase):
 
 
     def _get_net_out_features(self):
-        test_in = next(iter(self._data_loader))
-        if self._iscuda:
-            if isinstance(test_in, list):
-                test_in = [ss.cuda() for ss in test_in]
-            else:
-                test_in = test_in.cuda()
+        with torch.no_grad():
+            test_in = next(iter(self._data_loader))
+            if self._iscuda:
+               test_in = self._match_type_with_network(test_in)
 
-        if isinstance(test_in, list):
-            out = self._net(*test_in).size()[1]
-        else:
-            out = self._net(test_in).size()[1]
-        del test_in
+            if isinstance(test_in, list):
+                out = self._net(*test_in).size()[1]
+            else:
+                out = self._net(test_in).size()[1]
+            del test_in
         return out
 
 
@@ -81,35 +85,32 @@ class SegmentationInferencer(InferencerBase):
         last_batch_dim = 0
 
         # compute size to pass to piece_patches
-        out_size = self._in_dataset.size()
+        out_size = list(self._in_dataset.size())
         out_features = self._get_net_out_features()
         out_size[1] = out_features
 
         out_tensor = torch.zeros(out_size)
-        for index, samples in enumerate(tqdm(self._data_loader, desc="Steps")):
-            s = samples
-            if (isinstance(s, tuple) or isinstance(s, list)) and len(s) > 1:
-                s = [Variable(ss, requires_grad=False).float() for ss in s]
 
-            if self._data_loader:
-                s = [ss.cuda() for ss in s] if isinstance(s, list) else s.cuda()
+        with torch.no_grad():
+            for index, samples in enumerate(tqdm(self._data_loader, desc="Steps")):
+                s = samples
+                s = self._match_type_with_network(s)
 
-            torch.no_grad()
-            if isinstance(s, list):
-                out = self._net.forward(*s).squeeze()
-            else:
-                out = self._net.forward(s).squeeze()
+                if isinstance(s, list):
+                    out = self._net.forward(*s).squeeze()
+                else:
+                    out = self._net.forward(s).squeeze()
 
-            while out.dim() < last_batch_dim and last_batch_dim != 0:
-                out = out.unsqueeze(0)
-                self._logger.log_print_tqdm('Unsqueezing last batch.' + str(out.shape))
-            # out = F.log_softmax(out, dim=1)
-            # val, out = torch.max(out, 1)
-            while out.dim() != out_tensor.dim():
-                out = out.unsqueeze(0)
-            out_tensor[index * self._batchsize: index * self._batchsize + out.shape[0]] = out.data.cpu()
-            last_batch_dim = out.dim()
-            del out
+                while out.dim() < last_batch_dim and last_batch_dim != 0:
+                    out = out.unsqueeze(0)
+                    self._logger.log_print_tqdm('Unsqueezing last batch.' + str(out.shape))
+                # out = F.log_softmax(out, dim=1)
+                # val, out = torch.max(out, 1)
+                while out.dim() != out_tensor.dim():
+                    out = out.unsqueeze(0)
+                out_tensor[index * self._batchsize: index * self._batchsize + out.shape[0]] = out.data.cpu()
+                last_batch_dim = out.dim()
+                del out
 
         if isinstance(self._in_dataset, ImagePatchesLoader) or \
                 isinstance(self._in_dataset, ImagePatchesLoader3D):
@@ -123,9 +124,74 @@ class SegmentationInferencer(InferencerBase):
                 out = F.log_softmax(out, dim=0)
                 out = torch.argmax(out, dim=0)
                 towrite.append(out.int())
+
+            # Save output if we have the ground truth for summary
+            if self._TARGET_DATASET_EXIST_FLAG:
+                self._out_dataset = towrite
+
             self._in_dataset.Write(towrite, self._outdir)
         else:
             self._logger.log_print_tqdm("Writing with tensor mode", 20)
             out_tensor = F.log_softmax(out_tensor, dim=1)
             out_tensor = torch.argmax(out_tensor, dim=1)
+
+            # Save output if we have the ground truth for summary
+            if self._TARGET_DATASET_EXIST_FLAG:
+                self._out_dataset = out_tensor.int()
+
             self._in_dataset.Write(out_tensor.squeeze().int(), self._outdir)
+
+
+    def display_summary(self):
+        """
+        This use method from Algorithm to output summary of the inferece. This is used to allow guildai to grad
+        performance of the network.
+        """
+        from ..Algorithms.Analysis import main
+
+        arguments = ['-a',
+                     '--test-data', self._outdir,
+                     '--gt-data', self._target_dataset.rootdir,
+                     '--idlist', str(list(set(self._target_dataset.get_unique_IDs())))
+                     ]
+
+        try:
+            self._logger.info("Running with args: {}".format(arguments))
+            out = main(arguments)
+            self._logger.info("\n{}".format(out.to_string()))
+            self._logger.info("Avg_DICE: {}".format(out['DSC'].mean()))
+        except:
+            self._logger.exception("Error calling Analysis.py. This is intended.")
+            return
+
+    @staticmethod
+    def _perf_measure(y_guess, y_actual):
+        """
+        Obtain the result of index test, i.e. the TF, FP, TN and FN of the test.
+
+        Args:
+            y_actual (np.array): Actual class.
+            y_guess (np.array): Guess class.
+
+        Returns:
+            (list of int): Count of TP, FP, TN and FN respectively
+        """
+
+        y = y_actual.astype('bool').flatten()
+        x = y_guess.astype('bool').flatten()
+
+        TP = np.sum((y == True) & (x == True))
+        TN = np.sum((y == False) & (x == False))
+        FP = np.sum((y == False) & (x == True))
+        FN = np.sum((y == True) & (x == False))
+        TP, TN, FP, FN = [float(v) for v in [TP, TN, FP, FN]]
+        return TP, FP, TN, FN
+
+    @staticmethod
+    def _DICE(TP, FP, TN, FN):
+        if np.isclose(2*TP+FP+FN, 0):
+            return 1
+        else:
+            return 2*TP / (2*TP+FP+FN)
+
+
