@@ -186,7 +186,7 @@ def main(a, config, logger):
         if not so is None:
             net_name = so.group()
         else:
-            net_name = "unknownnetwork"
+            net_name = "<unknown_network>"
     except:
         logger.exception("Fail creating network.")
         logger.critical("Terminate.")
@@ -199,8 +199,8 @@ def main(a, config, logger):
         pmi_factory = PMIDataFactory()
         pmi_data = pmi_factory.produce_object(config)
     except Exception as e:
-        logger.log_print_tqdm("Error creating target object!", logging.FATAL)
-        logger.log_print_tqdm("Original error: {}".format(e))
+        logger.exception("Error creating target object!", logging.FATAL)
+        logger.error("Original error: {}".format(e))
         return
 
     validation_FLAG=False
@@ -366,8 +366,6 @@ def main(a, config, logger):
     else:
         logger.log_print_tqdm("Starting evaluation...")
 
-
-
         #=============================
         # Perform inference
         #-------------------
@@ -390,6 +388,7 @@ def main(a, config, logger):
             inferencer = infer_class(inputDataset, dir_output, param_batchsize,
                                      net, checkpoint_load,
                                      bool_usecuda, target_data=gtDataset)
+            logger.info("Performing inference with ground-truth data.")
         except AttributeError as e:
             logger.exception(e)
             logger.log_print("Falling back to just doing inference", logger.DEBUG)
@@ -399,6 +398,7 @@ def main(a, config, logger):
                                      bool_usecuda)
 
         if write_mode == 'GradCAM':
+            #TODO: custom grad cam layers
             inferencer.grad_cam_write_out(['att2'])
         else:
             with torch.no_grad():
@@ -481,4 +481,6 @@ if __name__ == '__main__':
     for msg in pre_log_message:
         logger.info(msg)
 
+    logger.info(">" * 40 + " Start Main " + "<" * 40)
     main(a, config, logger)
+    logger.info("=" * 40 + " Done " + "="* 40)
