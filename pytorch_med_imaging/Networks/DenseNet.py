@@ -6,6 +6,7 @@ import torch.nn.functional as F
 
 __all__ = ['DenseNet3d']
 
+
 class DenseNet3d(nn.Module):
     r"""
 
@@ -27,7 +28,7 @@ class DenseNet3d(nn.Module):
                 out_ch,
                 init_conv_features:int = 64,
                 k:int = 4,
-                block_config: tuple[int] = (6, 12, 24, 16),
+                block_config: tuple = (6, 12, 24, 16),
                 dropout=0.2):
 
         super(DenseNet3d, self).__int__()

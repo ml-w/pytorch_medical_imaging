@@ -2,8 +2,9 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from .Layers import PermuteTensor, DoubleConv1d, DoubleConv3d, BGRUCell, BGRUStack, StandardFC2d
+from .DenseNet import DenseNet3d
 
-__all__ = ['CNNGRU', 'CNNGRU_FCA']
+__all__ = ['CNNGRU', 'CNNGRU_FCA', 'BadhanauAttention']
 
 class CNNGRU(nn.Module):
     r"""
@@ -273,3 +274,46 @@ class CNNGRU_FCA(nn.Module):
             else:
                 x = x.unsqueeze(0)
         return x
+
+
+class DenseGRU(nn.Module):
+    def __init__(self,
+                 in_ch: int,
+                 out_ch: int,
+                 first_conv_out_ch: int = 32,
+                 embedding_size: tuple = (20, 5, 5),
+                 gru_layers: int = 1,
+                 dropout: float = 0.2
+                 ):
+        super(DenseGRU, self).__init__()
+
+        _net = DenseNet3d(in_ch, out_ch, first_conv_out_ch) # Use default setting for other params.
+
+        self._encoder = nn.Sequential(
+            _net.inconv,
+            _net.dense_blocks
+        )
+
+        self._atten
+
+
+class BadhanauAttention(nn.Module):
+    def __init__(self, in_ch, hidden_size, units):
+        super(BadhanauAttention, self).__init__()
+        self.fc1 = nn.Linear(in_ch, units)
+        self.fc2 = nn.Linear(hidden_size, units)
+        self.V = nn.Linear(units, 1)
+
+    def forward(self, x: torch.Tensor, hidden: torch.Tensor) -> torch.Tensor:
+        # Expected input dim, x: (B x features x in_ch)
+        # Expected input dim, hidden: (B x hidden)
+        while hidden.dim() < x.dim():
+            hidden = hidden.unsqueeze(1)
+
+        attention_hidden_layer = (F.tanh(self.fc1(x) + self.fc2(hidden)))
+        score = self.V(attention_hidden_layer)
+
+        attention_weights = F.softmax(score, dim=1)
+        context_vect = x * attention_weights
+        context_vect = context_vect.sum(dim=1)
+        return context_vect, attention_weights
