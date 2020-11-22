@@ -4,18 +4,23 @@ import numpy as np
 import os
 import pandas as pd
 
-from ..MedImgDataset import ImageDataSet
-from tqdm import *
-from surface_distance import compute_surface_distances, compute_average_surface_distance
+from pytorch_med_imaging.MedImgDataset import ImageDataSet
+import tqdm.auto as auto
 import argparse
+from surface_distance import compute_surface_distances, compute_average_surface_distance
 
 
-__all__ = ['ASD', 'SSIM']
+__all__ = ['ASD', 'SSIM', 'DICE']
 
 #========================================
 # Similarity functions
 #========================================
 def ASD(seg, test, spacing):
+    assert isinstance(seg, np.ndarray) and isinstance(test, np.ndarray), "Input are not numpy arrays."
+    seg = seg.squeeze()
+    test = test.squeeze()
+    assert seg.ndim == 3 and test.ndim == 3, "Input dim in-correct: {} {}".format(seg.shape, test.shape)
+
     return np.sum(compute_average_surface_distance(
         compute_surface_distances(seg, test, spacing))) / 2.
 
@@ -233,13 +238,13 @@ def EVAL(seg, gt, vars):
     gtindexes = gt.get_unique_IDs()
     segindexes = seg.get_unique_IDs()
 
-    for i, row in enumerate(tqdm(segindexes)):
-        tqdm.write("Computing {}".format(row))
+    for i, row in enumerate(auto.tqdm(segindexes)):
+        auto.tqdm.write("Computing {}".format(row))
         # check if both have same ID
         try:
             gtindexes.index(segindexes[i])
         except ValueError:
-            tqdm.write("Skipping " + os.path.basename(seg.get_data_source(
+            auto.tqdm.write("Skipping " + os.path.basename(seg.get_data_source(
                 i)))
             data = pd.DataFrame([[os.path.basename(seg.get_data_source(i)),
                                   'Not Found',
@@ -262,22 +267,26 @@ def EVAL(seg, gt, vars):
         try:
             TP, FP, TN, FN = np.array(perf_measure(gg.flatten(), ss.flatten()), dtype=float)
         except:
-            tqdm.write("Somthing wrong with: {}".format(segindexes[i]))
+            auto.tqdm.write("Somthing wrong with: {}".format(segindexes[i]))
             continue
         if TP == 0:
-            tqdm.write("No TP hits for {}".format(row))
+            auto.tqdm.write("No TP hits for {}".format(row))
             continue
         values = []
         for keys in vars:
-            try:
+            if keys in ['ASD', 'GTV-test', 'GTV-seg']:
+                values.append(vars[keys](gg, ss, gt.get_spacing(i)))
+            else:
                 values.append(vars[keys](TP, FP, TN, FN))
-            except:
-                # tqdm.write("Error encounter for {}".format(keys))
-                try:
-                    values.append(vars[keys](gg, ss, gt.get_spacing(i)))
-                except Exception as e:
-                    values.append(np.nan)
-                    tqdm.write(e.message)
+            # try:
+            #     if keys in ['ASD', 'GTV-test', 'GTV-seg']:
+            #         values.append(vars[keys](gg, ss, gt.get_spacing(i)))
+            #     else:
+            #         values.append(vars[keys](TP, FP, TN, FN))
+            # except:
+            #     # tqdm.write("Error encounter for {}".format(keys))
+            #     values.append(np.nan)
+            #     # auto.tqdm.write(e)
 
         data = pd.DataFrame([[os.path.basename(seg.get_data_source(i)),
                               os.path.basename(
@@ -294,7 +303,7 @@ def EVAL(seg, gt, vars):
         df.set_index('Index')
     return df
 
-if __name__ == '__main__':
+def main(raw_args=None):
     parse = argparse.ArgumentParser()
     parse.add_argument('-d', '--DICE', action='store_true', default=False, dest='dice', help="add DICE to analysis.")
     parse.add_argument('-p', '--PM', action='store_true', default=False, dest='pm',
@@ -325,7 +334,9 @@ if __name__ == '__main__':
                        dest='gtfilter', default=None, help='Filter for ground truth data.')
     parse.add_argument('--added-label', action='store', type=str, dest='label',
                        help='Additional label that will be marked under the column "Note"')
-    args = parse.parse_args()
+    parse.add_argument('--verbose', action='store_true', dest='verbose',
+                       help='Print results.')
+    args = parse.parse_args(raw_args)
     assert os.path.isdir(args.testset) and os.path.isdir(args.gtset), "Path error!"
 
     vars = {}
@@ -359,7 +370,10 @@ if __name__ == '__main__':
 
     if not args.idlist is None:
         try:
-            idlist = [r.rstrip() for r in open(args.idlist, 'r').readlines()]
+            if os.path.isfile(args.idlist):
+                idlist = [r.rstrip() for r in open(args.idlist, 'r').readlines()]
+            else:
+                idlist = eval(args.idlist)
         except:
             print("Can't read idlist properly.")
             idlist = None
@@ -384,13 +398,15 @@ if __name__ == '__main__':
         results = results.set_index('Index')
         results.index = results.index.astype(str)
 
-        print(results.to_string())
-        print(results.mean())
-        print(results.median())
+        if args.verbose:
+            print(results.to_string())
+            print(results.mean())
+            print(results.median())
     except:
-        print(results.to_string())
-        print(results.mean())
-        print(results.median())
+        if args.verbose:
+            print(results.to_string())
+            print(results.mean())
+            print(results.median())
 
 
     if not args.label is None:
@@ -408,3 +424,7 @@ if __name__ == '__main__':
                 results.to_csv(args.save)
         except:
             print("Cannot save to: ", args.save)
+    return results
+
+if __name__ == '__main__':
+    main()
