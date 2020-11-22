@@ -115,8 +115,8 @@ def draw_grid(image, segmentation, ground_truth=None,
         seg_grid_single = (seg_grid == val).numpy()[0].astype('uint8')
 
         # Fid Contours
-        res = cv2.findContours(seg_grid_single, mode=cv2.RETR_EXTERNAL,
-                                            method=cv2.CHAIN_APPROX_SIMPLE)
+        res = cv2.findContours(seg_grid_single, mode=cv2.RETR_LIST,
+                               method=cv2.CHAIN_APPROX_SIMPLE)
 
         # opencv > 4.5.0 change the findContours function.
         try:
@@ -138,14 +138,14 @@ def draw_grid(image, segmentation, ground_truth=None,
 
     if not ground_truth is None:
         gt_grid = make_grid(ground_truth, nrow=nrow, padding=padding, normalize=False)
-        gt_grid_single = (gt_grid != 0).numpy()[0].astype('uint8')
+        gt_grid_single = (gt_grid > 0).numpy()[0].astype('uint8') * 255
 
-        res = cv2.findContours(gt_grid_single, mode=cv2.RETR_EXTERNAL,
+
+        res = cv2.findContours(gt_grid_single, mode=cv2.RETR_LIST,
                                method=cv2.CHAIN_APPROX_SIMPLE)
-
         # opencv > 4.5.0 change the findContours function.
         try:
-            _a, contours = res
+            _a, contours, _ = res
         except ValueError:
             contours, _ = res
 
@@ -154,7 +154,7 @@ def draw_grid(image, segmentation, ground_truth=None,
         except:
             cv2.putText(im_grid,
                         f"No contour_g {val}",
-                        (5, 20 * c), cv2.FONT_HERSHEY_COMPLEX_SMALL, 1, contour_color)
+                        (5, 20), cv2.FONT_HERSHEY_COMPLEX_SMALL, 1, gt_color)
             pass
 
     return im_grid
