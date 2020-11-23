@@ -50,9 +50,12 @@ class DenseBlock(nn.Module):
 
 
 class DenseConv3D(nn.Module):
-    def __init__(self, inchan, outchan, kernsize=3, stride=1, pad=True):
+    def __init__(self, inchan, outchan, padding=None, kernsize=3, stride=1):
         super(DenseConv3D, self).__init__()
-        padding = int((kernsize - 1)/2.) if pad else 0
+        if padding is None:
+            padding = [ks // 2 for ks in kernsize] if isinstance(kernsize, list) or isinstance(kernsize, tuple) else \
+                kernsize // 2
+
         self.conv = nn.Sequential(
             nn.BatchNorm3d(inchan),
             nn.ReLU(inplace=True),
@@ -79,15 +82,17 @@ class DenseLayer3D(nn.Module):
 
 
 class DenseBlock3D(nn.Module):
-    def __init__(self, inchan:int, k:int, num_layers:int , kernsize: int or [int] = 3, dropout:float =0.2):
+    def __init__(self, inchan:int, k:int, num_layers:int , bn_size:int =4, kernsize: int or [int] = 3, dropout:float \
+        =0.2):
         super(DenseBlock3D, self).__init__()
 
-        convs = []
+        self.convs = nn.Sequential()
         for i in range(num_layers):
-            convs.append(
-                DenseLayer3D(inchan + (i+1)*k, k, 4, dropout=dropout, kernsize=kernsize)
+            self.convs.add_module(
+                'dense_block_layer_%02d'%i,
+                DenseLayer3D(inchan + i*k, k, bn_size=bn_size, dropout=dropout, kernsize=kernsize)
             )
-        self.convs = nn.Sequential(*convs)
+
 
 
     def forward(self, x):
