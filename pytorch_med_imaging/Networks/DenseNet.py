@@ -23,20 +23,20 @@ class DenseNet3d(nn.Module):
             Config of the dense block, specifying number of layers in them. Default to be [6, 12, 24, 16]
         dropout (float, Optional):
     """
-    def __int__(self,
-                in_ch,
-                out_ch,
-                init_conv_features:int = 64,
-                k:int = 4,
-                block_config: tuple = (6, 12, 24, 16),
-                dropout=0.2):
+    def __init__(self,
+                 in_ch,
+                 out_ch,
+                 init_conv_features:int = 64,
+                 k:int = 4,
+                 block_config: tuple = (6, 12, 24, 16),
+                 dropout=0.2):
 
-        super(DenseNet3d, self).__int__()
+        super(DenseNet3d, self).__init__()
 
         #init conv
         self.inconv = nn.Sequential(
             Conv3d(in_ch, init_conv_features, kern_size=[3, 7, 7], stride=[1, 2, 2], padding=[1, 3, 3]),
-            nn.MaxPool3d(kernel_size=[1, 3, 3], stride=2, padding=[0, 1, 1])
+            nn.MaxPool3d(kernel_size=[1, 3, 3], stride=[1, 2, 2], padding=[0, 1, 1])
         )
 
         features = init_conv_features
@@ -48,7 +48,7 @@ class DenseNet3d(nn.Module):
 
             # Insert transition layer if its not the last layer
             if i != len(block_config) - 1:
-                trans = DownSemi3d(features, features)
+                trans = DownSemi3d(features, features // 2)
                 self.dense_blocks.add_module('down_%02d'%(i+1), trans)
                 features = features // 2
         self.dense_blocks.add_module('final_bn', nn.BatchNorm3d(features))
@@ -72,7 +72,7 @@ class DenseNet3d(nn.Module):
         x = self.inconv(x)
         x = self.dense_blocks(x)
         x = F.relu(x, inplace=True)
-        x = F.adaptive_avg_pool3d(x, (1, 1))
+        x = F.adaptive_avg_pool3d(x, (1, 1, 1))
         x = torch.flatten(x, 1)
         x = self.out_fc(x)
         return x

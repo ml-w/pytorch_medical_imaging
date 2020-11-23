@@ -4,7 +4,7 @@ import torch.nn.functional as F
 from .Layers import PermuteTensor, DoubleConv1d, DoubleConv3d, BGRUCell, BGRUStack, StandardFC2d
 from .DenseNet import DenseNet3d
 
-__all__ = ['CNNGRU', 'CNNGRU_FCA', 'BadhanauAttention']
+__all__ = ['CNNGRU', 'CNNGRU_FCA', 'BadhanauAttention', 'DenseGRU']
 
 class CNNGRU(nn.Module):
     r"""
@@ -281,20 +281,28 @@ class DenseGRU(nn.Module):
                  in_ch: int,
                  out_ch: int,
                  first_conv_out_ch: int = 32,
-                 embedding_size: tuple = (20, 5, 5),
+                 embedding_size: tuple = 64,
                  gru_layers: int = 1,
                  dropout: float = 0.2
                  ):
         super(DenseGRU, self).__init__()
 
-        _net = DenseNet3d(in_ch, out_ch, first_conv_out_ch) # Use default setting for other params.
+        _dense_201 = DenseNet3d(in_ch, out_ch, first_conv_out_ch, 32, (6, 12, 48, 32)) # Use default setting for other params.
 
         self._encoder = nn.Sequential(
-            _net.inconv,
-            _net.dense_blocks
+            _dense_201.inconv,
+            _dense_201.dense_blocks
         )
 
-        self._atten
+        # Hidden dize = (1, 2, out_ch)
+        # self._attention = BadhanauAttention()
+        self._gru_stack = BGRUStack
+
+
+    def forward(self, x):
+        # context, att_weight = self._attention
+
+        return self._encoder(x)
 
 
 class BadhanauAttention(nn.Module):
@@ -310,10 +318,12 @@ class BadhanauAttention(nn.Module):
         while hidden.dim() < x.dim():
             hidden = hidden.unsqueeze(1)
 
-        attention_hidden_layer = (F.tanh(self.fc1(x) + self.fc2(hidden)))
+
+        attention_hidden_layer = (torch.tanh(self.fc1(x) + self.fc2(hidden)))
         score = self.V(attention_hidden_layer)
 
         attention_weights = F.softmax(score, dim=1)
+        print(x.shape, attention_weights.shape)
         context_vect = x * attention_weights
         context_vect = context_vect.sum(dim=1)
         return context_vect, attention_weights
