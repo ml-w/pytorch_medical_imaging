@@ -24,22 +24,31 @@ class BGRUStack(nn.Module):
         - N is the number of sequences
         - I is the input sequence length (in channels)
     Expected output dim: (B x N x C x O)
-        - O is the output sequence length (out channels)
+        - O is the output sequence length (out channels) (its doubled if bidirectional)
+    Expected output hidden states dim: (B x 2 x C x O)
 
 
     Args:
         in_chan (int):
             Input channels of the sequence, equivalent to I.
-        out_chan:
+        out_chan (int):
             Output channels desired, equivalent to O.
-        stack_length:
+        stack_length (int):
             Number of GRUs in the stack, equivalent to C.
-        num_layers:
-            Number of layers in each GRUs.
-        dropout:
-            Dropouts for the GRUs.
+        hidden_states (bool, Optional):
+            Whether to return the hidden states or not. Default to False.
+        num_layers (int, Optional):
+            Number of layers in each GRUs. Default to 1.
+        dropout (float, Optional):
+            Dropouts for the GRUs. Default to 0.2.
     """
-    def __init__(self, in_chan: int, out_chan: int, stack_length: int, num_layers: int = 1, dropout: float = 0):
+    def __init__(self,
+                 in_chan: int,
+                 out_chan: int,
+                 stack_length: int,
+                 hidden_states: bool = False,
+                 num_layers: int = 1,
+                 dropout: float = 0):
         super(BGRUStack, self).__init__()
         self._in_chan = in_chan
         self._out_chan = out_chan
@@ -48,6 +57,7 @@ class BGRUStack(nn.Module):
 
         self._grus = nn.ModuleList([BGRUCell(in_chan, out_chan, num_layers, dropout) for i in range(stack_length)])
 
+        self.register_buffer('_hidden_states', torch.tensor(hidden_states, dtype=bool))
 
     def __len__(self):
         return len(self._grus)
@@ -74,4 +84,9 @@ class BGRUStack(nn.Module):
         for g in self._grus:
             g._gru.flatten_parameters()
 
-        return torch.stack([self._grus[i](x[:,i])[0] for i in range(len(self._grus))], dim = -2)
+        if self._hidden_states.item():
+            out = [torch.stack([self._grus[i](x[:,i])[j] for i in range(len(self._grus))],
+                                  dim = -2) for j in range(2)]
+            return out[0], out[1]
+        else:
+            return torch.stack([self._grus[i](x[:,i])[0] for i in range(len(self._grus))], dim = -2)
