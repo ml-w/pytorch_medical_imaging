@@ -3,6 +3,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 from .Layers import PermuteTensor, DoubleConv1d, DoubleConv3d, BGRUCell, BGRUStack, StandardFC2d
 from .DenseNet import DenseNet3d
+import math
 
 __all__ = ['CNNGRU', 'CNNGRU_FCA', 'BadhanauAttention', 'DenseGRU']
 
@@ -281,49 +282,167 @@ class DenseGRU(nn.Module):
                  in_ch: int,
                  out_ch: int,
                  first_conv_out_ch: int = 32,
-                 embedding_size: tuple = 64,
+                 dense_block_config: tuple = (6, 12, 24, 16),
+                 dense_growth_rate: int = 16,
+                 embedding_size: int = 64,
                  gru_layers: int = 1,
                  dropout: float = 0.2
                  ):
+        """
+
+        Args:
+            in_ch:
+            out_ch:
+            first_conv_out_ch:
+            dense_block_config (tuple, Optional):
+                Use this to set dense block properties. Default uses Densenet-201, which is (6, 12, 24, 16).
+            dense_growth_rate:
+                Use this to set the growth rate of the densenet. Default to 16.
+            embedding_size:
+            gru_layers:
+            dropout:
+        """
         super(DenseGRU, self).__init__()
 
-        _dense_201 = DenseNet3d(in_ch, out_ch, first_conv_out_ch, 32, (6, 12, 48, 32)) # Use default setting for other params.
+        # Check if embedding_size has exact square root
+        if not math.isclose(math.sqrt(embedding_size), int(math.sqrt(embedding_size))):
+            raise ValueError("The embedding_size must have exact square root. Got {}.".format(embedding_size))
+
+        self._out_ch = out_ch
+        self._embedding_size = embedding_size
+
+        _dense = DenseNet3d(in_ch, out_ch, first_conv_out_ch, dense_growth_rate, dense_block_config) # Use default setting for other params.
 
         self._encoder = nn.Sequential(
-            _dense_201.inconv,
-            _dense_201.dense_blocks
+            _dense.inconv,
+            _dense.dense_blocks
         )
 
+        # f(0) = c0 + kl_0
+        # f(1) = f(0) // 2 + kl_1
+        # f(2) = f(1) // 2 + kl_2 ... where L = [l_0, l_1, ...] = block_config
+        _num_features = first_conv_out_ch // 2**(len(dense_block_config) - 1)  \
+                        + int(sum([dense_growth_rate * l // 2**(len(dense_block_config) - 1 - i) \
+                               for i, l in enumerate(dense_block_config)]))
+        # init hidden state
+        _hidden_features = (out_ch + 1)
+
+
+        _hidden_state = torch.zeros([2, out_ch + 1])
+
         # Hidden dize = (1, 2, out_ch)
-        # self._attention = BadhanauAttention()
-        self._gru_stack = BGRUStack
+
+        self._hidden_unit = 512
+
+        self._attention = BadhanauAttention(_num_features, self._hidden_unit, self._hidden_unit, reduce_dim=0)
+        self._gru       = torch.nn.GRUCell(_num_features + out_ch, self._hidden_unit)
+
+        self._fc = nn.Linear(self._hidden_unit, out_ch + 1)
+        # self._gru_decoder = BGRUStack(_num_features, out_ch + 1, embedding_size, num_layers=gru_layers, dropout=dropout)
 
 
-    def forward(self, x):
-        # context, att_weight = self._attention
+    def initiate_hidden_states(self, target_batch):
+        """
+        This should be called after each mini-batch operation because the decision should not be related from one
+        image to another, only within an image.
+        """
+        batch_size = target_batch.shape[0]
+        return torch.zeros([batch_size, 1, self._hidden_unit])
 
-        return self._encoder(x)
+
+    def forward(self, x: torch.Tensor, ori_len: torch.Tensor, gt=None) -> [torch.Tensor]:
+        """
+        Args:
+            x:
+                Input embedded features.
+            ori_len:
+                A index int tensor that suggest the original length of the input sequence.
+            gt:
+                The ground-truth decision, dim: (B x out_ch + 1) [+1 is the terminate decision]. If None,
+                the forward function runs in inference mode and stops until the consensus score is > 0.5.
+
+        """
+
+        hidden = self.initiate_hidden_states(x).type_as(x)
+
+        x = self._encoder(x)
+        # Flatten encoded image to embeddingsize:
+        if not x.shape[-1] == x.shape[-1] == int(math.sqrt(self._embedding_size)):
+            x = F.adaptive_avg_pool3d(x, [x.shape[2]] + [int(math.sqrt(self._embedding_size))] * 2)
+        else:
+            # No need to resize
+            pass
+        # Flatten H, W dim and swap with C, where C is the embedding dim
+        x = x.view(list(x.shape[:-2]) + [-1]).transpose(1, -1)
+
+        # Loop through each of the components
+        out_pred = torch.zeros([len(x), self._out_ch + 1]).type_as(x)
+        for b, _xx in enumerate(x):
+            xx_len = ori_len[b]
+            # if training, use force teaching
+            _init_hidden = hidden[b]
+            if self.training and not gt is None:
+            # if True:
+                for i in range(xx_len):
+                    # print(i)
+                    # print(_xx.shape, _init_hidden.shape)
+                    context, att_weight = self._attention(_xx[:,i], _init_hidden.squeeze())
+                    # print(context.shape, gt[b].shape)
+
+                    context = torch.cat([context, gt[b]], dim=-1).unsqueeze(0) # Give it back the batchsize
+                    output = self._gru(context, _init_hidden)
+
+                    _init_hidden = output
+                    # print("output:", output.shape)
+                    if i == xx_len - 1:
+                        out_pred[b] = self._fc(output)
+            else:
+                _slice = 0
+                _guess = torch.zeros([0] * (self._out_ch) + 1).type_as(_xx) # init_guess
+                while True:
+                    _slice = _slice % xx_len
+                    context, att_weight = self._attention(_xx[:, i], _init_hidden.squeeze())
+                    context = torch.cat([context, _guess], dim=-1).unsqueeze(0)
+
+                    output = self._gru(context, _init_hidden)
+
+                    _init_hidden = output
+
+                    pred = self._fc(output)
+                    if torch.sigmoid(pred[-1]) > 0.5:
+                        out_pred[b] = pred
+                        break
+                    del pred # This will wast mem if not deleted.
+                    # Keep feeding until riching stopping condition.
+                    _slice += 1
+
+                #TODO: store att_weight for display
+        return out_pred
 
 
 class BadhanauAttention(nn.Module):
-    def __init__(self, in_ch, hidden_size, units):
+    def __init__(self, in_ch, hidden_size, units, reduce_dim=1):
         super(BadhanauAttention, self).__init__()
         self.fc1 = nn.Linear(in_ch, units)
         self.fc2 = nn.Linear(hidden_size, units)
         self.V = nn.Linear(units, 1)
 
+        self._reduce_dim = reduce_dim
+
     def forward(self, x: torch.Tensor, hidden: torch.Tensor) -> torch.Tensor:
         # Expected input dim, x: (B x features x in_ch)
         # Expected input dim, hidden: (B x hidden)
         while hidden.dim() < x.dim():
-            hidden = hidden.unsqueeze(1)
+            hidden = hidden.unsqueeze(0)
 
+        # print(hidden.shape)
+        # print("fc", self.fc1(x).shape, self.fc2(hidden).shape)
 
         attention_hidden_layer = (torch.tanh(self.fc1(x) + self.fc2(hidden)))
         score = self.V(attention_hidden_layer)
 
-        attention_weights = F.softmax(score, dim=1)
-        print(x.shape, attention_weights.shape)
+        attention_weights = F.softmax(score, dim=1) # softmax along embedded dim (H, W)
         context_vect = x * attention_weights
-        context_vect = context_vect.sum(dim=1)
+        # print(context_vect.shape)
+        context_vect = context_vect.sum(dim=self._reduce_dim)
         return context_vect, attention_weights
