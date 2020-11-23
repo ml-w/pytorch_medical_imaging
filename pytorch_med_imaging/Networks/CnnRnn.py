@@ -379,42 +379,45 @@ class DenseGRU(nn.Module):
         out_pred = torch.zeros([len(x), self._out_ch + 1]).type_as(x)
         for b, _xx in enumerate(x):
             xx_len = ori_len[b]
-            # if training, use force teaching
+
+            # Init hidden states to zeros for each image.
             _init_hidden = hidden[b]
+
+            # if training, use force teaching
             if self.training and not gt is None:
             # if True:
                 for i in range(xx_len):
-                    # print(i)
-                    # print(_xx.shape, _init_hidden.shape)
                     context, att_weight = self._attention(_xx[:,i], _init_hidden.squeeze())
-                    # print(context.shape, gt[b].shape)
-
                     context = torch.cat([context, gt[b]], dim=-1).unsqueeze(0) # Give it back the batchsize
                     output = self._gru(context, _init_hidden)
 
                     _init_hidden = output
-                    # print("output:", output.shape)
                     if i == xx_len - 1:
                         out_pred[b] = self._fc(output)
             else:
                 _slice = 0
-                _guess = torch.zeros([0] * (self._out_ch) + 1).type_as(_xx) # init_guess
+                _tries = 0
+                _guess = torch.zeros([self._out_ch]).type_as(_xx) # init_guess
                 while True:
-                    _slice = _slice % xx_len
-                    context, att_weight = self._attention(_xx[:, i], _init_hidden.squeeze())
+                    _slice = _slice % xx_len.item()
+                    context, att_weight = self._attention(_xx[:, _slice], _init_hidden.squeeze())
                     context = torch.cat([context, _guess], dim=-1).unsqueeze(0)
-
                     output = self._gru(context, _init_hidden)
 
                     _init_hidden = output
 
                     pred = self._fc(output)
-                    if torch.sigmoid(pred[-1]) > 0.5:
+                    if torch.sigmoid(pred.squeeze())[-1] > 0.5:
                         out_pred[b] = pred
                         break
+
+                    if _tries == 100:
+                        break
+
                     del pred # This will wast mem if not deleted.
                     # Keep feeding until riching stopping condition.
                     _slice += 1
+                    _tries += 1
 
                 #TODO: store att_weight for display
         return out_pred
