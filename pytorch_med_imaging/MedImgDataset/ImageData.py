@@ -169,6 +169,7 @@ class ImageDataSet(PMIDataBase):
         self.dtype = dtype
         # self.idlist = idlist
         # self.filesuffix = filesuffix
+        self._raw_length = 0                    # length of raw input (i.e. num of nii.gz files loaded)
         self._filterargs = kwargs
         self._filtermode=filtermode
         self._readmode=readmode
@@ -323,6 +324,7 @@ class ImageDataSet(PMIDataBase):
                 except:
                     metadata[key] = im.GetMetaData(key)
             self.metadata.append(metadata)
+            self._raw_length += 1
         self.length = len(self.data_source_path)
         self._logger.info("Finished loading. Loaded {} files.".format(self.length))
 
@@ -489,8 +491,9 @@ class ImageDataSet(PMIDataBase):
         return outlist
 
     def get_size(self, id):
-        r"""Get the size of the original image. Ignores load by slice and
-        gives 3D size."""
+        r"""Get the size of the original image. Gives 3D size. If load by slices, it will look for the internal
+        index before returning the 3D size.
+        """
         id = id % len(self.metadata)
         if self._byslices >= 0:
             return [int(self.metadata[self.get_internal_index(id)]['dim[%d]'%(i+1)]) for i in range(3)]

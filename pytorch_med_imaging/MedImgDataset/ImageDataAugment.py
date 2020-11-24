@@ -53,15 +53,20 @@ class ImageDataSetAugment(ImageDataSet):
         #==============================
         # Recalculate length of dataset
         #------------------------------
-        self._base_length = self.length
-        self.length = self.length * (self._augment_factor + 1)
+        self._base_length = self.length                         # number of un-augmented slices
+        self.length = self.length * (self._augment_factor + 1)  # number of un-augmented + augmented slices
         self._nb_of_classes = len(np.unique(self.data.numpy()))
         for i in range(self._augment_factor):
-            self._itemindexes = np.concatenate([self._itemindexes, self._itemindexes[1:] + self._itemindexes[-1]])
+            self._itemindexes = np.concatenate([self._itemindexes, self._itemindexes[1 + i * self._raw_length:] +
+                                                self._itemindexes[-1]])
         self._is_referenced = False
         self._is_referencing = False
         self._referencees = []
         self._call_count = 0
+
+        self._logger.critical('raw length: {}'.format(self._raw_length))
+        self._logger.critical('length: {}'.format(len(self._itemindexes)))
+        self._logger.critical('{}'.format(self._itemindexes))
 
         #==================
         # Build augmentator
@@ -108,7 +113,29 @@ class ImageDataSetAugment(ImageDataSet):
         """This will share the augmentator of two object."""
         assert isinstance(dataset, ImageDataSetAugment)
         assert not dataset in self._referencees,"Assigned dataset is already referenced."
-        assert len(self) == len(dataset), "Datasets have different length! [%s, %s]"%(self.data.shape, dataset.data.shape)
+
+        # Check data length to ensure properly stacked.
+        if len(self) != len(dataset):
+            self._logger.warning("Datasets have different length! [%s, %s]"%(self.data.shape, dataset.data.shape))
+            self._logger.debug("Check which item results in differences...")
+            if len(self.data_source_path) != len(dataset.data_source_path):
+                # Number of raw images are differents
+                self._logger.error("Number of raw data are different! {} and {}.".format(
+                    len(self.data_source_path),
+                    len(dataset.data_source_path)
+                ))
+                return
+
+            for i, (a, b) in enumerate(zip(self._itemindexes, dataset._itemindexes)):
+                # Get size looks for internal index with get_internal_index() if _byslice is not -1.
+                if a != b:
+                    self._logger.error("Item indexes error at {}: {} {}".format(i, a, b))
+                s1, s2 = self.get_size(a), dataset.get_size(b)
+                if s1 != s2:
+                    self._logger.debug("Error found at: {}, self: {}, ref_data: {}".format(
+                        self.get_unique_IDs()[self._itemindexes[i]],
+                        s1, s2
+                    ))
 
         try:
             self._is_referenced=False
