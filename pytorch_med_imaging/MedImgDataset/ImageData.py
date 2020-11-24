@@ -435,7 +435,15 @@ class ImageDataSet(PMIDataBase):
     def get_data_source(self, i):
         r"""Get directory of the source of the i-th element."""
         if self._byslices >=0:
-            return self.data_source_path[int(np.argmax(self._itemindexes > i)) - 1]
+            try:
+                return self.data_source_path[int(np.argmax(self._itemindexes > i)) - 1]
+            except IndexError:
+                # self._logger.warning("Require index {} but source path len is {}.".format(
+                #     int(np.argmax(self._itemindexes > i)) - 1,
+                #     len(self.data_source_path)
+                # ))
+                # self._logger.warning("Returning modulated result.")
+                return self.data_source_path[(int(np.argmax(self._itemindexes > i)) - 1) % len(self.data_source_path)]
         else:
             return self.data_source_path[i]
 
