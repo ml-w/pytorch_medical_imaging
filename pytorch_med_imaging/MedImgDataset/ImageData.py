@@ -450,6 +450,13 @@ class ImageDataSet(PMIDataBase):
             return self.data_source_path[i]
 
     def get_internal_index(self, i):
+        r"""If load by slice, get the image index instead of the stacked slice index."""
+        if self._byslices >= 0:
+            return int(np.argmax(self._itemindexes > i)) - 1
+        else:
+            return i
+
+    def get_internal_slice_index(self, i):
         r"""If load by slice, get the slice number of the i-th 2D element in
         its original image."""
         if self._byslices >= 0:
@@ -494,10 +501,10 @@ class ImageDataSet(PMIDataBase):
         r"""Get the size of the original image. Gives 3D size. If load by slices, it will look for the internal
         index before returning the 3D size.
         """
-        id = id % len(self.metadata)
         if self._byslices >= 0:
-            return [int(self.metadata[self.get_internal_index(id)]['dim[%d]'%(i+1)]) for i in range(3)]
+            return [int(self.metadata[self.get_internal_index(id)]['dim[%d]' % (i + 1)]) for i in range(3)]
         else:
+            id = id % len(self.metadata)
             return [int(self.metadata[id]['dim[%d]'%(i+1)]) for i in range(3)]
 
     def get_spacing(self, id):
@@ -505,7 +512,7 @@ class ImageDataSet(PMIDataBase):
         gives 3D spacing."""
         id = id % len(self.metadata)
         if self._byslices >= 0:
-            return [round(self.metadata[self.get_internal_index(id)]['pixdim[%d]'%(i+1)], 5) for i in range(3)]
+            return [round(self.metadata[self.get_internal_index(id)]['pixdim[%d]' % (i + 1)], 5) for i in range(3)]
         else:
             return [round(self.metadata[id]['pixdim[%d]'%(i+1)], 5) for i in range(3)]
 

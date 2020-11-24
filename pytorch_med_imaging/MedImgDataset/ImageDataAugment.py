@@ -64,9 +64,6 @@ class ImageDataSetAugment(ImageDataSet):
         self._referencees = []
         self._call_count = 0
 
-        self._logger.critical('raw length: {}'.format(self._raw_length))
-        self._logger.critical('length: {}'.format(len(self._itemindexes)))
-        self._logger.critical('{}'.format(self._itemindexes))
 
         #==================
         # Build augmentator
@@ -114,6 +111,9 @@ class ImageDataSetAugment(ImageDataSet):
         assert isinstance(dataset, ImageDataSetAugment)
         assert not dataset in self._referencees,"Assigned dataset is already referenced."
 
+        #==============================================
+        # Error Check
+        #----------------------------------------------
         # Check data length to ensure properly stacked.
         if len(self) != len(dataset):
             self._logger.warning("Datasets have different length! [%s, %s]"%(self.data.shape, dataset.data.shape))
@@ -125,11 +125,10 @@ class ImageDataSetAugment(ImageDataSet):
                     len(dataset.data_source_path)
                 ))
                 return
-
             for i, (a, b) in enumerate(zip(self._itemindexes, dataset._itemindexes)):
-                # Get size looks for internal index with get_internal_index() if _byslice is not -1.
-                if a != b:
-                    self._logger.error("Item indexes error at {}: {} {}".format(i, a, b))
+                # No need to search augmented iamges.
+                if i >= self._raw_length:
+                    break
                 s1, s2 = self.get_size(a), dataset.get_size(b)
                 if s1 != s2:
                     self._logger.debug("Error found at: {}, self: {}, ref_data: {}".format(
