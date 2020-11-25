@@ -167,7 +167,7 @@ class SolverBase(object):
         for name, module in self._net.named_modules():
             try:
                 self._net_weight_type = module.weight.type()
-                self._logger.debug("Module type is: {}".format(self._net_weight_type))
+                #self._logger.debug("Module type is: {}".format(self._net_weight_type))
                 break
             except AttributeError:
                 continue

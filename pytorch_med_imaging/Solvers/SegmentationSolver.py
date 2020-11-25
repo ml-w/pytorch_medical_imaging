@@ -1,11 +1,15 @@
 import numpy as np
 import torch
 import torch.nn as nn
+import torch.nn.functional as F
 from torch import optim
 from torch.autograd import Variable
+from torch.utils.data import TensorDataset, DataLoader
 
 from .SolverBase import SolverBase
 from pytorch_med_imaging.logger import Logger
+
+import tqdm.auto as auto
 
 
 class SegmentationSolver(SolverBase):
@@ -82,6 +86,31 @@ class SegmentationSolver(SolverBase):
 
         super(SegmentationSolver, self).__init__(solver_configs)
 
+    def validation(self, val_set, gt_set, batch_size):
+        with torch.no_grad():
+            validation_loss = []
+            self._net.eval()
+
+            dataset = TensorDataset(val_set, gt_set)
+            dl = DataLoader(dataset, batch_size=batch_size, shuffle=False, num_workers=0, drop_last=False, pin_memory=False)
+
+            for s, g in auto.tqdm(dl, desc="Validation", position=2):
+                s = self._match_type_with_network(s)
+                g = self._match_type_with_network(g) # no assumption but should be long in segmentation only.
+
+                if isinstance(s, list):
+                    res = self._net(*s)
+                else:
+                    res = self._net(s)
+                res = F.log_softmax(res, dim=1)
+                loss = self._lossfunction(res, g.squeeze().long())
+                validation_loss.append(loss.item())
+                self._logger.debug("_val_step_loss: {}".format(loss.data.item()))
+
+            mean_val_loss = np.mean(np.array(validation_loss).flatten())
+            self._logger.info("Validation Result VAL: %.05f"%(mean_val_loss))
+        self._net = self._net.train()
+        return [mean_val_loss]
 
     def _feed_forward(self, *args):
         s, g = args
