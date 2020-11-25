@@ -73,6 +73,15 @@ class PMIImageDataLoader(PMIDataLoaderBase):
             else:
                 self._idlist = self._idlist.split(',')
             self._idlist.sort()
+        self._exclude = self.get_from_config('Filters', 'id_exclude', None)
+        if not self._exclude is None:
+            self._exclude = self._exclude.split(',')
+            for e in self._exclude:
+                if e in self._idlist:
+                    self._logger.info("Removing {} from the list as specified.".format(e))
+                    self._idlist.remove(e)
+
+
 
         self._data_subtype = self.get_from_loader_params('data_subtype', None)
         self._augmentation = self.get_from_loader_params_with_eval('augmentation', 0)
