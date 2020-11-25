@@ -5,6 +5,7 @@ import os
 import pandas as pd
 
 from pytorch_med_imaging.MedImgDataset import ImageDataSet
+from pytorch_med_imaging.logger import Logger
 import tqdm.auto as auto
 import argparse
 from surface_distance import compute_surface_distances, compute_average_surface_distance
@@ -248,7 +249,7 @@ def EVAL(seg, gt, vars):
                 i)))
             data = pd.DataFrame([[os.path.basename(seg.get_data_source(i)),
                                   'Not Found',
-                                  gt.get_internal_index(i),
+                                  gt.get_internal_slice_index(i),
                                   int(segindexes[i])] + [np.nan] * len(vars)],
                             columns=['Filename', 'TestParentDirectory',
                                      'ImageIndex',
@@ -294,7 +295,7 @@ def EVAL(seg, gt, vars):
                                           seg.get_data_source(i))
                                   ),
                               seg._filterargs['regex'],
-                              gt.get_internal_index(i),
+                              gt.get_internal_slice_index(i),
                               int(segindexes[i])] + values],
                             columns=['Filename', 'TestParentDirectory',
                                      'TestFilter', 'ImageIndex', 'Index'] +
@@ -331,13 +332,15 @@ def main(raw_args=None):
                        dest='testfilter', default=None, help='Filter for test filter')
     parse.add_argument('--gt-data', action='store', type=str, dest='gtset', required=True)
     parse.add_argument('--gt-filter', action='store', type=str,
-                       dest='gtfilter', default=None, help='Filter for ground truth data.')
+                       dest='gtfilter', default='(.*)', help='Filter for ground truth data.')
     parse.add_argument('--added-label', action='store', type=str, dest='label',
                        help='Additional label that will be marked under the column "Note"')
     parse.add_argument('--verbose', action='store_true', dest='verbose',
                        help='Print results.')
     args = parse.parse_args(raw_args)
     assert os.path.isdir(args.testset) and os.path.isdir(args.gtset), "Path error!"
+
+    logger = Logger('./Analysis.log', 'main', verbose=args.verbose)
 
     vars = {}
     if args.dice:
@@ -388,7 +391,7 @@ def main(raw_args=None):
         imset = ImageDataSet(args.testset, readmode='recursive',
                              filtermode='regex', regex=args.testfilter,
                              verbose=True, debugmode=False, dtype='uint8')
-    gtset = ImageDataSet(args.gtset, filtermode='both',
+    gtset = ImageDataSet(args.gtset, filtermode='both', readmode='recursive',
                          regex=args.gtfilter, idlist=imset.get_unique_IDs(),
                          verbose=True, debugmode=False, dtype='uint8')
 
@@ -405,7 +408,9 @@ def main(raw_args=None):
     except:
         if args.verbose:
             print(results.to_string())
+            print("Mean")
             print(results.mean())
+            print("Median")
             print(results.median())
 
 
