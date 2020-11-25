@@ -106,7 +106,7 @@ class Logger(object):
 
     def exception_hook(self, *args):
         self._logger.error('Uncaught exception:', exc_info=args)
-        traceback.print_tb(args[-1])
+        self._logger.exception(args[-1])
 
     def __class_getitem__(cls, item):
         if cls.global_logger is None:
