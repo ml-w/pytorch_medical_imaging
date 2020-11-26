@@ -7,6 +7,8 @@ from torch.autograd import Variable
 from .SolverBase import SolverBase
 from pytorch_med_imaging.logger import Logger
 
+__all__ = ['AutoEncoderSolver']
+
 
 class AutoEncoderSolver(SolverBase):
     def __init__(self, in_data, gt_data, net, param_optim, param_iscuda,

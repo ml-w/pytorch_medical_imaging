@@ -237,6 +237,8 @@ def main(a, config, logger):
             solver_class = ClassificationSolver
         elif run_type == 'BinaryClassification':
             solver_class = BinaryClassificationSolver
+        elif run_type == 'BinaryRNNClassification':
+            solver_class = BinaryClassificationRNNSolver
         else:
             logger.log_print_tqdm('Wrong run_type setting!', logging.ERROR)
             return

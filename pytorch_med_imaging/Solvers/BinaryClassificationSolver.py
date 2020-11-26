@@ -10,6 +10,8 @@ import numpy as np
 import pandas as pd
 import tqdm.auto as auto
 
+__all__ = ['BinaryClassificationSolver']
+
 
 class BinaryClassificationSolver(ClassificationSolver):
     def __init__(self, in_data, gt_data, net, param_optim, param_iscuda,

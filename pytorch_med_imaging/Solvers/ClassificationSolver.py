@@ -11,6 +11,8 @@ from tqdm import *
 
 import pandas as pd
 
+__all__ = ['ClassificationSolver']
+
 class ClassificationSolver(SolverBase):
     def __init__(self,in_data, gt_data, net, param_optim, param_iscuda,
                  param_initWeight=None, logger=None, **kwargs):
