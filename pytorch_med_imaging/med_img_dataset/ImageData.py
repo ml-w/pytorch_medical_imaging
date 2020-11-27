@@ -354,10 +354,10 @@ class ImageDataSet(PMIDataBase):
                         corner_index = np.array(cent) - np.array(majority_size) // 2
 
                         # Check if majority size is greater than original size.
-                        pad = target_size[-2:] < np.array(majority_size)
+                        Pad = target_size[-2:] < np.array(majority_size)
 
                         # Crop or pad image to standard size
-                        for dim, (corn, p) in enumerate(zip(corner_index, pad)):
+                        for dim, (corn, p) in enumerate(zip(corner_index, Pad)):
                             t_dim = dim + 1 if dim >= self._byslices else dim
                             if not p:
                                 target_dat = target_dat.narrow(int(t_dim), int(corn), int(majority_size[dim]))
@@ -379,7 +379,60 @@ class ImageDataSet(PMIDataBase):
             except:
                 self._logger.warning("Cannot stack data due to non-uniform shapes.")
                 self._logger.debug("Shapes are: \n%s"%'\n'.join([str(d.shape) for d in self.data]))
-                self._logger.warning("Some function might be impaired.")
+                self._logger.warning("Some function might be impaired. Trying to unify size!")
+
+                allsizes = [tuple(m.shape[1:]) for m in self.data]
+                uniquesizes = list(set(allsizes))
+                self._logger.info("Dectected image sizes: {}".format(uniquesizes))
+
+                if not len(uniquesizes) == 1:
+                    majority_size = uniquesizes[np.argmax([allsizes.count(tup) for tup in uniquesizes])]
+                    self._logger.info("Found majority size: {}".format(majority_size))
+                    target = [ss != majority_size for ss in allsizes]
+                    target = [i for i, x in enumerate(target) if x]
+                    self._logger.debug("Reisize needed for: {}".format(target))
+
+                    for t in target:
+                        self._logger.info("Trying to pad/crop {}".format(t))
+                        target_dat = self.data[t]
+                        target_size = np.array(majority_size)
+                        tmp_im_shape = np.array(target_dat.shape)
+                        pad_size_left = (target_size - tmp_im_shape[-2:]) // 2
+                        pad_size_right = target_size - pad_size_left - tmp_im_shape[-2:]
+
+                        self._logger.debug("Current size: {}".format(target_dat.shape))
+                        self._logger.debug("Target size: {}".format(target_size))
+
+                        # Check if majority size is greater than original size.
+                        need_pad = target_size[-2:] > tmp_im_shape[-2:]
+
+
+                        # Crop or pad image to standard size
+                        for dim, (ps_l, ps_r, p) in enumerate(zip(pad_size_left, pad_size_right, need_pad)):
+                            t_dim = dim + 1 # we are only doing H W padding, not Z
+                            if not p:
+                                target_dat = target_dat.narrow(int(t_dim), int(ps_l), int(tmp_im_shape[dim]))
+                            else:
+                                pa = [0] * target_dat.ndim * 2
+                                pa[t_dim * 2] = abs(int(ps_l))
+                                pa[t_dim * 2 + 1] = abs(int(ps_r))
+                                self._logger.debug("Padding: {}".format(pa))
+                                # pa = [abs(int(ps_l)) if x // 2 == t_dim else 0 for x in range(6)]
+                                # if len(pa) == 4: (left, right, top, bot)
+                                # if len(pa) == 6: (left, right, top, bot, front, back)
+                                target_dat = pad(target_dat, pa[-4:], mode='constant', value=0)
+
+                        self._logger.debug("Resized {} from {} to {}".format(
+                            self.get_unique_IDs()[t],
+                            allsizes[t],
+                            list(target_dat.shape)
+                        ))
+                        self.data[t] = target_dat
+
+
+
+
+
 
 
     def get_raw_data_shape(self):
