@@ -4,7 +4,7 @@ from functools import partial
 import numpy as np
 
 from .med_img_dataset import *
-from .med_img_dataset.Computation import *
+from .med_img_dataset.computations import *
 
 #
 # class PMD_DataLoaderBase(object):

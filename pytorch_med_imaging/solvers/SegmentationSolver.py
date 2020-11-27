@@ -11,7 +11,7 @@ from pytorch_med_imaging.logger import Logger
 
 import tqdm.auto as auto
 
-__all__ = ['SolverBase']
+__all__ = ['SegmentationSolver']
 
 class SegmentationSolver(SolverBase):
     def __init__(self, in_data, gt_data, net, param_optim, param_iscuda,

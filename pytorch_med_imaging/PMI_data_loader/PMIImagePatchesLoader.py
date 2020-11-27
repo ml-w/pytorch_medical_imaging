@@ -1,6 +1,6 @@
 from .PMIImageDataLoader import PMIImageDataLoader
 from .. import med_img_dataset
-from ..med_img_dataset.Computation import clip_5
+from ..med_img_dataset.computations import clip_5
 
 __all__ = ['PMIImagePatchesLoader']
 

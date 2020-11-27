@@ -1,6 +1,6 @@
 from .PMIDataLoaderBase import PMIDataLoaderBase
 from .. import med_img_dataset
-from ..med_img_dataset.Computation import ImageDataSetWithTexture
+from ..med_img_dataset.computations import ImageDataSetWithTexture
 
 import re
 
