@@ -16,22 +16,22 @@ cmdclass = {}
 ext_modules = []
 if use_cython:
     ext_modules += [
-        Extension("MedImgDataset.Computation._LocalNeighborhoodDifferencePattern",
-                  ["pytorch_med_imaging/MedImgDataset/Computation/_LocalNeighborhoodDifferencePattern.pyx"],
+        Extension("med_img_dataset.Computation._LocalNeighborhoodDifferencePattern",
+                  ["pytorch_med_imaging/med_img_dataset/Computation/_LocalNeighborhoodDifferencePattern.pyx"],
                   include_dirs=[numpy.get_include()]),
     ]
     ext_modules += [
-        Extension("MedImgDataset.Computation._interpolation",
-                  ["pytorch_med_imaging/MedImgDataset/Computation/_interpolation.pxd"],
+        Extension("med_img_dataset.Computation._interpolation",
+                  ["pytorch_med_imaging/med_img_dataset/Computation/_interpolation.pxd"],
                   include_dirs=[numpy.get_include()]),
     ]
     ext_modules += [
-        Extension("MedImgDataset.Computation._prob_func",
-                  ["pytorch_med_imaging/MedImgDataset/Computation/_prob_func.pyx"],
+        Extension("med_img_dataset.Computation._prob_func",
+                  ["pytorch_med_imaging/med_img_dataset/Computation/_prob_func.pyx"],
                   include_dirs=[numpy.get_include()]),
     ]
     cmdclass.update({'build_ext': build_ext})
-    # ext_modules += cythonize("MedImgDataset.rst/Computation/_LocalNeighborhoodDifferencePattern.pyx")
+    # ext_modules += cythonize("med_img_dataset.rst/Computation/_LocalNeighborhoodDifferencePattern.pyx")
 
 setup(
     name='NPC_Segment',

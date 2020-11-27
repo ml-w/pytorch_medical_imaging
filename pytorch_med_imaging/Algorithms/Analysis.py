@@ -4,7 +4,7 @@ import numpy as np
 import os
 import pandas as pd
 
-from pytorch_med_imaging.MedImgDataset import ImageDataSet
+from pytorch_med_imaging.med_img_dataset import ImageDataSet
 from pytorch_med_imaging.logger import Logger
 import tqdm.auto as auto
 import argparse

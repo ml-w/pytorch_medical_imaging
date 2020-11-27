@@ -4,11 +4,11 @@ import torch.nn as nn
 from torchvision.utils import make_grid
 from torch.utils.data import TensorDataset, DataLoader
 
-from pytorch_med_imaging.PMIDataLoader import PMIImageMCFeaturePair, PMIDataFactory
+from pytorch_med_imaging.PMI_data_loader import PMIImageMCFeaturePair, PMIDataFactory
 from pytorch_med_imaging.tb_plotter import TB_plotter
 from pytorch_med_imaging.logger import Logger
-from pytorch_med_imaging.Networks.Layers import *
-from pytorch_med_imaging.Networks import CNNGRU
+from pytorch_med_imaging.networks.layers import *
+from pytorch_med_imaging.networks import CNNGRU
 from tensorboardX import SummaryWriter
 
 import configparser as cf

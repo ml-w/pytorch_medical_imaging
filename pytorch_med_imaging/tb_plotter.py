@@ -101,7 +101,7 @@ class TB_plotter(object):
 
     def plot_loss(self, loss, writer_index):
         self._last_writer_index = writer_index
-        self._writer.add_scalar('Loss', loss, writer_index)
+        self._writer.add_scalar('loss', loss, writer_index)
 
     def plot_scalars(self, writer_index: int, scalars: dict):
         """

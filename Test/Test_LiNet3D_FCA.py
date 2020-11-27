@@ -1,4 +1,4 @@
-from pytorch_med_imaging.Networks import LiNet3d_FCA, CNNGRU_FCA
+from pytorch_med_imaging.networks import LiNet3d_FCA, CNNGRU_FCA
 import torch
 from pytorch_model_summary import *
 

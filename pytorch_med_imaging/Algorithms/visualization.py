@@ -4,7 +4,7 @@ import torch.nn.functional as F
 import cv2
 import numpy as np
 import os
-from pytorch_med_imaging.MedImgDataset import ImageDataSet
+from pytorch_med_imaging.med_img_dataset import ImageDataSet
 
 __all__ = ['draw_overlay_heatmap', 'draw_grid', 'contour_grid_by_dir', 'contour_grid_by_image']
 
@@ -235,7 +235,7 @@ def draw_overlay_heatmap(baseim, heatmap):
 
 
 def contour_grid_by_dir(im_dir, seg_dir, output_dir, gt_dir=None, write_png=False):
-    from pytorch_med_imaging.MedImgDataset import ImageDataSet
+    from pytorch_med_imaging.med_img_dataset import ImageDataSet
 
     if not os.path.isdir(output_dir):
         os.makedirs(output_dir, exist_ok=True)

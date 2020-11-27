@@ -12,15 +12,15 @@ import torch.nn as nn
 from torch.utils.data import DataLoader, TensorDataset
 import configparser
 import numpy as np
-from pytorch_med_imaging.PMIDataLoader import PMIDataFactory
+from pytorch_med_imaging.PMI_data_loader import PMIBatchSamplerFactory, PMIDataFactory
 
 # This package
-from pytorch_med_imaging.Networks import *
+from pytorch_med_imaging.networks import *
 from pytorch_med_imaging.tb_plotter import TB_plotter
 
 from pytorch_med_imaging.logger import Logger
-from pytorch_med_imaging.Solvers import *
-from pytorch_med_imaging.Inferencers import *
+from pytorch_med_imaging.solvers import *
+from pytorch_med_imaging.inferencers import *
 
 from tensorboardX import SummaryWriter
 import torch.autograd as autograd
@@ -140,6 +140,8 @@ def main(a, config, logger):
 
     # [LoaderParams] section is not useful to load here except this (for naming).
     data_pmi_data_type = config['LoaderParams']['PMI_datatype_name']
+    data_pmi_loader_type = config['LoaderParams'].get('PMI_loader_name', None)
+    data_pmi_loader_kwargs = config['LoaderParams'].get('PMI_loader_kwargs', None)
 
     # Config override
     #-----------------
@@ -237,7 +239,7 @@ def main(a, config, logger):
             solver_class = ClassificationSolver
         elif run_type == 'BinaryClassification':
             solver_class = BinaryClassificationSolver
-        elif run_type == 'BinaryRNNClassification':
+        elif run_type == 'BinarylassificationRNN':
             solver_class = BinaryClassificationRNNSolver
         else:
             logger.log_print_tqdm('Wrong run_type setting!', logging.ERROR)
@@ -254,8 +256,13 @@ def main(a, config, logger):
 
         numcpu = torch.multiprocessing.cpu_count()
         trainingSet = TensorDataset(inputDataset, gtDataset)
-        loader      = DataLoader(trainingSet, batch_size=param_batchsize, shuffle=True, num_workers=16,
-                                 drop_last=True, pin_memory=False)
+        if data_pmi_loader_type is None:
+            loader = DataLoader(trainingSet, batch_size=param_batchsize, shuffle=True, num_workers=16,
+                                drop_last=True, pin_memory=False)
+        else:
+            logger.info("Loading custom dataloader.")
+            loader_factory = PMIBatchSamplerFactory()
+            loader = loader_factory.produce_object(trainingSet, config)
 
 
         # Read tensorboard dir from env, disable plot if it fails
@@ -290,7 +297,7 @@ def main(a, config, logger):
                 out, loss = solver.step(s, g)
 
                 E.append(loss.data.cpu())
-                logger.log_print_tqdm("\t[Step %04d] Loss: %.010f"%(index, loss.data))
+                logger.log_print_tqdm("\t[Step %04d] loss: %.010f"%(index, loss.data))
 
                 # Plot to tensorboard
                 if bool_plot and index % 10 == 0:
