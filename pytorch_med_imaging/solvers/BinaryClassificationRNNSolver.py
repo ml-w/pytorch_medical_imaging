@@ -103,6 +103,11 @@ class BinaryClassificationRNNSolver(BinaryClassificationSolver):
 
             for s, g in auto.tqdm(dl, desc="Validation", position=2):
                 s, ori_len = s
+
+                #TODO: Expected 3D here, should be more general.
+                while s.ndim < 5:
+                    s = s.unsqueeze(0)
+
                 s = self._match_type_with_network(s)
                 g = self._match_type_with_network(g)
 

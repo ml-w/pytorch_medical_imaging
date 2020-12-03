@@ -71,15 +71,22 @@ class SolverBase(object):
         self._lr_decay_func = func
         self._lr_schedular = torch.optim.lr_scheduler.LambdaLR(self._optimizer, self._lr_decay_func)
 
-    def set_lr_decay_to_reduceOnPlateau(self, patience, factor):
+    def set_lr_decay_to_reduceOnPlateau(self, default_patience, factor, **kwargs):
+        _default_kwargs = {
+            'factor': factor,
+            'patience': int(default_patience),
+            'cooldown':2,
+            'min_lr': 1E-6,
+            'threshold':0.05,
+            'threshold_mode':'rel'
+        }
+        for keys in kwargs:
+            _default_kwargs[keys] = kwargs[keys]
+
+        self._logger.debug("Set lr_scheduler to decay on plateau with params: {}.".format(_default_kwargs))
         self._lr_schedular = torch.optim.lr_scheduler.ReduceLROnPlateau(
             self._optimizer,
-            factor= factor,
-            patience = int(patience),
-            cooldown=2,
-            min_lr = 1E-6,
-            threshold=0.05,
-            threshold_mode='rel'
+            **_default_kwargs
         )
 
     def set_momentum_decay(self, decay):

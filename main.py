@@ -120,6 +120,7 @@ def main(a, config, logger):
     param_decay = float(config['RunParams'].get('decay_rate_LR'))
     param_batchsize = int(config['RunParams'].get('batch_size'))
     param_decay_on_plateau = config['RunParams'].getboolean('decay_on_plateau', False)
+    param_lr_scheduler_dict = config['RunParams'].get('lr_scheduler_dict', None)
 
     checkpoint_load = config['Checkpoint'].get('cp_load_dir', "")
     checkpoint_save = config['Checkpoint'].get('cp_save_dir', "")
@@ -245,19 +246,25 @@ def main(a, config, logger):
             logger.log_print_tqdm('Wrong run_type setting!', logging.ERROR)
             return
 
+        logger.info("Creating solver: {}".format(solver_class))
         solver = solver_class(inputDataset, gtDataset, net,
                               {'lr': param_lr, 'momentum': param_momentum}, bool_usecuda,
                               param_initWeight=param_initWeight)
         if param_decay_on_plateau:
             logger.log_print_tqdm("Optimizer decay on plateau.")
-            solver.set_lr_decay_to_reduceOnPlateau(3, param_decay)
+            _lr_scheduler_dict = eval(param_lr_scheduler_dict)
+            if not isinstance(_lr_scheduler_dict, dict):
+                logger.error("lr_scheduler_dict must eval to a dictionary! Got {} instead.".format(_lr_scheduler_dict))
+                return
+            logger.debug("Got lr_schedular_dict: {}.".format(param_lr_scheduler_dict))
+            solver.set_lr_decay_to_reduceOnPlateau(3, param_decay, **_lr_scheduler_dict)
         else:
             solver.set_lr_decay_exp(param_decay)
 
-        numcpu = torch.multiprocessing.cpu_count()
+        numcpu = int(os.environ.get('SLURM_CPUS_ON_NODE', default=torch.multiprocessing.cpu_count()))
         trainingSet = TensorDataset(inputDataset, gtDataset)
         if data_pmi_loader_type is None:
-            loader = DataLoader(trainingSet, batch_size=param_batchsize, shuffle=True, num_workers=16,
+            loader = DataLoader(trainingSet, batch_size=param_batchsize, shuffle=True, num_workers=numcpu,
                                 drop_last=True, pin_memory=False)
         else:
             logger.info("Loading custom dataloader.")
