@@ -8,9 +8,9 @@ train:
         lr: 1E-4
         debug: no
     output-scalars:
-        loss: 'EpochLoss: (\value)'
+        loss/loss: 'EpochLoss: (\value)'
         accuracy: 'ACC: (\value)'
-        validation_loss: 'VAL: (\value)'
+        loss/validation_loss: 'VAL: (\value)'
         step: 'Epoch (\step)'
         step_lr: 'LR: (\value)'
     sourcecode:
@@ -90,6 +90,8 @@ validation_segment:
           select: 'Backup'
     output-scalars:
         DSC: 'Avg_DICE: (\value)'
+        med_DSC: 'Median_DICE: (\value)'
+
 
 pipeline:
     flags:
