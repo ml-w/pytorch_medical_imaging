@@ -235,6 +235,7 @@ def Volume(TP, FP, TN, FN):
 
 def EVAL(seg, gt, vars):
     df = pd.DataFrame(columns=['Filename','ImageIndex'] + list(vars.keys()))
+    logger = Logger['EVAL']
 
     gtindexes = gt.get_unique_IDs()
     segindexes = seg.get_unique_IDs()
@@ -264,6 +265,19 @@ def EVAL(seg, gt, vars):
             ss = ss.numpy().astype('bool')
         if not isinstance(gg, np.ndarray):
             gg = gg.numpy().astype('bool')
+
+        # Check if two images have the same number of slices
+        logger.info("Shapes: {}, {}".format(ss.shape, gg.shape))
+        if not ss.shape[1] == gg.shape[1]:
+            logger.warning('Warning, the input {} has different number of slices: {} and {} \n'
+                           'Performing naive crop.'.format(row, ss.shape, gg.shape))
+            b = ss.shape[1] < gg.shape[1]
+            if b:
+                gg = gg[:,-ss.shape[1]:]
+            else:
+                ss = ss[:,-gg.shape[1]:]
+            logger.debug("Shape after cropping: {}, {}".format(ss.shape, gg.shape))
+
 
         try:
             TP, FP, TN, FN = np.array(perf_measure(gg.flatten(), ss.flatten()), dtype=float)
@@ -332,7 +346,7 @@ def main(raw_args=None):
                        dest='testfilter', default=None, help='Filter for test filter')
     parse.add_argument('--gt-data', action='store', type=str, dest='gtset', required=True)
     parse.add_argument('--gt-filter', action='store', type=str,
-                       dest='gtfilter', default='(.*)', help='Filter for ground truth data.')
+                       dest='gtfilter', default=None, help='Filter for ground truth data.')
     parse.add_argument('--added-label', action='store', type=str, dest='label',
                        help='Additional label that will be marked under the column "Note"')
     parse.add_argument('--verbose', action='store_true', dest='verbose',
