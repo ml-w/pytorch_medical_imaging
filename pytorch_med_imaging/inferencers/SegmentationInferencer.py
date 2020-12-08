@@ -160,6 +160,8 @@ class SegmentationInferencer(InferencerBase):
             out = main(arguments)
             self._logger.info("\n{}".format(out.to_string()))
             self._logger.info("Avg_DICE: {}".format(out['DSC'].mean()))
+            self._logger.info("Med_DICE: {}".format(out['DSC'].median()))
+            self._logger.info("Summary:\n {}".format(out.describe(include='all')))
         except:
             self._logger.exception("Error calling Analysis.py. This is intended.")
             return
