@@ -120,7 +120,7 @@ def main(a, config, logger):
     param_decay = float(config['RunParams'].get('decay_rate_LR'))
     param_batchsize = int(config['RunParams'].get('batch_size'))
     param_decay_on_plateau = config['RunParams'].getboolean('decay_on_plateau', False)
-    param_lr_scheduler_dict = config['RunParams'].get('lr_scheduler_dict', None)
+    param_lr_scheduler_dict = config['RunParams'].get('lr_scheduler_dict', '{}')
 
     checkpoint_load = config['Checkpoint'].get('cp_load_dir', "")
     checkpoint_save = config['Checkpoint'].get('cp_save_dir', "")
@@ -240,7 +240,7 @@ def main(a, config, logger):
             solver_class = ClassificationSolver
         elif run_type == 'BinaryClassification':
             solver_class = BinaryClassificationSolver
-        elif run_type == 'BinarylassificationRNN':
+        elif run_type == 'BinaryClassificationRNN':
             solver_class = BinaryClassificationRNNSolver
         else:
             logger.log_print_tqdm('Wrong run_type setting!', logging.ERROR)
@@ -394,9 +394,11 @@ def main(a, config, logger):
             infer_class = ClassificationInferencer
         elif run_type == 'BinaryClassification':
             infer_class = BinaryClassificationInferencer
+        elif run_type == 'BinaryClassificationRNN':
+            infer_class = BinaryClassificationRNNInferencer
         else:
             logger.log_print_tqdm('Wrong run_type setting!', logging.ERROR)
-            raise NotImplementedError("Not implemented inference type!")
+            raise NotImplementedError("Not implemented inference type: {}".format(run_type))
 
 
         try:
@@ -412,6 +414,14 @@ def main(a, config, logger):
             inferencer = infer_class(inputDataset, dir_output, param_batchsize,
                                      net, checkpoint_load,
                                      bool_usecuda)
+
+        # Pass PMI to inferencer if its specified
+        if not data_pmi_loader_kwargs is None:
+            loader_factory = PMIBatchSamplerFactory()
+            loader = loader_factory.produce_object(inputDataset, config)
+            inferencer.overload_dataloader(loader)
+
+
 
         if write_mode == 'GradCAM':
             #TODO: custom grad cam layers

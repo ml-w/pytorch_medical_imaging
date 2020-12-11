@@ -254,6 +254,7 @@ class ImageDataSet(PMIDataBase):
             else:
                 self._idlist = self._filterargs['idlist']
 
+            self._logger.debug(f'{self._idlist}')
             tmp_file_dirs = np.array(file_dirs)
             keep = [id in self._idlist for id in file_ids]
 
@@ -390,7 +391,8 @@ class ImageDataSet(PMIDataBase):
                     self._logger.info("Found majority size: {}".format(majority_size))
                     target = [ss != majority_size for ss in allsizes]
                     target = [i for i, x in enumerate(target) if x]
-                    self._logger.debug("Reisize needed for: {}".format(target))
+                    self._logger.debug("Reisize needed for: {}".format([self.get_unique_IDs()[t]
+                                                                       for t in target]))
 
                     for t in target:
                         self._logger.info("Trying to pad/crop {}".format(t))
@@ -400,8 +402,10 @@ class ImageDataSet(PMIDataBase):
                         pad_size_left = (target_size - tmp_im_shape[-2:]) // 2
                         pad_size_right = target_size - pad_size_left - tmp_im_shape[-2:]
 
-                        self._logger.debug("Current size: {}".format(target_dat.shape))
+                        self._logger.debug("Current size: {}".format(tmp_im_shape))
                         self._logger.debug("Target size: {}".format(target_size))
+                        self._logger.debug("pad_size_left/right: {},{}".format(pad_size_left,
+                                                                               pad_size_right))
 
                         # Check if majority size is greater than original size.
                         need_pad = target_size[-2:] > tmp_im_shape[-2:]
@@ -411,7 +415,9 @@ class ImageDataSet(PMIDataBase):
                         for dim, (ps_l, ps_r, p) in enumerate(zip(pad_size_left, pad_size_right, need_pad)):
                             t_dim = dim + 1 # we are only doing H W padding, not Z
                             if not p:
-                                target_dat = target_dat.narrow(int(t_dim), int(ps_l), int(tmp_im_shape[dim]))
+                                self._logger.debug(f"(ps_l={ps_l}, ps_r={ps_r}, t_dim={t_dim}, target_size={target_size}"
+                                                   f"(target_dat.shape={target_dat.shape}")
+                                target_dat = target_dat.narrow(int(t_dim), int(abs(ps_l)), int(target_size[dim]))
                             else:
                                 pa = [0] * target_dat.ndim * 2
                                 pa[t_dim * 2] = abs(int(ps_l))

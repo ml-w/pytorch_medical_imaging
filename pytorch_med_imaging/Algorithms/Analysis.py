@@ -241,7 +241,7 @@ def EVAL(seg, gt, vars):
     segindexes = seg.get_unique_IDs()
 
     for i, row in enumerate(auto.tqdm(segindexes)):
-        auto.tqdm.write("Computing {}".format(row))
+        logger.info("Computing {}".format(row))
         # check if both have same ID
         try:
             gtindexes.index(segindexes[i])
@@ -267,7 +267,7 @@ def EVAL(seg, gt, vars):
             gg = gg.numpy().astype('bool')
 
         # Check if two images have the same number of slices
-        logger.info("Shapes: {}, {}".format(ss.shape, gg.shape))
+        logger.debug("Shapes: {}, {}".format(ss.shape, gg.shape))
         if not ss.shape[1] == gg.shape[1]:
             logger.warning('Warning, the input {} has different number of slices: {} and {} \n'
                            'Performing naive crop.'.format(row, ss.shape, gg.shape))
@@ -282,10 +282,10 @@ def EVAL(seg, gt, vars):
         try:
             TP, FP, TN, FN = np.array(perf_measure(gg.flatten(), ss.flatten()), dtype=float)
         except:
-            auto.tqdm.write("Somthing wrong with: {}".format(segindexes[i]))
+            logger.error("Somthing wrong with: {}".format(segindexes[i]))
             continue
         if TP == 0:
-            auto.tqdm.write("No TP hits for {}".format(row))
+            logger.warning("No TP hits for {}".format(row))
             continue
         values = []
         for keys in vars:

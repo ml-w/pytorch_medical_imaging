@@ -90,7 +90,7 @@ validation_segment:
           select: 'Backup'
     output-scalars:
         DSC: 'Avg_DICE: (\value)'
-        med_DSC: 'Median_DICE: (\value)'
+        med_DSC: 'Med_DICE: (\value)'
 
 
 pipeline:

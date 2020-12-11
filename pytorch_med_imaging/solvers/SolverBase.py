@@ -47,6 +47,11 @@ class SolverBase(object):
         self._net_weight_type   = None
         self._data_logger       = None
 
+        self._logger.info("Logger were configured with options: {}".format(solver_configs))
+        if  len(kwargs):
+            self._logger.warning("Some solver configs were not used: {}".format(kwargs))
+
+
     def get_net(self):
         if torch.cuda.device_count() > 1:
             try:
@@ -80,8 +85,11 @@ class SolverBase(object):
             'threshold':0.05,
             'threshold_mode':'rel'
         }
-        for keys in kwargs:
-            _default_kwargs[keys] = kwargs[keys]
+        try:
+            for keys in kwargs:
+                _default_kwargs[keys] = kwargs[keys]
+        except:
+            self._logger.warning("Extraction of parameters failed. Retreating to use default.")
 
         self._logger.debug("Set lr_scheduler to decay on plateau with params: {}.".format(_default_kwargs))
         self._lr_schedular = torch.optim.lr_scheduler.ReduceLROnPlateau(

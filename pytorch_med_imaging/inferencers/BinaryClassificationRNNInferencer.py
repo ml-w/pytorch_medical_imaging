@@ -75,6 +75,7 @@ class BinaryClassificationRNNInferencer(ClassificationInferencer):
                 del out, s
 
             out_tensor = torch.cat(out_tensor, dim=0) #(NxC)
+            self._logger.info(f"{out_tensor}")
             dl = self._writter(out_tensor)
             self._logger.debug('\n' + dl._data_table.to_string())
 
@@ -83,7 +84,7 @@ class BinaryClassificationRNNInferencer(ClassificationInferencer):
         out_decisions = {}
         sig_out = torch.sigmoid(out_tensor)
         out_decision = (sig_out > .5).int()
-        self._num_out_out_class = int(out_tensor.shape[1])
+        self._num_out_out_class = int(out_tensor.shape[1]) - 1 # Because RNN add an extra stopping character.
         if os.path.isdir(self._outdir):
             self._outdir = os.path.join(self._outdir, 'class_inf.csv')
         if not self._outdir.endswith('.csv'):
@@ -95,10 +96,12 @@ class BinaryClassificationRNNInferencer(ClassificationInferencer):
 
         # Write decision
         out_decisions['IDs'] = self._in_dataset.get_unique_IDs()
-        for i in range(out_tensor.shape[1]):
+        self._logger.debug(f"Shape: {out_tensor.shape}")
+        for i in range(self._num_out_out_class):
             out_decisions[f'Prob_Class_{i}'] = sig_out[:, i].data.cpu().tolist()
             out_decisions[f'Decision_{i}'] = out_decision[:, i].tolist()
             if self._TARGET_DATASET_EXIST_FLAG:
+                self._logger.debug(f"Truth of {i}")
                 out_decisions[f'Truth_{i}'] = self._target_dataset._data_table.iloc[:,i].tolist()
 
 

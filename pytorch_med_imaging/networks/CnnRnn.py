@@ -284,7 +284,7 @@ class DenseGRU(nn.Module):
                  first_conv_out_ch: int = 32,
                  dense_block_config: tuple = (6, 12, 24, 16),
                  dense_growth_rate: int = 16,
-                 embedding_size: int = 64,
+                 embedding_size: int = 256,
                  gru_layers: int = 1,
                  dropout: float = 0.2
                  ):
@@ -317,6 +317,8 @@ class DenseGRU(nn.Module):
             _dense.inconv,
             _dense.dense_blocks
         )
+
+        self._adap_pool = nn.AdaptiveAvgPool3d([None] + [int(math.sqrt(self._embedding_size))] * 2)
 
         # f(0) = c0 + kl_0
         # f(1) = f(0) // 2 + kl_1
@@ -366,12 +368,15 @@ class DenseGRU(nn.Module):
         hidden = self.initiate_hidden_states(x).type_as(x)
 
         x = self._encoder(x)
-        # Flatten encoded image to embeddingsize:
-        if not x.shape[-1] == x.shape[-1] == int(math.sqrt(self._embedding_size)):
-            x = F.adaptive_avg_pool3d(x, [x.shape[2]] + [int(math.sqrt(self._embedding_size))] * 2)
-        else:
-            # No need to resize
-            pass
+
+        # Resize anyways
+        # x = self._adap_pool(x)
+        # # Flatten encoded image to embeddingsize:
+        # if not x.shape[-1] == x.shape[-1] == int(math.sqrt(self._embedding_size)):
+        #     x = self._adap_pool(x)
+        # else:
+        #     # No need to resize
+        #     pass
         # Flatten H, W dim and swap with C, where C is the embedding dim
         x = x.view(list(x.shape[:-2]) + [-1]).transpose(1, -1)
 
@@ -399,7 +404,8 @@ class DenseGRU(nn.Module):
                 _tries = 0
                 _guess = torch.zeros([self._out_ch]).type_as(_xx) # init_guess
                 while True:
-                    _slice = _slice % xx_len.item()
+                    print(f"====>>>{_slice}, {_tries}")
+                    _slice = _slice % int(xx_len.item())
                     context, att_weight = self._attention(_xx[:, _slice], _init_hidden.squeeze())
                     context = torch.cat([context, _guess], dim=-1).unsqueeze(0)
                     output = self._gru(context, _init_hidden)

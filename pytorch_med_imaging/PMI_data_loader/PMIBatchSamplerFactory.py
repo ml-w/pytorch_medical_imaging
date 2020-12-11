@@ -16,7 +16,7 @@ class PMIBatchSamplerFactory(object):
             sampler_kwargs = config['LoaderParams'].get('PMI_loader_kwargs', dict())
             param_batchsize = int(config['RunParams'].get('batch_size'))
             run_mode = config['General'].get('run_mode', 'training')
-            run_mode = run_mode == 'test' or run_mode == 'testing'
+            run_mode = run_mode == 'test' or run_mode == 'testing' or run_mode == "inference"
 
             sampler_kwargs = eval(sampler_kwargs)
             if not isinstance(sampler_kwargs, dict):
