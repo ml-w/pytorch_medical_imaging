@@ -8,6 +8,8 @@ import numpy as np
 from tqdm import *
 from ..logger import Logger
 
+__all__ = ['SegmentationInferencer']
+
 class SegmentationInferencer(InferencerBase):
     def __init__(self, input_data, out_dir, batch_size, net, checkpoint_dir, iscuda, logger=None, target_data=None,
                  **kwargs):
@@ -161,7 +163,7 @@ class SegmentationInferencer(InferencerBase):
             self._logger.info("\n{}".format(out.to_string()))
             self._logger.info("Avg_DICE: {}".format(out['DSC'].mean()))
             self._logger.info("Med_DICE: {}".format(out['DSC'].median()))
-            self._logger.info("Summary:\n {}".format(out.describe(include='all')))
+            self._logger.info("Summary:\n {}".format(out.describe(include='all').to_string()))
         except:
             self._logger.exception("Error calling Analysis.py. This is intended.")
             return

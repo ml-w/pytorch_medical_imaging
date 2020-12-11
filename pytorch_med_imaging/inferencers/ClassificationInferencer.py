@@ -13,6 +13,7 @@ from torchvision.utils import make_grid
 from imageio import imsave
 from pytorch_med_imaging.Algorithms.visualization import draw_overlay_heatmap
 
+__all__ = ['ClassificationInferencer']
 
 class ClassificationInferencer(InferencerBase):
     def __init__(self, input_data, out_dir, batch_size, net, checkpoint_dir, iscuda, logger=None, target_data=None):
@@ -224,3 +225,6 @@ class ClassificationInferencer(InferencerBase):
         dl = DataLabel.from_dict(out_decisions)
         dl.write(self._outdir)
         return dl
+
+    def overload_dataloader(self, loader):
+        self._data_loader = loader

@@ -6,12 +6,11 @@ import os
 import torch
 #from ..networks.GradCAM import *
 
-__all__ = ['BinaryClassificationInferencer']
+__all__ = ['BinaryClassificationRNNInferencer']
 
-
-class BinaryClassificationInferencer(ClassificationInferencer):
+class BinaryClassificationRNNInferencer(ClassificationInferencer):
     def __init__(self, *args, **kwargs):
-        super(BinaryClassificationInferencer, self).__init__(*args, **kwargs)
+        super(BinaryClassificationRNNInferencer, self).__init__(*args, **kwargs)
 
     def _create_net(self):
         state_dict = torch.load(self._net_state_dict, map_location=torch.device('cpu'))
