@@ -57,7 +57,8 @@ class BinaryClassificationRNNSolver(BinaryClassificationSolver):
             lossfunction_a = lossfunction_a.cuda()
             lossfunction_b = lossfunction_b.cuda()
 
-        lossfunction = lambda s, g: lossfunction_a(s, g) + lossfunction_b(s, g)
+        # lossfunction = lambda s, g: lossfunction_a(s, g) + lossfunction_b(s, g)
+        lossfunction = lossfunction_a
         self.set_loss_function(lossfunction)
 
 
@@ -87,21 +88,25 @@ class BinaryClassificationRNNSolver(BinaryClassificationSolver):
 
 
 
-    def validation(self, val_set, gt_set, batch_size):
+    def validation(self):
+        if self._data_loader_val is None:
+            self._logger.warning("Validation skipped because no loader is available.")
+            return []
+
         with torch.no_grad():
-            dataset = TensorDataset(val_set, gt_set)
+            # dataset = TensorDataset(val_set, gt_set)
             # TODO: Let user decided dataloader here
-            dl = PMIBatchZeroPadSampler(dataset,
-                                        pad_element=0,
-                                        pad_axis=1,
-                                        batch_size=batch_size,
-                                        shuffle=False, num_workers=0, drop_last=False, pin_memory=False)
+            # dl = PMIBatchZeroPadSampler(dataset,
+            #                             pad_element=0,
+            #                             pad_axis=1,
+            #                             batch_size=batch_size,
+            #                             shuffle=False, num_workers=0, drop_last=False, pin_memory=False)
             self._net = self._net.eval()
 
             decisions = None # (B x N)
             validation_loss = []
 
-            for s, g in auto.tqdm(dl, desc="Validation", position=2):
+            for s, g in auto.tqdm(self._data_loader_val, desc="Validation", position=2):
                 s, ori_len = s
 
                 #TODO: Expected 3D here, should be more general.
@@ -154,6 +159,8 @@ class BinaryClassificationRNNSolver(BinaryClassificationSolver):
             self._logger.info("Validation Result - ACC: %.05f, VAL: %.05f"%(acc, validation_loss))
 
         self._net = self._net.train()
+        self.plotter_dict['scalars']['Loss/Validation Loss'] = validation_loss
+        self.plotter_dict['scalars']['Performance/ACC'] = acc
         return validation_loss, acc
 
     def step(self, *args):
@@ -163,23 +170,23 @@ class BinaryClassificationRNNSolver(BinaryClassificationSolver):
         except:
             pass
 
-        # Skip if all ground-truth have the same type
-        if g.unique().shape[0] == 1:
-            with torch.no_grad():
-                out = self._feed_forward(*args)
-                loss = self._loss_eval(out, *args)
-                # loss.backward()
-                # Cope with extreme data imbalance.
-                self._logger.warning("Skipping grad, all input are the same class.")
-                self._called_time += 1
-            return out, loss.cpu().data
-        else:
-            out = self._feed_forward(*args)
-            loss = self._loss_eval(out, *args)
-            self._optimizer.zero_grad()
-            loss.backward()
-            self._optimizer.step()
-            return out, loss.cpu().data
+        # # Skip if all ground-truth have the same type
+        # if g.unique().shape[0] == 1:
+        #     with torch.no_grad():
+        #         out = self._feed_forward(*args)
+        #         loss = self._loss_eval(out, *args)
+        #         # loss.backward()
+        #         # Cope with extreme data imbalance.
+        #         self._logger.warning("Skipping grad, all input are the same class.")
+        #         self._called_time += 1
+        #     return out, loss.cpu().data
+        # else:
+        out = self._feed_forward(*args)
+        loss = self._loss_eval(out, *args)
+        self._optimizer.zero_grad()
+        loss.backward()
+        self._optimizer.step()
+        return out, loss.cpu().data
 
 
     def _loss_eval(self, *args):
@@ -192,8 +199,6 @@ class BinaryClassificationRNNSolver(BinaryClassificationSolver):
         _g_stop = torch.all((torch.sigmoid(out[:, :-1]) > .5) == g, dim=-1, keepdim=True)
         g = torch.cat([g, _g_stop], dim=-1)
 
-        self._logger.info("g: {}".format(g.shape))
-        self._logger.info("out: {}".format(out.shape))
         # An issues is caused if the batchsize is 1, this is a work arround.
         if out.shape[0] == 1:
             loss = self._lossfunction(out.squeeze().unsqueeze(0), g.squeeze().unsqueeze(0))

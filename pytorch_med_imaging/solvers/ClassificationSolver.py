@@ -120,15 +120,16 @@ class ClassificationSolver(SolverBase):
         loss = self._lossfunction(out.squeeze(), g.squeeze().long())
         return loss
 
-    def validation(self, val_set, gt_set, batch_size):
+    def validation(self):
+        if self._data_loader_val is None:
+            self._logger.warning("Validation skipped because no loader is available.")
+            return []
         with torch.no_grad():
-            dataset = TensorDataset(val_set, gt_set)
-            dl = DataLoader(dataset, batch_size=batch_size, shuffle=False, num_workers=0, drop_last=False, pin_memory=False)
             self._net.eval()
 
             decisions = []
             validation_loss = []
-            for s, g in tqdm(dl, desc="Validation", position=2):
+            for s, g in tqdm(self._data_loader_val, desc="Validation", position=2):
                 if self._iscuda:
                         s = [ss.cuda() for ss in s] if isinstance(s, list) else s.cuda()
                         g = [gg.cuda() for gg in g] if isinstance(g, list) else g.cuda()
@@ -150,5 +151,7 @@ class ClassificationSolver(SolverBase):
             validation_loss = np.mean(np.array(validation_loss).flatten())
             self._logger.log_print_tqdm("Validation Result - ACC: %.05f, VAL: %.05f"%(acc, validation_loss))
 
+        self.plotter_dict['scalars']['Loss/Validation Loss'] = validation_loss
+        self.plotter_dict['scalars']['Performance/ACC'] = acc
         return validation_loss, acc
 

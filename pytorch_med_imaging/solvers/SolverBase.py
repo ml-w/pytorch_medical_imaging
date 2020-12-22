@@ -7,6 +7,7 @@ from tqdm import *
 from abc import abstractmethod
 
 import numpy as np
+import gc
 from logging import Logger
 
 class SolverBase(object):
@@ -46,6 +47,13 @@ class SolverBase(object):
         # internal_attributes
         self._net_weight_type   = None
         self._data_logger       = None
+        self._data_loader       = None
+        self._data_loader_val   = None
+        self._tb_plotter        = None
+
+        # external_att
+        self.plotter_dict      = {}
+
 
         self._logger.info("Logger were configured with options: {}".format(solver_configs))
         if  len(kwargs):
@@ -75,6 +83,10 @@ class SolverBase(object):
         assert callable(func), "Insert function not callable!"
         self._lr_decay_func = func
         self._lr_schedular = torch.optim.lr_scheduler.LambdaLR(self._optimizer, self._lr_decay_func)
+
+    def set_dataloader(self, dataloader, data_loader_val=None):
+        self._data_loader = dataloader
+        self._data_loader_val = data_loader_val
 
     def set_lr_decay_to_reduceOnPlateau(self, default_patience, factor, **kwargs):
         _default_kwargs = {
@@ -137,25 +149,45 @@ class SolverBase(object):
             out = self._net.forward(*list(args))
         return out
 
+    def solve_epoch(self, epoch_number):
+        """
 
-    def validation(self, val_set, gt_set, batch_size):
-        validation_loss = []
-        with torch.no_grad():
-            dataset = TensorDataset(val_set, gt_set)
-            dl = DataLoader(dataset, batch_size=batch_size, shuffle=False, num_workers=0, drop_last=False, pin_memory=False)
+        Returns:
+            step_loss (list of float)
+            epoch_loss (float)
+            validation_loss (float or None)
 
-            for s, g in tqdm(dl, desc="Validation", position=2):
-                s = self._match_type_with_network(s)
-                g = self._match_type_with_network(g) # no assumption but should be long in segmentation only.
+        """
+        E = []
+        # Reset dict each epoch
+        self.plotter_dict = {'scalars': {}, 'epoch_num': epoch_number}
+        for step_idx, samples in enumerate(self._data_loader):
+            s, g = samples
 
-                if isinstance(s, list):
-                    res = self._net(*s)
-                else:
-                    res = self._net(s)
-                res = F.log_softmax(res, dim=1)
-                loss = self._lossfunction(res, g.squeeze().long())
-                validation_loss.append(loss.item())
-        return [np.mean(np.array(validation_loss).flatten())]
+            # initiate one train step. Things should be plotted in decorator of step if needed.
+            out, loss = self.step(s, g)
+
+            E.append(loss.data.cpu())
+            self._logger.info("\t[Step %04d] loss: %.010f"%(step_idx, loss.data))
+
+            self._step_callback((s, g, out, loss), step_idx=step_idx)
+            del s, g
+            gc.collect()
+
+        epoch_loss = np.array(E).mean()
+        self.plotter_dict['scalars']['Loss/Loss'] = epoch_loss
+
+        self.validation()
+        self._epoch_callback()
+
+
+    @abstractmethod
+    def validation(self, *args, **kwargs):
+        """
+        This is called after each epoch.
+        """
+        raise NotImplementedError("Validation is not implemented in this solver.")
+
 
     def _log_print(self, msg, level=20):
         if not self._logger is None:
@@ -218,7 +250,6 @@ class SolverBase(object):
             out = tensor.type(self._net_weight_type)
         return out
 
-
     @staticmethod
     def _force_cuda(arg):
         return [a.float().cuda() for a in arg] if isinstance(arg, list) else arg.cuda()
@@ -230,4 +261,26 @@ class SolverBase(object):
     @abstractmethod
     def _loss_eval(self, *args):
         raise NotImplementedError
+
+    @abstractmethod
+    def _step_callback(self, s, g, out, loss, writer_index=None):
+        return
+
+    def _epoch_callback(self, *args, **kwargs):
+        """
+        Default callback
+        """
+        scalars = self.plotter_dict.get('scalars', default=None)
+        writer_index = self.plotter_dict.get('epoch_num', default=None)
+
+        if scalars is None:
+            return
+        elif self._tb_plotter is None:
+            return
+        else:
+            try:
+                self._tb_plotter.plot_scalars(writer_index, scalars)
+                self._tb_plotter.plot_weight_histogram(self._net, writer_index)
+            except:
+                self._logger.exception("Error occured in default epoch callback.")
 

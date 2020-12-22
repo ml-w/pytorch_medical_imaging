@@ -87,15 +87,15 @@ class SegmentationSolver(SolverBase):
 
         super(SegmentationSolver, self).__init__(solver_configs)
 
-    def validation(self, val_set, gt_set, batch_size):
+    def validation(self):
+        if self._data_loader_val is None:
+            self._logger.warning("Validation skipped because no loader is available.")
+            return []
+
         with torch.no_grad():
             validation_loss = []
             self._net.eval()
-
-            dataset = TensorDataset(val_set, gt_set)
-            dl = DataLoader(dataset, batch_size=batch_size, shuffle=False, num_workers=0, drop_last=False, pin_memory=False)
-
-            for s, g in auto.tqdm(dl, desc="Validation", position=2):
+            for s, g in auto.tqdm(self._data_loader_val, desc="Validation", position=2):
                 s = self._match_type_with_network(s)
                 g = self._match_type_with_network(g) # no assumption but should be long in segmentation only.
 
@@ -111,6 +111,8 @@ class SegmentationSolver(SolverBase):
             mean_val_loss = np.mean(np.array(validation_loss).flatten())
             self._logger.info("Validation Result VAL: %.05f"%(mean_val_loss))
         self._net = self._net.train()
+
+        self.plotter_dict['scalars']['Loss/Validation Loss'] = mean_val_loss
         return [mean_val_loss]
 
     def _feed_forward(self, *args):
@@ -203,3 +205,11 @@ class SegmentationSolver(SolverBase):
             if init > cap:
                 out = init
         return out
+
+    def _step_callback(self, s, g, out, loss, writer_index=None):
+        if self._tb_plotter is None:
+            self._logger.warning("There are no tb_plotter.")
+            return
+
+        if writer_index % 10 == 0:
+            self._tb_plotter.plot_segmentation(g, out, s, writer_index)

@@ -103,16 +103,18 @@ class BinaryClassificationSolver(ClassificationSolver):
         super(ClassificationSolver, self).__init__(solver_configs, **kwargs)
 
 
-    def validation(self, val_set, gt_set, batch_size):
+    def validation(self):
+        if self._data_loader_val is None:
+            self._logger.warning("Validation skipped because no loader is available.")
+            return []
+
         with torch.no_grad():
-            dataset = TensorDataset(val_set, gt_set)
-            dl = DataLoader(dataset, batch_size=batch_size, shuffle=False, num_workers=0, drop_last=False, pin_memory=False)
             self._net = self._net.eval()
 
             decisions = None # (B x N)
             validation_loss = []
 
-            for s, g in auto.tqdm(dl, desc="Validation", position=2):
+            for s, g in auto.tqdm(self._data_loader_val, desc="Validation", position=2):
                 s = self._match_type_with_network(s)
                 g = self._match_type_with_network(g)
 
@@ -167,6 +169,8 @@ class BinaryClassificationSolver(ClassificationSolver):
             self._logger.info("Validation Result - ACC: %.05f, VAL: %.05f"%(acc, validation_loss))
 
         self._net = self._net.train()
+        self.plotter_dict['scalars']['Loss/Validation Loss'] = validation_loss
+        self.plotter_dict['scalars']['Performance/ACC'] = acc
         return validation_loss, acc
 
     def step(self, *args):
@@ -207,3 +211,4 @@ class BinaryClassificationSolver(ClassificationSolver):
         else:
             loss = self._lossfunction(out.squeeze(), g.squeeze())
         return loss
+
