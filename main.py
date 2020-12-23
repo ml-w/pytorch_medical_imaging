@@ -245,11 +245,11 @@ def main(a, config, logger):
         else:
             logger.log_print_tqdm('Wrong run_type setting!', logging.ERROR)
             return
-
         logger.info("Creating solver: {}".format(solver_class))
         solver = solver_class(inputDataset, gtDataset, net,
                               {'lr': param_lr, 'momentum': param_momentum}, bool_usecuda,
                               param_initWeight=param_initWeight)
+
         if param_decay_on_plateau:
             logger.log_print_tqdm("Optimizer decay on plateau.")
             _lr_scheduler_dict = eval(param_lr_scheduler_dict)
@@ -263,14 +263,23 @@ def main(a, config, logger):
 
         numcpu = int(os.environ.get('SLURM_CPUS_ON_NODE', default=torch.multiprocessing.cpu_count()))
         trainingSet = TensorDataset(inputDataset, gtDataset)
+        valSet = TensorDataset(valDataset, valgtDataset) if validation_FLAG else None
+        # Create dataloader for training data
         if data_pmi_loader_type is None:
             loader = DataLoader(trainingSet, batch_size=param_batchsize, shuffle=True, num_workers=numcpu,
                                 drop_last=True, pin_memory=False)
+            loader_val = DataLoader(valSet, batch_size=param_batchsize, shuffle=False, num_workers=numcpu,
+                                    drop_last=False, pin_memory=False) if validation_FLAG else None
         else:
             logger.info("Loading custom dataloader.")
             loader_factory = PMIBatchSamplerFactory()
             loader = loader_factory.produce_object(trainingSet, config)
+            loader_val = loader_factory.produce_object(valSet, config, force_inference=True) if validation_FLAG else None
 
+        logger.debug(f"loader: {loader}")
+        logger.debug(f"loader_val: {loader_val}")
+
+        solver.set_dataloader(loader, loader_val)
 
         # Read tensorboard dir from env, disable plot if it fails
         bool_plot, writer = prepare_tensorboard_writer(bool_plot, filters_lsuffix, net_name, logger)
@@ -294,55 +303,10 @@ def main(a, config, logger):
 
         logger.log_print_tqdm("Start training...")
         for i in range(param_epoch):
-            E = []
-            val_loss = []
-            temploss = 1e32
-            for index, samples in enumerate(loader):
-                s, g = samples
+            solver.solve_epoch(i)
 
-                # initiate one train step.
-                out, loss = solver.step(s, g)
-
-                E.append(loss.data.cpu())
-                logger.log_print_tqdm("\t[Step %04d] loss: %.010f"%(index, loss.data))
-
-                # Plot to tensorboard
-                if bool_plot and index % 10 == 0:
-                    writer.plot_loss(loss.data, writerindex)
-                    if run_type == 'Segmentation':
-                        writer.plot_segmentation(g, out, s, writerindex)
-                    elif run_type == 'Classification':
-                        pass
-
-                if loss.data.cpu() <= temploss:
-                    backuppath = "./Backup/cp_%s_%s_temp.pt"%(data_pmi_data_type, net_name) \
-                        if checkpoint_save is None else checkpoint_save.replace('.pt', '_temp.pt')
-                    torch.save(solver.get_net().state_dict(), backuppath)
-                    temploss = loss.data.cpu()
-                del s, g
-                gc.collect()
-
-                if index % 1000 == 0 and validation_FLAG and bool_plot:
-                    try:
-                        logger.info("Initiate validation.")
-                        # perform validation per 1000 steps
-                        val_loss.append(writer.plot_validation_loss(writerindex, *solver.validation(valDataset,
-                                                                                                    valgtDataset,
-                                                                                                    param_batchsize)))
-                    except Exception as e:
-                        logger.exception("Validation encounters error!")
-                        solver.get_net().train()
-
-                # End of step
-                writerindex += 1
-
-            epoch_loss = np.array(E).mean()
-            # Decay after each epoch
-            if param_decay_on_plateau:
-                solver.decay_optimizer(epoch_loss)
-            else:
-                solver.decay_optimizer()
-
+            epoch_loss = solver.plotter_dict['scalars']['Loss/Loss']
+            val_loss = solver.plotter_dict['scalars'].get('Loss/Validation Loss', None)
 
             # Call back after each epoch
             try:
@@ -352,10 +316,8 @@ def main(a, config, logger):
             except:
                 logger.log_print_tqdm("Input dataset has no batch done callback.", logging.DEBUG)
 
-
-            losses.append(E)
             # use validation loss as epoch loss if it exist
-            measure_loss = np.array(val_loss).mean() if len(val_loss) > 0 else epoch_loss
+            measure_loss = val_loss if val_loss is not None else epoch_loss
             if measure_loss <= lastloss:
                 backuppath = "./Backup/cp_%s_%s.pt"%(data_pmi_data_type, net_nettype) \
                     if checkpoint_save is None else checkpoint_save

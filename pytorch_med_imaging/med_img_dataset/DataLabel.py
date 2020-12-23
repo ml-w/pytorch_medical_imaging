@@ -97,16 +97,17 @@ class DataLabel(PMIDataBase):
     def __getitem__(self, item):
         if isinstance(item, int):
             if self._target_column is None:
-                return torch.tensor(self._data_table.iloc[item])
+                out = self._data_table.iloc[item]
             else:
-                return torch.tensor(self._data_table[self._target_column].iloc[item])
+                out = self._data_table[self._target_column].iloc[item]
         elif isinstance(item, str):
             if self._target_column is None:
-                return torch.tensor(self._data_table.loc[item])
+                out = self._data_table.loc[item]
             else:
-                return torch.tensor(self._data_table[self._target_column].loc[item])
+                out = self._data_table[self._target_column].loc[item]
         else:
-            return torch.tensor(self._data_table.loc[item])
+            out = self._data_table.loc[item]
+        return torch.tensor(out)
 
     def __str__(self):
         return self._data_table.to_string()

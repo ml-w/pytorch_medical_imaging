@@ -8,7 +8,7 @@ from ..logger import Logger
 __all__ = ['PMIBatchZeroPadSampler']
 
 class PMIBatchZeroPadSampler(DataLoader):
-    def __init__(self, *args, pad_element: int = None, pad_axis:int = None, **kwargs):
+    def __init__(self, *args, pad_element: int = None, pad_axis:int = None, return_ori_len:bool = True, **kwargs):
         r"""
         This sampler class inherits `DataLoader`, but uses a collate_fn method to pad the input with zeros at the
         specified axis.
@@ -27,6 +27,7 @@ class PMIBatchZeroPadSampler(DataLoader):
         self.pad_element = pad_element if isinstance(pad_element, list) else [pad_element]
         self.pad_axis = pad_axis
         self._logger = Logger[__class__.__name__]
+        self._return_ori_len = return_ori_len
 
         if not isinstance(self.pad_element, list) or not isinstance(self.pad_axis, int):
             self._logger.error("Cannot create sampler because input is wrong.")
@@ -93,11 +94,11 @@ class PMIBatchZeroPadSampler(DataLoader):
 
         if len(set(ori_len)) == 1:
             try:
-                return torch.cat(in_list, dim=0), ori_len
+                return (torch.cat(in_list, dim=0), ori_len) if self._return_ori_len else torch.cat(in_list, dim=0)
             except:
                 self._logger.exception("Specified axis are aligned but other tensors do not have the same size.")
                 raise ArithmeticError("Input are not of the same size!")
         else:
             out = pad_sequence([b.transpose(0, target_axis) for b in in_list], batch_first=True) # Always batch_first
             out = out.transpose(1, target_axis + 1) # Batch dim is added after pad_sequence.
-            return out, ori_len
+            return (out, ori_len) if self._return_ori_len else out

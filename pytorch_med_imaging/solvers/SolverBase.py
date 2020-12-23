@@ -20,6 +20,9 @@ class SolverBase(object):
     Kwargs:
         'net_init': Initialization method. (Not implemented)
 
+    Attributes:
+        plotter_dict (dict):
+            This dict could be used by the child class to perform plotting after validation or in each step.
 
     """
     def __init__(self, solver_configs, **kwargs):
@@ -137,7 +140,10 @@ class SolverBase(object):
 
     def decay_optimizer(self, *args):
         if not self._lr_schedular is None:
-            self._lr_schedular.step(*args)
+            try:
+                self._lr_schedular.step(*args)
+            except:
+                self._lr_schedular.step()
         if not self._mom_decay is None:
             for pg in self._optimizer.param_groups:
                 pg['momentum'] = self._mom_decay_func(pg['momemtum'])
@@ -151,15 +157,11 @@ class SolverBase(object):
 
     def solve_epoch(self, epoch_number):
         """
-
-        Returns:
-            step_loss (list of float)
-            epoch_loss (float)
-            validation_loss (float or None)
-
+        Run this per epoch.
         """
         E = []
         # Reset dict each epoch
+        self._net.train()
         self.plotter_dict = {'scalars': {}, 'epoch_num': epoch_number}
         for step_idx, samples in enumerate(self._data_loader):
             s, g = samples
@@ -170,15 +172,17 @@ class SolverBase(object):
             E.append(loss.data.cpu())
             self._logger.info("\t[Step %04d] loss: %.010f"%(step_idx, loss.data))
 
-            self._step_callback((s, g, out, loss), step_idx=step_idx)
-            del s, g
+            self._step_callback(s, g, out, loss, step_idx=step_idx)
+            del s, g, out, loss
             gc.collect()
 
         epoch_loss = np.array(E).mean()
         self.plotter_dict['scalars']['Loss/Loss'] = epoch_loss
 
+        self._logger.info("Initiating validation.")
         self.validation()
         self._epoch_callback()
+        self.decay_optimizer(epoch_loss)
 
 
     @abstractmethod
@@ -263,15 +267,15 @@ class SolverBase(object):
         raise NotImplementedError
 
     @abstractmethod
-    def _step_callback(self, s, g, out, loss, writer_index=None):
+    def _step_callback(self, s, g, out, loss, step_idx=None):
         return
 
     def _epoch_callback(self, *args, **kwargs):
         """
         Default callback
         """
-        scalars = self.plotter_dict.get('scalars', default=None)
-        writer_index = self.plotter_dict.get('epoch_num', default=None)
+        scalars = self.plotter_dict.get('scalars', None)
+        writer_index = self.plotter_dict.get('epoch_num', None)
 
         if scalars is None:
             return

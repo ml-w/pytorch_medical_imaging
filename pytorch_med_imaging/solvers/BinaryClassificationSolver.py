@@ -181,22 +181,22 @@ class BinaryClassificationSolver(ClassificationSolver):
             pass
 
         # Skip if all ground-truth have the same type
-        if g.unique().shape[0] == 1:
-            with torch.no_grad():
-                out = self._feed_forward(*args)
-                loss = self._loss_eval(out, *args)
-                # loss.backward()
-                # Cope with extreme data imbalance.
-                self._logger.warning("Skipping grad, all input are the same class.")
-                self._called_time += 1
-            return out, loss.cpu().data
-        else:
-            out = self._feed_forward(*args)
-            loss = self._loss_eval(out, *args)
-            self._optimizer.zero_grad()
-            loss.backward()
-            self._optimizer.step()
-            return out, loss.cpu().data
+        # if g.unique().shape[0] == 1:
+        #     with torch.no_grad():
+        #         out = self._feed_forward(*args)
+        #         loss = self._loss_eval(out, *args)
+        #         # loss.backward()
+        #         # Cope with extreme data imbalance.
+        #         self._logger.warning("Skipping grad, all input are the same class.")
+        #         self._called_time += 1
+        #     return out, loss.cpu().data
+        # else:
+        out = self._feed_forward(*args)
+        loss = self._loss_eval(out, *args)
+        self._optimizer.zero_grad()
+        loss.backward()
+        self._optimizer.step()
+        return out, loss.cpu().data
 
 
     def _loss_eval(self, *args):
