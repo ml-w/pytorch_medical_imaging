@@ -380,7 +380,8 @@ class DenseGRU(nn.Module):
         # Flatten H, W dim and swap with C, where C is the embedding dim
         x = x.view(list(x.shape[:-2]) + [-1]).transpose(1, -1)
 
-        # Loop through each of the components
+        # Loop through each of the components in the batch
+        out_gru_features = []
         out_pred = torch.zeros([len(x), self._out_ch + 1]).type_as(x)
         for b, _xx in enumerate(x):
             xx_len = ori_len[b]
@@ -398,23 +399,23 @@ class DenseGRU(nn.Module):
 
                     _init_hidden = output
                     if i == xx_len - 1:
-                        out_pred[b] = self._fc(output)
+                        out_gru_features.append(output)
+                        # out_pred[b] = self._fc(output)
             else:
                 _slice = 0
                 _tries = 0
                 _guess = torch.zeros([self._out_ch]).type_as(_xx) # init_guess
                 while True:
-                    print(f"====>>>{_slice}, {_tries}")
                     _slice = _slice % int(xx_len.item())
                     context, att_weight = self._attention(_xx[:, _slice], _init_hidden.squeeze())
                     context = torch.cat([context, _guess], dim=-1).unsqueeze(0)
                     output = self._gru(context, _init_hidden)
-
+                    print(output.shape)
                     _init_hidden = output
 
                     pred = self._fc(output)
                     if torch.sigmoid(pred.squeeze())[-1] > 0.5:
-                        out_pred[b] = pred
+                        out_pred[b] = self._fc(output)
                         break
 
                     if _tries == 100:
@@ -425,7 +426,12 @@ class DenseGRU(nn.Module):
                     _slice += 1
                     _tries += 1
 
-                #TODO: store att_weight for display
+                    #TODO: store att_weight for display
+
+        if self.training and not gt is None:
+            out_gru_features = torch.cat(out_gru_features, dim=0)
+            out_pred = self._fc(out_gru_features)
+
         # Shape of out is (B x class_num + 1)
         return out_pred
 

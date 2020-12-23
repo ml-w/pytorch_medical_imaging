@@ -19,6 +19,8 @@ class DenseNet3d(nn.Module):
             Number of features after the first convolution
         k (int):
             Growth rate of the Dense blocks.
+        bn_size (int):
+            Multiplicative factor for number of bottle neck layers (bn_size * k = features in bottle neck)
         block_config (tuple of int):
             Config of the dense block, specifying number of layers in them. Default to be [6, 12, 24, 16]
         dropout (float, Optional):
@@ -27,7 +29,8 @@ class DenseNet3d(nn.Module):
                  in_ch,
                  out_ch,
                  init_conv_features:int = 64,
-                 k:int = 4,
+                 k:int = 32,
+                 bn_size:int = 4,
                  block_config: tuple = (6, 12, 24, 16),
                  dropout=0.2):
 
@@ -42,7 +45,7 @@ class DenseNet3d(nn.Module):
         features = init_conv_features
         self.dense_blocks = nn.Sequential()
         for i, num_layers in enumerate(block_config):
-            block = DenseBlock3D(features, k, num_layers, kernsize=[1, 3, 3], dropout=dropout)
+            block = DenseBlock3D(features, k, num_layers, kernsize=[1, 3, 3], dropout=dropout, bn_size=bn_size)
             self.dense_blocks.add_module('dense_block_%02d'%(i+1), block)
             features = features + num_layers * k
 
@@ -55,6 +58,7 @@ class DenseNet3d(nn.Module):
 
 
         # out classifier layers
+        self.pre_out_fc = nn.Linear(16 * 16, 1)
         self.out_fc = nn.Linear(features, out_ch)
 
 
@@ -69,10 +73,14 @@ class DenseNet3d(nn.Module):
                 nn.init.constant_(m.bias, 0)
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
+        while x.dim() < 5:
+            x = x.unsqueeze(0)
         x = self.inconv(x)
         x = self.dense_blocks(x)
         x = F.relu(x, inplace=True)
-        x = F.adaptive_avg_pool3d(x, (1, 1, 1))
+        x = F.adaptive_max_pool3d(x, (1, 16, 16))
+        x = torch.flatten(x, 2)
+        x = self.pre_out_fc(x)
         x = torch.flatten(x, 1)
         x = self.out_fc(x)
         return x
