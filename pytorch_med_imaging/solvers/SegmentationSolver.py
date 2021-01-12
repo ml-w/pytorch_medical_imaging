@@ -25,6 +25,7 @@ class SegmentationSolver(SolverBase):
 
         solver_configs = {}
         # check unique class in gt
+        logger.info(f"gt_data: {gt_data}")
         logger.log_print_tqdm("Detecting number of classes...")
         valcountpair = gt_data.get_unique_values_n_counts()
         classes = list(valcountpair.keys())
@@ -206,10 +207,10 @@ class SegmentationSolver(SolverBase):
                 out = init
         return out
 
-    def _step_callback(self, s, g, out, loss, writer_index=None):
+    def _step_callback(self, s, g, out, loss, step_idx=None):
         if self._tb_plotter is None:
             self._logger.warning("There are no tb_plotter.")
             return
 
-        if writer_index % 10 == 0:
-            self._tb_plotter.plot_segmentation(g, out, s, writer_index)
+        if step_idx % 10 == 0:
+            self._tb_plotter.plot_segmentation(g, out, s, step_idx)
