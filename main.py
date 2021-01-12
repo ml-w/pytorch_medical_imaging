@@ -276,9 +276,6 @@ def main(a, config, logger):
             loader = loader_factory.produce_object(trainingSet, config)
             loader_val = loader_factory.produce_object(valSet, config, force_inference=True) if validation_FLAG else None
 
-        logger.debug(f"loader: {loader}")
-        logger.debug(f"loader_val: {loader_val}")
-
         solver.set_dataloader(loader, loader_val)
 
         # Read tensorboard dir from env, disable plot if it fails
@@ -429,7 +426,7 @@ if __name__ == '__main__':
 
     assert os.path.isfile(a.config), "Cannot find config file!"
 
-    config = configparser.ConfigParser()
+    config = configparser.ConfigParser(interpolation=configparser.ExtendedInterpolation())
     config.read(a.config)
 
     # Override config settings
