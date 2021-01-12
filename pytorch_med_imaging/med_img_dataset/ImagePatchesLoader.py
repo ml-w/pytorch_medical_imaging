@@ -149,7 +149,7 @@ class ImagePatchesLoader(Dataset):
     """
     def __init__(self, base_dataset, patch_size, patch_stride=-1, include_last_patch=True,
                  axis=None, reference_dataset=None, pre_shuffle=False, random_patches=-1,
-                 random_from_distribution=None, renew_index=True):
+                 random_from_distribution=None, renew_index=True, **kwargs):
         super(ImagePatchesLoader, self).__init__()
 
         assert axis is None or len(axis) == 2, \
@@ -165,6 +165,9 @@ class ImagePatchesLoader(Dataset):
             patch_size = [patch_size, patch_size]
         if isinstance(patch_stride, int):
             patch_stride = [patch_stride, patch_stride]
+
+        if len(kwargs) != 0:
+            self._logger.warning(f"Unused options detected in ImagePatchesLoader: {kwargs}")
 
         self._pre_shuffle = pre_shuffle     # If pre-shuffle is True, patch indexes will be shuffled.
         self._base_dataset = base_dataset   # Base ImageDataSet.
