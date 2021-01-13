@@ -14,7 +14,7 @@ def _mpi_wrapper(roi, pos, p_indexes=None, semaphore=None, **kwargs):
     """This is required for mpi choose patches"""
     try:
         if p_indexes is None:
-            print("_mpi_wrapper encounters error input configurations!")
+            Logger['ImagePatchesLoder:_mpi_wrapper'].warning(f"_mpi_wrapper encounters error input configurations: p_indexes is None")
             semaphore.release()
             return 1
         out = ImagePatchesLoader._choose_from_probability_map(roi, **kwargs)
@@ -24,6 +24,7 @@ def _mpi_wrapper(roi, pos, p_indexes=None, semaphore=None, **kwargs):
         del out, roi
         return 0
     except Exception as e:
+        Logger['ImagePatchesLoder:_mpi_wrapper'].exception(e)
         semaphore.release()
         return 1
 
@@ -231,7 +232,7 @@ class ImagePatchesLoader(Dataset):
 
         # Sample accordingly
         xy = np.meshgrid(np.arange(prob.shape[0]), np.arange(prob.shape[1]))
-        xy = list(zip(xy[0].flatten(), xy[1].flatten()))
+        xy = list(zip(xy[0].flatten().astype('int'), xy[1].flatten().astype('int')))
 
         if np.isclose(prob.sum(), 0.):
             prob = np.ones_like(prob)
@@ -240,7 +241,7 @@ class ImagePatchesLoader(Dataset):
         try:
             choices = np.random.choice(len(xy), p=prob.flatten(), size=pps)
         except Exception as e:
-            print(roi.shape, len(xy), prob.flatten().shape, e)
+            Logger[__class__.__name__].exception(f"{roi.shape}, {len(xy)}, {prob.flatten().shape}, {e}")
         out = [xy[c] for c in choices]
         del xy, choices, prob, roi
         return out
@@ -562,3 +563,8 @@ class ImagePatchesLoader(Dataset):
                     indexes.append(slice(None))
             return self._base_dataset[slice_index][indexes]
 
+    def __getattr__(self, item):
+        try:
+            getattr(super(ImagePatchesLoader, self), item)
+        except AttributeError:
+            return getattr(self._base_dataset, item)
