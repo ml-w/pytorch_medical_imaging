@@ -7,6 +7,7 @@ train:
         batch-size: 4
         lr: 1E-4
         debug: no
+        override: ""
     output-scalars:
         loss/loss: 'EpochLoss: (\value)'
         accuracy: 'ACC: (\value)'
@@ -39,6 +40,7 @@ validation:
     flags:
         batch-size: 4
         config: "Configs/Survival/Test.ini"
+        override: ""
     sourcecode:
         root: ../
         select:
@@ -70,6 +72,7 @@ validation_segment:
     flags:
         batch-size: 4
         config: "Configs/Survival/Test.ini"
+        override: ""
     sourcecode:
         root: ../
         select:
@@ -99,9 +102,10 @@ pipeline:
         epoch: 50
         batch-size: 4
         lr: 1E-4
+        override: ""
     steps:
-        - train config=${config} epoch=${epoch} batch-size=${batch-size} lr=${lr}
-        - validation config=${config} batch-size=${batch-size}
+        - train config=${config} epoch=${epoch} batch-size=${batch-size} lr=${lr} override=${override}
+        - validation config=${config} batch-size=${batch-size} override=${override}
 
 pipeline_segment:
     flags:
@@ -109,6 +113,7 @@ pipeline_segment:
         epoch: 50
         batch-size: 4
         lr: 1E-4
+        override: ""
     steps:
-        - train config=${config} epoch=${epoch} batch-size=${batch-size} lr=${lr}
-        - validation_segment config=${config} batch-size=${batch-size}
+        - train config=${config} epoch=${epoch} batch-size=${batch-size} lr=${lr} override=${override}
+        - validation_segment config=${config} batch-size=${batch-size} override=${override}
