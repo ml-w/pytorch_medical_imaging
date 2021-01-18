@@ -114,6 +114,9 @@ class BinaryClassificationSolver(ClassificationSolver):
             decisions = None # (B x N)
             validation_loss = []
 
+            dics = []
+            gts = []
+
             for s, g in auto.tqdm(self._data_loader_val, desc="Validation", position=2):
                 s = self._match_type_with_network(s)
                 g = self._match_type_with_network(g)
@@ -152,6 +155,9 @@ class BinaryClassificationSolver(ClassificationSolver):
                 pos = torch.where(torch.sigmoid(res) > 0.5)
                 dic[pos] = 1
 
+                dics.append(dic.cpu())
+                gts.append(g.cpu())
+
                 if decisions is None:
                     decisions = dic.cpu() == g.cpu()
                     self._logger.debug("Creating dicision list with size {}.".format(decisions.size()))
@@ -163,14 +169,34 @@ class BinaryClassificationSolver(ClassificationSolver):
                 # tqdm.write(str(torch.stack([torch.stack([a, b, c]) for a, b, c, in zip(dic, torch.sigmoid(res), g)])))
                 del dic, pos, s, g
 
-            # Compute accuracies
-            acc = float(torch.sum(decisions > 0).item()) / float(len(decisions.flatten()))
-            validation_loss = np.mean(np.array(validation_loss).flatten())
-            self._logger.info("Validation Result - ACC: %.05f, VAL: %.05f"%(acc, validation_loss))
+        # Compute accuracies
+        dics = torch.cat(dics).bool()
+        gts = torch.cat(gts).bool()
 
+        tp = (dics * gts).sum(axis=0)
+        tn = (~dics * ~gts).sum(axis=0)
+        fp = (dics * ~gts).sum(axis=0)
+        fn = (~dics * gts ).sum(axis=0)
+
+        accuracy = pd.Series((tp + tn) / (tp + tn + fp + fn).float(), name='Accuracy')
+        sens = pd.Series(tp / (tp + fn).float(), name='Sensitivity')
+        spec = pd.Series(tn / (tn + fp).float(), name ='Specificity')
+        ppv = pd.Series(tp / (tp + fp).float(), name='PPV')
+        npv = pd.Series(tn / (tn + fn).float(), name='NPV')
+
+        restable = pd.concat([accuracy, sens, spec, ppv, npv], axis=1)
+        per_mean = restable.mean()
+
+        acc = float(torch.sum(decisions > 0).item()) / float(len(decisions.flatten()))
+        validation_loss = np.mean(np.array(validation_loss).flatten())
+        self._logger.debug("_val_perfs: \n%s"%restable.T.to_string())
+        self._logger.info("Validation Result - ACC: %.05f, VAL: %.05f"%(acc, validation_loss))
         self._net = self._net.train()
         self.plotter_dict['scalars']['Loss/Validation Loss'] = validation_loss
         self.plotter_dict['scalars']['Performance/ACC'] = acc
+        for param, val in per_mean.iteritems():
+            self.plotter_dict['scalars']['Performance/%s'%param] = val
+
         return validation_loss, acc
 
     def step(self, *args):

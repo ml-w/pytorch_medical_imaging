@@ -58,7 +58,7 @@ class SolverBase(object):
         self.plotter_dict      = {}
 
 
-        self._logger.info("Logger were configured with options: {}".format(solver_configs))
+        self._logger.info("Solver were configured with options: {}".format(solver_configs))
         if  len(kwargs):
             self._logger.warning("Some solver configs were not used: {}".format(kwargs))
 
@@ -118,6 +118,9 @@ class SolverBase(object):
     def set_momentum_decay_func(self, func):
         assert callable(func), "Insert function not callable!"
         self._mom_dcay_func = func
+
+    def set_plotter(self, plotter):
+        self._tb_plotter = plotter
 
     def net_to_parallel(self):
         if torch.cuda.device_count()  > 1:

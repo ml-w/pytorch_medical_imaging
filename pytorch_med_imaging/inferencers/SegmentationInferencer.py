@@ -30,7 +30,7 @@ class SegmentationInferencer(InferencerBase):
 
     def _input_check(self):
         assert isinstance(self._in_dataset, ImageDataSet) or \
-               isinstance(self._in_dataset, ImagePatchesLoader)
+               isinstance(self._in_dataset, ImagePatchesLoader), "Input dataset type is wrong."
 
         return 0
 

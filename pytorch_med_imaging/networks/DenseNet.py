@@ -3,6 +3,7 @@ from .layers import DenseBlock3D, Conv3d, DownSemi3d
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
+import math
 
 __all__ = ['DenseNet3d']
 
@@ -32,14 +33,18 @@ class DenseNet3d(nn.Module):
                  k:int = 32,
                  bn_size:int = 4,
                  block_config: tuple = (6, 12, 24, 16),
-                 dropout=0.2):
+                 embedding_size: int = 256,
+                 dropout=0.3):
 
         super(DenseNet3d, self).__init__()
+
+        self._embedding_size = embedding_size
 
         #init conv
         self.inconv = nn.Sequential(
             Conv3d(in_ch, init_conv_features, kern_size=[3, 7, 7], stride=[1, 2, 2], padding=[1, 3, 3]),
-            nn.MaxPool3d(kernel_size=[1, 3, 3], stride=[1, 2, 2], padding=[0, 1, 1])
+            nn.Dropout3d(p=dropout),
+            nn.MaxPool3d(kernel_size=[1, 3, 3], stride=[1, 2, 2], padding=[0, 1, 1]),
         )
 
         features = init_conv_features
@@ -58,7 +63,8 @@ class DenseNet3d(nn.Module):
 
 
         # out classifier layers
-        self.pre_out_fc = nn.Linear(16 * 16, 1)
+        self._embedding_dim = int(math.sqrt(self._embedding_size))
+        self.pre_out_fc = nn.Linear(self._embedding_size, 1)
         self.out_fc = nn.Linear(features, out_ch)
 
 
@@ -78,7 +84,7 @@ class DenseNet3d(nn.Module):
         x = self.inconv(x)
         x = self.dense_blocks(x)
         x = F.relu(x, inplace=True)
-        x = F.adaptive_max_pool3d(x, (1, 16, 16))
+        x = F.adaptive_max_pool3d(x, (1, self._embedding_dim, self._embedding_dim))
         x = torch.flatten(x, 2)
         x = self.pre_out_fc(x)
         x = torch.flatten(x, 1)

@@ -311,14 +311,15 @@ class DenseGRU(nn.Module):
         self._out_ch = out_ch
         self._embedding_size = embedding_size
 
-        _dense = DenseNet3d(in_ch, out_ch, first_conv_out_ch, dense_growth_rate, dense_block_config) # Use default setting for other params.
+        _dense = DenseNet3d(in_ch, out_ch, init_conv_features = first_conv_out_ch,
+                            k = dense_growth_rate, block_config = dense_block_config, embedding_size = embedding_size) # Use default setting for other params.
 
         self._encoder = nn.Sequential(
             _dense.inconv,
             _dense.dense_blocks
         )
 
-        self._adap_pool = nn.AdaptiveAvgPool3d([None] + [int(math.sqrt(self._embedding_size))] * 2)
+        self._adap_pool = nn.AdaptiveMaxPool3d([None] + [int(math.sqrt(self._embedding_size))] * 2)
 
         # f(0) = c0 + kl_0
         # f(1) = f(0) // 2 + kl_1
@@ -350,6 +351,11 @@ class DenseGRU(nn.Module):
         """
         batch_size = target_batch.shape[0]
         return torch.zeros([batch_size, 1, self._hidden_unit])
+
+    def load_densenet_states(self, file, require_grad=False):
+        """
+        If `require_grad = False`, the dense layers will not be trained.
+        """
 
 
     def forward(self, x: torch.Tensor, ori_len: torch.Tensor, gt=None) -> [torch.Tensor]:
@@ -410,7 +416,6 @@ class DenseGRU(nn.Module):
                     context, att_weight = self._attention(_xx[:, _slice], _init_hidden.squeeze())
                     context = torch.cat([context, _guess], dim=-1).unsqueeze(0)
                     output = self._gru(context, _init_hidden)
-                    print(output.shape)
                     _init_hidden = output
 
                     pred = self._fc(output)

@@ -95,6 +95,7 @@ class SegmentationSolver(SolverBase):
 
         with torch.no_grad():
             validation_loss = []
+            perfs = []
             self._net.eval()
             for s, g in auto.tqdm(self._data_loader_val, desc="Validation", position=2):
                 s = self._match_type_with_network(s)
@@ -109,8 +110,21 @@ class SegmentationSolver(SolverBase):
                 validation_loss.append(loss.item())
                 self._logger.debug("_val_step_loss: {}".format(loss.data.item()))
 
+                # Compute hit and misses
+                res_b = res.argmax(dim=1)
+                res_b = res_b.bool().flatten()
+                fg = g.bool().flatten()
+
+                tp = (res_b * fg).int().sum().float().cpu().item()
+                tn = (~res_b * ~fg).int().sum().float().cpu().item()
+                fp = (res_b * ~fg).int().sum().float().cpu().item()
+                fn = (~res_b * fg).int().sum().float().cpu().item()
+                perfs.append([tp, tn, fp, fn])
+
+            tps, tns, fps, fns = torch.tensor(perfs).sum(dim=0)
+            dsc = self._DICE(tps, fps, tns, fns)
             mean_val_loss = np.mean(np.array(validation_loss).flatten())
-            self._logger.info("Validation Result VAL: %.05f"%(mean_val_loss))
+            self._logger.info("Validation Result VAL: %.05f DSC: %.05f"%(mean_val_loss, dsc))
         self._net = self._net.train()
 
         self.plotter_dict['scalars']['Loss/Validation Loss'] = mean_val_loss
@@ -206,6 +220,37 @@ class SegmentationSolver(SolverBase):
             if init > cap:
                 out = init
         return out
+
+    @staticmethod
+    def _perf_measure(y_guess, y_actual):
+        """
+        Obtain the result of index test, i.e. the TF, FP, TN and FN of the test.
+
+        Args:
+            y_actual (np.array): Actual class.
+            y_guess (np.array): Guess class.
+
+        Returns:
+            (list of int): Count of TP, FP, TN and FN respectively
+        """
+
+        y = y_actual.astype('bool').flatten()
+        x = y_guess.astype('bool').flatten()
+
+        TP = np.sum((y == True) & (x == True))
+        TN = np.sum((y == False) & (x == False))
+        FP = np.sum((y == False) & (x == True))
+        FN = np.sum((y == True) & (x == False))
+        TP, TN, FP, FN = [float(v) for v in [TP, TN, FP, FN]]
+        return TP, FP, TN, FN
+
+    @staticmethod
+    def _DICE(TP, FP, TN, FN):
+        if np.isclose(2*TP+FP+FN, 0):
+            return 1
+        else:
+            return 2*TP / (2*TP+FP+FN)
+
 
     def _step_callback(self, s, g, out, loss, step_idx=None):
         if self._tb_plotter is None:

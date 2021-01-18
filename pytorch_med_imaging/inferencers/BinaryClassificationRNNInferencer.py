@@ -50,6 +50,9 @@ class BinaryClassificationRNNInferencer(ClassificationInferencer):
                 s = samples
                 if (isinstance(s, tuple) or isinstance(s, list)) and len(s) > 1:
                     s = [ss.float() for ss in s]
+                    if s[0].dim() < 5:
+                        s[0] = s[0].unsqueeze(0)
+
                 else:
                     s = s.float()
 

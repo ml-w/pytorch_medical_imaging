@@ -46,4 +46,5 @@ class TverskyDiceLoss(nn.Module):
         fp = ((1 - g) * s).sum()
         fn = ((1 - s) * g).sum()
 
+        # Note 1 minus output is the loss, its minus in forward depending on reduction method
         return (tp + self.gamma) / (tp + self.weight[0] * fn + self.weight[1] *fp + self.gamma)

@@ -280,6 +280,8 @@ def main(a, config, logger):
 
         # Read tensorboard dir from env, disable plot if it fails
         bool_plot, writer = prepare_tensorboard_writer(bool_plot, filters_lsuffix, net_name, logger)
+        if bool_plot:
+            solver.set_plotter(writer)
 
         # Load Checkpoint or create new network
         #-----------------------------------------
@@ -324,6 +326,8 @@ def main(a, config, logger):
                 torch.save(solver.get_net().state_dict(), backuppath)
                 lastloss = measure_loss
                 logger.info("Update benchmark loss.")
+            else:
+                torch.save(solver.get_net().state_dict(), backuppath.replace('.pt', '_temp.pt'))
 
 
             try:
@@ -367,12 +371,17 @@ def main(a, config, logger):
                                      bool_usecuda, target_data=gtDataset)
             logger.info("Performing inference with ground-truth data.")
         except AttributeError as e:
+            # in case ground-truth is not found, _load_data_set_training will return Attr error.
             logger.exception(e)
             logger.log_print("Falling back to just doing inference", logger.DEBUG)
             inputDataset= pmi_data.load_dataset()
             inferencer = infer_class(inputDataset, dir_output, param_batchsize,
                                      net, checkpoint_load,
                                      bool_usecuda)
+        except Exception as e:
+            logger.exception(e)
+            logger.critical("Terminating because inferencer cannot be created.")
+            return 10
 
         # Pass PMI to inferencer if its specified
         if not data_pmi_loader_kwargs is None:
@@ -390,10 +399,12 @@ def main(a, config, logger):
                 inferencer.write_out()
 
         # Output summary of results if implemented
+        if not hasattr(inferencer, 'display_summary'):
+            logger.info(f"No summary for the class: {inferencer.__class__.__name__}")
         try:
             inferencer.display_summary()
         except AttributeError as e:
-            logger.log_print_tqdm("No summary for the class: {}".format(str(type(inferencer))), logger.DEBUG)
+            logger.exception("Error when computing summary.")
 
     pass
 
