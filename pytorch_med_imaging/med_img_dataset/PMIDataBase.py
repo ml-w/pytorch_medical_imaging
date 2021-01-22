@@ -39,3 +39,7 @@ class PMIDataBase(Dataset):
         """
         assert callable(func)
         self._get_item_hook = func
+
+
+    def batch_done_callback(self, *args):
+        raise NotImplementedError("Batch done callback was not implemented in this class")
