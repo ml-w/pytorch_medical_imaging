@@ -1,4 +1,5 @@
 from .PMIImageDataLoader import PMIImageDataLoader
+from torch.utils.data import TensorDataset
 from .. import med_img_dataset
 
 __all__ = ['PMIImageFeaturePair']
@@ -21,6 +22,16 @@ class PMIImageFeaturePair(PMIImageDataLoader):
             If `_augmentation` > 0, :class:`ImageDataSetAugment` will be used instead.
         load_by_slice (int):
             If `_load_by_slice` > -1, images volumes are loaded slice by slice along the axis specified.
+
+    Loader_Params:
+        excel_sheetname (Optional):
+            Name of excel sheet if the target is an excel file
+        column (Optional):
+            A comma seperated string that specified the columns to read for ground-truth dataset
+        net_in_label_dir (Optional):
+            If this is specified, an extra set of data will be loaded and input to the network
+        net_in_column (Optional):
+            Same as `column` but used for the extra set of data.
 
     Args:
         *args: Please see parent class.
@@ -52,17 +63,41 @@ class PMIImageFeaturePair(PMIImageDataLoader):
             (tuple) -> (:class:`ImageDataSet` or :class:`ImageDataSetAugment`, :class:`DataLabel`)
 
         """
-        img_out = self._read_image(self._input_dir)
+        out = self._read_image(self._input_dir)
 
-        if not self.get_from_config('excel_sheetname', None) is None:
+        if not self.get_from_loader_params('excel_sheetname', None) is None:
             gt_dat = med_img_dataset.DataLabel.from_xlsx(self._target_dir, self.get_from_config('excel_sheetname', ))
         else:
             gt_dat = med_img_dataset.DataLabel.from_csv(self._target_dir)
+
+        # Load extra column and concat if extra column options were found
+        if not self.get_from_loader_params('net_in_label_dir') is None:
+            self._logger.info("Selecting extra input columns")
+            if not self.get_from_loader_params('net_in_excel_sheetname', None) is None:
+                extra_dat = med_img_dataset.DataLabel.from_xlsx(self._target_dir, self.get_from_config('net_in_excel_sheetname', ))
+            else:
+                extra_dat = med_img_dataset.DataLabel.from_csv(self._target_dir)
+            extra_dat.set_target_column(self.get_from_loader_params('net_in_column'))
+            out = TensorDataset(out, extra_dat)
+
 
         # Load selected columns only
         if not self.get_from_loader_params('column') is None:
             self._logger.info("Selecting target column: {}".format(self.get_from_loader_params('column')))
             gt_dat.set_target_column(self.get_from_loader_params('column'))
-        gt_dat.map_to_data(img_out)
-        return img_out, gt_dat
+        gt_dat.map_to_data(out)
+        return out, gt_dat
+
+    def _load_data_set_inference(self):
+        # Load extra column and concat if extra column options were found
+        if not self.get_from_loader_params('net_in_label_dir') is None:
+            self._logger.info("Selecting extra input columns")
+            if not self.get_from_loader_params('net_in_excel_sheetname', None) is None:
+                extra_dat = med_img_dataset.DataLabel.from_xlsx(self._target_dir, self.get_from_config('net_in_excel_sheetname', ))
+            else:
+                extra_dat = med_img_dataset.DataLabel.from_csv(self._target_dir)
+            extra_dat.set_target_column(self.get_from_loader_params('net_in_column'))
+            return TensorDataset(super(PMIImageFeaturePair, self)._load_data_set_inference(), extra_dat)
+        else:
+            return super(PMIImageFeaturePair, self)._load_data_set_inference()
 
