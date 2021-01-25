@@ -64,9 +64,10 @@ class PMIBatchZeroPadSampler(DataLoader):
                     if isinstance(c, list) or isinstance(c, tuple):
                         col_c = list(map(list, zip(*c)))
                         pre_out = [self._zero_pad(cc, self.pad_axis) for cc in col_c]
-                        ol = pre_out[0][1]
-                        pre_out = [p[0] for p in pre_out]
-                        pre_out.append(ol)
+                        if self._return_ori_len:
+                            ol = pre_out[0][1]
+                            pre_out = [p[0] for p in pre_out]
+                            pre_out.append(ol)
                         out.append(pre_out)
                     else:
                         out.append(self._zero_pad(c, self.pad_axis))
@@ -85,10 +86,10 @@ class PMIBatchZeroPadSampler(DataLoader):
             ori_len = torch.Tensor(ori_len).int()
             self._logger.debug("Ori_len: {}".format(ori_len))
         except IndexError:
-            return default_collate(in_list), None
+            return (default_collate(in_list), None) if self._return_ori_len else default_collate(in_list)
         except AttributeError:
             self._logger.warning(f"Attribute error measuring the length of target axis {target_axis}")
-            return default_collate(in_list), None
+            return (default_collate(in_list), None) if self._return_ori_len else default_collate(in_list)
 
         if len(set(ori_len)) == 1:
             try:
