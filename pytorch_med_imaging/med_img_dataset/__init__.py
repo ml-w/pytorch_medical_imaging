@@ -14,6 +14,7 @@ from .DataLabel import DataLabel
 from pydicom.datadict import add_dict_entry, add_private_dict_entry
 from pydicom.tag import Tag
 from os.path import abspath, basename
+from .PMITensorDataset import *
 
 """
 Add DICOM dictionary

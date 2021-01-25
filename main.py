@@ -9,10 +9,11 @@ import datetime
 from functools import partial
 import torch
 import torch.nn as nn
-from torch.utils.data import DataLoader, TensorDataset
+from torch.utils.data import DataLoader
 import configparser
 import numpy as np
 from pytorch_med_imaging.PMI_data_loader import PMIBatchSamplerFactory, PMIDataFactory
+from pytorch_med_imaging.med_img_dataset import PMITensorDataset
 
 # This package
 from pytorch_med_imaging.networks import *
@@ -250,6 +251,7 @@ def main(a, config, logger):
                               {'lr': param_lr, 'momentum': param_momentum}, bool_usecuda,
                               param_initWeight=param_initWeight)
 
+        # Set learning rate scheduler
         if param_decay_on_plateau:
             logger.log_print_tqdm("Optimizer decay on plateau.")
             _lr_scheduler_dict = eval(param_lr_scheduler_dict)
@@ -261,9 +263,11 @@ def main(a, config, logger):
         else:
             solver.set_lr_decay_exp(param_decay)
 
+        # Prepare dataset
         numcpu = int(os.environ.get('SLURM_CPUS_ON_NODE', default=torch.multiprocessing.cpu_count()))
-        trainingSet = TensorDataset(inputDataset, gtDataset)
-        valSet = TensorDataset(valDataset, valgtDataset) if validation_FLAG else None
+        trainingSet = PMITensorDataset(inputDataset, gtDataset) # Note that this avoids dim checks.
+        valSet = PMITensorDataset(valDataset, valgtDataset) if validation_FLAG else None
+
         # Create dataloader for training data
         if data_pmi_loader_type is None:
             loader = DataLoader(trainingSet, batch_size=param_batchsize, shuffle=True, num_workers=numcpu,
@@ -276,6 +280,7 @@ def main(a, config, logger):
             loader = loader_factory.produce_object(trainingSet, config)
             loader_val = loader_factory.produce_object(valSet, config, force_inference=True) if validation_FLAG else None
 
+        # Push dataloader to solver
         solver.set_dataloader(loader, loader_val)
 
         # Read tensorboard dir from env, disable plot if it fails
@@ -297,9 +302,6 @@ def main(a, config, logger):
 
 
         lastloss = 1e32
-        writerindex = 0
-        losses = []
-
         logger.log_print_tqdm("Start training...")
         for i in range(param_epoch):
             solver.solve_epoch(i)
@@ -312,8 +314,10 @@ def main(a, config, logger):
                 logger.log_print_tqdm("Initiate batch done callback.", logging.DEBUG)
                 inputDataset.batch_done_callback()
                 logger.log_print_tqdm("Done", logging.DEBUG)
-            except:
+            except NotImplementedError:
                 logger.log_print_tqdm("Input dataset has no batch done callback.", logging.DEBUG)
+            except Exception as e:
+                logger.exception(f"Unknown error occured during batch done callback: {e}")
 
             # use validation loss as epoch loss if it exist
             measure_loss = val_loss if val_loss is not None else epoch_loss
