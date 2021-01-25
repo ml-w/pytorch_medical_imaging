@@ -70,6 +70,12 @@ class PMIImageFeaturePair(PMIImageDataLoader):
         else:
             gt_dat = med_img_dataset.DataLabel.from_csv(self._target_dir)
 
+        # Load selected columns only
+        if not self.get_from_loader_params('column') is None:
+            self._logger.info("Selecting target column: {}".format(self.get_from_loader_params('column')))
+            gt_dat.set_target_column(self.get_from_loader_params('column'))
+        gt_dat.map_to_data(out)
+
         # Load extra column and concat if extra column options were found
         if not self.get_from_loader_params('net_in_label_dir') is None:
             self._logger.info("Selecting extra input columns")
@@ -78,15 +84,13 @@ class PMIImageFeaturePair(PMIImageDataLoader):
             else:
                 extra_dat = med_img_dataset.DataLabel.from_csv(self._target_dir)
             extra_dat.set_target_column(self.get_from_loader_params('net_in_column'))
-            out = TensorDataset(out, extra_dat)
+            extra_dat.map_to_data(out)
+            self._logger.info(f"extradat: {extra_dat.size()}")
+            self._logger.info(f"out: {out}")
+            return TensorDataset(out,extra_dat) ,gt_dat
 
-
-        # Load selected columns only
-        if not self.get_from_loader_params('column') is None:
-            self._logger.info("Selecting target column: {}".format(self.get_from_loader_params('column')))
-            gt_dat.set_target_column(self.get_from_loader_params('column'))
-        gt_dat.map_to_data(out)
-        return out, gt_dat
+        else:
+            return out, gt_dat
 
     def _load_data_set_inference(self):
         # Load extra column and concat if extra column options were found
@@ -97,7 +101,10 @@ class PMIImageFeaturePair(PMIImageDataLoader):
             else:
                 extra_dat = med_img_dataset.DataLabel.from_csv(self._target_dir)
             extra_dat.set_target_column(self.get_from_loader_params('net_in_column'))
-            return TensorDataset(super(PMIImageFeaturePair, self)._load_data_set_inference(), extra_dat)
+            im_dat = super(PMIImageFeaturePair, self)._load_data_set_inference()
+            extra_dat.map_to_data(im_dat)
+
+            return TensorDataset(im_dat, extra_dat)
         else:
             return super(PMIImageFeaturePair, self)._load_data_set_inference()
 

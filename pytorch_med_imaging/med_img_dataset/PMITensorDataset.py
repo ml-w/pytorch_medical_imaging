@@ -11,6 +11,9 @@ class PMITensorDataset(TensorDataset):
         """
         self.tensors = tensors
 
+    def __len__(self):
+        return len(self.tensors[0])
+
 class PMIParallelConcatDataset(Dataset):
     def __init__(self, *tensors):
         assert all(tensors[0].size(0) == tensor.size(0) for tensor in tensors)

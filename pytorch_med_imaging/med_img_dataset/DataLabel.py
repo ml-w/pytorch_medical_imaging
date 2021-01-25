@@ -40,7 +40,7 @@ class DataLabel(PMIDataBase):
                     self._target_column.append(t)
         else:
             if not target in self._data_table.columns:
-                self._logger.warning("Cannot found specified target column {} in data table!"
+                self._logger.warning("Cannot found specified target column '{}' in data table!"
                                      "Available columns are {}".format(target, self._data_table.columns))
                 self._logger.warning("Setting target to {} anyways.".format(target))
             self._target_column = target
@@ -82,7 +82,7 @@ class DataLabel(PMIDataBase):
     def get_unique_values(self):
         return list(self._data_table[self._target_column].unique())
 
-    def size(self, item):
+    def size(self, item=None):
         return self.__len__()
 
     def write(self, out_fname):

@@ -52,20 +52,16 @@ class PMIBatchZeroPadSampler(DataLoader):
         #   [(a2, b2), c2]
         # ]
 
-        elem = batch[0]
-        if isinstance(elem, list) or isinstance(elem, tuple):
-            elem_type = [type(e) for e in elem]
-        else:
-            elem_type = type(elem)
-
+        elem_type = [type(e) for e in batch]
         out = []
-        if isinstance(elem_type, list):
+        if len(elem_type) > 1:
             # Convert rows in a mini-batch into columns
             # cols = [([a1, a2], [b1, b2]), [c1, c2]]
             cols = list(map(list, zip(*batch)))
+
             for idx, c in enumerate(cols):
                 if idx in self.pad_element:
-                    if isinstance(c[0], list) or isinstance(c[0], tuple):
+                    if isinstance(c, list) or isinstance(c, tuple):
                         col_c = list(map(list, zip(*c)))
                         pre_out = [self._zero_pad(cc, self.pad_axis) for cc in col_c]
                         ol = pre_out[0][1]
@@ -89,7 +85,9 @@ class PMIBatchZeroPadSampler(DataLoader):
             ori_len = torch.Tensor(ori_len).int()
             self._logger.debug("Ori_len: {}".format(ori_len))
         except IndexError:
-            self._logger.exception("Specified axis does not exist in input. Falling back to default collate_fn.")
+            return default_collate(in_list), None
+        except AttributeError:
+            self._logger.warning(f"Attribute error measuring the length of target axis {target_axis}")
             return default_collate(in_list), None
 
         if len(set(ori_len)) == 1:
@@ -102,3 +100,12 @@ class PMIBatchZeroPadSampler(DataLoader):
             out = pad_sequence([b.transpose(0, target_axis) for b in in_list], batch_first=True) # Always batch_first
             out = out.transpose(1, target_axis + 1) # Batch dim is added after pad_sequence.
             return (out, ori_len) if self._return_ori_len else out
+
+    @staticmethod
+    def _recusive_get(x, idx):
+        if isinstance(idx, list) or isinstance(idx, tuple):
+            idx = list(idx)
+            _idx = idx.pop()
+            return (x[_idx], idx)
+        else:
+            return x[idx]
