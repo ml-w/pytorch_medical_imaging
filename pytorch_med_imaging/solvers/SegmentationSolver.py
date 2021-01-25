@@ -15,7 +15,7 @@ __all__ = ['SegmentationSolver']
 
 class SegmentationSolver(SolverBase):
     def __init__(self, in_data, gt_data, net, param_optim, param_iscuda,
-                 param_initWeight=None, logger=None):
+                 param_initWeight=None, logger=None, config=None):
         assert isinstance(logger, Logger) or logger is None, "Logger incorrect settings!"
 
         if logger is None:
@@ -33,7 +33,7 @@ class SegmentationSolver(SolverBase):
         logger.log_print_tqdm("Find %i classes: %s"%(numOfClasses, classes))
 
         # calculate empty label ratio for updating loss function weight
-        self._sigmoid_params = {'delay': 5, 'stretch': 2, 'cap':0.5}
+        self._sigmoid_params = {'delay': 15, 'stretch': 2, 'cap':0.3}
         r = []
         for c in classes:
             factor = float(np.prod(np.array(gt_data.size())))/float(valcountpair[c])

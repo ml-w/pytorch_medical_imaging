@@ -12,7 +12,7 @@ __all__ = ['AutoEncoderSolver']
 
 class AutoEncoderSolver(SolverBase):
     def __init__(self, in_data, gt_data, net, param_optim, param_iscuda,
-                 param_initWeight=None, logger=None):
+                 param_initWeight=None, logger=None, **kwargs):
         assert isinstance(logger, Logger) or logger is None, "Logger incorrect settings!"
 
         if logger is None:
@@ -53,7 +53,7 @@ class AutoEncoderSolver(SolverBase):
         solver_configs['iscuda'] = iscuda
         solver_configs['logger'] = logger
 
-        super(AutoEncoderSolver, self).__init__(solver_configs)
+        super(AutoEncoderSolver, self).__init__(solver_configs, **kwargs)
 
 
     def _feed_forward(self, *args):

@@ -21,6 +21,8 @@ class SolverBase(object):
         'net_init': Initialization method. (Not implemented)
 
     Attributes:
+        _optimizer (torch.optim.Optimizer):
+            This is the optimizer.
         plotter_dict (dict):
             This dict could be used by the child class to perform plotting after validation or in each step.
 
@@ -37,15 +39,18 @@ class SolverBase(object):
         # optional
         self._logger            = solver_configs['logger'] if 'logger' in solver_configs else \
                                                                         Logger[self.__class__.__name__]
+
+        # Optimizer
         self._lr_decay          = solver_configs['lrdecay'] if 'lrdecay' in solver_configs else None
         self._mom_decay         = solver_configs['momdecay'] if 'momdecay' in solver_configs else None
-
         self._lr_decay_func     = lambda epoch: np.exp(-self._lr_decay * epoch)
         self._mom_decay_func    = lambda mom: np.max(0.2, mom * np.exp(-self._mom_decay))
-
         self._lr_schedular      = None
         self._called_time = 0
         self._decayed_time= 0
+
+        # Added config not used in base class
+        self._config            = kwargs.get('config', None)
 
         # internal_attributes
         self._net_weight_type   = None
@@ -290,4 +295,20 @@ class SolverBase(object):
                 self._tb_plotter.plot_weight_histogram(self._net, writer_index)
             except:
                 self._logger.exception("Error occured in default epoch callback.")
+
+    def _get_params_from_config(self, section, key, default=None, with_eval=False):
+        try:
+            if with_eval:
+                return eval(self._config[section].get(key, default))
+            else:
+                return self._config[section].get(key, default)
+        except AttributeError:
+            self._logger.warning(f"Key absent in config: ({section},{key})")
+            return default
+        except:
+            self._logger.exception(f"Unexpected error when reading params with key: ({section}, {key})")
+            return
+
+    def _get_params_from_solver_config(self, key, default=None, with_eval=False):
+        return self._get_params_from_config('SolverParams', key, default, with_eval)
 
