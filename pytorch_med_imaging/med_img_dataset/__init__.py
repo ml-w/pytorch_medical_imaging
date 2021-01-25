@@ -27,6 +27,6 @@ for row in f.readlines():
     except:
         add_private_dict_entry("CT-PD-dict_v8", Tag(*(r[0][1:-1]).split(',')), r[1].split('/')[0], r[2],r[2])
 
-__all__ = ['ImageFeaturePair', 'Landmarks', 'ImageDataSet',
+__all__ = ['ImageFeaturePair', 'Landmarks', 'ImageDataSet', 'PMIParallelConcatDataset',
            'Projection', 'Subbands', 'ImagePatchesLoader', 'ImageDataSetFilter',
            'ImageDataSetAugment', 'ImageDataMultiChannel', 'ImagePatchesLoader3D', 'DataLabel']
