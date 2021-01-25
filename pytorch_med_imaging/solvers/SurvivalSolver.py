@@ -11,7 +11,9 @@ from ..loss import CoxNLL
 
 import tqdm.auto as auto
 
-class SurivalSolver(SolverBase):
+__all__ = ['SurvivalSolver']
+
+class SurvivalSolver(SolverBase):
     def __init__(self, _, __, net, param_optim, param_iscuda, grad_iter:int = 5,
                  censor_value:float =-1, param_initWeight=None, logger=None, **kwargs):
         """
@@ -53,7 +55,7 @@ class SurivalSolver(SolverBase):
         solver_configs['iscuda'] = iscuda
         solver_configs['logger'] = logger
 
-        super(SurivalSolver, self).__init__(solver_configs)
+        super(SurvivalSolver, self).__init__(solver_configs)
 
     def validation(self):
         if self._data_loader_val is None:
