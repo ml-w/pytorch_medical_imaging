@@ -535,6 +535,8 @@ class ImageDataSet(PMIDataBase):
         if ids.count(id) <= 1 or not get_all:
             return self.__getitem__(ids.index(id))
         else:
+            self._logger.warning(f"Returning first that matches requested ID {id}. "
+                                 f"{[self.get_data_source(i) for i in np.where(np.array(ids)==id)[0]]}")
             return [self.__getitem__(i) for i in np.where(np.array(ids)==id)[0]]
 
     def get_unique_IDs(self, globber=None):
@@ -556,7 +558,7 @@ class ImageDataSet(PMIDataBase):
                 outlist.append(f[matchobj.start():matchobj.end()])
         return outlist
 
-    def get_size(self, id):
+    def get_size(self, id: int):
         r"""Get the size of the original image. Gives 3D size. If load by slices, it will look for the internal
         index before returning the 3D size.
         """

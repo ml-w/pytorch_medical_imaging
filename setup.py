@@ -33,6 +33,10 @@ if use_cython:
     cmdclass.update({'build_ext': build_ext})
     # ext_modules += cythonize("med_img_dataset.rst/computations/_LocalNeighborhoodDifferencePattern.pyx")
 
+scripts = [
+    'pytorch_med_imaging/utils/match_dimension'
+]
+
 setup(
     name='NPC_Segment',
     version='0.1',
@@ -43,5 +47,6 @@ setup(
     author_email='fromosia@link.cuhk.edu.hk',
     description='',
     cmdclass = cmdclass,
-    ext_modules = ext_modules
+    ext_modules = ext_modules,
+    scripts = scripts
 )
