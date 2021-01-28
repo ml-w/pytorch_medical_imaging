@@ -1,6 +1,7 @@
 import logging
 import traceback
 import os, sys, traceback
+import hashlib
 from tqdm import *
 
 __all__ = ['Logger']
@@ -33,6 +34,7 @@ class Logger(object):
         super(Logger, self).__init__()
         self._log_dir = log_dir
         self._verbose = verbose
+        self._warning_hash = {}
 
         log_levels={
             'debug': logging.DEBUG,
@@ -91,8 +93,16 @@ class Logger(object):
     def debug(self, msg):
         self.log_print_tqdm(msg, level=logging.DEBUG)
 
-    def warning(self, msg):
-        self.log_print_tqdm(msg, level=logging.WARNING)
+    def warning(self, msg, no_repeat=False):
+        if no_repeat:
+            h = hashlib.md5(msg)
+            if not h in self._warning_hash:
+                self.log_print_tqdm(msg, level=logging.WARNING)
+                self.log_print_tqdm("Warning message won't be shown again in this run",
+                                    level=logging.WARNING)
+                self._warning_hash[h] = 1
+        else:
+            self.log_print_tqdm(msg, level=logging.WARNING)
 
     def error(self, msg):
         self.log_print_tqdm(msg, level=logging.ERROR)
