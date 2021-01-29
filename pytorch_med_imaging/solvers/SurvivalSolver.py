@@ -7,6 +7,7 @@ import pandas as pd
 import gc
 
 from torch import optim
+from torch.utils import checkpoint
 from ..loss import CoxNLL
 
 import tqdm.auto as auto
@@ -15,7 +16,7 @@ __all__ = ['SurvivalSolver']
 
 class SurvivalSolver(SolverBase):
     def __init__(self, _, __, net, param_optim, param_iscuda, grad_iter:int = 5,
-                 censor_value:float =-1, param_initWeight=None, logger=None, **kwargs):
+                 censor_value:float =-1, param_initWeight=None, logger=None, config=None):
         """
         This class is a special solver for survival analysis. This class uses negative log cox harzard as loss
         function as default. Because of that, the gradient propagation can only happen after a the whole set of
@@ -31,6 +32,11 @@ class SurvivalSolver(SolverBase):
         self._decay_init_weight = param_initWeight if not param_initWeight is None else 0
         self._grad_iter = grad_iter
         self._censor_value = censor_value
+        self._config = config
+
+        if not self._config is None:
+            self._censor_value = self._get_params_from_solver_config('censor_value', 5, True)
+            self._grad_iter = self._get_params_from_solver_config('censor_value', 2, True)
 
         solver_configs = {}
 
@@ -70,15 +76,23 @@ class SurvivalSolver(SolverBase):
 
             for s, g in auto.tqdm(self._data_loader_val, desc="Validation", position=2):
                 out, g = self._feed_forward(s, g)
+                while g.dim() < 2:
+                    g = g.unsqueeze()
+
+                self._logger.debug(f"outshape: {out.shape}, gshape: {g.shape}")
                 net_out.append(out)
                 G.append(g)
 
             net_out = torch.cat(net_out, 0)
-            G = torch.cat(net_out,0)
+            try:
+                G = torch.cat(G,0)
+            except Exception as e:
+                self._logger.exception(e)
+                self._logger.info(f"G: {G}")
 
             val_loss = self._loss_eval(net_out, G)
             self._logger.debug(f"Validation Result - VAL: {val_loss:.05f}")
-            self.plotter_dict['scalar']['Loss/Validation'] = val_loss.cpu().data
+            self.plotter_dict['scalars']['Loss/Validation'] = val_loss.cpu().data
 
 
     def _feed_forward(self, *args):
@@ -96,14 +110,10 @@ class SurvivalSolver(SolverBase):
 
         if isinstance(s, list):
             out = self._net.forward(*s)
+            # out = checkpoint.checkpoint(self._net.forward, *s)
         else:
             out = self._net.forward(s)
-
-        # Display step results
-        _pairs = zip(out.flatten().data.cpu(), g.flatten().data.cpu())
-        _df = pd.DataFrame(_pairs, columns=['res', 'g'], dtype=float)
-        self._logger.debug('\n' + _df.to_string())
-        del _pairs, _df
+            # out = checkpoint.checkpoint(self._net.forward, s)
         return out, g
 
     def _loss_eval(self, *args):
@@ -111,7 +121,7 @@ class SurvivalSolver(SolverBase):
         loss = self._lossfunction(out, G)
         return loss
 
-    def step(self, *args):
+    def __dep_step(self, *args):
         """
         Optimizer step after each epoch instead of each iteration step, so this is reduced to only
         doing network forward.
@@ -119,6 +129,16 @@ class SurvivalSolver(SolverBase):
         out = self._feed_forward(*args)
         self._called_time += 1
         return out
+
+    def step(self, *args):
+        out, g = self._feed_forward(*args)
+        loss = self._loss_eval(out, g)
+        self._optimizer.zero_grad()
+        loss.backward()
+        self._optimizer.step()
+
+        self._called_time += 1
+        return out, loss.cpu().data
 
     def solve_epoch(self, epoch_number):
         """
@@ -132,13 +152,14 @@ class SurvivalSolver(SolverBase):
         self.plotter_dict = {'scalars': {}, 'epoch_num': epoch_number}
         grad_itered = 0
         for step_idx, samples in enumerate(self._data_loader):
-            GRAD_FLAG = grad_itered < self._grad_iter
-            torch.set_grad_enabled(GRAD_FLAG)
+            # GRAD_FLAG = grad_itered < self._grad_iter
+            # GRAD_FLAG = True
+            # torch.set_grad_enabled(GRAD_FLAG)
             s, g = samples
-            out = self.step(s, g)
-            self._logger.info("\t[Step %04d]"%(step_idx))
-            net_out.append(out)
-            G.append(g)
+            out, loss = self.step(s, g)
+            self._logger.info("\t[Step %04d Loss: %.05f]"%(step_idx, loss))
+            # net_out.append(out)
+            # G.append(g)
 
             grad_itered += 1
 
@@ -147,10 +168,16 @@ class SurvivalSolver(SolverBase):
         net_out = torch.cat(net_out, dim=0)
         G = torch.cat(G, dim=0)
 
-        self._optimizer.zero_grad()
         epoch_loss = self._loss_eval(net_out, G)
+        self._optimizer.zero_grad()
         epoch_loss.backward()
         self._optimizer.step()
+
+        # Display epoch results
+        _pairs = zip(net_out.flatten().data.cpu(), G.flatten().data.cpu())
+        _df = pd.DataFrame(_pairs, columns=['res', 'g'], dtype=float)
+        self._logger.debug('\n' + _df.to_string())
+        del _pairs, _df
 
         epoch_loss = epoch_loss.cpu().data
         self.plotter_dict['scalars']['Loss/Loss'] = epoch_loss
