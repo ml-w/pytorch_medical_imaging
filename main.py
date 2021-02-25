@@ -243,13 +243,15 @@ def main(a, config, logger):
             solver_class = BinaryClassificationSolver
         elif run_type == 'BinaryClassificationRNN':
             solver_class = BinaryClassificationRNNSolver
+        elif run_type == 'Survival':
+            solver_class = SurvivalSolver
         else:
             logger.log_print_tqdm('Wrong run_type setting!', logging.ERROR)
             return
         logger.info("Creating solver: {}".format(solver_class))
         solver = solver_class(inputDataset, gtDataset, net,
                               {'lr': param_lr, 'momentum': param_momentum}, bool_usecuda,
-                              param_initWeight=param_initWeight)
+                              param_initWeight=param_initWeight, config=config)
 
         # Set learning rate scheduler
         if param_decay_on_plateau:
@@ -314,8 +316,8 @@ def main(a, config, logger):
                 logger.log_print_tqdm("Initiate batch done callback.", logging.DEBUG)
                 inputDataset.batch_done_callback()
                 logger.log_print_tqdm("Done", logging.DEBUG)
-            except NotImplementedError:
-                logger.log_print_tqdm("Input dataset has no batch done callback.", logging.DEBUG)
+            except NotImplementedError or AttributeError:
+                logger.warning("Input dataset has no batch done callback.", no_repeat=True)
             except Exception as e:
                 logger.exception(f"Unknown error occured during batch done callback: {e}")
 
@@ -363,6 +365,8 @@ def main(a, config, logger):
             infer_class = BinaryClassificationInferencer
         elif run_type == 'BinaryClassificationRNN':
             infer_class = BinaryClassificationRNNInferencer
+        elif run_type == 'Survival':
+            infer_class = SurvivalInferencer
         else:
             logger.log_print_tqdm('Wrong run_type setting!', logging.ERROR)
             raise NotImplementedError("Not implemented inference type: {}".format(run_type))
