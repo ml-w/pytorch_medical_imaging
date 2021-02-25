@@ -377,6 +377,7 @@ class ImageDataSet(PMIDataBase):
         else:
             try:
                 self.data = stack(self.data, dim=0).unsqueeze(1)
+                self._logger.debug(f"self.data.shape:{self.data.shape}")
             except:
                 self._logger.warning("Cannot stack data due to non-uniform shapes.")
                 self._logger.debug("Shapes are: \n%s"%'\n'.join([str(d.shape) for d in self.data]))
@@ -433,6 +434,10 @@ class ImageDataSet(PMIDataBase):
                             allsizes[t],
                             list(target_dat.shape)
                         ))
+
+                        # Make sure channel dimension is there
+                        while target_dat.dim() < 4:
+                            target_dat = target_dat.unsqueeze(0)
                         self.data[t] = target_dat
 
 
@@ -587,8 +592,10 @@ class ImageDataSet(PMIDataBase):
             out_dim = 4
 
         out = self.data[item]
+        self._logger.debug(f"out.shape:{out.shape}")
         while out.dim() < out_dim:
             out = out.unsqueeze(0)
+        self._logger.debug(f"2out.shape:{out.shape}")
         return out
 
     def __str__(self):
