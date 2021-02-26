@@ -15,6 +15,7 @@ class DataLabel(PMIDataBase):
         self._unique_ids = data_table.index
         if not self._unique_ids.unique:
             print("Warning! Unique ID is not unique!")
+        self._get_table = None
         self._data_table = data_table
         self._original_table = data_table
         self._target_column = None
@@ -45,6 +46,7 @@ class DataLabel(PMIDataBase):
                 self._logger.warning("Setting target to {} anyways.".format(target))
             self._target_column = target
         self._logger.debug("columns are: {}".format(self._target_column))
+        self._get_table = self._data_table[self._target_column]
         return 0
 
     @staticmethod
@@ -75,9 +77,12 @@ class DataLabel(PMIDataBase):
         target_ids = target.get_unique_IDs(target_id_globber)
         try:
             self._data_table = self._original_table.loc[target_ids]
+            if not self._target_column is None:
+                self._get_table = self._data_table[self._target_column]
+            return 0
         except:
-            import traceback as tr
-            tr.print_last()
+            self._logger.exception("Error when trying to map table to data.")
+            return 1
 
     def get_unique_values(self):
         return list(self._data_table[self._target_column].unique())
@@ -95,19 +100,22 @@ class DataLabel(PMIDataBase):
         return len(self._data_table)
 
     def __getitem__(self, item):
+        if self._get_table is None:
+            self._get_table = self._data_table
+
         if isinstance(item, int):
-            if self._target_column is None:
-                out = self._data_table.iloc[item]
-            else:
-                out = self._data_table[self._target_column].iloc[item]
+            out = self._get_table.iloc[item]
         elif isinstance(item, str):
-            if self._target_column is None:
-                out = self._data_table.loc[item]
-            else:
-                out = self._data_table[self._target_column].loc[item]
+            out = self._get_table.loc[item]
         else:
-            out = self._data_table.loc[item]
-        return torch.tensor(out)
+            out = self._get_table.loc[item]
+
+        try:
+            # if multiple rows are requested, a pandas dataframe object is directly returned
+            return torch.tensor(out)
+        except:
+            return out
+
 
     def __str__(self):
         return self._data_table.to_string()
