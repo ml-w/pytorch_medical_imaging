@@ -57,12 +57,17 @@ class PMIBatchZeroPadSampler(DataLoader):
         if len(elem_type) > 1:
             # Convert rows in a mini-batch into columns
             # cols = [([a1, a2], [b1, b2]), [c1, c2]]
-            cols = list(map(list, zip(*batch)))
+            if len(batch[0]) == 1:
+                cols = batch
+            else:
+                cols = list(map(list, zip(*batch)))
 
             for idx, c in enumerate(cols):
                 if idx in self.pad_element:
-                    if isinstance(c, list) or isinstance(c, tuple):
+                    # If inner level is still a list of tuple [(a1, b1), (a2, b2), ...]
+                    if isinstance(c[0], list) or isinstance(c[0], tuple):
                         col_c = list(map(list, zip(*c)))
+
                         pre_out = [self._zero_pad(cc, self.pad_axis) for cc in col_c]
                         if self._return_ori_len:
                             ol = pre_out[0][1]
@@ -91,8 +96,10 @@ class PMIBatchZeroPadSampler(DataLoader):
             self._logger.warning(f"Attribute error measuring the length of target axis {target_axis}")
             return (default_collate(in_list), None) if self._return_ori_len else default_collate(in_list)
 
+        self._logger.debug(f"len(set(ori_len)): {len(set(ori_len))}")
         if len(set(ori_len)) == 1:
             try:
+
                 return (torch.cat(in_list, dim=0), ori_len) if self._return_ori_len else torch.cat(in_list, dim=0)
             except:
                 self._logger.exception("Specified axis are aligned but other tensors do not have the same size.")
