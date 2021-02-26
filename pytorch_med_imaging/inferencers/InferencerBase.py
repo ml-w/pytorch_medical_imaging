@@ -61,7 +61,9 @@ class InferencerBase(object):
         Returns:
             out (torch.Tensor)
         """
-        assert isinstance(tensor, list) or torch.is_tensor(tensor), "_match_type_with_network: input type error!"
+        assert isinstance(tensor, list) or torch.is_tensor(tensor) or isinstance(tensor, tuple),\
+            "_match_type_with_network: input type error! Expected list, tuple or torch.Tensor, "\
+            "got {} instead.".format(type(tensor))
 
         for name, module in self._net.named_modules():
             try:
@@ -89,11 +91,11 @@ class InferencerBase(object):
         except:
             self._logger.warning("Can't determine if type is already followed.")
 
-        # We also expect list input too.
-        out = [ss.type(self._net_weight_type) for ss in tensor] if isinstance(tensor, list) else \
+        # We also expect list or tuple input too.
+        out = [ss.type(self._net_weight_type) for ss in tensor] if isinstance(tensor, list) or \
+                                                                   isinstance (tensor,tuple) else \
             tensor.type(self._net_weight_type)
         return out
-
 
     def get_net(self):
         return self._net
