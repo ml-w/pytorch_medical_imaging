@@ -30,7 +30,7 @@ class InferencerBase(object):
         self._batchsize         = inferencer_configs['batchsize']
         self._iscuda            = inferencer_configs['iscuda']
         self._outdir            = inferencer_configs['outdir']
-        self._config            = inferencer_configs['configs']
+        self._config            = inferencer_configs['config']
         assert os.path.isfile(self._net_state_dict), "Cannot open network checkpoint!"
 
         # optional
