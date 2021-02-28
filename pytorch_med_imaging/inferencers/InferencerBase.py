@@ -20,7 +20,7 @@ class InferencerBase(object):
         _logger (logger.Logger):
             Use this logger to log anything or print anything.
     """
-    def __init__(self, inferencer_configs):
+    def __init__(self, inferencer_configs, **kwargs):
         super(InferencerBase, self).__init__()
 
         # required
@@ -48,6 +48,9 @@ class InferencerBase(object):
         self._input_check()
         self._create_net()
         self._create_dataloader()
+
+        if  len(kwargs):
+            self._logger.warning("Some inferencer configs were not used: {}".format(kwargs))
 
 
     def _match_type_with_network(self, tensor):
