@@ -27,8 +27,14 @@ class SurvivalInferencer(InferencerBase):
         inference_configs['outdir']         = out_dir
         inference_configs['iscuda']         = iscuda
         inference_configs['target_data']    = target_data
+        inference_configs['config']         = config
 
         super(SurvivalInferencer, self).__init__(inference_configs)
+
+        self._config = config
+        if not self._config is None:
+            self._censor_value = self._get_params_from_solver_config('censor_value', 5, True)
+
 
     def _input_check(self):
         return 0
@@ -142,7 +148,7 @@ class SurvivalInferencer(InferencerBase):
         for col in dl.columns:
             if col == 'Harzard' or col == 'IDs':
                 continue
-            C = self._compute_concordance(dl['Harzard'], dl[col], 5)
+            C = self._compute_concordance(dl['Harzard'], dl[col], self._censor_value)
             summary[col] = C
         self._logger.info(f"\n{summary}")
 

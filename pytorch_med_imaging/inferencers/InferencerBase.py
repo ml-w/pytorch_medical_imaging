@@ -30,6 +30,7 @@ class InferencerBase(object):
         self._batchsize         = inferencer_configs['batchsize']
         self._iscuda            = inferencer_configs['iscuda']
         self._outdir            = inferencer_configs['outdir']
+        self._config            = inferencer_configs['configs']
         assert os.path.isfile(self._net_state_dict), "Cannot open network checkpoint!"
 
         # optional
@@ -102,6 +103,25 @@ class InferencerBase(object):
 
     def get_net(self):
         return self._net
+
+    def _get_params_from_config(self, section, key, default=None, with_eval=False):
+        if self._config is None:
+            self._logger.warning("No config input.")
+
+        try:
+            if with_eval:
+                return eval(self._config[section].get(key, default))
+            else:
+                return self._config[section].get(key, default)
+        except AttributeError:
+            self._logger.warning(f"Key absent in config: ({section},{key})")
+            return default
+        except:
+            self._logger.exception(f"Unexpected error when reading params with key: ({section}, {key})")
+            return
+
+    def _get_params_from_solver_config(self, key, default=None, with_eval=False):
+        return self._get_params_from_config('SolverParams', key, default, with_eval)
 
     @abstractmethod
     def _input_check(self):
