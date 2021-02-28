@@ -10,7 +10,7 @@ __all__ = ['SegmentationInferencer']
 
 class SegmentationInferencer(InferencerBase):
     def __init__(self, input_data, out_dir, batch_size, net, checkpoint_dir, iscuda, logger=None, target_data=None,
-                 **kwargs):
+                 config=None, **kwargs):
         inference_configs = {}
         inference_configs['indataset']      = input_data
         inference_configs['batchsize']      = batch_size
@@ -20,7 +20,7 @@ class SegmentationInferencer(InferencerBase):
         inference_configs['outdir']         = out_dir
         inference_configs['iscuda']         = iscuda
         inference_configs['target_data']    = target_data
-
+        inference_configs['config']         = config
         self._out_dataset = None # For storing result of inference
 
         super(SegmentationInferencer, self).__init__(inference_configs)

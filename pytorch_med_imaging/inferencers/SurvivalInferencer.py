@@ -17,7 +17,7 @@ __all__ = ['SurvivalInferencer']
 
 class SurvivalInferencer(InferencerBase):
     def __init__(self, in_data, out_dir, batch_size, net, checkpoint_dir, iscuda, logger=None, target_data=None,
-                 config=None):
+                 config=None, **kwargs):
         inference_configs = {}
         inference_configs['indataset']      = in_data
         inference_configs['batchsize']      = batch_size
