@@ -1,12 +1,10 @@
 from ..med_img_dataset import ImageDataSet, ImagePatchesLoader, ImagePatchesLoader3D
 from .InferencerBase import InferencerBase
 from torch.utils.data import DataLoader
-from torch.autograd import Variable
 import torch
 import torch.nn.functional as F
 import numpy as np
 from tqdm import *
-from ..logger import Logger
 
 __all__ = ['SegmentationInferencer']
 
@@ -149,7 +147,7 @@ class SegmentationInferencer(InferencerBase):
         This use method from Algorithm to output summary of the inferece. This is used to allow guildai to grad
         performance of the network.
         """
-        from ..Algorithms.Analysis import main
+        from pytorch_med_imaging.utils.analysis import main
 
         arguments = ['-a',
                      '--test-data', self._outdir,
@@ -165,7 +163,7 @@ class SegmentationInferencer(InferencerBase):
             self._logger.info("Med_DICE: {}".format(out['DSC'].median()))
             self._logger.info("Summary:\n {}".format(out.describe(include='all').to_string()))
         except:
-            self._logger.exception("Error calling Analysis.py. This is intended.")
+            self._logger.exception("Error calling analysis.py. This is intended.")
             return
 
     @staticmethod
