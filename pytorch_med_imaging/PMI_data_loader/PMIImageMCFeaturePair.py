@@ -94,6 +94,8 @@ class PMIImageMCFeaturePair(PMIImageDataLoader):
         else:
             gt_dat = med_img_dataset.DataLabel.from_csv(self._target_dir)
 
+
+
         # Load selected columns only
         if not self.get_from_loader_params('column') is None:
             self._logger.info("Selecting target column: {}".format(self.get_from_loader_params('column')))

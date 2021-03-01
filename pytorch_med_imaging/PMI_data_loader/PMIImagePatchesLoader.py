@@ -117,5 +117,8 @@ class PMIImagePatchesLoader(PMIImageDataLoader):
             data_cls = ImagePatchesLoader
             self._patch_loader_params['mode'] = self._patch_loader_params.pop('compute_textures')
 
+        # Reqruiements from dataclass, force this to 0 if in inference mode.
+        self._patch_loader_params['random_patches'] = 0
+
         img_out = data_cls(img_out, self._patch_size, pre_shuffle=True, **self._patch_loader_params)
         return img_out
