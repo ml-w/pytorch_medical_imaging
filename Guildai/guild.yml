@@ -134,6 +134,35 @@ validation_segment:
         med_DSC: 'Med_DICE: (\value)'
 
 
+validation_survival:
+    decription: Validate the trained model. Should be used in pipeline, otherwise it won't find the checkpoint.
+    main: main --inference
+    flags:
+        batch-size: 4
+        config: "Configs/Survival/Test.ini"
+        override: ""
+    sourcecode:
+        root: ../
+        select:
+            - exclude:
+                  dir: 'NPC_Segmentation'
+            - exclude:
+                  dir: '__pycache__'
+            - exclude:
+                  dir: "Guildai"
+            - '*.py'
+            - '*.pyx'
+            - '*.txt'
+            - '*.so'
+    requires:
+        - file: '../Configs'
+        - file: '../NPC_Segmentation'
+        - operation: train_segment
+          select: 'Backup'
+    output-scalars:
+        C-index: 'C-index: (\value)'
+
+
 pipeline:
     flags:
         config: "Configs/Survival/Test.ini"
