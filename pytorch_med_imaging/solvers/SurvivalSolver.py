@@ -36,7 +36,7 @@ class SurvivalSolver(SolverBase):
 
         if not self._config is None:
             self._censor_value = self._get_params_from_solver_config('censor_value', 5, True)
-            self._grad_iter = self._get_params_from_solver_config('censor_value', 2, True)
+            self._grad_iter = self._get_params_from_solver_config('grad_iter', 2, True)
 
         solver_configs = {}
 
@@ -79,7 +79,7 @@ class SurvivalSolver(SolverBase):
                 while g.dim() < 2:
                     g = g.unsqueeze()
 
-                self._logger.debug(f"outshape: {out.shape}, gshape: {g.shape}")
+                # self._logger.debug(f"outshape: {out.shape}, gshape: {g.shape}")
                 net_out.append(out)
                 G.append(g)
 
@@ -90,9 +90,13 @@ class SurvivalSolver(SolverBase):
                 self._logger.exception(e)
                 self._logger.info(f"G: {G}")
 
+            # compute C-index
+            c_index = self._compute_concordance(net_out.cpu(), G[:,:-1].cpu(), G[:,-1].cpu())
+
             val_loss = self._loss_eval(net_out, G)
-            self._logger.debug(f"Validation Result - VAL: {val_loss:.05f}")
-            self.plotter_dict['scalars']['Loss/Validation'] = val_loss.cpu().data
+            self._logger.debug(f"Validation Result - VAL: {val_loss:.05f} C-index: {c_index:.05f}")
+            self.plotter_dict['scalars']['Loss/Validation Loss'] = val_loss.cpu().data
+            self.plotter_dict['scalars']['Perf/Validation C-index'] = c_index
 
 
     def _feed_forward(self, *args):
@@ -118,7 +122,7 @@ class SurvivalSolver(SolverBase):
 
     def _loss_eval(self, *args):
         out, G = args
-        loss = self._lossfunction(out, G)
+        loss = self._lossfunction(out, G[:, :-1], G[:,-1]) # last column reserved for event status
         return loss
 
     def __dep_step(self, *args):
@@ -145,46 +149,80 @@ class SurvivalSolver(SolverBase):
         Because this solver is fixed to use Cox harzard loss, the gradients only computed after
         each epoch, and this requires more memory to do.
         """
-        net_out = []
-        G = []
+        if self._data_loader_val is None:
+            self._logger.error("Dataloader not found!")
+            raise AttributeError("You have not properly setup the dataloader")
+
+        E = []
         # Reset dict each epoch
         self._net.train()
         self.plotter_dict = {'scalars': {}, 'epoch_num': epoch_number}
         grad_itered = 0
+
         for step_idx, samples in enumerate(self._data_loader):
-            # GRAD_FLAG = grad_itered < self._grad_iter
-            # GRAD_FLAG = True
-            # torch.set_grad_enabled(GRAD_FLAG)
             s, g = samples
+
+            # Check if all elements in the batch are censored. Last column of gt reserved for event_status
+            if all(list(g[:,-1] == False)):
+                self._logger.info(f"\t[Step {step_idx:04d}] Skipped")
+                continue
+
             out, loss = self.step(s, g)
-            self._logger.info("\t[Step %04d Loss: %.05f]"%(step_idx, loss))
-            # net_out.append(out)
-            # G.append(g)
+
+            E.append(loss.data.cpu())
+            self._logger.info("\t[Step %04d] Loss: %.05f"%(step_idx, loss))
 
             grad_itered += 1
+            # Display epoch results
+            _pairs = zip(out.flatten().data.cpu(), g[:,:-1].flatten().data.cpu())
+            _df = pd.DataFrame(_pairs, columns=['res', 'g'], dtype=float)
+            self._logger.debug('\n' + _df.to_string())
+            del _pairs, _df
 
-        # Make sure to turn this back on.
-        torch.set_grad_enabled(True)
-        net_out = torch.cat(net_out, dim=0)
-        G = torch.cat(G, dim=0)
+            del s, g, out, loss
+            gc.collect()
 
-        epoch_loss = self._loss_eval(net_out, G)
-        self._optimizer.zero_grad()
-        epoch_loss.backward()
-        self._optimizer.step()
-
-        # Display epoch results
-        _pairs = zip(net_out.flatten().data.cpu(), G.flatten().data.cpu())
-        _df = pd.DataFrame(_pairs, columns=['res', 'g'], dtype=float)
-        self._logger.debug('\n' + _df.to_string())
-        del _pairs, _df
-
-        epoch_loss = epoch_loss.cpu().data
+        epoch_loss = np.array(E).mean()
         self.plotter_dict['scalars']['Loss/Loss'] = epoch_loss
 
         self._logger.info("Initiating validation.")
         self.validation()
-
         self._epoch_callback()
         self.decay_optimizer(epoch_loss)
+
+    @staticmethod
+    def _compute_concordance(risk, event_time, censor_thres):
+        r"""
+        Compute the concordance index.
+
+        .. math::
+
+            $C-index = \frac{\sum_{i,j} I[T_j < T_i] \cdot I [\eta_j > \eta_i] d_j}{1}$
+
+        """
+        # convert everything to numpy
+        risk, event_time = [np.asarray(x) for x in [risk, event_time]]
+
+        # sort by event_time
+        event_order = event_time.argsort().astype('int')
+        sorted_event_time = event_time[event_order]
+        sorted_risk = risk[event_order]
+
+        # censoring
+        censor_vect = sorted_event_time < censor_thres
+
+        top = bot = 0
+        for i in range(len(risk)):
+            times_truth = sorted_event_time > sorted_event_time[i]
+            risk_truth = sorted_risk < sorted_risk[i]
+
+            i_top = times_truth & risk_truth
+            i_top = i_top & censor_vect
+            i_bot = times_truth
+            i_bot = i_bot & censor_vect
+
+            top += i_top.sum()
+            bot += i_bot.sum()
+
+        return top/float(bot)
 
