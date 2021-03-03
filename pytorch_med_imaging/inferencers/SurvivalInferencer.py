@@ -1,17 +1,12 @@
 from .InferencerBase import InferencerBase
-from ..med_img_dataset import ImageDataSet, DataLabel, ImageDataMultiChannel
+from ..med_img_dataset import DataLabel
+from ..logger import Logger
 from torch.utils.data import DataLoader
 from tqdm import *
-from torch.autograd import Variable
 import os
 import torch
-import torch.nn.functional as F
 import numpy as np
-from SimpleITK import WriteImage, ReadImage, GetImageFromArray
-from ..networks.GradCAM import *
-from torchvision.utils import make_grid
-from imageio import imsave
-from pytorch_med_imaging.Algorithms.visualization import draw_overlay_heatmap
+
 
 __all__ = ['SurvivalInferencer']
 
@@ -140,23 +135,25 @@ class SurvivalInferencer(InferencerBase):
 
     def display_summary(self):
         """
-        This uses the C-index to measure the performance
+        This uses the C-index to measure the performance, last colume is treated as the censoring index
         """
         dl = self._results
 
         summary = {}
-        for col in dl.columns:
+        for col in dl.columns[:-1]:
             if col == 'Harzard' or col == 'IDs':
                 continue
-            C = self._compute_concordance(dl['Harzard'], dl[col], self._censor_value)
+            C = self._compute_concordance(dl['Harzard'], dl[col], self._censor_value, dl[dl.columns[-1]])
             summary[col] = C
-        self._logger.info(f"\n{summary}")
+        self._logger.info("-" * 40 + " Summary " + "-" * 40)
+        for key in summary:
+            self._logger.info(f"{key} - C-index: {summary[key]}")
 
 
     @staticmethod
-    def _compute_concordance(risk, event_time, censor_thres):
+    def _compute_concordance(risk, event_time, censor_thres, event_status):
         r"""
-        Compute the concordance index.
+        Compute the concordance index. Assume no ties.
 
         .. math::
 
@@ -166,34 +163,31 @@ class SurvivalInferencer(InferencerBase):
         # convert everything to numpy
         risk, event_time = [np.asarray(x) for x in [risk, event_time]]
 
-        # sort by event_time
-        event_order = event_time.argsort().astype('int')
-        sorted_event_time = event_time[event_order]
-        sorted_risk = risk[event_order]
-
         # censoring
-        censor_vect = sorted_event_time < censor_thres
+        censor_vect = (event_time < censor_thres) & event_status
 
         top = bot = 0
         for i in range(len(risk)):
-            times_truth = sorted_event_time > sorted_event_time[i]
-            risk_truth = sorted_risk < sorted_risk[i]
+            # skip if censored:
+            if censor_vect[i] == 0:
+                continue
+
+            times_truth = event_time > event_time[i]
+            risk_truth = risk < risk[i]
 
             i_top = times_truth & risk_truth
-            i_top = i_top & censor_vect
             i_bot = times_truth
-            i_bot = i_bot & censor_vect
 
             top += i_top.sum()
             bot += i_bot.sum()
 
-        return top/float(bot)
+        c_index = top/float(bot)
+        if np.isnan(c_index):
+            Logger[__class__.__name__].warning("Got nan when computing concordance. Replace by 0.")
+            c_index = 0
 
+        return np.clip(c_index, 0, 1)
 
-
-
-
-        pass
 
     def overload_dataloader(self, loader):
         self._data_loader = loader

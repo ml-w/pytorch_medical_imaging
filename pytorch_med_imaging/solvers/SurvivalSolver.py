@@ -91,12 +91,51 @@ class SurvivalSolver(SolverBase):
                 self._logger.info(f"G: {G}")
 
             # compute C-index
-            c_index = self._compute_concordance(net_out.cpu(), G[:,:-1].cpu(), G[:,-1].cpu())
+            c_index = self._compute_concordance(net_out.cpu().numpy(),
+                                                G[:,:-1].cpu().numpy(),
+                                                G[:,-1].cpu().numpy())
 
             val_loss = self._loss_eval(net_out, G)
             self._logger.debug(f"Validation Result - VAL: {val_loss:.05f} C-index: {c_index:.05f}")
             self.plotter_dict['scalars']['Loss/Validation Loss'] = val_loss.cpu().data
             self.plotter_dict['scalars']['Perf/Validation C-index'] = c_index
+
+    def train_set_validation(self):
+        if self._data_loader_val is None:
+            self._logger.warning("Validation skipped because no loader is available.")
+            return []
+
+        self._logger.info("Start validation...")
+        with torch.no_grad():
+            self._net = self._net.eval()
+            net_out = []
+            G = []
+
+            for s, g in auto.tqdm(self._data_loader, desc="Validation", position=2):
+                out, g = self._feed_forward(s, g)
+                while g.dim() < 2:
+                    g = g.unsqueeze()
+
+                # self._logger.debug(f"outshape: {out.shape}, gshape: {g.shape}")
+                net_out.append(out)
+                G.append(g)
+
+            net_out = torch.cat(net_out, 0)
+            try:
+                G = torch.cat(G,0)
+            except Exception as e:
+                self._logger.exception(e)
+                self._logger.info(f"G: {G}")
+
+            # compute C-index
+            c_index = self._compute_concordance(net_out.cpu().numpy(),
+                                                G[:,:-1].cpu().numpy(),
+                                                G[:,-1].cpu().numpy())
+
+            self._logger.debug(f"Training C-index: {c_index:.05f}")
+            self.plotter_dict['scalars']['Perf/Training C-index'] = c_index
+
+
 
 
     def _feed_forward(self, *args):
@@ -187,13 +226,14 @@ class SurvivalSolver(SolverBase):
 
         self._logger.info("Initiating validation.")
         self.validation()
+        self.train_set_validation()
         self._epoch_callback()
         self.decay_optimizer(epoch_loss)
 
     @staticmethod
-    def _compute_concordance(risk, event_time, censor_thres):
+    def _compute_concordance(risk, event_time, censor_thres, event_status):
         r"""
-        Compute the concordance index.
+        Compute the concordance index. Assume no ties.
 
         .. math::
 
@@ -203,26 +243,28 @@ class SurvivalSolver(SolverBase):
         # convert everything to numpy
         risk, event_time = [np.asarray(x) for x in [risk, event_time]]
 
-        # sort by event_time
-        event_order = event_time.argsort().astype('int')
-        sorted_event_time = event_time[event_order]
-        sorted_risk = risk[event_order]
-
         # censoring
-        censor_vect = sorted_event_time < censor_thres
+        censor_vect = (event_time < censor_thres) & event_status
 
         top = bot = 0
         for i in range(len(risk)):
-            times_truth = sorted_event_time > sorted_event_time[i]
-            risk_truth = sorted_risk < sorted_risk[i]
+            # skip if censored:
+            if censor_vect[i] == 0:
+                continue
+
+            times_truth = event_time > event_time[i]
+            risk_truth = risk < risk[i]
 
             i_top = times_truth & risk_truth
-            i_top = i_top & censor_vect
             i_bot = times_truth
-            i_bot = i_bot & censor_vect
 
             top += i_top.sum()
             bot += i_bot.sum()
 
-        return top/float(bot)
+        c_index = top/float(bot)
+        if np.isnan(c_index):
+            Logger[__class__.__name__].warning("Got nan when computing concordance. Replace by 0.")
+            c_index = 0
+
+        return np.clip(c_index, 0, 1)
 
