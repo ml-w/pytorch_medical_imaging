@@ -71,6 +71,41 @@ train_segment:
         - file: '../NPC_Segmentation'
         - file: '../Backup/Log'
 
+train_survival:
+    description: Train a model.
+    main: main
+    flags:
+        config: "Configs/Survival/Test.ini"
+        epoch: 50
+        batch-size: 4
+        lr: 1E-4
+        debug: no
+        override: ""
+    output-scalars:
+        loss/loss: 'EpochLoss: (\value)'
+        loss/validation_loss: 'VAL: (\value)'
+        step: 'Epoch (\step)'
+        step_lr: 'LR: (\value)'
+        perf/validation_c-index: 'Training C-index: (\value)'
+    sourcecode:
+        root: ../
+        select:
+            - exclude:
+                dir: 'NPC_Segmentation'
+            - exclude:
+                dir: 'Backup'
+            - exclude:
+                dir: '__pycache__'
+            - exclude:
+                dir: "Guildai"
+            - '*.py'
+            - '*.pyx'
+            - '*.txt'
+            - '*.so'
+    requires:
+        - file: '../Configs'
+        - file: '../NPC_Segmentation'
+        - file: '../Backup/Log'
 
 validation:
     decription: Validate the trained model. Should be used in pipeline, otherwise it won't find the checkpoint.
@@ -157,7 +192,7 @@ validation_survival:
     requires:
         - file: '../Configs'
         - file: '../NPC_Segmentation'
-        - operation: train_segment
+        - operation: train_survival
           select: 'Backup'
     output-scalars:
         C-index: 'C-index: (\value)'
@@ -184,3 +219,14 @@ pipeline_segment:
     steps:
         - train_segment config=${config} epoch=${epoch} batch-size=${batch-size} lr=${lr} override=${override}
         - validation_segment config=${config} batch-size=${batch-size} override="${override};(LoaderParams,random_patches)=75"
+
+pipeline_survival:
+    flags:
+        config: "Configs/Survival/Test.ini"
+        epoch: 50
+        batch-size: 4
+        lr: 1E-4
+        override: ""
+    steps:
+        - train_survival config=${config} epoch=${epoch} batch-size=${batch-size} lr=${lr} override=${override}
+        - validation_survival config=${config} batch-size=${batch-size} override=${override}
