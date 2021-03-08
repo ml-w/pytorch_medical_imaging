@@ -307,7 +307,7 @@ class SolverBase(object):
             return default
         except:
             self._logger.exception(f"Unexpected error when reading params with key: ({section}, {key})")
-            return
+            return default
 
     def _get_params_from_solver_config(self, key, default=None, with_eval=False):
         return self._get_params_from_config('SolverParams', key, default, with_eval)
