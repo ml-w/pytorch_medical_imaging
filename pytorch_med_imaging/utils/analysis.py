@@ -25,11 +25,14 @@ def ASD(seg, test, spacing):
     return np.sum(compute_average_surface_distance(
         compute_surface_distances(seg, test, spacing))) / 2.
 
-def GrossVolume_Test(seg, test, spacing):
-    return np.sum(test > 0) * np.prod(spacing)
+def GrossVolume_Test(gt, test, spacing):
+    """
+    Return GTV of the test setting in cm^3
+    """
+    return np.sum(test > 0) * np.prod(spacing) / 1000.
 
-def GrossVolume_Seg(seg, test, spacing):
-    return np.sum(seg > 0) * np.prod(spacing)
+def GrossVolume_Seg(gt, test, spacing):
+    return np.sum(gt > 0) * np.prod(spacing) / 1000.
 
 def SSIM(x: np.ndarray,
          y: np.ndarray,
@@ -289,7 +292,7 @@ def EVAL(seg, gt, vars):
             continue
         values = []
         for keys in vars:
-            if keys in ['ASD', 'GTV-test', 'GTV-seg']:
+            if keys in ['ASD', 'GTV-Target', 'GTV-predict']:
                 values.append(vars[keys](gg, ss, gt.get_spacing(i)))
             else:
                 values.append(vars[keys](TP, FP, TN, FN))
@@ -380,8 +383,8 @@ def main(raw_args=None):
                 'VD': VD,
                 'PPV': PrecisionRate,
                 'CR': CorrespondenceRatio,
-                'GTV-test': GrossVolume_Test,
-                'GTV-seg': GrossVolume_Seg,
+                'GTV-Predict': GrossVolume_Test,
+                'GTV-Target': GrossVolume_Seg,
                 'PM': PercentMatch,
                 'ASD': ASD}
 
