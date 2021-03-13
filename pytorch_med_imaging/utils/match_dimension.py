@@ -10,35 +10,60 @@ def main(args):
         assert os.path.isdir(dir)
 
     log = Logger(a.log, logger_name='utils.match_dimension', verbose=a.verbose)
+    log.info("{:=^100}".format(" Matching Dimensions "))
     sys.excepthook = log.exception_hook
 
-    imsetA = ImageDataSet(a.dirA, verbose=a.verbose, dtype='uint8', debugmode=a.debug)
+    if args.ids is not None:
+        if os.path.isfile(args.ids):
+            ids = [r.rstrip() for r in open(args.ids, 'r').readlines()]
+        elif args.ids.find(',') >= 0:
+            ids = args.ids.split(',')
+        else:
+            ids = [args.ids]
+    else:
+        ids = None
+
+    if not ids is None:
+        imsetA = ImageDataSet(a.dirA, verbose=a.verbose, dtype='uint8', debugmode=a.debug, filtermode='idlist',
+                              idlist=ids)
+    else:
+        imsetA = ImageDataSet(a.dirA, verbose=a.verbose, dtype='uint8', debugmode=a.debug)
     ida = imsetA.get_unique_IDs(a.globber)
 
     imsetB = ImageDataSet(a.dirB, verbose=a.verbose, dtype='uint8', filtermode='idlist', idlist=ida)
     idb = imsetB.get_unique_IDs(a.globber)
 
-    size_a = [tuple(imsetA.get_data_by_ID(i).shape) for i in ida]
-    size_b = [tuple(imsetB.get_data_by_ID(i).shape) for i in idb]
-
     missing = []
     for sa in ida:
         if not sa in idb:
             missing.append(sa)
+    log.debug(f"{missing}")
+
+    # check if the two sets contains same number of elements
+    if len(imsetA) != len(imsetB):
+        log.warning("The images are not paired properly.")
+
+    # check if pairing are correctly done
+    if set(ida) != set(idb):
+        log.warning("The ids are not paired properly. Using overlapping of the lists.")
+
+    overlapId = list(set(ida) & set(idb))
+    size_a = [tuple(imsetA.get_data_by_ID(i).shape) for i in overlapId]
+    size_b = [tuple(imsetB.get_data_by_ID(i).shape) for i in overlapId]
 
     miss_match = {}
     for i, (sa, sb) in enumerate(zip(size_a, size_b)):
         if sa != sb:
-            miss_match[ida[i]] = {'A': sa, 'B': sb}
+            miss_match[overlapId[i]] = {'A': sa, 'B': sb}
 
     if len(miss_match) > 0:
-        log.info(f"Miss-match list: {','.join(miss_match.keys())}\n")
-        log.info(f"Size-list: \n")
-        log.info([f"{idx}: {miss_match[idx]['A']} - {miss_match[idx]['B']} \n" for idx in miss_match])
+        log.info(f"Miss-match list: {','.join(miss_match.keys())}")
+        log.info(f"Size-list: ")
+        log.info('\n' + '\n'.join([f"{idx}: {miss_match[idx]['A']} - {miss_match[idx]['B']}" for idx in miss_match]))
 
         if len(missing) > 0:
-            log.info("Missing: \n")
-            log.info(f"{','.join([m for m in missing])}")
+            log.warning("Missing in directory B!")
+            log.info("Missing ids: \n" + f"{','.join([m for m in missing])}")
 
         if a.save.endswith('.txt'):
             log.info(f"Writing to: {a.save}")
@@ -49,7 +74,7 @@ def main(args):
 
                 if len(missing) > 0:
                     f.write("\n")
-                    f.write("Missing: \n")
+                    f.write("directory B: \n")
                     f.writelines(f"{','.join([m for m in missing])}")
 
         elif a.save.endswith('.ini'):
@@ -66,10 +91,15 @@ def main(args):
             cf.write(a.save)
 
     else:
+        if len(missing) > 0:
+            log.warning("Missing in directory B!")
+            log.info("Missing ids: \n" + f"{','.join([m for m in missing])}")
+
         log.info("Check complete. No miss-match found.")
 
     # If everything goes smoothly, delete the log file
     log.info("Try exiting cleanly")
+    log.info("{:=^100}".format(" Finished "))
     del log
     if not a.saveLog:
         os.remove(a.log)
