@@ -11,3 +11,5 @@ from .CnnRnn import *
 from .SimpleFCNet import *
 from .DenseNet import *
 
+# Exporting package
+from . import thrid_party_nets

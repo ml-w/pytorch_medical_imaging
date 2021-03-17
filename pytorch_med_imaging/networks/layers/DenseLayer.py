@@ -1,7 +1,7 @@
 import torch
 import torch.nn as nn
 
-__all__ = ['DenseConv', 'DenseConv3D','DenseLayer', 'DenseBlock', 'DenseBlock3D', 'DenseLayer3D']
+__all__ = ['DenseConv', 'DenseConv3D','DenseLayer', 'DenseBlock', 'DenseBlock3d', 'DenseLayer3D']
 
 class DenseConv(nn.Module):
     def __init__(self, inchan, outchan, kernsize=3, stride=1, pad=True):
@@ -81,10 +81,10 @@ class DenseLayer3D(nn.Module):
         return torch.cat([x, new_features], dim=1)
 
 
-class DenseBlock3D(nn.Module):
+class DenseBlock3d(nn.Module):
     def __init__(self, inchan:int, k:int, num_layers:int , bn_size:int =4, kernsize: int or [int] = 3, dropout:float \
         =0.2):
-        super(DenseBlock3D, self).__init__()
+        super(DenseBlock3d, self).__init__()
 
         self.convs = nn.Sequential()
         for i in range(num_layers):

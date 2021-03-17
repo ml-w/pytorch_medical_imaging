@@ -242,3 +242,4 @@ class StandardFC2d(nn.Module):
         if not x.dim() == 3:
             raise ArithmeticError("Expect dim to be 3, got {} instead.".format(x.dim()))
         return self._fc(x)
+

@@ -1,4 +1,4 @@
-from .layers import DenseBlock3D, Conv3d, DownSemi3d
+from .layers import DenseBlock3d, Conv3d, DownSemi3d
 
 import torch
 import torch.nn as nn
@@ -54,7 +54,7 @@ class DenseNet3d(nn.Module):
         features = init_conv_features
         self.dense_blocks = nn.Sequential()
         for i, num_layers in enumerate(block_config):
-            block = DenseBlock3D(features, k, num_layers, kernsize=[1, 3, 3], dropout=dropout, bn_size=bn_size)
+            block = DenseBlock3d(features, k, num_layers, kernsize=[1, 3, 3], dropout=dropout, bn_size=bn_size)
             self.dense_blocks.add_module('dense_block_%02d'%(i+1), block)
             features = features + num_layers * k
 
@@ -95,6 +95,10 @@ class DenseNet3d(nn.Module):
 
 
 class DenseEncoder25D(nn.Module):
+    r"""
+    This is basically the same as DenseNet3D, but DenseNet3D is actually 2.5, so I plan to change its name to
+    this one instead 3D.
+    """
     def __init__(self,
                  in_ch,
                  init_conv_features:int = 64,
@@ -117,7 +121,7 @@ class DenseEncoder25D(nn.Module):
         features = init_conv_features
         self.dense_blocks = nn.Sequential()
         for i, num_layers in enumerate(block_config):
-            block = DenseBlock3D(features, k, num_layers, kernsize=[1, 3, 3], dropout=dropout, bn_size=bn_size)
+            block = DenseBlock3d(features, k, num_layers, kernsize=[1, 3, 3], dropout=dropout, bn_size=bn_size)
             self.dense_blocks.add_module('dense_block_%02d'%(i+1), block)
             features = features + num_layers * k
 
@@ -184,8 +188,14 @@ class DenseSurv(nn.Module):
 
         self._fc_classifier = nn.Sequential(
             nn.Linear(self._encoder.out_features + clas_added_features, clas_hidden_features),
+            nn.LeakyReLU(),
             nn.Linear(clas_hidden_features, out_ch)
         )
+
+        # Initialization
+        for m in self._fc_classifier.modules():
+            if isinstance(m, nn.Linear):
+                nn.init.constant_(m.bias, 0)
 
     def forward(self, x, added_features = None):
         """
@@ -198,11 +208,17 @@ class DenseSurv(nn.Module):
         x = self._encoder(x)
 
         if not added_features is None:
-            assert added_features.dim() == 2, "Expect added features to have dim = 2, " \
-                f"got {added_features.dim()} instead."
-            x = torch.cat([x, added_features]) # (B x C_1 + C_2)
+            if len(added_features) == 0:
+                pass
+            else:
+                assert added_features.dim() == 2, "Expect added features to have dim = 2, " \
+                    f"got {added_features.dim()} instead."
+                x = torch.cat([x, added_features], dim=1) # (B x C_1 + C_2)
         x = self._fc_classifier(x)
-        x = torch.sigmoid(x)
+        x = torch.sigmoid(x) * 10. # Harzard should not be negative.
+
+        while x.dim() < 2:
+            x = x.unsqueeze()
         return x
 
 
