@@ -17,6 +17,7 @@ from pytorch_med_imaging.med_img_dataset import PMITensorDataset
 
 # This package
 from pytorch_med_imaging.networks import *
+from pytorch_med_imaging.networks import third_party_nets
 from pytorch_med_imaging.tb_plotter import TB_plotter
 
 from pytorch_med_imaging.logger import Logger
@@ -122,6 +123,7 @@ def main(a, config, logger):
     param_batchsize = int(config['RunParams'].get('batch_size'))
     param_decay_on_plateau = config['RunParams'].getboolean('decay_on_plateau', False)
     param_lr_scheduler_dict = config['RunParams'].get('lr_scheduler_dict', '{}')
+    param_early_stop = config['RunParams'].get('early_stop', '{}')
 
     checkpoint_load = config['Checkpoint'].get('cp_load_dir', "")
     checkpoint_save = config['Checkpoint'].get('cp_save_dir', "")
@@ -311,21 +313,23 @@ def main(a, config, logger):
             epoch_loss = solver.plotter_dict['scalars']['Loss/Loss']
             val_loss = solver.plotter_dict['scalars'].get('Loss/Validation Loss', None)
 
-            # Call back after each epoch
+            # Call back after each epoch, plotter_dict is plotted here
             try:
-                logger.log_print_tqdm("Initiate batch done callback.", logging.DEBUG)
+                logger.info("Initiate batch done callback.")
                 inputDataset.batch_done_callback()
-                logger.log_print_tqdm("Done", logging.DEBUG)
-            except NotImplementedError or AttributeError:
+                logger.info("Done")
+            except NotImplementedError:
+                logger.warning("Input dataset has no batch done callback.", no_repeat=True)
+            except AttributeError:
                 logger.warning("Input dataset has no batch done callback.", no_repeat=True)
             except Exception as e:
                 logger.exception(f"Unknown error occured during batch done callback: {e}")
 
             # use validation loss as epoch loss if it exist
             measure_loss = val_loss if val_loss is not None else epoch_loss
+            backuppath = "./Backup/cp_%s_%s.pt"%(data_pmi_data_type, net_nettype) \
+                if checkpoint_save is None else checkpoint_save
             if measure_loss <= lastloss:
-                backuppath = "./Backup/cp_%s_%s.pt"%(data_pmi_data_type, net_nettype) \
-                    if checkpoint_save is None else checkpoint_save
                 logger.info("New loss ({:.03f}) is smaller than previous loss ({:.03f})".format(measure_loss, lastloss))
                 logger.info("Saving new checkpoint to: {}".format(backuppath))
                 logger.info("Iteration number is: {}".format(i))
@@ -335,6 +339,11 @@ def main(a, config, logger):
             else:
                 torch.save(solver.get_net().state_dict(), backuppath.replace('.pt', '_temp.pt'))
 
+            # Save network every 5 epochs
+            if i % 5 == 0:
+                torch.save(solver.get_net().state_dict(), backuppath.replace('.pt', '_{:03d}.pt'.format(i)))
+
+            # TODO: early stopping if criteria true
 
             try:
                 current_lr = next(solver.get_optimizer().param_groups)['lr']
@@ -376,7 +385,7 @@ def main(a, config, logger):
             inputDataset, gtDataset = pmi_data._load_data_set_training()
             inferencer = infer_class(inputDataset, dir_output, param_batchsize,
                                      net, checkpoint_load,
-                                     bool_usecuda, target_data=gtDataset)
+                                     bool_usecuda, target_data=gtDataset, config=config)
             logger.info("Performing inference with ground-truth data.")
         except AttributeError as e:
             # in case ground-truth is not found, _load_data_set_training will return Attr error.
@@ -385,7 +394,7 @@ def main(a, config, logger):
             inputDataset= pmi_data.load_dataset()
             inferencer = infer_class(inputDataset, dir_output, param_batchsize,
                                      net, checkpoint_load,
-                                     bool_usecuda)
+                                     bool_usecuda, config=config)
         except Exception as e:
             logger.exception(e)
             logger.critical("Terminating because inferencer cannot be created.")
@@ -393,9 +402,11 @@ def main(a, config, logger):
 
         # Pass PMI to inferencer if its specified
         if not data_pmi_loader_kwargs is None:
+            logger.info("Overriding loader, setting to: {}".format(data_pmi_loader_kwargs))
             loader_factory = PMIBatchSamplerFactory()
             loader = loader_factory.produce_object(inputDataset, config)
             inferencer.overload_dataloader(loader)
+            logger.info("New loader type: {}".format(loader.__class__.__name__))
 
 
 
@@ -486,5 +497,10 @@ if __name__ == '__main__':
         logger.info(msg)
 
     logger.info(">" * 40 + " Start Main " + "<" * 40)
-    main(a, config, logger)
+    try:
+        main(a, config, logger)
+    except Exception as e:
+        logger.error("Uncaught exception!")
+        logger.exception(e)
+        raise BrokenPipeError("Unexpected error in main().")
     logger.info("=" * 40 + " Done " + "="* 40)

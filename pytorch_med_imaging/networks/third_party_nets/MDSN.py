@@ -27,36 +27,45 @@ class MDSN(nn.Module):
     Implemented according to [1]. Default values used the values stated in the original paper.
     Original paper input sequence was a stacked image of T1w-ce, T1w and T2w images, each has 25 slices.
 
-    Detailed Config:
-    -----------------------------------------------------------------------------
-          Layer (type)              Output Shape         Param #     Tr. Param #
-    =============================================================================
-              Conv3d-1     [2, 24, 37, 127, 127]           1,824           1,824
-        DenseBlock3d-2       [2, 72, 18, 63, 63]          91,248          91,248
-         BatchNorm3d-3       [2, 72, 18, 63, 63]             144             144
-                ReLU-4       [2, 72, 18, 63, 63]               0               0
-              Conv3d-5       [2, 16, 18, 63, 63]           1,152           1,152
-           AvgPool3d-6        [2, 16, 9, 31, 31]               0               0
-        DenseBlock3d-7       [2, 112, 9, 31, 31]         188,832         188,832
-         BatchNorm3d-8       [2, 112, 9, 31, 31]             224             224
-                ReLU-9       [2, 112, 9, 31, 31]               0               0
-             Conv3d-10        [2, 16, 9, 31, 31]           1,792           1,792
-          AvgPool3d-11        [2, 16, 4, 15, 15]               0               0
-       DenseBlock3d-12       [2, 272, 4, 15, 15]         588,032         588,032
-        BatchNorm3d-13       [2, 272, 4, 15, 15]             544             544
-               ReLU-14       [2, 272, 4, 15, 15]               0               0
-             Linear-15                    [2, 2]             546             546
-    =============================================================================
-    Total params: 874,338
-    Trainable params: 874,338
-    Non-trainable params: 0
-    -----------------------------------------------------------------------------
+    This network were used for survival analysis. The output FC part of the network can be replaced to bring
+    additional patient demographics, such as T stage, N stage into account.
 
     References:
         [1] Jing, Bingzhong, et al. "Deep learning for risk prediction in patients with
             nasopharyngeal carcinoma using multi-parametric MRIs." Computer Methods and Programs
             in Biomedicine 197 (2020): 105684.
 
+    Examples:
+
+        >>> import torch
+        >>> from pytorch_model_summary.model_summary import summary
+        >>> from pytorch_med_imaging.networks.third_party_nets import MDSN
+        >>> net = MDSN(1, 2)
+        >>> summary(net, torch.rand([2, 1, 75, 384, 384]), print_summary=True)
+
+        -----------------------------------------------------------------------------
+              Layer (type)              Output Shape         Param #     Tr. Param #
+        =============================================================================
+                  Conv3d-1     [2, 24, 37, 127, 127]           1,824           1,824
+            DenseBlock3d-2       [2, 72, 18, 63, 63]          91,248          91,248
+             BatchNorm3d-3       [2, 72, 18, 63, 63]             144             144
+                    ReLU-4       [2, 72, 18, 63, 63]               0               0
+                  Conv3d-5       [2, 16, 18, 63, 63]           1,152           1,152
+               AvgPool3d-6        [2, 16, 9, 31, 31]               0               0
+            DenseBlock3d-7       [2, 112, 9, 31, 31]         188,832         188,832
+             BatchNorm3d-8       [2, 112, 9, 31, 31]             224             224
+                    ReLU-9       [2, 112, 9, 31, 31]               0               0
+                 Conv3d-10        [2, 16, 9, 31, 31]           1,792           1,792
+              AvgPool3d-11        [2, 16, 4, 15, 15]               0               0
+           DenseBlock3d-12       [2, 272, 4, 15, 15]         588,032         588,032
+            BatchNorm3d-13       [2, 272, 4, 15, 15]             544             544
+                   ReLU-14       [2, 272, 4, 15, 15]               0               0
+                 Linear-15                    [2, 2]             546             546
+        =============================================================================
+        Total params: 874,338
+        Trainable params: 874,338
+        Non-trainable params: 0
+        -----------------------------------------------------------------------------
 
     """
     def __init__(self,

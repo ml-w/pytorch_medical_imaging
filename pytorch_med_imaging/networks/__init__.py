@@ -12,4 +12,4 @@ from .SimpleFCNet import *
 from .DenseNet import *
 
 # Exporting package
-from . import thrid_party_nets
+from . import third_party_nets
