@@ -66,8 +66,8 @@ class DataLabel(PMIDataBase):
         return datalabel
 
     @staticmethod
-    def from_dict(dict):
-        df = pd.DataFrame.from_dict(dict)
+    def from_dict(dict, **kwargs):
+        df = pd.DataFrame.from_dict(dict, **kwargs)
         df.set_index(df.keys()[0])
 
         datalabel = DataLabel(df)
@@ -96,6 +96,9 @@ class DataLabel(PMIDataBase):
     def to_numpy(self):
         return self._data_table.to_numpy()
 
+    def get_unique_IDs(self):
+        return list(self._data_table.index)
+
     def __len__(self):
         return len(self._data_table)
 
@@ -119,3 +122,4 @@ class DataLabel(PMIDataBase):
 
     def __str__(self):
         return self._data_table.to_string()
+

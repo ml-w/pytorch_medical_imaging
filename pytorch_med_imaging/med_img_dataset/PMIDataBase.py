@@ -29,6 +29,10 @@ class PMIDataBase(Dataset):
     def __len__(self):
         raise NotImplementedError("Unfinished class implementation.")
 
+    @abstractmethod
+    def get_unique_IDs(self):
+        raise NotImplemented("Unfnished class implementation")
+
     def apply_hook(self, func):
         r"""
         Apply this function to all output before it is returned.
