@@ -1,5 +1,5 @@
 from .InferencerBase import InferencerBase
-from ..med_img_dataset import DataLabel
+from ..med_img_dataset import DataLabel, PMIDataBase
 from ..logger import Logger
 from torch.utils.data import DataLoader
 from tqdm import *
@@ -113,9 +113,13 @@ class SurvivalInferencer(InferencerBase):
 
         # prepare the output spreadsheet
         try:
-            survival_table['IDs'] = self._in_dataset.tensors[0].get_unique_IDs()
+            if isinstance(self._in_dataset, torch.utils.data.TensorDataset):
+                survival_table['IDs'] = self._in_dataset.tensors[0].get_unique_IDs()
+            elif isinstance(self._in_dataset, PMIDataBase.PMIDataBase):
+                survival_table['IDs'] = self._in_dataset.get_unique_IDs()
         except:
-            self._logger.error("Could not get ID of data!")
+            self._logger.exception("Could not get ID of data!")
+            self._logger.warning("Falling back.")
         survival_table['Harzard'] = survival_harzard.tolist()
         dl = DataLabel.from_dict(survival_table)
 
@@ -143,7 +147,7 @@ class SurvivalInferencer(InferencerBase):
         for col in dl.columns[:-1]:
             if col == 'Harzard' or col == 'IDs':
                 continue
-            C = self._compute_concordance(dl['Harzard'], dl[col], self._censor_value, dl[dl.columns[-1]])
+            C = self._compute_concordance(dl['Harzard'], dl[col], (dl[col] < self._censor_value) & dl[dl.columns[-1]])
             summary[col] = C
         self._logger.info("-" * 40 + " Summary " + "-" * 40)
         for key in summary:
@@ -151,9 +155,11 @@ class SurvivalInferencer(InferencerBase):
 
 
     @staticmethod
-    def _compute_concordance(risk, event_time, censor_thres, event_status):
+    def _compute_concordance(risk, event_time, censor_vect):
         r"""
         Compute the concordance index. Assume no ties.
+
+        # TODO: Handle multiple event_time classes
 
         .. math::
 
@@ -162,9 +168,6 @@ class SurvivalInferencer(InferencerBase):
         """
         # convert everything to numpy
         risk, event_time = [np.asarray(x) for x in [risk, event_time]]
-
-        # censoring
-        censor_vect = (event_time < censor_thres) & event_status
 
         top = bot = 0
         for i in range(len(risk)):
