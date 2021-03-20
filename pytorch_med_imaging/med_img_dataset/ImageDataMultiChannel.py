@@ -6,7 +6,7 @@ import os
 
 
 class ImageDataMultiChannel(PMIDataBase):
-    """
+    r"""
     ImageDataSetMultiChannel class allows you to load either vector images (Pending) or load from a bunch
     of subdirectories and concatanate them as multi-channel input. The channels will order accoding to the
     alphabetical order of the subdirecties. They will use the first set of data as references and load the ids that
@@ -28,6 +28,9 @@ class ImageDataMultiChannel(PMIDataBase):
                 * `recursive` - search all subdirectories excluding softlinks, use with causion.
                 * `explicit` - specifying directories of the files to load.
             Default is `normal`.
+        concat_by_axis (int, Optional)
+            If value is >=0, the images will be concatenated at specified axis instead of the channel, 0 equals to
+            th first axis after channel dimension.
         filtermode (str, Optional):
             After grabbing file directories, they are filtered by either ID, regex or both. Corresponding att needed. \n
             Usage:
@@ -156,6 +159,11 @@ class ImageDataMultiChannel(PMIDataBase):
                                                             ),
                                                **_temp_dict))
 
+        # Options
+        self._concat_by_axis = kwargs.get('concat_by_axis', -1)   # concated at the specified axis if > -1
+        if self._concat_by_axis > -1:
+            self._logger.info(f"Concatenating output at axis {self._concat_by_axis} instead of channels.")
+
         # Inherit some of the properties of the inputs
         self._byslices = kwargs['loadBySlices']
 
@@ -196,7 +204,14 @@ class ImageDataMultiChannel(PMIDataBase):
         else:
             # output datatype will follow the dtype of the first constructor argument
             if self._UNIQUE_DTYPE:
-                return cat([dat[item] for dat in self._basedata])
+                if self._concat_by_axis >= 0:
+                    return cat([dat[item] for dat in self._basedata], dim=self._concat_by_axis + 2)
+                else:
+                    return cat([dat[item] for dat in self._basedata])
             else:
                 self._logger.debug("Performing type-cast for item {}.".format(item))
-                return cat([dat[item].type_as(self._basedata[0][item]) for dat in self._basedata])
+                if self._concat_by_axis >= 0:
+                    cat([dat[item].type_as(self._basedata[0][item]) for dat in self._basedata],
+                        dim=self._concat_by_axis)
+                else:
+                    return cat([dat[item].type_as(self._basedata[0][item]) for dat in self._basedata])
