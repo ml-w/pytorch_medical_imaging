@@ -1,9 +1,9 @@
-from .PMIImageDataLoader import PMIImageDataLoader
+from .PMIImageFeaturePair import PMIImageFeaturePair
 from .. import med_img_dataset
 
 __all__ = ['PMIImageMCFeaturePair']
 
-class PMIImageMCFeaturePair(PMIImageDataLoader):
+class PMIImageMCFeaturePair(PMIImageFeaturePair):
     """
     This class load :class:`ImageDataMultiChannel` related image data together with features written in a csv file.
 
@@ -21,6 +21,8 @@ class PMIImageMCFeaturePair(PMIImageDataLoader):
             If `_augmentation` > 0, :class:`ImageDataSetAugment` will be used instead.
         load_by_slice (int):
             If `_load_by_slice` > -1, images volumes are loaded slice by slice along the axis specified.
+        concat_by_axis (int):
+            If `concat_by_axis` > -1, images volume are concatenated at the specified axis instead of by channels.
 
     Args:
         *args: Please see parent class.
@@ -74,33 +76,11 @@ class PMIImageMCFeaturePair(PMIImageDataLoader):
         # default reader func
         self._image_class = med_img_dataset.ImageDataMultiChannel
 
+        concat_by_axis = self.get_from_loader_params_with_eval('concat_by_axis', -1)
         return self._image_class(root_dir, channel_subdirs=self._channel_subdirs, verbose=self._verbose,
                                  debugmode=self._debug, filtermode='both', regex=self._regex, idlist=self._idlist,
-                                 loadBySlices=self._load_by_slices, aug_factor=self._augmentation, **kwargs)
-
-    def _load_data_set_training(self):
-        """
-        Load :class:`ImageDataSet` or :class:`ImageDataSetAugment for network input.
-        Load :class:`DataLabel` as target.
-
-        Returns:
-            (tuple) -> (:class:`ImageDataSet` or :class:`ImageDataSetAugment`, :class:`DataLabel`)
-
-        """
-        img_out = self._read_image(self._input_dir)
-
-        if not self.get_from_config('excel_sheetname', None) is None:
-            gt_dat = med_img_dataset.DataLabel.from_xlsx(self._target_dir, self.get_from_config('excel_sheetname', None))
-        else:
-            gt_dat = med_img_dataset.DataLabel.from_csv(self._target_dir)
+                                 loadBySlices=self._load_by_slices, aug_factor=self._augmentation,
+                                 concat_by_axis=concat_by_axis, **kwargs)
 
 
-
-        # Load selected columns only
-        if not self.get_from_loader_params('column') is None:
-            self._logger.info("Selecting target column: {}".format(self.get_from_loader_params('column')))
-            gt_dat.set_target_column(self.get_from_loader_params('column'))
-
-        gt_dat.map_to_data(img_out)
-        return img_out, gt_dat
 
