@@ -113,9 +113,9 @@ class PMIImagePatchesLoader(PMIImageDataLoader):
 
         if self._patch_loader_params['compute_textures'] is not None:
             data_cls = ImagePatchLocMMTex
+            self._patch_loader_params['mode'] = self._patch_loader_params.pop('compute_textures')
         else:
             data_cls = ImagePatchesLoader
-            self._patch_loader_params['mode'] = self._patch_loader_params.pop('compute_textures')
 
         # Reqruiements from dataclass, force this to 0 if in inference mode.
         self._patch_loader_params['random_patches'] = 0

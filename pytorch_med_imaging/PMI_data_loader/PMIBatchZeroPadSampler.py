@@ -45,13 +45,16 @@ class PMIBatchZeroPadSampler(DataLoader):
 
         If the column is already tensors, the default collate_fn will be used.
         """
+        # Return as is if batch size is 1
+        if len(batch) == 1:
+            # Give it back the batch dimension
+            return [b.unsqueeze(0) for b in batch[0]]
 
         # Input Example
         # [
         #   [(a1, b1), c1],
         #   [(a2, b2), c2]
         # ]
-
         elem_type = [type(e) for e in batch]
         out = []
         if len(elem_type) > 1:
@@ -96,7 +99,6 @@ class PMIBatchZeroPadSampler(DataLoader):
             self._logger.warning(f"Attribute error measuring the length of target axis {target_axis}")
             return (default_collate(in_list), None) if self._return_ori_len else default_collate(in_list)
 
-        self._logger.debug(f"len(set(ori_len)): {len(set(ori_len))}")
         if len(set(ori_len)) == 1:
             try:
 
