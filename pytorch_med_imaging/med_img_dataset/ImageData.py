@@ -256,7 +256,7 @@ class ImageDataSet(PMIDataBase):
 
             self._logger.debug(f'{self._idlist}')
             tmp_file_dirs = np.array(file_dirs)
-            keep = [id in self._idlist for id in file_ids]
+            keep = [id in self._idlist for id in file_ids] # error near this could be because nothing is grabed
 
             file_dirs = tmp_file_dirs[keep].tolist()
             filtered_away.extend(tmp_file_dirs[np.invert(keep)])
@@ -280,7 +280,15 @@ class ImageDataSet(PMIDataBase):
                     self._logger.error("Error encountered when performing regex filtering.")
                     self._logger.error(tr.extract_tb(tb))
                     self._logger.error([re.match(self._filterargs['regex'], f) is None for f in file_basenames])
-                filtered_away.extend(np.array(file_dirs)[np.invert(keep)].tolist())
+
+                try:
+                    filtered_away.extend(np.array(file_dirs)[np.invert(keep)].tolist())
+                except IndexError:
+                    self._logger.exception("Error when trying to filter by regex.")
+                    self._logger.debug(f"keep: {keep}")
+                    self._logger.debug(f"file_dirs: {file_dirs}")
+                except:
+                    self._logger.exception("Unknown error when trying to filter by regex.")
                 file_dirs = np.array(file_dirs)[keep].tolist()
             else: # else use wild card
                 file_dirs = fnmatch.filter(file_dirs, "*" + self._filterargs['regex'] + "*")
@@ -342,30 +350,63 @@ class ImageDataSet(PMIDataBase):
                 uniquesizes = list(set(allsizes))
                 if not len(uniquesizes) == 1:
                     self._logger.debug("Detected slice sizes: {}".format(uniquesizes))
-                    self._logger.warning("There are more than one slice size, attempting to crop")
+                    self._logger.warning("There are more than one slice size, attempting to pad/crop")
                     majority_size = uniquesizes[np.argmax([allsizes.count(tup) for tup in uniquesizes])]
+                    self._logger.info("Found majority size: {}".format(majority_size))
+
                     # Get all index of image that is not of majority size
                     target = [ss != majority_size for ss in allsizes]
                     target = [i for i, x in enumerate(target) if x]
+                    self._logger.info("Targets that are not of majority size: {}".format(target))
 
                     for t in target:
+                        self._logger.info("Trying to pad/crop {}".format(t))
                         target_dat = self.data[t]
-                        target_size = target_dat.size()
-                        cent = np.array(target_size[-2:]) // 2
-                        corner_index = np.array(cent) - np.array(majority_size) // 2
+                        target_size = np.array(majority_size)
+                        tmp_im_shape = np.array(target_dat.shape)
+                        pad_size_left = (target_size - tmp_im_shape[-2:]) // 2
+                        pad_size_right = target_size - pad_size_left - tmp_im_shape[-2:]
 
                         # Check if majority size is greater than original size.
                         Pad = target_size[-2:] < np.array(majority_size)
 
+                        self._logger.debug("Current size: {}".format(tmp_im_shape))
+                        self._logger.debug("Target size: {}".format(target_size))
+                        self._logger.debug("pad_size_left/right: {},{}".format(pad_size_left,
+                                                                               pad_size_right))
+
+
+                        # Check if majority size is greater than original size.
+                        need_pad = target_size[-2:] > tmp_im_shape[-2:]
+
                         # Crop or pad image to standard size
-                        for dim, (corn, p) in enumerate(zip(corner_index, Pad)):
-                            t_dim = dim + 1 if dim >= self._byslices else dim
+                        for dim, (ps_l, ps_r, p) in enumerate(zip(pad_size_left, pad_size_right, need_pad)):
+                            t_dim = dim # we are only doing H W padding, not Z
                             if not p:
-                                target_dat = target_dat.narrow(int(t_dim), int(corn), int(majority_size[dim]))
+                                self._logger.debug(f"(ps_l={ps_l}, ps_r={ps_r}, t_dim={t_dim}, target_size={target_size}"
+                                                   f"(target_dat.shape={target_dat.shape}")
+                                target_dat = target_dat.narrow(int(t_dim), int(abs(ps_l)), int(target_size[dim]))
                             else:
-                                pa = [abs(int(corn)) if x // 2 == t_dim else 0 for x in range(6)]
-                                target_dat = pad(target_dat, pa, mode='constant', value=0)
-                            self.data[t] = target_dat
+                                pa = [0] * target_dat.ndim * 2
+                                pa[t_dim * 2] = abs(int(ps_l))
+                                pa[t_dim * 2 + 1] = abs(int(ps_r))
+                                self._logger.debug("Padding: {}".format(pa))
+                                # pa = [abs(int(ps_l)) if x // 2 == t_dim else 0 for x in range(6)]
+                                # if len(pa) == 4: (left, right, top, bot)
+                                # if len(pa) == 6: (left, right, top, bot, front, back)
+                                target_dat = pad(target_dat, pa[-4:], mode='constant', value=0)
+
+                        self._logger.debug("Resized {} from {} to {}".format(
+                            self.get_unique_IDs()[t],
+                            allsizes[t],
+                            list(target_dat.shape)
+                        ))
+
+                        # Make sure channel dimension is there
+                        while target_dat.dim() < 4:
+                            target_dat = target_dat.unsqueeze(0)
+                        self.data[t] = target_dat
+
 
 
                 self.data = cat(self.data, dim=self._byslices).transpose(0, self._byslices).unsqueeze(1)
@@ -592,10 +633,8 @@ class ImageDataSet(PMIDataBase):
             out_dim = 4
 
         out = self.data[item]
-        self._logger.debug(f"out.shape:{out.shape}")
         while out.dim() < out_dim:
             out = out.unsqueeze(0)
-        self._logger.debug(f"2out.shape:{out.shape}")
         return out
 
     def __str__(self):
