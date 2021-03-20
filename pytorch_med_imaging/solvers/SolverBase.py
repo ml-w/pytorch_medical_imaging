@@ -299,7 +299,8 @@ class SolverBase(object):
     def _get_params_from_config(self, section, key, default=None, with_eval=False):
         try:
             if with_eval:
-                return eval(self._config[section].get(key, default))
+                out = self._config[section].get(key, default)
+                return eval(out) if isinstance(out,str) else out
             else:
                 return self._config[section].get(key, default)
         except AttributeError:
@@ -312,3 +313,63 @@ class SolverBase(object):
     def _get_params_from_solver_config(self, key, default=None, with_eval=False):
         return self._get_params_from_config('SolverParams', key, default, with_eval)
 
+
+class SolverEarlyStopScheduler(object):
+    def __init__(self, configs):
+        super(SolverEarlyStopScheduler, self).__init__()
+        self._configs = configs
+        self._logger = Logger[__class__.__name__]
+        self._last_loss = 1E-32
+        self._watch = 0
+
+        if self._configs is None:
+            self._warmup = None
+            self._patience = None
+            pass
+        else:
+            _c = self._configs['RunParams'].get('early_stop', {})
+            _c = eval(_c)
+
+            if not isinstance(_c, dict):
+                self._logger.error(f"Wrong early stopping settings, cannot eval into dict. Receive arguments: {_c}")
+                self._logger.warning("Ignoring early stopping options")
+                self._configs = None
+                return
+
+            warmup = _c.get('warmup', None)
+            patience = _c.get('patience', None)
+
+            if warmup is None or patience is None or warmup < 0 or patience < 0:
+                self._logger.warning(f"Wrong ealry stopping settings: {_c}")
+                self._logger.warning("Ignoring early stopping options")
+                self._configs = None
+                return
+
+            self._warmup = warmup
+            self._patience = patience
+
+
+    def step(self,
+             loss: float,
+             epoch: int):
+        r"""
+        Returns 1 if reaching stopping criteria, else 0.
+        """
+        # ignore if there are no configs
+        if self._configs is None:
+            return 0
+        else:
+            if epoch < self._warmup:
+                return 0
+            else:
+                # reset if lass is smaller than last loss
+                if loss < self._last_loss:
+                    self._watch = 0
+                    self._last_loss = loss
+                    return 0
+                else:
+                    self._watch += 1
+
+            # Stop if enough iterations show no decrease
+            if self._watch > self._patience:
+                return 1

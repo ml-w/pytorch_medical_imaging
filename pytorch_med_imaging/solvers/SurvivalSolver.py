@@ -33,6 +33,7 @@ class SurvivalSolver(SolverBase):
         self._grad_iter = grad_iter
         self._censor_value = censor_value
         self._config = config
+        self._logger = Logger[__class__.__name__]
 
         if not self._config is None:
             self._censor_value = self._get_params_from_solver_config('censor_value', 5, True)
@@ -91,12 +92,15 @@ class SurvivalSolver(SolverBase):
                 self._logger.info(f"G: {G}")
 
             # compute C-index
+            censor_vect = (G[:,:-1].cpu().numpy() < self._censor_value).flatten() \
+                          & G[:,-1].cpu().numpy().astype('bool').flatten()
             c_index = self._compute_concordance(net_out.cpu().numpy(),
                                                 G[:,:-1].cpu().numpy(),
-                                                G[:,-1].cpu().numpy())
+                                                censor_vect
+                                                )
 
             val_loss = self._loss_eval(net_out, G)
-            self._logger.debug(f"Validation Result - VAL: {val_loss:.05f} C-index: {c_index:.05f}")
+            self._logger.debug(f"Validation Result - VAL: {val_loss:.05f} VAL C-index: {c_index:.05f}")
             self.plotter_dict['scalars']['Loss/Validation Loss'] = val_loss.cpu().data
             self.plotter_dict['scalars']['Perf/Validation C-index'] = c_index
 
@@ -128,9 +132,11 @@ class SurvivalSolver(SolverBase):
                 self._logger.info(f"G: {G}")
 
             # compute C-index
+            censor_vect = (G[:,:-1].cpu().numpy() < self._censor_value).flatten() \
+                          & G[:,-1].cpu().numpy().astype('bool').flatten()
             c_index = self._compute_concordance(net_out.cpu().numpy(),
                                                 G[:,:-1].cpu().numpy(),
-                                                G[:,-1].cpu().numpy())
+                                                censor_vect)
 
             self._logger.debug(f"Training C-index: {c_index:.05f}")
             self.plotter_dict['scalars']['Perf/Training C-index'] = c_index
@@ -231,7 +237,7 @@ class SurvivalSolver(SolverBase):
         self.decay_optimizer(epoch_loss)
 
     @staticmethod
-    def _compute_concordance(risk, event_time, censor_thres, event_status):
+    def _compute_concordance(risk, event_time, censor_vect):
         r"""
         Compute the concordance index. Assume no ties.
 
@@ -243,8 +249,9 @@ class SurvivalSolver(SolverBase):
         # convert everything to numpy
         risk, event_time = [np.asarray(x) for x in [risk, event_time]]
 
-        # censoring
-        censor_vect = (event_time < censor_thres) & event_status
+        # Logger[__class__.__name__].error(f"risk: {risk.shape}")
+        # Logger[__class__.__name__].error(f"censor: {censor_vect.shape}")
+        # Logger[__class__.__name__].error(f"eventime: {event_time.shape}")
 
         top = bot = 0
         for i in range(len(risk)):
@@ -267,4 +274,5 @@ class SurvivalSolver(SolverBase):
             c_index = 0
 
         return np.clip(c_index, 0, 1)
+
 
