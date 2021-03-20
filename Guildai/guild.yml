@@ -86,7 +86,8 @@ train_survival:
         loss/validation_loss: 'VAL: (\value)'
         step: 'Epoch (\step)'
         step_lr: 'LR: (\value)'
-        perf/validation_c-index: 'Training C-index: (\value)'
+        perf/validation_c-index: 'VAL C-index: (\value)'
+        perf/training_c-index: 'Training C-index: (\value)'
     sourcecode:
         root: ../
         select:
