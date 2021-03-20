@@ -93,9 +93,9 @@ class Logger(object):
     def debug(self, msg):
         self.log_print_tqdm(msg, level=logging.DEBUG)
 
-    def warning(self, msg, no_repeat=False):
+    def warning(self, msg: str, no_repeat=False):
         if no_repeat:
-            h = hashlib.md5(msg)
+            h = hashlib.md5(msg.encode('utf-8')).hexdigest()
             if not h in self._warning_hash:
                 self.log_print_tqdm(msg, level=logging.WARNING)
                 self.log_print_tqdm("Warning message won't be shown again in this run",
