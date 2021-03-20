@@ -99,8 +99,16 @@ class MDSN(nn.Module):
         self.out_features = features
 
         self.classifier = nn.Sequential()
-        self.classifier.add_module('fc_out', nn.Linear(features, out_ch))
+        self.classifier.add_module('fc_out', nn.Linear(features, out_ch, bias=False))
 
+        for m in self.modules():
+            if isinstance(m, nn.Conv3d):
+                nn.init.kaiming_normal_(m.weight)
+            elif isinstance(m, nn.BatchNorm3d):
+                nn.init.constant_(m.weight, 1)
+                nn.init.constant_(m.bias, 0)
+            elif isinstance(m, nn.Linear):
+               nn.init.kaiming_uniform_(m.weight)
 
     def forward(self, x):
         x = self.in_conv(x)
@@ -109,6 +117,9 @@ class MDSN(nn.Module):
         x = self.dense_blocks(x)
 
         # Global average poolying
-        x = F.adaptive_max_pool3d(x, (1, 1, 1)).squeeze()
+        x = F.adaptive_avg_pool3d(x, (1, 1, 1)).squeeze()
         x = self.classifier(x)
+
+        # Make value always positive and between 0-10
+        x = torch.sigmoid(x) * 10.
         return x
