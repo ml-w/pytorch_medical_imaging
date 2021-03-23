@@ -140,6 +140,73 @@ class WeightedCoxNLL(nn.Module):
         cox = - log_l.sum() / N
         return cox
 
+class TimeDependentCoxNLL(nn.Module):
+    def __init__(self, censoring: float = -1):
+        r"""
+
+        Args:
+            cencering (float):
+                The value which would be censored if the even time >= it.
+        """
+        super(TimeDependentCoxNLL, self).__init__()
+        self.censoring = censoring
+        self._eps = 1E-7
+        self._L1_regularizer_coef = 0.2
+        self._L2_regularizer_coef = 0.04
+
+
+    def forward(self,
+                pred: torch.FloatTensor,
+                ytime: torch.FloatTensor,
+                event_status: torch.BoolTensor = None):
+        r"""
+        Cox harzard. Assumes no ties.
+
+        We don't want the predition to have a value that is too large, thus the L1 and L2 regularizers.
+
+        .. math::
+            $h_i(t) = h_{i(0)} + h_{i(1)}t + h_{i(2)}/t
+
+            $\sum_{i}^{N} D_i $
+
+        D_i is the censoring status of i-th individual (1 if event happened, 0 otherwise)
+        R_i is the set in which they survived until event-time of i-th individual
+        h_j is the network output (`pred`)
+
+        Args:
+            pred (torch.Tensor):
+            ytime (torch.Tensor):
+            event_status (torch.Tensor):
+                Censor if even did not occur. 0 if censored, 1 if not censored.
+        """
+        if event_status is None:
+            # Assume all experienced event if not specified
+            event_status = torch.ones_like(pred).bool()
+        event_status = event_status.bool()
+
+        # sort according to ytime
+               # sort according to ytime
+        _, idx = ytime.sort(0)
+        sorted_ytime = ytime.gather(0, idx)
+        sorted_event = event_status.view_as(ytime).gather(0, idx)
+        sorted_pred = pred.gather(0, idx)
+        sorted_pred = sorted_pred[:,0] + sorted_pred[:,1] * sorted_ytime + sorted_pred[:,2] / (sorted_ytime + self._eps)
+        sorted_exp_pred = torch.exp(sorted_pred)
+
+        # flip it so cumsum sums from the back to the front
+        cumsum_exp_pred = torch.flip(torch.flip(sorted_exp_pred, [1, 0]).cumsum(0), [1, 0])
+
+        # censoring to follow up years
+        censoring_vect = (sorted_ytime < self.censoring) & sorted_event
+
+        sum_log_exp = torch.log(cumsum_exp_pred)
+        log_l = sorted_pred - sum_log_exp
+        log_l = log_l.mul(censoring_vect)
+
+        N = censoring_vect.bool().float().sum()
+        cox = - log_l.sum() / N
+        return cox
+
 class PyCoxLoss(nn.Module):
     def __init__(self, censoring: float = -1):
         super(PyCoxLoss, self).__init__()

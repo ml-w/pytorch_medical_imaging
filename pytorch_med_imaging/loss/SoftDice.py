@@ -1,6 +1,8 @@
 import torch
 import torch.nn as nn
 
+__all__ = ['SoftDiceLoss']
+
 class SoftDiceLoss(nn.Module):
     r"""
     This function calculates the multi-class soft dice of the input. Implementation follows the reference [1]_.

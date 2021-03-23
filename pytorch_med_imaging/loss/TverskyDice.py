@@ -2,6 +2,8 @@ import torch
 import torch.nn as nn
 from pytorch_med_imaging.logger import Logger
 
+__all__ = ['TverskyDiceLoss']
+
 class TverskyDiceLoss(nn.Module):
     def __init__(self, with_sigmoid=True, gamma=1, reduction='mean', weight=(0.5, 0.5)):
         super(TverskyDiceLoss, self).__init__()
