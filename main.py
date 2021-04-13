@@ -415,7 +415,14 @@ def main(a, config, logger):
             inferencer.grad_cam_write_out(['att2'])
         else:
             with torch.no_grad():
-                inferencer.write_out()
+                if a.inference_all_checkpoints:
+                    try:
+                        inferencer.write_out_allcps()
+                    except AttributeError:
+                        logger.warning("Falling back to normal inference.")
+                        inferencer.write_out()
+                else:
+                    inferencer.write_out()
 
         # Output summary of results if implemented
         if not hasattr(inferencer, 'display_summary'):
@@ -442,6 +449,8 @@ if __name__ == '__main__':
                         help="Set this to override number of epoch when loading config.")
     parser.add_argument("-l", "--lr", dest='lr', type=float, default=None,
                         help="Set this to override learning rate.")
+    parser.add_argument("--all-checkpoints", dest='inference_all_checkpoints', action='store_true',
+                        help="Set this to inference all checkpoints.")
     parser.add_argument("--log-level", dest='log_level', type=str, choices=('debug', 'info', 'warning','error'),
                         default='info', help="Set log-level of the logger.")
     parser.add_argument('--debug', dest='debug', action='store_true', default=None,
@@ -471,7 +480,7 @@ if __name__ == '__main__':
             else:
                 mo_dict = mo.groupdict()
                 _section, _key, _val = [mo_dict[k] for k in ['section', 'key', 'value']]
-                print(_section,_key,_val)
+                pre_log_message.append(f"Overrided: ({_section},{_key})={_val}")
                 if not _section in config:
                     config.add_section(_section)
                 config.set(_section, _key, _val)
