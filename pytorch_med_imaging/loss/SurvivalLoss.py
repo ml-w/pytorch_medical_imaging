@@ -2,7 +2,7 @@ import torch
 import torch.nn as nn
 from ..logger import Logger
 
-__all__ = ['CoxNLL', 'PyCoxLoss', 'WeightedCoxNLL', 'TimeDependentCoxNLL']
+__all__ = ['CoxNLL', 'PyCoxLoss', 'WeightedCoxBCE', 'TimeDependentCoxNLL']
 
 class CoxNLL(nn.Module):
     def __init__(self, censoring: float = -1):
@@ -84,14 +84,27 @@ class CoxNLL(nn.Module):
                                     f"\n{log_l.flatten()}\n{N}")
         return cox
 
-class WeightedCoxNLL(nn.Module):
-    def __init__(self, censoring: float = -1):
+class WeightedCoxBCE(nn.Module):
+    def __init__(self,
+                 t_range: torch.FloatTensor or float,
+                 h_range: torch.FloatTensor or float,
+                 w_cox: float,
+                 w_rmsdT: float,
+                 w_bce: float,
+                 bce_class_weight: torch.FloatTensor = None
+                 ):
         r"""
-        Cox harzard. Assumes no ties.
+        Cox loss with hazard inversely proportional
 
         .. math::
 
-             $-\sum_{i}^{N} D_i \left\{ h_i - \ln \left[ \sum_{j\in R_i} \frac{T_j}{T_i} \exp(h_j) \right] \right\}$
+             $$
+             \begin{equation}
+               L(h;T,D) = -\frac{1}{N} \sum_i^N \left\{ \alpha \left[ h_i - \ln \sum_{j\in R(T_i)}  \exp{(h_j)}\right]
+               + \beta\left| \frac{h_{\text{range}}-h_i}{h_{\text{range}}} - \frac{T_i'}{T_{\text{range}}}\right|  \right\}
+               - \frac{\gamma}{N} \sum_i^N H_{\text{bce}}(h_i/h_{\text{range}},D_i)
+             \end{equation}
+             $$
 
         D_i is the censoring status of i-th individual (1 if event happened, 0 otherwise)
         R_i is the set in which they survived until event-time of i-th individual
@@ -99,13 +112,27 @@ class WeightedCoxNLL(nn.Module):
         T_i is the event time of i-th individual
 
         Args:
-            pred (torch.Tensor):
-            ytime (torch.Tensor):
-            event_status (torch.Tensor):
-                Censor if even did not occur. 0 if censored, 1 if not censored.
+            t_range (torch.FloatTensor or float):
+                Range of event time.
+            h_range (torch.FloatTensor or float):
+                Range of risks.
+            w_cox (torch.FloatTensor or float):
+                Weight of the cox loss
+            w_rmsdT (torch.FloatTensor or float):
+                Weight of the root-mean-square ratio loss.
+            w_bce (torch.FloatTensor or float):
+                Weight of the BCE loss.
+            bce_class_weight (torch.FloatTensor):
+                Class positive weight in the BCE loss.
         """
-        super(WeightedCoxNLL, self).__init__()
-        self.censoring = censoring
+        super(WeightedCoxBCE, self).__init__()
+
+        self.register_buffer('t_range', torch.as_tensor(t_range, dtype=torch.float).flatten())
+        self.register_buffer('h_range', torch.as_tensor(h_range, dtype=torch.float).flatten())
+        self.register_buffer('w_cox', torch.as_tensor(w_cox, dtype=torch.float).flatten())
+        self.register_buffer('w_rmsdT', torch.as_tensor(w_rmsdT, dtype=torch.float).flatten())
+        self.register_buffer('w_bce', torch.as_tensor(w_bce, dtype=torch.float).flatten())
+        self.bce = nn.BCEWithLogitsLoss(pos_weight=bce_class_weight)
         self._epx = 1E-7
 
     def forward(self,
@@ -120,39 +147,53 @@ class WeightedCoxNLL(nn.Module):
             event_status = torch.ones_like(pred).bool()
         event_status = event_status.bool()
 
+        #======================
+        # Cox NLL
+        #----------------------
         # sort according to ytime
-        _, idx = ytime.sort(0)
+        _, idx = ytime.sort(0, descending=True)
         sorted_ytime = ytime.gather(0, idx)
         sorted_event = event_status.view_as(ytime).gather(0, idx)
         sorted_pred = pred.gather(0, idx)
-        sorted_exp_pred = torch.exp(sorted_pred)
-
-        # Compute weights
-        sorted_invers_ytime = torch.ones_like(sorted_ytime) / sorted_ytime
-        weight_mat = sorted_invers_ytime.mm(sorted_ytime.T)
-        weight_mat = torch.tril(weight_mat.T, diagonal=-1).T
-        sorted_exp_pred = sorted_exp_pred.expand_as(weight_mat).T
-
-        weighted_exp_pred = weight_mat.mul(sorted_exp_pred)
-        # weighted_exp_pred = sorted_exp_pred.T
-
-        # flip it so cumsum sums from the back to the front
-        sum_exp_pred = weighted_exp_pred.sum(dim=1).view_as(sorted_pred)
 
         # censoring to follow up years
-        censoring_vect = (sorted_ytime < self.censoring) & sorted_event
+        if self.t_range > 0:
+            censoring_vect = (sorted_ytime < self.t_range) & sorted_event
+        else:
+            censoring_vect = sorted_event
 
-        sum_log_exp = torch.log(sum_exp_pred)
+        # flip it so cumsum sums from the back to the front, gamma provide numerical stability
+        gamma = pred.max()
+        sorted_exp_pred = torch.exp(sorted_pred - gamma)
+        cumsum_exp_pred = sorted_exp_pred.cumsum(0)
+
+        sum_log_exp = torch.log(cumsum_exp_pred) + gamma
         log_l = sorted_pred - sum_log_exp
-        log_l = log_l.mul(censoring_vect.view_as(log_l))[:-1]  # Discard the last element bcos it should be zero
-
+        log_l = log_l.mul(censoring_vect)
         N = censoring_vect.bool().float().sum()
         cox = - log_l.sum() / N
+        cox = self.w_cox * cox
+
         if torch.isnan(cox):
             Logger['CoxLoss'].warning("Got nan")
-            Logger['CoxLoss'].error(f"{pred}\n{sum_log_exp.flatten()}"
+            Logger['CoxLoss'].error(f"{pred}\n"
+                                    f"{gamma.flatten()}\n{cumsum_exp_pred.flatten()}\n{sum_log_exp.flatten()}"
                                     f"\n{log_l.flatten()}\n{N}")
-        return cox
+
+        #======================
+        # RMS ratio loss
+        #----------------------
+        ratio_h = (1 - sorted_pred) / self.h_range
+        ratio_t = sorted_ytime / self.t_range
+        ratio_t[~censoring_vect] = 1.
+        diff_ratio = torch.nn.functional.l1_loss(ratio_h, ratio_t)
+        rms_loss = self.w_rmsdT * diff_ratio
+
+        #======================
+        # BCE Loss
+        #----------------------
+        bce_l = self.w_bce * self.bce(sorted_pred, censoring_vect.float())
+        return cox + rms_loss + bce_l
 
 class TimeDependentCoxNLL(nn.Module):
     def __init__(self, censoring: float = -1):
