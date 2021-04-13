@@ -32,6 +32,10 @@ class PMIDataFactory(object):
         """
         requested_datatype = config['LoaderParams']['PMI_datatype_name']
         run_mode = config['General'].get('run_mode', 'training')
+        # Force loading training data
+        force_train_data = config['General'].get('force_train_data', False)
+        if force_train_data:
+            run_mode = 'training'
         debug = config['General'].getboolean('debug', False)
         self._logger.log_print_tqdm("Creating object: {}".format(requested_datatype))
 
