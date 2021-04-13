@@ -64,6 +64,7 @@ def GenerateTestBatch(ids, k_fold, outdir, prefix="Batch_", exclude_list=None, s
             classes = list(set(stratification_class))
             classes_prob = {c: stratification_class.count(c) / float(len(ids)) for c in classes}
             p = [classes_prob[s] / float(stratification_class.count(s)) for s in stratification_class]
+            print(len(p), len(ids))
             validation_ids = random.choice(ids, size=validation, p=p, replace=False)
 
 
@@ -190,18 +191,18 @@ def check_batches_files(dir, globber=None):
 
 if __name__ == '__main__':
     import pandas as pd
-    allids = open('../../NPC_Segmentation/99.Testing/Survival_analysis/all_case.txt').readlines()[0].rstrip().split(',')
+    allids = [r.rstrip() for r in open('../../NPC_Segmentation/99.Testing/Survival_analysis/chemo_only.txt').readlines()]
     datasheet = pd.read_csv('../../NPC_Segmentation/50.NPC_SurvivalAnalysis/survival_analysis_data_table.csv',
                             index_col=0)
     datasheet.index = datasheet.index.astype(str)
-    relasped = datasheet.apply(sum, axis=1)[allids]
-    relasped = (relasped > 0).astype('int').to_list()
+    datasheet=datasheet.loc[allids]
+    dfs = (datasheet['DFS']*12).astype('int').to_list()
 
     GenerateTestBatch(allids,
                       5,
-                      '../../NPC_Segmentation/99.Testing/KFold_Survival_5_Folds/',
-                      stratification_class=relasped,
-                      validation=29,
+                      '../../NPC_Segmentation/99.Testing/Survival_5Fold_Chemo_only_stratified_DFS/',
+                      stratification_class=dfs,
+                      validation=36,
                       prefix='B'
                       )
 

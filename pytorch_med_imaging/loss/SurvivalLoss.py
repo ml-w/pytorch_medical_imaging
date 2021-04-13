@@ -1,7 +1,8 @@
 import torch
 import torch.nn as nn
+from ..logger import Logger
 
-__all__ = ['CoxNLL', 'PyCoxLoss', 'WeightedCoxNLL']
+__all__ = ['CoxNLL', 'PyCoxLoss', 'WeightedCoxNLL', 'TimeDependentCoxNLL']
 
 class CoxNLL(nn.Module):
     def __init__(self, censoring: float = -1):
@@ -39,7 +40,7 @@ class CoxNLL(nn.Module):
              $\sum_{i}^{N} D_i \left\{ h_i - \ln \left[ \sum_{j\in R_i} \exp(h_j) \right] \right\}$
 
         D_i is the censoring status of i-th individual (1 if event happened, 0 otherwise)
-        R_i is the set in which they survived until event-time of i-th individual
+        R_i is the set in which they survived until event-time of i-th individual, including the i-th.
         h_j is the network output (`pred`)
 
         Args:
@@ -54,24 +55,33 @@ class CoxNLL(nn.Module):
         event_status = event_status.bool()
 
         # sort according to ytime
-        _, idx = ytime.sort(0)
+        _, idx = ytime.sort(0, descending=True)
         sorted_ytime = ytime.gather(0, idx)
         sorted_event = event_status.view_as(ytime).gather(0, idx)
         sorted_pred = pred.gather(0, idx)
-        sorted_exp_pred = torch.exp(sorted_pred)
-
-        # flip it so cumsum sums from the back to the front
-        cumsum_exp_pred = torch.flip(torch.flip(sorted_exp_pred, [1, 0]).cumsum(0), [1, 0])
 
         # censoring to follow up years
-        censoring_vect = (sorted_ytime < self.censoring) & sorted_event
+        if self.censoring > 0:
+            censoring_vect = (sorted_ytime < self.censoring) & sorted_event
+        else:
+            censoring_vect = sorted_event
 
-        sum_log_exp = torch.log(cumsum_exp_pred)
+        # flip it so cumsum sums from the back to the front, gamma provide numerical stability
+        gamma = pred.max()
+        sorted_exp_pred = torch.exp(sorted_pred - gamma)
+        cumsum_exp_pred = sorted_exp_pred.cumsum(0)
+
+        sum_log_exp = torch.log(cumsum_exp_pred) + gamma
         log_l = sorted_pred - sum_log_exp
         log_l = log_l.mul(censoring_vect)
-
         N = censoring_vect.bool().float().sum()
         cox = - log_l.sum() / N
+
+        if torch.isnan(cox):
+            Logger['CoxLoss'].warning("Got nan")
+            Logger['CoxLoss'].error(f"{pred}\n"
+                                    f"{gamma.flatten()}\n{cumsum_exp_pred.flatten()}\n{sum_log_exp.flatten()}"
+                                    f"\n{log_l.flatten()}\n{N}")
         return cox
 
 class WeightedCoxNLL(nn.Module):
@@ -138,6 +148,10 @@ class WeightedCoxNLL(nn.Module):
 
         N = censoring_vect.bool().float().sum()
         cox = - log_l.sum() / N
+        if torch.isnan(cox):
+            Logger['CoxLoss'].warning("Got nan")
+            Logger['CoxLoss'].error(f"{pred}\n{sum_log_exp.flatten()}"
+                                    f"\n{log_l.flatten()}\n{N}")
         return cox
 
 class TimeDependentCoxNLL(nn.Module):
@@ -181,30 +195,39 @@ class TimeDependentCoxNLL(nn.Module):
         """
         if event_status is None:
             # Assume all experienced event if not specified
-            event_status = torch.ones_like(pred).bool()
+            event_status = torch.ones_like(ytime).bool()
         event_status = event_status.bool()
 
         # sort according to ytime
                # sort according to ytime
-        _, idx = ytime.sort(0)
+        _, idx = ytime.sort(0, descending=True)
         sorted_ytime = ytime.gather(0, idx)
         sorted_event = event_status.view_as(ytime).gather(0, idx)
-        sorted_pred = pred.gather(0, idx)
-        sorted_pred = sorted_pred[:,0] + sorted_pred[:,1] * sorted_ytime + sorted_pred[:,2] / (sorted_ytime + self._eps)
-        sorted_exp_pred = torch.exp(sorted_pred)
-
-        # flip it so cumsum sums from the back to the front
-        cumsum_exp_pred = torch.flip(torch.flip(sorted_exp_pred, [1, 0]).cumsum(0), [1, 0])
+        vec_pred = pred[:, 0] + pred[:, 1] * ytime + pred[:, 2] / (sorted_ytime + self._eps)
+        sorted_pred = vec_pred.gather(0, idx)
 
         # censoring to follow up years
-        censoring_vect = (sorted_ytime < self.censoring) & sorted_event
+        if self.censoring > 0:
+            censoring_vect = (sorted_ytime < self.censoring) & sorted_event
+        else:
+            censoring_vect = sorted_event
 
-        sum_log_exp = torch.log(cumsum_exp_pred)
+        # flip it so cumsum sums from the back to the front, gamma provide numerical stability
+        gamma = pred.max()
+        sorted_exp_pred = torch.exp(sorted_pred - gamma)
+        cumsum_exp_pred = sorted_exp_pred.cumsum(0)
+
+        sum_log_exp = torch.log(cumsum_exp_pred) + gamma
         log_l = sorted_pred - sum_log_exp
         log_l = log_l.mul(censoring_vect)
-
         N = censoring_vect.bool().float().sum()
         cox = - log_l.sum() / N
+        if torch.isnan(cox):
+            Logger['CoxLoss'].warning("Got nan")
+            Logger['CoxLoss'].error(f"{pred}\n{vec_pred.flatten()}\n"
+                                    f"{gamma.flatten()}\n{cumsum_exp_pred.flatten()}\n{sum_log_exp.flatten()}"
+                                    f"\n{log_l.flatten()}\n{N}")
+
         return cox
 
 class PyCoxLoss(nn.Module):

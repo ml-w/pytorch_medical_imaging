@@ -232,7 +232,7 @@ class AttentionResidualNet_64(nn.Module):
         super(AttentionResidualNet_64, self).__init__()
 
         self.save_weight=save_weight
-        self.in_conv1 = Conv3d(in_ch, 64, stride=[1, 2, 2], padding=[1, 2, 2])
+        self.in_conv1 = Conv3d(in_ch, 64, stride=[1, 2, 2], padding=[1, 1, 1])
         self.in_sw = Conv3d(64, 20)
         self.x_w = None
 
@@ -344,7 +344,7 @@ class AttentionResidualNet_SW(nn.Module):
         self.in_conv1 = Conv3d(in_ch, 64, stride=[1, 2, 2], padding=[1, 2, 2])
         self.in_sw = nn.Sequential(
             Conv3d(64, 128, stride=[1, 2, 2], kern_size=2),
-            Conv3d(128, 20, stride=[1,3,3], kern_size=3),
+            Conv3d(128, 20, stride=[1, 3, 3], kern_size=3),
         )
         self.x_w = None
 
@@ -355,6 +355,7 @@ class AttentionResidualNet_SW(nn.Module):
         self.r1 = ResidualBlock3d(256, 512, p=0.3)
         self.att2 = AttentionModule_Modified(512, 512, save_mask=save_mask)
         self.r2 = ResidualBlock3d(512, 1024, p=0.3)
+        self.att3 = AttentionModule_Modified(1024, 1024, save_mask=save_mask)
         self.out_conv1 = ResidualBlock3d(1024, 2048, p=0.3)
         self.out_linear = nn.Linear(20, 1)
 

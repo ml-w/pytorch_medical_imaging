@@ -121,5 +121,5 @@ class MDSN(nn.Module):
         x = self.classifier(x)
 
         # Make value always positive and between 0-10
-        x = torch.sigmoid(x) * 10.
+        x = torch.sigmoid(x)
         return x

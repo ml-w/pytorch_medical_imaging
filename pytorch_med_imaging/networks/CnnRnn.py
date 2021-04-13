@@ -2,7 +2,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from .layers import PermuteTensor, DoubleConv1d, DoubleConv3d, BGRUCell, BGRUStack, StandardFC2d
-from .DenseNet import DenseNet3d
+from .DenseNet import DenseEncoder25d
 import math
 
 __all__ = ['CNNGRU', 'CNNGRU_FCA', 'BadhanauAttention', 'DenseGRU']
@@ -311,8 +311,12 @@ class DenseGRU(nn.Module):
         self._out_ch = out_ch
         self._embedding_size = embedding_size
 
-        _dense = DenseNet3d(in_ch, out_ch, init_conv_features = first_conv_out_ch,
-                            k = dense_growth_rate, block_config = dense_block_config, embedding_size = embedding_size) # Use default setting for other params.
+        _dense = DenseEncoder25d(in_ch,
+                                 init_conv_features = first_conv_out_ch,
+                                 k = dense_growth_rate,
+                                 block_config = dense_block_config,
+                                 embedding_size = embedding_size
+                                 ) # Use default setting for other params.
 
         self._encoder = nn.Sequential(
             _dense.inconv,
@@ -467,3 +471,5 @@ class BadhanauAttention(nn.Module):
         # print(context_vect.shape)
         context_vect = context_vect.sum(dim=self._reduce_dim)
         return context_vect, attention_weights
+
+
