@@ -31,7 +31,7 @@ class InferencerBase(object):
         self._iscuda            = inferencer_configs['iscuda']
         self._outdir            = inferencer_configs['outdir']
         self._config            = inferencer_configs['config']
-        assert os.path.isfile(self._net_state_dict), "Cannot open network checkpoint!"
+        assert os.path.isfile(self._net_state_dict), f"Cannot open network checkpoint at {self._net_state_dict}"
 
         # optional
         self._logger = inferencer_configs.get('Logger', None)

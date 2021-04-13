@@ -99,7 +99,7 @@ class SurvivalInferencer(InferencerBase):
 
     def _writter(self, out_tensor):
         survival_table = {}
-        survival_harzard = out_tensor
+        survival_hazard = out_tensor
 
         # prepare output directories
         if os.path.isdir(self._outdir):
@@ -115,12 +115,12 @@ class SurvivalInferencer(InferencerBase):
         try:
             if isinstance(self._in_dataset, torch.utils.data.TensorDataset):
                 survival_table['IDs'] = self._in_dataset.tensors[0].get_unique_IDs()
-            elif isinstance(self._in_dataset, PMIDataBase.PMIDataBase):
+            elif isinstance(self._in_dataset, PMIDataBase):
                 survival_table['IDs'] = self._in_dataset.get_unique_IDs()
         except:
             self._logger.exception("Could not get ID of data!")
             self._logger.warning("Falling back.")
-        survival_table['Harzard'] = survival_harzard.tolist()
+        survival_table['Hazard'] = survival_hazard.tolist()
         dl = DataLabel.from_dict(survival_table)
 
         # extract survival information if it exists
@@ -137,6 +137,38 @@ class SurvivalInferencer(InferencerBase):
         dl.write(self._outdir)
         return dl
 
+
+    def write_out_allcps(self):
+        r"""
+        This load all checkpoints in the specified directory and record results and performance
+        """
+        import fnmatch
+        import pandas as pd
+        # Look for other checkpoints
+        cp_dir = os.path.dirname(self._net_state_dict)
+        all_cps = fnmatch.filter(os.listdir(cp_dir), "*.pt")
+        all_cps.sort()
+
+        rows = pd.DataFrame()
+        for cps in tqdm(all_cps, position=1):
+            self._logger.info(f"Inferencing on f{cps}")
+            try:
+                self._net.load_state_dict(torch.load(os.path.join(cp_dir, cps)))
+            except FileNotFoundError:
+                self._logger.warning(f"Cannot found file f{cps}.Skipping")
+                continue
+            except:
+                self._logger.warning(f"Error when loading checkpoint from f{cps}. Skipping")
+                continue
+
+            # display summary look at self._results
+            self._outdir = os.path.join(os.path.dirname(self._outdir), cps.replace('.pt', '.csv'))
+            self.write_out()
+            s = self.display_summary()
+            rows = rows.append(pd.DataFrame([[cps, s]], columns=['Checkpoint', 'C-index']))
+        rows.to_csv(os.path.join(os.path.dirname(self._outdir), 'AllCheckpoints.csv'))
+
+
     def display_summary(self):
         """
         This uses the C-index to measure the performance, last colume is treated as the censoring index
@@ -145,13 +177,14 @@ class SurvivalInferencer(InferencerBase):
 
         summary = {}
         for col in dl.columns[:-1]:
-            if col == 'Harzard' or col == 'IDs':
+            if col == 'Hazard' or col == 'IDs':
                 continue
-            C = self._compute_concordance(dl['Harzard'], dl[col], (dl[col] < self._censor_value) & dl[dl.columns[-1]])
+            C = self._compute_concordance(dl['Hazard'], dl[col], (dl[col] < self._censor_value) & dl[dl.columns[-1]])
             summary[col] = C
         self._logger.info("-" * 40 + " Summary " + "-" * 40)
         for key in summary:
             self._logger.info(f"{key} - C-index: {summary[key]}")
+        return summary[key]
 
 
     @staticmethod
