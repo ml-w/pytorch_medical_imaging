@@ -8,7 +8,7 @@ import gc
 
 from torch import optim
 from torch.utils import checkpoint
-from ..loss import CoxNLL
+from ..loss import CoxNLL, TimeDependentCoxNLL
 
 import tqdm.auto as auto
 
@@ -182,12 +182,21 @@ class SurvivalSolver(SolverBase):
     def step(self, *args):
         out, g = self._feed_forward(*args)
         loss = self._loss_eval(out, g)
-        self._optimizer.zero_grad()
-        loss.backward()
-        self._optimizer.step()
 
-        self._called_time += 1
-        return out, loss.cpu().data
+        # Loss might be nan
+        if torch.isnan(loss):
+            self._logger.warning("Loss was nan, skipping iteration.")
+            self._optimizer.zero_grad()
+            loss.backward()
+            self._called_time += 1
+            return out, loss.cpu().data
+        else:
+            self._optimizer.zero_grad()
+            loss.backward()
+            self._optimizer.step()
+
+            self._called_time += 1
+            return out, loss.cpu().data
 
     def solve_epoch(self, epoch_number):
         """
@@ -219,15 +228,20 @@ class SurvivalSolver(SolverBase):
 
             grad_itered += 1
             # Display epoch results
-            _pairs = zip(out.flatten().data.cpu(), g[:,:-1].flatten().data.cpu())
-            _df = pd.DataFrame(_pairs, columns=['res', 'g'], dtype=float)
+            _g_len = g.shape[1]
+            _res_len = out.shape[1]
+            _cols = [f"res_{i:02d}" for i in range(_res_len)] + [f"g_{i:02d}" for i in range(_g_len)]
+            _pairs = torch.cat([out.data.cpu(), g.data.cpu()], dim=1)
+            _df = pd.DataFrame(_pairs, columns=_cols, dtype=float)
             self._logger.debug('\n' + _df.to_string())
             del _pairs, _df
 
             del s, g, out, loss
             gc.collect()
 
-        epoch_loss = np.array(E).mean()
+        E = np.asarray(E).flatten()
+        E = E[np.isfinite(E)]
+        epoch_loss = E.mean()
         self.plotter_dict['scalars']['Loss/Loss'] = epoch_loss
 
         self._logger.info("Initiating validation.")
