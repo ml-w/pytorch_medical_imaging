@@ -133,7 +133,13 @@ class SolverBase(object):
 
     def set_loss_function(self, func: callable):
         self._logger.debug("loss functioning override.")
-        self._lossfunction = func
+        # Check if its cuda mode
+        is_cuda = self._lossfunction.is_cuda
+        del self._lossfunction
+        if is_cuda:
+            self._lossfunction = func.cuda()
+        else:
+            self._lossfunction = func
 
 
     def step(self, *args):
