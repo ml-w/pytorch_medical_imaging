@@ -157,7 +157,7 @@ class SolverBase(object):
 
         # Extract parameters
         try:
-            _loss_params = self._config['LossParams']
+            _loss_params = dict(self._config['LossParams'])
         except KeyError:
             _loss_params = {}
         except Exception as e:
@@ -165,11 +165,12 @@ class SolverBase(object):
             raise RuntimeError("Can't proceed.")
 
         # Try to eval all of the arguments
-        for keys in _lossfunction:
+        for keys in _loss_params:
             try:
-                _lossfunction[keys] = ast.literal_eval(_lossfunction[keys])
+                _loss_params[keys] = ast.literal_eval(_loss_params[keys])
             except:
-                pass
+                self._logger.exception(f"Failed to eval key: {keys}")
+
 
         # Create loss function accordingly
         if not _lossfunction is None and issubclass(_lossfunction, nn.Module):
