@@ -342,7 +342,7 @@ class DenseSurvGRU(nn.Module):
 
         x = F.adaptive_max_pool1d(x, 1)    # B × C × 1
         x = self._fc0(x.squeeze())         # B × out_ch
-        x = torch.sigmoid(x) * 3. # Harzard should not be negative.x
+        x = torch.sigmoid(x) # Harzard should not be negative.x
 
         while x.dim() < 2:
             x = x.unsqueeze(0)

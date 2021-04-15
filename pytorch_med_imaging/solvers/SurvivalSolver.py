@@ -48,8 +48,7 @@ class SurvivalSolver(SolverBase):
             raise ArithmeticError("Network is not correctly specified in solver.")
 
         # Create optimizer and loss function
-        lossfunction = CoxNLL(self._censor_value)
-        # optimizer = optim.SGD(net.parameters(), lr=param_optim['lr'], momentum=param_optim['momentum'])
+        lossfunction = self.create_lossfunction()
         optimizer = optim.Adam(net.parameters(), lr=param_optim['lr'])
         iscuda = param_iscuda
         if param_iscuda:
@@ -140,9 +139,6 @@ class SurvivalSolver(SolverBase):
 
             self._logger.debug(f"Training C-index: {c_index:.05f}")
             self.plotter_dict['scalars']['Perf/Training C-index'] = c_index
-
-
-
 
     def _feed_forward(self, *args):
         s, g = args
@@ -249,6 +245,18 @@ class SurvivalSolver(SolverBase):
         self.train_set_validation()
         self._epoch_callback()
         self.decay_optimizer(epoch_loss)
+
+    def create_lossfunction(self):
+        r"""
+        Create default loss function for this class.
+        """
+        # Get parameters from config
+        _lossfunction = self._get_params_from_solver_config('loss_func', None)
+        if not _lossfunction is None:
+            return super(SurvivalSolver, self).create_lossfunction()
+        else:
+            return CoxNLL(self._censor_value)
+
 
     @staticmethod
     def _compute_concordance(risk, event_time, censor_vect):

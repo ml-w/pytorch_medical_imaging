@@ -1,13 +1,14 @@
 import torch
 import torch.nn as nn
-import torch.nn.functional as F
-from torch.utils.data import DataLoader, TensorDataset
+
+from ..loss import *
 
 from tqdm import *
 from abc import abstractmethod
 
 import numpy as np
 import gc
+import ast
 from logging import Logger
 
 class SolverBase(object):
@@ -31,18 +32,19 @@ class SolverBase(object):
         super(SolverBase, self).__init__()
 
         # required
-        self._optimizer         = solver_configs['optimizer']
-        self._lossfunction      = solver_configs['lossfunction']
-        self._net               = solver_configs['net']
-        self._iscuda            = solver_configs['iscuda']
+        self._optimizer         = solver_configs.get('optimizer', None)
+        self._lossfunction      = solver_configs.get('lossfunction', None)
+        self._net               = solver_configs.get('net', None)
+        self._iscuda            = solver_configs.get('iscuda', None)
 
         # optional
-        self._logger            = solver_configs['logger'] if 'logger' in solver_configs else \
-                                                                        Logger[self.__class__.__name__]
+        self._logger            = solver_configs.get('logger', None)
+        if self._logger is None:
+            self._logger = Logger[self.__class__.__name__]
 
         # Optimizer
-        self._lr_decay          = solver_configs['lrdecay'] if 'lrdecay' in solver_configs else None
-        self._mom_decay         = solver_configs['momdecay'] if 'momdecay' in solver_configs else None
+        self._lr_decay          = solver_configs.get('lrdecay', None)
+        self._mom_decay         = solver_configs.get('momdecay', None)
         self._lr_decay_func     = lambda epoch: np.exp(-self._lr_decay * epoch)
         self._mom_decay_func    = lambda mom: np.max(0.2, mom * np.exp(-self._mom_decay))
         self._lr_schedular      = None
@@ -62,11 +64,14 @@ class SolverBase(object):
         # external_att
         self.plotter_dict      = {}
 
+        # create loss function if not specified
+        if self._lossfunction is None:
+            self._logger.info("Trying to create loss function.")
+            self.create_lossfunction()
 
         self._logger.info("Solver were configured with options: {}".format(solver_configs))
         if  len(kwargs):
             self._logger.warning("Some solver configs were not used: {}".format(kwargs))
-
 
     def get_net(self):
         if torch.cuda.device_count() > 1:
@@ -141,6 +146,38 @@ class SolverBase(object):
         else:
             self._lossfunction = func
 
+    def create_lossfunction(self, *args, **kwargs):
+        r"""
+        Try to create loss function from parameters specified by the config file.
+        """
+        self._logger.info("Creating loss function from config specification.")
+
+        # Follows the specification in config
+        _lossfunction = eval(self._get_params_from_solver_config('loss_func', None))
+
+        # Extract parameters
+        try:
+            _loss_params = self._config['LossParams']
+        except KeyError:
+            _loss_params = {}
+        except Exception as e:
+            self._logger.exception("Unknown error when creating loss function.")
+            raise RuntimeError("Can't proceed.")
+
+        # Try to eval all of the arguments
+        for keys in _lossfunction:
+            try:
+                _lossfunction[keys] = ast.literal_eval(_lossfunction[keys])
+            except:
+                pass
+
+        # Create loss function accordingly
+        if not _lossfunction is None and issubclass(_lossfunction, nn.Module):
+            self._lossfunction = _lossfunction(**_loss_params)
+            return self._lossfunction
+        else:
+            self._logger.warning(f"Cannot create loss function using: {_lossfunction}")
+            return None
 
     def step(self, *args):
         out = self._feed_forward(*args)
@@ -198,14 +235,12 @@ class SolverBase(object):
         self._epoch_callback()
         self.decay_optimizer(epoch_loss)
 
-
     @abstractmethod
     def validation(self, *args, **kwargs):
         """
         This is called after each epoch.
         """
         raise NotImplementedError("Validation is not implemented in this solver.")
-
 
     def _log_print(self, msg, level=20):
         if not self._logger is None:
@@ -214,7 +249,6 @@ class SolverBase(object):
                 tqdm.write(msg)
             except:
                 tqdm.write(msg)
-
 
     def _match_type_with_network(self, tensor):
         """
@@ -306,7 +340,7 @@ class SolverBase(object):
         try:
             if with_eval:
                 out = self._config[section].get(key, default)
-                return eval(out) if isinstance(out,str) else out
+                return ast.literal_eval(out) if isinstance(out,str) else out
             else:
                 return self._config[section].get(key, default)
         except AttributeError:
