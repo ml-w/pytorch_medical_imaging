@@ -292,7 +292,7 @@ def EVAL(seg, gt, vars):
             continue
         values = []
         for keys in vars:
-            if keys in ['ASD', 'GTV-Target', 'GTV-predict']:
+            if keys in ['ASD', 'GTV-Target', 'GTV-Predict']:
                 values.append(vars[keys](gg, ss, gt.get_spacing(i)))
             else:
                 values.append(vars[keys](TP, FP, TN, FN))

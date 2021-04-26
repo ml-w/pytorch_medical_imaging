@@ -5,6 +5,7 @@ import re
 import multiprocessing as mpi
 from tqdm import *
 import random
+import argparse
 sitk.ProcessObject_GlobalWarningDisplayOff()
 from pytorch_med_imaging.logger import Logger
 logger = Logger('./batch_job.log')
@@ -64,9 +65,9 @@ def dicom2nii(folder, out_dir=None, seq_filters=None):
     folder = os.path.abspath(folder)
     f = folder.replace('\\', '/')
     # matchobj = re.search('NPC[0-9]+', f)
-    matchobj = re.search('(?i)(NPC|P)?[0-9]{3,5}', f)
+    matchobj = re.search('(?i)(NPC|P|RHO|T1rhoNPC)?[0-9]{3,5}', os.path.basename(f))
     # prefix1 = f.split('/')[-2]
-    prefix1 = f[matchobj.start():matchobj.end()]
+    prefix1 = matchobj.group()
 
 
     # Read file
@@ -86,7 +87,7 @@ def dicom2nii(folder, out_dir=None, seq_filters=None):
         headerreader.ReadImageInformation()
         outname = out_dir + '/%s-%s+%s.nii.gz'%(prefix1,
                                               headerreader.GetMetaData('0008|103e').rstrip().replace(' ','_'),
-                                              headerreader.GetMetaData('0020|0011').rstrip()[0])
+                                              headerreader.GetMetaData('0020|0011').rstrip()) # Some series has the same series name, need this to differentiate
 
         if not seq_filters is None:
             if isinstance(seq_filters, list):
@@ -350,8 +351,10 @@ if __name__ == '__main__':
     # folders = RecursiveListDir(5, '../NPC_Segmentation/00.RAW/MMX/840/')
     # batch_dicom2nii(folders, out_dir='../NPC_Segmentation/00.RAW/NIFTI/All')
     # dicom2nii('../NPC_Segmentation/00.RAW/MMX/769/S', '../NPC_Segmentation/00.RAW/NIFTI/MMX')
-    batch_dicom2nii(RecursiveListDir(3, '../NPC_Segmentation/00.RAW/Jun16/779'),
-                    '../NPC_Segmentation/0A.NIFTI_ALL/Malignant_2')
+    # batch_dicom2nii(RecursiveListDir(3, '../NPC_Segmentation/00.RAW/Jun16/779'),
+    #                 '../NPC_Segmentation/0A.NIFTI_ALL/Malignant_2')
+    batch_dicom2nii(RecursiveListDir(3, '../../NPC_Segmentation/00.RAW/extra_20210426/'),
+                    '../../NPC_Segmentation/0A.NIFTI_ALL/Extra')
     # dicom2nii('../NPC_Segmentation/00.RAW/Transfer/Benign/NPC147/Orignial Scan/DICOM', '../NPC_Segmentation/0A.NIFTI_ALL/Benign')
     # main(sys.argv)
     # make_mask_from_dir('../NPC_Segmentation/06.NPC_Perfect/temp_t2/', '../NPC_Segmentation/06.NPC_Perfect/temp_mask')
