@@ -7,7 +7,7 @@ __all__ = ['PMITensorDataset', 'PMIParallelConcatDataset']
 class PMITensorDataset(TensorDataset):
     def __init__(self, *tensors):
         """
-        A :class:`torch.utils.data.Dataset` that doesn't do stupid checks.
+        A :class:`torch.scripts.data.Dataset` that doesn't do stupid checks.
         """
         self.tensors = tensors
 

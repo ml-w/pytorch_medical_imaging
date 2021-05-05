@@ -195,10 +195,6 @@ class ImageDataSet(PMIDataBase):
         if self._filtermode == 'both':
             assert all([ k in self._filterargs for k in ['idlist', 'regex']]), 'No filter arguments.'
 
-    # def log_print(self, msg, level=logging.INFO):
-    #     logging.getLogger('__main__').log(level, msg)
-    #     if self.verbose:
-    #         print(msg)
 
     def _parse_root_dir(self):
         r"""
@@ -391,9 +387,6 @@ class ImageDataSet(PMIDataBase):
                                 pa[t_dim * 2] = abs(int(ps_l))
                                 pa[t_dim * 2 + 1] = abs(int(ps_r))
                                 self._logger.debug("Padding: {}".format(pa))
-                                # pa = [abs(int(ps_l)) if x // 2 == t_dim else 0 for x in range(6)]
-                                # if len(pa) == 4: (left, right, top, bot)
-                                # if len(pa) == 6: (left, right, top, bot, front, back)
                                 target_dat = pad(target_dat, pa[-4:], mode='constant', value=0)
 
                         self._logger.debug("Resized {} from {} to {}".format(
@@ -465,9 +458,6 @@ class ImageDataSet(PMIDataBase):
                                 pa[t_dim * 2] = abs(int(ps_l))
                                 pa[t_dim * 2 + 1] = abs(int(ps_r))
                                 self._logger.debug("Padding: {}".format(pa))
-                                # pa = [abs(int(ps_l)) if x // 2 == t_dim else 0 for x in range(6)]
-                                # if len(pa) == 4: (left, right, top, bot)
-                                # if len(pa) == 6: (left, right, top, bot, front, back)
                                 target_dat = pad(target_dat, pa[-4:], mode='constant', value=0)
 
                         self._logger.debug("Resized {} from {} to {}".format(
@@ -480,10 +470,6 @@ class ImageDataSet(PMIDataBase):
                         while target_dat.dim() < 4:
                             target_dat = target_dat.unsqueeze(0)
                         self.data[t] = target_dat
-
-
-
-
 
 
 

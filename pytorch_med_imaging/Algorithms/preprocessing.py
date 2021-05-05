@@ -82,7 +82,6 @@ def dicom2nii(folder, out_dir=None, seq_filters=None):
 
         # Generate out file name
         headerreader = sitk.ImageFileReader()
-        headerreader.SetFileName(reader.GetFileNames()[0])
         headerreader.LoadPrivateTagsOn()
         headerreader.ReadImageInformation()
         outname = out_dir + '/%s-%s+%s.nii.gz'%(prefix1,

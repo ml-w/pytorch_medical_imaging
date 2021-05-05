@@ -34,7 +34,7 @@ if use_cython:
     # ext_modules += cythonize("med_img_dataset.rst/computations/_LocalNeighborhoodDifferencePattern.pyx")
 
 scripts = [
-    'pytorch_med_imaging/utils/match_dimension'
+    'pytorch_med_imaging/scripts/match_dimension'
 ]
 
 setup(

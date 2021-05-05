@@ -9,7 +9,7 @@ def main(args):
     for dir in [args.dirA, args.dirB]:
         assert os.path.isdir(dir)
 
-    log = Logger(a.log, logger_name='utils.match_dimension', verbose=a.verbose)
+    log = Logger(a.log, logger_name='scripts.match_dimension', verbose=a.verbose)
     log.info("{:=^100}".format(" Matching Dimensions "))
     sys.excepthook = log.exception_hook
 
