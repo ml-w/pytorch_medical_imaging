@@ -16,7 +16,7 @@ class Logger(object):
     FATAL = logging.FATAL
     ERROR = logging.ERROR
 
-    def __init__(self, log_dir, logger_name=__name__, verbose=False, log_level='debug'):
+    def __init__(self, log_dir, logger_name=__name__, verbose=False, log_level='debug', keep_file=True):
         """
         This is the logger. This is typically passed to all modules for logging. Use class method Logger['str'] to get a
         logger named 'str'.
@@ -35,6 +35,7 @@ class Logger(object):
         self._log_dir = log_dir
         self._verbose = verbose
         self._warning_hash = {}
+        self._keepfile = keep_file
 
         log_levels={
             'debug': logging.DEBUG,
@@ -120,7 +121,7 @@ class Logger(object):
 
     def __class_getitem__(cls, item):
         if cls.global_logger is None:
-            cls.global_logger = Logger('./default.log', logger_name='default')
+            cls.global_logger = Logger('./default.log', logger_name='default', verbose=True)
             return Logger[item]
 
         elif not item in cls.all_loggers:
@@ -153,6 +154,10 @@ class Logger(object):
             raise AttributeError("Global logger was not created.")
 
 
+    def __del__(self):
+        if not self._keepfile & self != Logger.get_global_logger():
+            os.remove(self._log_dir)
+
 
 class TqdmLoggingHandler(logging.Handler):
     def __init__(self, level=logging.NOTSET, verbose=False):
@@ -169,3 +174,4 @@ class TqdmLoggingHandler(logging.Handler):
             raise
         except:
             self.handleError(record)
+
