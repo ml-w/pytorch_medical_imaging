@@ -14,9 +14,11 @@ def main(a, logger):
             return
 
     logger.info(f"idglobber: {a.idglobber}")
+    logger.info(f"use: {a.usepid}")
     dicom_dirs = preprocessing.recursive_list_dir(a.depth, a.input)
     data_formatting.batch_dicom2nii(dicom_dirs,
                                     a.output,
+                                    None, # TODO: Port these two arguments to command too
                                     None,
                                     a.idglobber,
                                     a.usepid)

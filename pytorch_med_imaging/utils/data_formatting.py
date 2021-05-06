@@ -18,16 +18,16 @@ def dicom2nii(folder: str,
     """
     Covert a series under specified folder into an nii.gz image.
     """
-
-    # logger = Logger['utils.dicom2nii']
-    print(f"Handling: {folder}")
+    workerid = mpi.current_process().name
+    logger = Logger['utils.dicom2nii-%s'%workerid]
+    logger.info(f"Handling: {folder}")
 
     if not os.path.isdir(out_dir):
         os.makedirs(out_dir, exist_ok=True)
         assert os.path.isdir(out_dir), "Output dir was not made."
 
     if not os.path.isdir(folder):
-        print(f"Cannot locate specified folder: {folder}")
+        logger.error(f"Cannot locate specified folder: {folder}")
         raise IOError("Cannot locate specified folder!")
 
     # Default globber
@@ -43,7 +43,7 @@ def dicom2nii(folder: str,
         prefix1 = matchobj.group()
     else:
         prefix1 = "NA"
-
+    logger.debug(f"prefix: {prefix1}")
 
     # Read file
     series = sitk.ImageSeriesReader_GetGDCMSeriesIDs(f)
@@ -65,7 +65,7 @@ def dicom2nii(folder: str,
 
         # Replace prefix if use patient id for file id
         if use_patient_id:
-            prefix1 = headerreader.GetMetaData('0010|0020').rstrip()
+            prefix1 = headerreader.GetMetaData('0010|0020').rstrip(' ')
         outname = out_dir + '/%s-%s+%s.nii.gz'%(prefix1,
                                               headerreader.GetMetaData('0008|103e').rstrip().replace(' ','_'),
                                               headerreader.GetMetaData('0020|0011').rstrip()) # Some series has the same series name, need this to differentiate
@@ -88,7 +88,7 @@ def dicom2nii(folder: str,
                     continue
 
         # Write image
-        print(f"Writting: {outname}")
+        logger.info(f"Writting: {outname}")
         outimage.SetMetaData('intent_name', headerreader.GetMetaData('0010|0020').rstrip())
         sitk.WriteImage(outimage, outname)
         del reader
@@ -245,7 +245,7 @@ def batch_dicom2nii(folderlist, out_dir,
                     use_patient_id = False):
     import multiprocessing as mpi
     logger = Logger['mpi_dicom2nii']
-    logger.info(f"{folderlist}")
+    logger.debug(f"use: {use_patient_id}")
 
     pool = mpi.Pool(workers)
     for f in folderlist:
