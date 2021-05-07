@@ -160,22 +160,21 @@ class ImageDataSet(PMIDataBase):
         super(ImageDataSet, self).__init__(verbose=verbose)
         assert os.path.isdir(rootdir), "Cannot access directory: {}".format(rootdir)
         assert loadBySlices <= 2, "This class only handle 3D data!"
-        self.rootdir = rootdir
-        self.data_source_path = []
-        self.data = []
-        self.metadata = []
-        self.length = 0
-        self.verbose = verbose
-        self.dtype = dtype
-        # self.idlist = idlist
-        # self.filesuffix = filesuffix
-        self._raw_length = 0                    # length of raw input (i.e. num of nii.gz files loaded)
-        self._filterargs = kwargs
-        self._filtermode=filtermode
-        self._readmode=readmode
-        self._id_globber = kwargs['idGlobber'] if 'idGlobber' in kwargs else "(^[a-zA-Z0-9]+)"
-        self._debug=debugmode
-        self._byslices=loadBySlices
+
+        self.rootdir            = rootdir
+        self.data_source_path   = []
+        self.data               = []
+        self.metadata           = []
+        self.length             = 0
+        self.verbose            = verbose
+        self.dtype              = dtype
+        self._raw_length        = 0 # length of raw input (i.e. num of nii.gz files loaded)
+        self._filterargs        = kwargs
+        self._filtermode        = filtermode
+        self._readmode          = readmode
+        self._id_globber        = kwargs.get('idGlobber', "(^[a-zA-Z0-9]+)")
+        self._debug             = debugmode
+        self._byslices          = loadBySlices
 
         self._error_check()
         self._parse_root_dir()
@@ -234,7 +233,7 @@ class ImageDataSet(PMIDataBase):
         # Apply filter if specified
         #--------------------------
         filtered_away = []
-        file_dirs = self.filter_filelist(file_dirs, filtered_away, removed_fnames)
+        file_dirs = self._filter_filelist(file_dirs, filtered_away, removed_fnames)
 
         self._logger.info("Found %s nii.gz files..."%len(file_dirs))
         self._logger.info("Start Loading")
@@ -295,7 +294,7 @@ class ImageDataSet(PMIDataBase):
                     target = [i for i, x in enumerate(target) if x]
                     self._logger.info("Targets that are not of majority size: {}".format(target))
 
-                    self.crop_data(target, majority_size, allsizes)
+                    self._crop_data(target, majority_size, allsizes)
 
                 self.data = cat(self.data, dim=self._byslices).transpose(0, self._byslices).unsqueeze(1)
                 self._logger.info("Finished load by slice.")
@@ -325,10 +324,9 @@ class ImageDataSet(PMIDataBase):
                     self._logger.debug("Reisize needed for: {}".format([self.get_unique_IDs()[t]
                                                                        for t in target]))
 
-                    self.crop_data(target, majority_size, allsizes)
+                    self._crop_data(target, majority_size, allsizes)
 
-
-    def crop_data(self, target_images, target_size, allsizes):
+    def _crop_data(self, target_images, target_size, allsizes):
         r"""Crop the images into one with equal X-Y dimension. Used in `parse_root_dir`."""
         for t in target_images:
             self._logger.info("Trying to pad/crop {}".format(t))
@@ -374,7 +372,7 @@ class ImageDataSet(PMIDataBase):
                 target_dat = target_dat.unsqueeze(0)
             self.data[t] = target_dat
 
-    def filter_filelist(self, file_dirs, filtered_away, removed_fnames):
+    def _filter_filelist(self, file_dirs, filtered_away, removed_fnames):
         r"""Filter the `file_dirs` using the specified attributions. Used in `parse_root_dir`."""
         # Filter by filelist
         if self._filtermode == 'idlist' or self._filtermode == 'both':
@@ -700,37 +698,6 @@ class ImageDataSet(PMIDataBase):
                 image = sitk.GetImageFromArray(tensor_data[i].squeeze().numpy())
                 image.CopyInformation(templateim)
                 sitk.WriteImage(image, outputdirectory +'/' + prefix + os.path.basename(self.data_source_path[i]))
-
-
-    @staticmethod
-    def WrapImageWithMetaData(inImage, metadata):
-        r"""Depreicated"""
-        DeprecationWarning("This function is deprecated. Use sitk.CopyInformation instead.")
-
-        im = inImage
-        if isinstance(inImage, np.ndarray):
-            im = sitk.GetImageFromArray(im)
-
-        if metadata['qform_code'] > 0:
-            spacing = np.array([metadata['pixdim[1]'], metadata['pixdim[2]'], metadata['pixdim[3]']],
-                               dtype=float)
-            ori = np.array([-metadata['qoffset_x'], -metadata['qoffset_y'], metadata['qoffset_z']],
-                           dtype=float)
-            b = float(metadata['quatern_b'])
-            c = float(metadata['quatern_c'])
-            d = float(metadata['quatern_d'])
-            a = np.sqrt(np.abs(1 - b**2 - c**2 - d**2))
-            A = np.array([
-                    [a*a + b*b - c*c - d*d, 2*b*c - 2*a*d, 2*b*d + 2*a*c],
-                    [2*b*c + 2*a*d , a*a+c*c-b*b-d*d, 2*c*d - 2*a*b],
-                    [2*b*d - 2*a*c, 2*c*d + 2*a*b, a*a + d*d - c*c - b*b]
-                ])
-            A[:2, :3] = -A[:2, :3]
-            A[:,2] = float(metadata['pixdim[0]']) * A[:,2]
-            im.SetOrigin(ori)
-            im.SetDirection(A.flatten())
-            im.SetSpacing(spacing)
-            return im
 
     def get_unique_values(self):
         r"""Get the tensor of all unique values in basedata. Only for integer tensors
