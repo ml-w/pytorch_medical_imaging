@@ -234,67 +234,7 @@ class ImageDataSet(PMIDataBase):
         # Apply filter if specified
         #--------------------------
         filtered_away = []
-        # Filter idlist
-        #--------------
-        if self._filtermode == 'idlist' or self._filtermode == 'both':
-            self._logger.info("Globbing ID with globber: " + self._id_globber + " ...")
-            file_basenames = [os.path.basename(f) for f in file_dirs]
-            file_ids = [re.search(self._id_globber, f) for f in file_basenames]
-            file_ids = [str(mo.group()) if not mo is None else mo for mo in file_ids]
-
-            if isinstance(self._filterargs['idlist'], str):
-                self._idlist = [r.strip() for r in open(self._filterargs['idlist'], 'r').readlines()]
-            elif self._filterargs['idlist'] is None:
-                self._logger.warning('Idlist input is None!')
-                pass
-            else:
-                self._idlist = self._filterargs['idlist']
-
-            self._logger.debug(f'{self._idlist}')
-            tmp_file_dirs = np.array(file_dirs)
-            keep = [id in self._idlist for id in file_ids] # error near this could be because nothing is grabed
-
-            file_dirs = tmp_file_dirs[keep].tolist()
-            filtered_away.extend(tmp_file_dirs[np.invert(keep)])
-
-        # Fitlter regex
-        #--------------
-        if self._filtermode == 'regex' or self._filtermode == 'both':
-            self._logger.info("Filtering ID with filter: {}".format(self._filterargs['regex']))
-            file_basenames = [os.path.basename(f) for f in file_dirs]
-            # use REGEX if find paranthesis
-            if self._filterargs['regex'] is None:
-                # do nothing if regex is Nonw
-                self._logger.warning('Regex input is None!')
-                pass
-            elif self._filterargs['regex'][0] == '(':
-                try:
-                    keep = np.invert([re.match(self._filterargs['regex'], f) is None for f in file_basenames])
-                except Exception as e:
-                    import sys, traceback as tr
-                    cl, exc, tb = sys.exc_info()
-                    self._logger.error("Error encountered when performing regex filtering.")
-                    self._logger.error(tr.extract_tb(tb))
-                    self._logger.error([re.match(self._filterargs['regex'], f) is None for f in file_basenames])
-
-                try:
-                    filtered_away.extend(np.array(file_dirs)[np.invert(keep)].tolist())
-                except IndexError:
-                    self._logger.exception("Error when trying to filter by regex.")
-                    self._logger.debug(f"keep: {keep}")
-                    self._logger.debug(f"file_dirs: {file_dirs}")
-                except:
-                    self._logger.exception("Unknown error when trying to filter by regex.")
-                file_dirs = np.array(file_dirs)[keep].tolist()
-            else: # else use wild card
-                file_dirs = fnmatch.filter(file_dirs, "*" + self._filterargs['regex'] + "*")
-
-        if len(removed_fnames) > 0:
-            removed_fnames.sort()
-            for fs in removed_fnames:
-                self._logger.warning("Cannot find " + fs + " in " + self.rootdir)
-
-        file_dirs.sort()
+        file_dirs = self.filter_filelist(file_dirs, filtered_away, removed_fnames)
 
         self._logger.info("Found %s nii.gz files..."%len(file_dirs))
         self._logger.info("Start Loading")
@@ -355,52 +295,7 @@ class ImageDataSet(PMIDataBase):
                     target = [i for i, x in enumerate(target) if x]
                     self._logger.info("Targets that are not of majority size: {}".format(target))
 
-                    for t in target:
-                        self._logger.info("Trying to pad/crop {}".format(t))
-                        target_dat = self.data[t]
-                        target_size = np.array(majority_size)
-                        tmp_im_shape = np.array(target_dat.shape)
-                        pad_size_left = (target_size - tmp_im_shape[-2:]) // 2
-                        pad_size_right = target_size - pad_size_left - tmp_im_shape[-2:]
-
-                        # Check if majority size is greater than original size.
-                        Pad = target_size[-2:] < np.array(majority_size)
-
-                        self._logger.debug("Current size: {}".format(tmp_im_shape))
-                        self._logger.debug("Target size: {}".format(target_size))
-                        self._logger.debug("pad_size_left/right: {},{}".format(pad_size_left,
-                                                                               pad_size_right))
-
-
-                        # Check if majority size is greater than original size.
-                        need_pad = target_size[-2:] > tmp_im_shape[-2:]
-
-                        # Crop or pad image to standard size
-                        for dim, (ps_l, ps_r, p) in enumerate(zip(pad_size_left, pad_size_right, need_pad)):
-                            t_dim = dim # we are only doing H W padding, not Z
-                            if not p:
-                                self._logger.debug(f"(ps_l={ps_l}, ps_r={ps_r}, t_dim={t_dim}, target_size={target_size}"
-                                                   f"(target_dat.shape={target_dat.shape}")
-                                target_dat = target_dat.narrow(int(t_dim), int(abs(ps_l)), int(target_size[dim]))
-                            else:
-                                pa = [0] * target_dat.ndim * 2
-                                pa[t_dim * 2] = abs(int(ps_l))
-                                pa[t_dim * 2 + 1] = abs(int(ps_r))
-                                self._logger.debug("Padding: {}".format(pa))
-                                target_dat = pad(target_dat, pa[-4:], mode='constant', value=0)
-
-                        self._logger.debug("Resized {} from {} to {}".format(
-                            self.get_unique_IDs()[t],
-                            allsizes[t],
-                            list(target_dat.shape)
-                        ))
-
-                        # Make sure channel dimension is there
-                        while target_dat.dim() < 4:
-                            target_dat = target_dat.unsqueeze(0)
-                        self.data[t] = target_dat
-
-
+                    self.crop_data(target, majority_size, allsizes)
 
                 self.data = cat(self.data, dim=self._byslices).transpose(0, self._byslices).unsqueeze(1)
                 self._logger.info("Finished load by slice.")
@@ -421,6 +316,7 @@ class ImageDataSet(PMIDataBase):
                 uniquesizes = list(set(allsizes))
                 self._logger.info("Dectected image sizes: {}".format(uniquesizes))
 
+                # Make 3D data into images with the same slice but not forcing them to have same number of slices
                 if not len(uniquesizes) == 1:
                     majority_size = uniquesizes[np.argmax([allsizes.count(tup) for tup in uniquesizes])]
                     self._logger.info("Found majority size: {}".format(majority_size))
@@ -429,49 +325,116 @@ class ImageDataSet(PMIDataBase):
                     self._logger.debug("Reisize needed for: {}".format([self.get_unique_IDs()[t]
                                                                        for t in target]))
 
-                    for t in target:
-                        self._logger.info("Trying to pad/crop {}".format(t))
-                        target_dat = self.data[t]
-                        target_size = np.array(majority_size)
-                        tmp_im_shape = np.array(target_dat.shape)
-                        pad_size_left = (target_size - tmp_im_shape[-2:]) // 2
-                        pad_size_right = target_size - pad_size_left - tmp_im_shape[-2:]
-
-                        self._logger.debug("Current size: {}".format(tmp_im_shape))
-                        self._logger.debug("Target size: {}".format(target_size))
-                        self._logger.debug("pad_size_left/right: {},{}".format(pad_size_left,
-                                                                               pad_size_right))
-
-                        # Check if majority size is greater than original size.
-                        need_pad = target_size[-2:] > tmp_im_shape[-2:]
+                    self.crop_data(target, majority_size, allsizes)
 
 
-                        # Crop or pad image to standard size
-                        for dim, (ps_l, ps_r, p) in enumerate(zip(pad_size_left, pad_size_right, need_pad)):
-                            t_dim = dim + 1 # we are only doing H W padding, not Z
-                            if not p:
-                                self._logger.debug(f"(ps_l={ps_l}, ps_r={ps_r}, t_dim={t_dim}, target_size={target_size}"
-                                                   f"(target_dat.shape={target_dat.shape}")
-                                target_dat = target_dat.narrow(int(t_dim), int(abs(ps_l)), int(target_size[dim]))
-                            else:
-                                pa = [0] * target_dat.ndim * 2
-                                pa[t_dim * 2] = abs(int(ps_l))
-                                pa[t_dim * 2 + 1] = abs(int(ps_r))
-                                self._logger.debug("Padding: {}".format(pa))
-                                target_dat = pad(target_dat, pa[-4:], mode='constant', value=0)
+    def crop_data(self, target_images, target_size, allsizes):
+        r"""Crop the images into one with equal X-Y dimension. Used in `parse_root_dir`."""
+        for t in target_images:
+            self._logger.info("Trying to pad/crop {}".format(t))
+            target_dat = self.data[t]
+            target_size = np.array(target_size)
+            tmp_im_shape = np.array(target_dat.shape)
+            pad_size_left = (target_size - tmp_im_shape[-2:]) // 2
+            pad_size_right = target_size - pad_size_left - tmp_im_shape[-2:]
 
-                        self._logger.debug("Resized {} from {} to {}".format(
-                            self.get_unique_IDs()[t],
-                            allsizes[t],
-                            list(target_dat.shape)
-                        ))
+            # Check if majority size is greater than original size.
+            Pad = target_size[-2:] < np.array(target_size)
 
-                        # Make sure channel dimension is there
-                        while target_dat.dim() < 4:
-                            target_dat = target_dat.unsqueeze(0)
-                        self.data[t] = target_dat
+            self._logger.debug("Current size: {}".format(tmp_im_shape))
+            self._logger.debug("Target size: {}".format(target_size))
+            self._logger.debug("pad_size_left/right: {},{}".format(pad_size_left,
+                                                                   pad_size_right))
 
+            # Check if majority size is greater than original size.
+            need_pad = target_size[-2:] > tmp_im_shape[-2:]
 
+            # Crop or pad image to standard size
+            for dim, (ps_l, ps_r, p) in enumerate(zip(pad_size_left, pad_size_right, need_pad)):
+                t_dim = dim  # we are only doing H W padding, not Z
+                if not p:
+                    self._logger.debug(f"(ps_l={ps_l}, ps_r={ps_r}, t_dim={t_dim}, target_size={target_size}"
+                                       f"(target_dat.shape={target_dat.shape}")
+                    target_dat = target_dat.narrow(int(t_dim), int(abs(ps_l)), int(target_size[dim]))
+                else:
+                    pa = [0] * target_dat.ndim * 2
+                    pa[t_dim * 2] = abs(int(ps_l))
+                    pa[t_dim * 2 + 1] = abs(int(ps_r))
+                    self._logger.debug("Padding: {}".format(pa))
+                    target_dat = pad(target_dat, pa[-4:], mode='constant', value=0)
+
+            self._logger.debug("Resized {} from {} to {}".format(
+                self.get_unique_IDs()[t],
+                allsizes[t],
+                list(target_dat.shape)
+            ))
+
+            # Make sure channel dimension is there
+            while target_dat.dim() < 4:
+                target_dat = target_dat.unsqueeze(0)
+            self.data[t] = target_dat
+
+    def filter_filelist(self, file_dirs, filtered_away, removed_fnames):
+        r"""Filter the `file_dirs` using the specified attributions. Used in `parse_root_dir`."""
+        # Filter by filelist
+        if self._filtermode == 'idlist' or self._filtermode == 'both':
+            self._logger.info("Globbing ID with globber: " + self._id_globber + " ...")
+            file_basenames = [os.path.basename(f) for f in file_dirs]
+            file_ids = [re.search(self._id_globber, f) for f in file_basenames]
+            file_ids = [str(mo.group()) if not mo is None else mo for mo in file_ids]
+
+            if isinstance(self._filterargs['idlist'], str):
+                self._idlist = [r.strip() for r in open(self._filterargs['idlist'], 'r').readlines()]
+            elif self._filterargs['idlist'] is None:
+                self._logger.warning('Idlist input is None!')
+                pass
+            else:
+                self._idlist = self._filterargs['idlist']
+
+            self._logger.debug(f'{self._idlist}')
+            tmp_file_dirs = np.array(file_dirs)
+            keep = [id in self._idlist for id in file_ids]  # error near this could be because nothing is grabed
+
+            file_dirs = tmp_file_dirs[keep].tolist()
+            filtered_away.extend(tmp_file_dirs[np.invert(keep)])
+
+        # Fitlter by regex
+        # --------------
+        if self._filtermode == 'regex' or self._filtermode == 'both':
+            self._logger.info("Filtering ID with filter: {}".format(self._filterargs['regex']))
+            file_basenames = [os.path.basename(f) for f in file_dirs]
+            # use REGEX if find paranthesis
+            if self._filterargs['regex'] is None:
+                # do nothing if regex is Nonw
+                self._logger.warning('Regex input is None!')
+                pass
+            elif self._filterargs['regex'][0] == '(':
+                try:
+                    keep = np.invert([re.match(self._filterargs['regex'], f) is None for f in file_basenames])
+                except Exception as e:
+                    import sys, traceback as tr
+                    cl, exc, tb = sys.exc_info()
+                    self._logger.error("Error encountered when performing regex filtering.")
+                    self._logger.error(tr.extract_tb(tb))
+                    self._logger.error([re.match(self._filterargs['regex'], f) is None for f in file_basenames])
+
+                try:
+                    filtered_away.extend(np.array(file_dirs)[np.invert(keep)].tolist())
+                except IndexError:
+                    self._logger.exception("Error when trying to filter by regex.")
+                    self._logger.debug(f"keep: {keep}")
+                    self._logger.debug(f"file_dirs: {file_dirs}")
+                except:
+                    self._logger.exception("Unknown error when trying to filter by regex.")
+                file_dirs = np.array(file_dirs)[keep].tolist()
+            else:  # else use wild card
+                file_dirs = fnmatch.filter(file_dirs, "*" + self._filterargs['regex'] + "*")
+        if len(removed_fnames) > 0:
+            removed_fnames.sort()
+            for fs in removed_fnames:
+                self._logger.warning("Cannot find " + fs + " in " + self.rootdir)
+        file_dirs.sort()
+        return file_dirs
 
     def get_raw_data_shape(self):
         r"""Get shape of all files as a list (ignore load by slice option)."""
