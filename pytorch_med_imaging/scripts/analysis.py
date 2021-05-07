@@ -11,7 +11,7 @@ import argparse
 from surface_distance import compute_surface_distances, compute_average_surface_distance
 
 
-__all__ = ['ASD', 'SSIM', 'DICE']
+__all__ = ['ASD', 'SSIM', 'DICE', 'segmentation_analysis']
 
 #========================================
 # Similarity functions
@@ -321,7 +321,7 @@ def EVAL(seg, gt, vars):
         df.set_index('Index')
     return df
 
-def main(raw_args=None):
+def segmentation_analysis(raw_args=None):
     parse = argparse.ArgumentParser()
     parse.add_argument('-d', '--DICE', action='store_true', default=False, dest='dice', help="add DICE to analysis.")
     parse.add_argument('-p', '--PM', action='store_true', default=False, dest='pm',
@@ -449,4 +449,4 @@ def main(raw_args=None):
     return results
 
 if __name__ == '__main__':
-    main()
+    segmentation_analysis()

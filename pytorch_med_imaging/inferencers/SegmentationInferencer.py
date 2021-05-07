@@ -147,7 +147,7 @@ class SegmentationInferencer(InferencerBase):
         This use method from Algorithm to output summary of the inferece. This is used to allow guildai to grad
         performance of the network.
         """
-        from pytorch_med_imaging.scripts.analysis import main
+        from pytorch_med_imaging.scripts.analysis import segmentation_analysis
 
         arguments = ['-a',
                      '--test-data', self._outdir,
@@ -157,7 +157,7 @@ class SegmentationInferencer(InferencerBase):
 
         try:
             self._logger.info("Running with args: {}".format(arguments))
-            out = main(arguments)
+            out = segmentation_analysis(arguments)
             self._logger.info("\n{}".format(out.to_string()))
             self._logger.info("Avg_DICE: {}".format(out['DSC'].mean()))
             self._logger.info("Med_DICE: {}".format(out['DSC'].median()))

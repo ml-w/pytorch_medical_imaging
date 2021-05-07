@@ -5,14 +5,9 @@ import configparser
 import argparse
 import os
 
-def main(args):
-    for dir in [args.dirA, args.dirB]:
-        assert os.path.isdir(dir)
+__all__ = ['match_dimension']
 
-    log = Logger(a.log, logger_name='scripts.match_dimension', verbose=a.verbose)
-    log.info("{:=^100}".format(" Matching Dimensions "))
-    sys.excepthook = log.exception_hook
-
+def match_dimension(args):
     if args.ids is not None:
         if os.path.isfile(args.ids):
             ids = [r.rstrip() for r in open(args.ids, 'r').readlines()]
@@ -22,6 +17,7 @@ def main(args):
             ids = [args.ids]
     else:
         ids = None
+    log = args.log
 
     if not ids is None:
         imsetA = ImageDataSet(a.dirA, verbose=a.verbose, dtype='uint8', debugmode=a.debug, filtermode='idlist',
@@ -106,7 +102,7 @@ def main(args):
 
     pass
 
-if __name__ == '__main__':
+def console_entry():
     parser = argparse.ArgumentParser(
         description="Check and match the dimensions if the images in [dirA] and [dirB]")
     parser.add_argument('dirA', metavar='dirA', action='store', type=str,
@@ -128,5 +124,17 @@ if __name__ == '__main__':
     parser.add_argument('-d', '--debug', dest='debug', action='store_true',
                         help="For debug.")
     a = parser.parse_args()
-    main(a)
+
+    for dir in [args.dirA, args.dirB]:
+        assert os.path.isdir(dir)
+
+    log = Logger(a.log, logger_name='scripts.match_dimension', verbose=a.verbose)
+    log.info("{:=^100}".format(" Matching Dimensions "))
+    sys.excepthook = log.exception_hook
+    a.log = log
+
+    match_dimension(a)
+
+if __name__ == '__main__':
+    console_entry()
 

@@ -3,7 +3,9 @@ from pytorch_med_imaging.utils import preprocessing, data_formatting
 import argparse
 import os
 
-def main(a, logger):
+__all__ = ['dicom2nii']
+
+def dicom2nii(a, logger):
     if not os.path.isdir(a.input):
         raise FileNotFoundError(f"Cannot open {a.input}.")
     if not os.path.isdir(a.output):
@@ -23,8 +25,7 @@ def main(a, logger):
                                     a.idglobber,
                                     a.usepid)
 
-
-if __name__ == '__main__':
+def console_entry():
     parser = argparse.ArgumentParser()
     parser.add_argument('-i', '--input', type=str, action='store', dest='input',
                         help='Input directory that contains the DICOMs.')
@@ -36,11 +37,14 @@ if __name__ == '__main__':
                         help='Specify the globber to glob the ID from the DICOM paths.')
     parser.add_argument('--use-patient-id', action='store_true', dest='usepid',
                         help='Use patient id as file id.')
-    parser.add_argument('--log')
+    parser.add_argument('--log', action='store_true', dest='log',
+                        help='Keep log file under ./dicom2nii.log')
     a = parser.parse_args()
 
-    logger = Logger('./dicom2nii.log', logger_name='dicom2nii', verbose=True)
+    logger = Logger('./dicom2nii.log', logger_name='dicom2nii', verbose=True, keep_file=a.log)
     logger.info("Recieve argumetns: {}".format(a))
 
-    main(a, logger)
+    dicom2nii(a, logger)
 
+if __name__ == '__main__':
+    console_entry()

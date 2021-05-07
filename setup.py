@@ -33,20 +33,29 @@ if use_cython:
     cmdclass.update({'build_ext': build_ext})
     # ext_modules += cythonize("med_img_dataset.rst/computations/_LocalNeighborhoodDifferencePattern.pyx")
 
-scripts = [
-    'pytorch_med_imaging/scripts/match_dimension'
-]
+import os
+
+scripts = [os.path.join('pytorch_med_imaging/scripts', s) for s in os.listdir('pytorch_med_imaging/scripts')]
 
 setup(
-    name='NPC_Segment',
+    name='pytorch_medical_imaging',
     version='0.1',
     packages=['pytorch_med_imaging'],
-    url='https://github.com/alabamagan/pytorch_medical_imaging/tree/NPC_Segment',
+    url='https://github.com/alabamagan/pytorch_medical_imaging',
     license='',
     author='Wong Matthew Lun',
     author_email='fromosia@link.cuhk.edu.hk',
     description='',
     cmdclass = cmdclass,
     ext_modules = ext_modules,
-    scripts = scripts
+    entry_points = {
+        'console_scripts': [
+            'dicom2nii = pytorch_med_imaging.scripts.dicom2nii:console_entry',
+            'analysis-segment = pytorch_med_imaging.scripts.analysis:segmentation_analysis',
+            'match_dimension = pytorch_med_imaging.scripts.match_dimension:console_entry'
+        ]
+    },
+    # scripts = scripts,
+    install_requires=['torchio'],
+    dependency_links=[os.path.abspath('./ThirdParty/torchio')]
 )

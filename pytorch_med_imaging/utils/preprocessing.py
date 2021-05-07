@@ -115,18 +115,3 @@ def main(args):
         batch_dicom2nii(folders, args[2], eval(args[3]) if len(args) > 4 else None)
     else:
         batch_dicom2nii(folders, args[2], args[3] if len(args) > 4 else None)
-
-if __name__ == '__main__':
-    # folders = RecursiveListDir(5, '../NPC_Segmentation/00.RAW/Benign NP')
-    # batch_dicom2nii(folders, out_dir='../NPC_Segmentation/00.RAW/NIFTI/Benign')
-    # folders = RecursiveListDir(5, '../NPC_Segmentation/00.RAW/T1+C_Missing/t1c/')
-    # folders = RecursiveListDir(5, '../NPC_Segmentation/00.RAW/MMX/840/')
-    # batch_dicom2nii(folders, out_dir='../NPC_Segmentation/00.RAW/NIFTI/All')
-    # dicom2nii('../NPC_Segmentation/00.RAW/MMX/769/S', '../NPC_Segmentation/00.RAW/NIFTI/MMX')
-    # batch_dicom2nii(RecursiveListDir(3, '../NPC_Segmentation/00.RAW/Jun16/779'),
-    #                 '../NPC_Segmentation/0A.NIFTI_ALL/Malignant_2')
-    batch_dicom2nii(recursive_list_dir(3, '../../NPC_Segmentation/00.RAW/extra_20210426/'),
-                    '../../NPC_Segmentation/0A.NIFTI_ALL/Extra')
-    # dicom2nii('../NPC_Segmentation/00.RAW/Transfer/Benign/NPC147/Orignial Scan/DICOM', '../NPC_Segmentation/0A.NIFTI_ALL/Benign')
-    # main(sys.argv)
-    # make_mask_from_dir('../NPC_Segmentation/06.NPC_Perfect/temp_t2/', '../NPC_Segmentation/06.NPC_Perfect/temp_mask')
