@@ -73,6 +73,7 @@ class Logger(object):
             Logger.global_logger = self
             Logger.all_loggers[logger_name] = self
             sys.excepthook= self.exception_hook
+            self.info("Exception hooked to this logger.")
 
 
     def log_traceback(self):
@@ -116,8 +117,8 @@ class Logger(object):
 
 
     def exception_hook(self, *args):
-        self._logger.error('Uncaught exception:', exc_info=args)
-        self._logger.exception(args[-1])
+        self.error('Uncaught exception:', exc_info=args)
+        self.exception(args[-1])
 
     def __class_getitem__(cls, item):
         if cls.global_logger is None:
