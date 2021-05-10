@@ -100,18 +100,3 @@ def make_mask_from_dir(indir, outdir):
     p.join()
 
 
-def main(args):
-    try:
-        os.makedirs(args[2], exist_ok=True)
-    except:
-        print("Cannot mkdir.")
-
-    assert os.path.isdir(args[1]) and os.path.isdir(args[2]), 'Cannot locate inputs directories or output directory.'
-
-    folders = recursive_list_dir(5, args[1])
-    folders = [os.path.abspath(f) for f in folders]
-
-    if isinstance(eval(args[3]), list):
-        batch_dicom2nii(folders, args[2], eval(args[3]) if len(args) > 4 else None)
-    else:
-        batch_dicom2nii(folders, args[2], args[3] if len(args) > 4 else None)
