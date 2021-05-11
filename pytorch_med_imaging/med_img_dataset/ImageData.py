@@ -548,16 +548,16 @@ class ImageDataSet(PMIDataBase):
         else:
             raise TypeError(f"Incorrect unique id specified, expect [int or str] got {unique_id}")
 
-        src_path = self.data_source_path[i]
+        src_path = self.data_source_path[index]
         src_im = sitk.ReadImage(src_path)
-        out_im = sitk.GetImageFromArray(tensor_data[i].squeeze().numpy())
+        out_im = sitk.GetImageFromArray(tensor_data.squeeze().numpy())
 
         # Check if size equal
         assert src_im.GetSize() == out_im.GetSize(), f"Source image and target image has different sizes: " \
                                                      f"\tsource: {src_im.GetSize()}\ttarget: {out_im.GetSize()}"
 
         out_im.CopyInformation(src_im)
-        sitk.WriteImage(image, outputdirectory +'/' + prefix + os.path.basename(self.data_source_path[i]))
+        sitk.WriteImage(out_im, outputdirectory +'/' + prefix + os.path.basename(self.data_source_path[index]))
 
 
     def get_unique_values(self):
