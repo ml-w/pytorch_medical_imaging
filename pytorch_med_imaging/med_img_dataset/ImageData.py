@@ -513,7 +513,7 @@ class ImageDataSet(PMIDataBase):
         Args:
             tensor_data (:obj:`torch.tensor`):
                 Data arrays to save, has to be arranged identically as the attribute self.data
-                of the object.
+                of the object. Expect dimension (B x C x D x W x H)
             outputdirectory (str):
                 Folder to output nii files.
             prefix (str):
@@ -528,7 +528,7 @@ class ImageDataSet(PMIDataBase):
 
         Args:
             tensor_data (torch.Tensor):
-                Data array to save, should have dimension (H x W x D)
+                Data array to save, should have dimension (D x W x H)
             unique_id (Any):
                 If str, source image with same unique ID is loaded. If int, source image load at
                 the same index in `data_source_path` is loaded.
