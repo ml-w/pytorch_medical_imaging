@@ -1,5 +1,5 @@
-from pytorch_med_imaging.med_img_dataset import ImageDataSet
-from pytorch_med_imaging.logger import Logger
+from ..med_img_dataset import ImageDataSet
+from ..logger import Logger
 import sys
 import configparser
 import argparse
