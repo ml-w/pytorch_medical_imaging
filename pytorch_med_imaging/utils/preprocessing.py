@@ -51,12 +51,42 @@ def SmoothImages(root_dir, out_dir):
         sitk.WriteImage(out, out_dir + "/" + fs)
 
 
-def make_mask(inimage, outdir, pos=-1):
+def make_mask(inimage,
+              outdir,
+              threshold_lower,
+              threshold_upper = None,
+              inside_to_1 = True,
+              pos=-1):
+    r"""Create a mask of an input with specified threshold slice-by-slice.
+
+    Args:
+        inimage (str or sitk.Image):
+            Input image.
+        outdir (str):
+            Ouptut directory.
+        threshold_lower:
+        threshold_upper:
+        inside_to_1:
+        pos:
+
+    Returns:
+
+    """
     if isinstance(inimage, str):
-        # tqdm.write("Reading " + inimage)
+        print(inimage)
         inimage = sitk.ReadImage(inimage)
 
-    gttest = sitk.BinaryThreshold(inimage, upperThreshold=65535, lowerThreshold=200)
+    # setup variables
+    inside_value = 1 if inside_to_1 else 0
+    outside_value = 0 if inside_to_1 else 1
+
+    # might need to cast type correctly in the future
+
+    gttest = sitk.BinaryThreshold(inimage,
+                                  upperThreshold=float(threshold_upper),
+                                  lowerThreshold=float(threshold_lower),
+                                  insideValue=bool(inside_value),
+                                  outsideValue=bool(outside_value))
     gttest = sitk.BinaryDilate(gttest, [15, 15, 0], sitk.BinaryMorphologicalOpeningImageFilter.Ball)
     gttest = sitk.BinaryErode(gttest, [15, 15, 0], sitk.BinaryMorphologicalOpeningImageFilter.Ball)
     # gttest = sitk.BinaryMorphologicalClosing(gttest, [0, 25, 25], sitk.BinaryMorphologicalOpeningImageFilter.Ball)
@@ -66,7 +96,7 @@ def make_mask(inimage, outdir, pos=-1):
         try:
             pos = int(mpi.current_process().name.split('-')[-1])
         except Exception as e:
-            tqdm.write(e.message)
+            tqdm.write(e)
 
     try:
         for i in trange(gttest.GetSize()[-1], position=pos, desc=mpi.current_process().name):
@@ -77,9 +107,10 @@ def make_mask(inimage, outdir, pos=-1):
         sitk.WriteImage(gttest, outdir)
         return 0
     except Exception as e:
-        print(e.message)
+        print(e)
 
-def make_mask_from_dir(indir, outdir):
+def make_mask_from_dir(indir, outdir, threshold_lower, threshold_upper, inside_to_1):
+    r"""Make mask from a directory"""
     if not os.path.isdir(outdir):
         os.mkdir(outdir)
 
@@ -90,8 +121,8 @@ def make_mask_from_dir(indir, outdir):
 
     for i, f in enumerate(filelist):
         outname = f.replace(indir, outdir)
-        # make_mask(sitk.ReadImage(f), outname, 0)
-        subp = p.apply_async(make_mask, (f, outname, -1))
+        # make_mask(f, outname, threshold_lower, threshold_upper, inside_to_1)
+        subp = p.apply_async(make_mask, (f, outname, threshold_lower, threshold_upper, inside_to_1))
         processes.append(subp)
 
     for pp in processes:
