@@ -519,71 +519,46 @@ class ImageDataSet(PMIDataBase):
             prefix (str):
                 Prefix to add before saved files. Default to ''.
         """
-        if self._byslices > -1:
-            assert self._itemindexes[-1] == tensor_data.size()[0], \
-                "Dimension mismatch! (%s vs %s)"%(self._itemindexes[-1], tensor_data.size()[0])
-            td=tensor_data.numpy()
-            for i in range(len(self.data_source_path)):
-                self._logger.info("Writing for {} with source image: {}".format(self.get_unique_IDs()[self._itemindexes[i]],
-                                                                                self.data_source_path[i]))
-                start=self._itemindexes[i]
-                end=self._itemindexes[i+1]
-                # image=sitk.GetImageFromArray(td[start:end])
-                templateim = sitk.ReadImage(self.data_source_path[i])
+        for i in range(len(self)):
+            source_file = self.data_source_path[i]
+            self.write_uid(tensor_data[i].squeeze().numpy(), i, outputdirectory, prefix)
 
-                # check if it matches the original image size
-                tmp_im = td[start:end]
-                if not np.roll(tmp_im.shape, -1).tolist() == list(templateim.GetSize()):
-                    self._logger.info("Recovering size for image with ID: {}.".format(
-                        self.get_unique_IDs()[self._itemindexes[i]]))
+    def write_uid(self, tensor_data, unique_id, outputdirectory, prefix=''):
+        r"""Write data with reference to the source image with specified unique_id.
 
-                    target_dat = templateim
-                    target_size = np.array(target_dat.GetSize())[:2]
-                    tmp_im_shape = np.array(tmp_im.shape)
-                    pad_size_left = (target_size - tmp_im_shape[-2:]) // 2
-                    pad_size_right = target_size - pad_size_left - tmp_im_shape[-2:]
+        Args:
+            tensor_data (torch.Tensor):
+                Data array to save, should have dimension (H x W x D)
+            unique_id (Any):
+                If str, source image with same unique ID is loaded. If int, source image load at
+                the same index in `data_source_path` is loaded.
+            outputdirectory (str):
+                Folder to output the nii files
+            prefix (str, Optional):
+                Prefix to add before the saved files. Default to ''.
+            suffix:
+                Prefix to add after the saved files. Default to ''.
+        """
 
-                    self._logger.debug("Current size: {}".format(tmp_im.shape))
-                    self._logger.debug("Target size: {}".format(target_size))
-
-                    # Check if majority size is greater than original size.
-                    need_pad = target_size[-2:] > tmp_im_shape[-2:]
-
-                    tmp_im = from_numpy(tmp_im)
-                    # Crop or pad image to standard size
-                    for dim, (ps_l, ps_r, p) in enumerate(zip(pad_size_left, pad_size_right, need_pad)):
-                        t_dim = dim + 1 if dim >= self._byslices else dim # since by slice eats a dimension
-                        if not p:
-                            tmp_im = tmp_im.narrow(int(t_dim), int(ps_l), int(tmp_im_shape[dim]))
-                        else:
-                            pa = [0] * tmp_im.ndim * 2
-                            pa[t_dim * 2] = abs(int(ps_l))
-                            pa[t_dim * 2 + 1] = abs(int(ps_r))
-                            self._logger.debug("Padding: {}".format(pa))
-                            # pa = [abs(int(ps_l)) if x // 2 == t_dim else 0 for x in range(6)]
-                            # if len(pa) == 4: (left, right, top, bot)
-                            # if len(pa) == 6: (left, right, top, bot, front, back)
-                            tmp_im = pad(tmp_im, pa[-4:], mode='constant', value=0)
-                    tmp_im = tmp_im.numpy()
-
-                    self._logger.info("Resized to shape: {}".format(tmp_im.shape))
-
-
-                image = sitk.GetImageFromArray(tmp_im)
-                image.CopyInformation(templateim)
-                # image=self.WrapImageWithMetaData(td[start:end], self.metadata[i])
-                sitk.WriteImage(image, outputdirectory +'/' + prefix + os.path.basename(self.data_source_path[i]))
-                del tmp_im
-
+        # Load source image
+        if isinstance(unique_id, str):
+            index = self.get_unique_IDs().index(str)
+        elif isinstance(unique_id, int):
+            index = unique_id
         else:
-            assert len(self) == len(tensor_data), "Length mismatch! %i vs %i"%(len(self), len(tensor_data))
+            raise TypeError(f"Incorrect unique id specified, expect [int or str] got {unique_id}")
 
-            for i in range(len(self)):
-                source_file = self.data_source_path[i]
-                templateim = sitk.ReadImage(source_file)
-                image = sitk.GetImageFromArray(tensor_data[i].squeeze().numpy())
-                image.CopyInformation(templateim)
-                sitk.WriteImage(image, outputdirectory +'/' + prefix + os.path.basename(self.data_source_path[i]))
+        src_path = self.data_source_path[i]
+        src_im = sitk.ReadImage(src_path)
+        out_im = sitk.GetImageFromArray(tensor_data[i].squeeze().numpy())
+
+        # Check if size equal
+        assert src_im.GetSize() == out_im.GetSize(), f"Source image and target image has different sizes: " \
+                                                     f"\tsource: {src_im.GetSize()}\ttarget: {out_im.GetSize()}"
+
+        out_im.CopyInformation(src_im)
+        sitk.WriteImage(image, outputdirectory +'/' + prefix + os.path.basename(self.data_source_path[i]))
+
 
     def get_unique_values(self):
         r"""Get the tensor of all unique values in basedata. Only for integer tensors
