@@ -2,11 +2,13 @@ from torch import from_numpy, cat, stack, unique
 from torch.nn.functional import pad
 from .PMIDataBase import PMIDataBase
 from tqdm import *
+import torchio as tio
 import tqdm.auto as auto
 import fnmatch, re
 import os
 import numpy as np
 import SimpleITK as sitk
+import nibabel as nib
 
 
 NIFTI_DICT = {
@@ -174,7 +176,7 @@ class ImageDataSet(PMIDataBase):
         self._readmode          = readmode
         self._id_globber        = kwargs.get('idGlobber', "(^[a-zA-Z0-9]+)")
         self._debug             = debugmode
-        self._byslices          = loadBySlices
+        self._byslices          = loadBySlices  # Depricated
 
         self._error_check()
         self._parse_root_dir()
@@ -249,132 +251,30 @@ class ImageDataSet(PMIDataBase):
                                                             desc="Load Images")):
             if self.verbose:
                 self._logger.info("Reading from "+f)
-            im = sitk.ReadImage(f)
-            self.data_source_path.append(f)
-            imarr = sitk.GetArrayFromImage(im).astype(self.dtype)
-            self.data.append(from_numpy(imarr))
-            self._itemindexes.append(self.data[i].size()[0])
-            metadata = {}
-            for key in im.GetMetaDataKeys():
-                try:
-                    if key.split('['):
-                        key_type = key.split('[')[0]
 
-                    try:
-                        t = NIFTI_DICT[key_type]
-                    except:
-                        continue
-                    metadata[key] = t(im.GetMetaData(key))
-                except:
-                    metadata[key] = im.GetMetaData(key)
-            self.metadata.append(metadata)
+            # if dtype is uint, treat as label
+            if np.issubdtype(self.dtype, np.unsignedinteger):
+                im = tio.LabelMap(f)
+            else:
+                im = tio.ScalarImage(f)
+            self.data_source_path.append(f)
+            self.data.append(im)
+
+            # read metadata
+            im = nib.load(f)
+            im_header = im.header
+            im_header_dict = {key: im_header.structarr[key].tolist() for key in im_header.structarr.dtype.names}
+            self.metadata.append(im_header_dict)
+
             self._raw_length += 1
         self.length = len(self.data_source_path)
         self._logger.info("Finished loading. Loaded {} files.".format(self.length))
 
-        #=====================================
-        # Option to load 3D images as 2D slice
-        #-------------------------------------
-        if self._byslices >= 0:
-            try:
-                self._logger.info("Load by slice...")
-                self._itemindexes = np.cumsum(self._itemindexes)
-                self.length = np.sum([m.size()[self._byslices] for m in self.data])
-                # check if all sizes are the same
-                allsizes = [tuple(np.array(m.size())[np.arange(m.dim()) != self._byslices]) for m in self.data]
-                uniquesizes = list(set(allsizes))
-                if not len(uniquesizes) == 1:
-                    self._logger.debug("Detected slice sizes: {}".format(uniquesizes))
-                    self._logger.warning("There are more than one slice size, attempting to pad/crop")
-                    majority_size = uniquesizes[np.argmax([allsizes.count(tup) for tup in uniquesizes])]
-                    self._logger.info("Found majority size: {}".format(majority_size))
-
-                    # Get all index of image that is not of majority size
-                    target = [ss != majority_size for ss in allsizes]
-                    target = [i for i, x in enumerate(target) if x]
-                    self._logger.info("Targets that are not of majority size: {}".format(target))
-
-                    self._crop_data(target, majority_size, allsizes)
-
-                self.data = cat(self.data, dim=self._byslices).transpose(0, self._byslices).unsqueeze(1)
-                self._logger.info("Finished load by slice.")
-            except IndexError:
-                self._logger.warning("Wrong Index is used in load by slices option!")
-                self._logger.warning("Retreating...")
-                self.length = len(self.data_source_path)
-        else:
-            try:
-                self.data = stack(self.data, dim=0).unsqueeze(1)
-                self._logger.debug(f"self.data.shape:{self.data.shape}")
-            except:
-                self._logger.warning("Cannot stack data due to non-uniform shapes.")
-                self._logger.debug("Shapes are: \n%s"%'\n'.join([str(d.shape) for d in self.data]))
-                self._logger.warning("Some function might be impaired. Trying to unify size!")
-
-                allsizes = [tuple(m.shape[1:]) for m in self.data]
-                uniquesizes = list(set(allsizes))
-                self._logger.info("Dectected image sizes: {}".format(uniquesizes))
-
-                # Make 3D data into images with the same slice but not forcing them to have same number of slices
-                if not len(uniquesizes) == 1:
-                    majority_size = uniquesizes[np.argmax([allsizes.count(tup) for tup in uniquesizes])]
-                    self._logger.info("Found majority size: {}".format(majority_size))
-                    target = [ss != majority_size for ss in allsizes]
-                    target = [i for i, x in enumerate(target) if x]
-                    self._logger.debug("Reisize needed for: {}".format([self.get_unique_IDs()[t]
-                                                                       for t in target]))
-
-                    self._crop_data(target, majority_size, allsizes)
-
-    def _crop_data(self, target_images, target_size, allsizes):
-        r"""Crop the images into one with equal X-Y dimension. Used in `parse_root_dir`."""
-        for t in target_images:
-            self._logger.info("Trying to pad/crop {}".format(t))
-            target_dat = self.data[t]
-            target_size = np.array(target_size)
-            tmp_im_shape = np.array(target_dat.shape)
-            pad_size_left = (target_size - tmp_im_shape[-2:]) // 2
-            pad_size_right = target_size - pad_size_left - tmp_im_shape[-2:]
-
-            # Check if majority size is greater than original size.
-            Pad = target_size[-2:] < np.array(target_size)
-
-            self._logger.debug("Current size: {}".format(tmp_im_shape))
-            self._logger.debug("Target size: {}".format(target_size))
-            self._logger.debug("pad_size_left/right: {},{}".format(pad_size_left,
-                                                                   pad_size_right))
-
-            # Check if majority size is greater than original size.
-            need_pad = target_size[-2:] > tmp_im_shape[-2:]
-
-            # Crop or pad image to standard size
-            for dim, (ps_l, ps_r, p) in enumerate(zip(pad_size_left, pad_size_right, need_pad)):
-                t_dim = dim  # we are only doing H W padding, not Z
-                if not p:
-                    self._logger.debug(f"(ps_l={ps_l}, ps_r={ps_r}, t_dim={t_dim}, target_size={target_size}"
-                                       f"(target_dat.shape={target_dat.shape}")
-                    target_dat = target_dat.narrow(int(t_dim), int(abs(ps_l)), int(target_size[dim]))
-                else:
-                    pa = [0] * target_dat.ndim * 2
-                    pa[t_dim * 2] = abs(int(ps_l))
-                    pa[t_dim * 2 + 1] = abs(int(ps_r))
-                    self._logger.debug("Padding: {}".format(pa))
-                    target_dat = pad(target_dat, pa[-4:], mode='constant', value=0)
-
-            self._logger.debug("Resized {} from {} to {}".format(
-                self.get_unique_IDs()[t],
-                allsizes[t],
-                list(target_dat.shape)
-            ))
-
-            # Make sure channel dimension is there
-            while target_dat.dim() < 4:
-                target_dat = target_dat.unsqueeze(0)
-            self.data[t] = target_dat
 
     def _filter_filelist(self, file_dirs, filtered_away, removed_fnames):
         r"""Filter the `file_dirs` using the specified attributions. Used in `parse_root_dir`."""
         # Filter by filelist
+        #-------------------
         if self._filtermode == 'idlist' or self._filtermode == 'both':
             self._logger.info("Globbing ID with globber: " + self._id_globber + " ...")
             file_basenames = [os.path.basename(f) for f in file_dirs]
@@ -412,9 +312,10 @@ class ImageDataSet(PMIDataBase):
                 except Exception as e:
                     import sys, traceback as tr
                     cl, exc, tb = sys.exc_info()
-                    self._logger.error("Error encountered when performing regex filtering.")
-                    self._logger.error(tr.extract_tb(tb))
-                    self._logger.error([re.match(self._filterargs['regex'], f) is None for f in file_basenames])
+                    self._logger.error(f"Error encountered when performing regex filtering.")
+                    self._logger.debug(f"Regex was {self._filterargs['regex']}")
+                    self._logger.debug(f"Filenames were {file_basenames}")
+                    self._logger.exception()
 
                 try:
                     filtered_away.extend(np.array(file_dirs)[np.invert(keep)].tolist())
@@ -556,32 +457,25 @@ class ImageDataSet(PMIDataBase):
         index before returning the 3D size.
         """
         if self._byslices >= 0:
-            return [int(self.metadata[self.get_internal_index(id)]['dim[%d]' % (i + 1)]) for i in range(3)]
+            return [int(self.metadata[self.get_internal_index(id)]['dim'][i + 1]) for i in range(3)]
         else:
             id = id % len(self.metadata)
-            return [int(self.metadata[id]['dim[%d]'%(i+1)]) for i in range(3)]
+            return [int(self.metadata[id]['dim'][i+1]) for i in range(3)]
 
     def get_spacing(self, id):
         r"""Get the spacing of the original image. Ignores load by slice and
         gives 3D spacing."""
         id = id % len(self.metadata)
         if self._byslices >= 0:
-            return [round(self.metadata[self.get_internal_index(id)]['pixdim[%d]' % (i + 1)], 5) for i in range(3)]
+            return [round(self.metadata[self.get_internal_index(id)]['pixdim'][i + 1], 8) for i in range(3)]
         else:
-            return [round(self.metadata[id]['pixdim[%d]'%(i+1)], 5) for i in range(3)]
+            return [round(self.metadata[id]['pixdim'][i+1], 8) for i in range(3)]
 
     def __len__(self):
         return self.length
 
     def __getitem__(self, item):
-        if self._byslices >= 0:
-            out_dim = 3
-        else:
-            out_dim = 4
-
-        out = self.data[item]
-        while out.dim() < out_dim:
-            out = out.unsqueeze(0)
+        out = self.data[item][tio.DATA]
         return out
 
     def __str__(self):
@@ -590,9 +484,8 @@ class ImageDataSet(PMIDataBase):
             "Datatype: %s \n" \
             "Root Path: %s \n" \
             "Number of loaded images: %i\n" \
-            "Load By Slice: %i \n" \
             "Image Details:\n" \
-            "--------------\n"%(__class__.__name__, self.rootdir, self.length, self._byslices)
+            "--------------\n"%(__class__.__name__, self.rootdir, self.length)
         # "File Paths\tSize\t\tSpacing\t\tOrigin\n"
         # printable = {'File Name': []}
         printable = {'ID': [], 'File Name': [], 'Size': [], 'Spacing': [], 'Origin': []}
@@ -601,26 +494,19 @@ class ImageDataSet(PMIDataBase):
             id_mo = 'None' if id_mo is None else id_mo.group()
             printable['ID'].append(id_mo)
             printable['File Name'].append(os.path.basename(self.data_source_path[i]))
-            # for keys in self.metadata[i]:
-            #     if not printable.has_key(keys):
-            #         printable[keys] = []
-            #
-            #     printable[keys].append(self.metadata[i][keys])
-            printable['Size'].append([self.metadata[i]['dim[1]'],
-                                      self.metadata[i]['dim[2]'],
-                                      self.metadata[i]['dim[3]']])
-            printable['Spacing'].append([round(self.metadata[i]['pixdim[1]'], 2),
-                                         round(self.metadata[i]['pixdim[2]'], 2),
-                                         round(self.metadata[i]['pixdim[3]'], 2)])
-            printable['Origin'].append([round(self.metadata[i]['qoffset_x'], 2),
-                                        round(self.metadata[i]['qoffset_y'], 2),
-                                        round(self.metadata[i]['qoffset_z'], 2)])
-        data = df(data=printable)
+
+            # TODO: temp fix
+            printable['Size'].append(self.metadata[i]['dim'][1:4])
+            printable['Spacing'].append([round(self.metadata[i]['pixdim'][j], 2) for j in range(1, 4)])
+            printable['Origin'].append([round(self.metadata[i][k], 3) for k in ['qoffset_x',
+                                                                                'qoffset_y',
+                                                                                'qoffset_z']])
+        data = df.from_dict(data=printable)
         data = data.set_index('ID')
         s += data.to_string()
         return s
 
-    def Write(self, tensor_data, outputdirectory, prefix=''):
+    def write_all(self, tensor_data, outputdirectory, prefix=''):
         r"""Write data array to the output directory accordining to the image
         properties of the loaded images.
 
@@ -702,22 +588,33 @@ class ImageDataSet(PMIDataBase):
     def get_unique_values(self):
         r"""Get the tensor of all unique values in basedata. Only for integer tensors
         """
-        assert self.data[0].is_floating_point() == False, \
-            "This function is for integer tensors. Current datatype is: %s"%(self.data[0].dtype)
-        vals = unique(cat([unique(d) for d in self.data]))
+        assert self[0].is_floating_point() == False, \
+            "This function is for integer tensors. Current datatype is: %s"%(self[0].dtype)
+        vals = unique(cat([unique(d) for d in self]))
         return vals
 
     def get_unique_values_n_counts(self):
         """Get a dictionary of unique values as key and its counts as value.
         """
-        assert self.data[0].is_floating_point() == False, \
-            "This function is for integer tensors. Current datatype is: %s"%(self.data[0].dtype)
+        from torch.utils.data import DataLoader
+        assert self[0].is_floating_point() == False, \
+            "This function is for integer tensors. Current datatype is: %s"%(self[0].dtype)
+
         out_dict = {}
-        for val, counts in [unique(d, return_counts=True) for d in self.data]:
-            for v, c in zip(val, counts):
+
+        # torchio reuqires some tricks to keep memory efficiencies.
+        subjects = [tio.Subject(im=d) for d in self.data]
+        subjects = tio.SubjectsDataset(subjects)
+        subjects_loader = DataLoader(subjects, batch_size=1, num_workers=12)
+
+        # Use a dataloader to do the trick
+        for d in auto.tqdm(subjects_loader, desc="get_unique_values_n_counts"):
+            val, counts = unique(d['im'][tio.DATA], return_counts=True)
+            for v, c, in zip(val, counts):
                 if v.item() not in out_dict:
                     out_dict[v.item()] = c.item()
                 else:
                     out_dict[v.item()] += c.item()
+            del d
         return out_dict
 
