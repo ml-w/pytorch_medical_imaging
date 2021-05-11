@@ -1,7 +1,9 @@
 from ..utils.preprocessing import make_mask_from_dir
 import argparse
 
-def console_entry_point():
+__all__ = ['console_entry']
+
+def console_entry():
     parser = argparse.ArgumentParser(
         description="Create mask using binary threshold filter for all images in a directory.")
     parser.add_argument('-i', '--input', dest='input', action='store',

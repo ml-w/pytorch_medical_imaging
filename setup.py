@@ -52,7 +52,8 @@ setup(
         'console_scripts': [
             'dicom2nii = pytorch_med_imaging.scripts.dicom2nii:console_entry',
             'analysis-segment = pytorch_med_imaging.scripts.analysis:segmentation_analysis',
-            'match_dimension = pytorch_med_imaging.scripts.match_dimension:console_entry'
+            'match_dimension = pytorch_med_imaging.scripts.match_dimension:console_entry',
+            'make_masks = pytorch_med_imaging.scripts.make_masks.console_entry'
         ]
     },
     # scripts = scripts,
