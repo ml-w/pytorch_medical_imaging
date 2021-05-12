@@ -1,70 +1,99 @@
 import torch
 import torch.nn as nn
-from .layers import Conv3d, ConvTrans3d, MultiConvResBlock3d
+from .layers import Conv3d, ConvTrans3d, MultiConvResBlock3d, DoubleConv3d
 from numpy import clip
+
+__all__ = ['VNet']
 
 
 class Down(nn.Module):
-    def __init__(self, in_ch, out_ch, down_fact=2):
+    r"""Down and than convolution."""
+    def __init__(self,
+                 in_ch,
+                 out_ch,
+                 num_conv: int = 2,
+                 down_mode: str = 'conv',
+                 drop_out: float = 0.2,
+                 residual: bool = True):
         super(Down, self).__init__()
-        self.down_conv = Conv3d(in_ch, out_ch, kern_size=down_fact, stride=down_fact, padding=0)
+        assert  num_conv >= 1, "Must have at least 1 convolution."
+        self.residual = residual
+
+        if down_mode == 'conv':
+            self.add_module('down', nn.Conv3d(in_ch, out_ch, stride=2, kernel_size=2, padding=0))
+        elif down_mode == 'pool':
+            self.add_module('down', nn.MaxPool3d(2))
+        else:
+            raise AttributeError(f"Argument down_mode can only be one of ['conv'|'poo'], got {down_mode} instead")
+
+        self.conv = MultiConvResBlock3d(out_ch, out_ch, num_conv, drop_out=drop_out)
 
     def forward(self, x):
-        return x, self.down_conv(x) # x is shortcut connection
+        x = self.down(x)
+        if self.residual:
+            return self.conv(x).add(x)
+        else:
+            return self.conv(x)
+
+
 
 class Up(nn.Module):
-    def __init__(self, in_ch, num_of_convs, drop_out=0, up_fact=2):
+    def __init__(self, in_ch, num_of_convs, drop_out=0):
+        r"""Upwards transition. First up, than conv."""
         super(Up, self).__init__()
         self.conv = MultiConvResBlock3d(in_ch, in_ch // 2, num_of_convs, drop_out=drop_out)
-        self.up = ConvTrans3d(in_ch // 2, in_ch //2, kern_size=up_fact, stride=up_fact, padding=0)
+        self.up = ConvTrans3d(in_ch, in_ch //2, kern_size=2, stride=2, padding=0)
 
     def forward(self, x, s):
-        return self.up(self.conv(torch.cat([x, s], dim=1)))
+        x = self.up(x)
+        return self.conv(torch.cat([x, s], dim=1)).mul(x)
 
 class VNet(nn.Module):
-    def __init__(self, in_ch, out_ch, depth=5):
+    def __init__(self, in_ch, out_ch, init_conv_out_ch=16, depth=5, residual=True):
         super(VNet, self).__init__()
-        self.depth=5
-        start_ch = 16
+        self.residual = True
+        self.depth = depth
+        start_ch = init_conv_out_ch
 
-        # First Down
-        self.down = [Down(in_ch, start_ch)]
+        # First conv
+        self.add_module('in_conv', DoubleConv3d(in_ch, start_ch))
 
-        # Inner down
-        for d in range(depth-2): #[0, 1, 2]
-            layer = nn.Sequential(
-                MultiConvResBlock3d(start_ch * 2 ** d, start_ch * 2 ** (d+1), clip(d+1, 2, 3)),
-                Down(start_ch * 2 ** (d+1), start_ch * 2 ** (d+1))
-            )
-            self.down.append(layer)
+        # Down
+        self.down = nn.ModuleDict()
+        for d in range(depth - 1): #[0, 1, 2]
+            num_conv = 2 if d == 1 else 3
+            self.down.add_module(f'down_{d+1:02d}', Down(start_ch * 2 **(d), start_ch * 2 **(d + 1), num_conv))
 
         # Last down
-        self.last_down = MultiConvResBlock3d(start_ch * 2 ** (depth - 2), start_ch * 2 ** (depth - 1))
+        self.add_module('last_conv',
+                        MultiConvResBlock3d(start_ch * 2 ** (depth - 2), start_ch * 2 ** (depth - 1), 2))
 
-        # First up
-        self.up = [ConvTrans3d(start_ch * 2 **(depth-1), start_ch * 2 ** (depth-1), kern_size=2, stride=2, padding=0)]
-
-        # Inner up
+        # Up
+        self.up = nn.ModuleDict()
         for d in range(depth-1, 1, -1): #[4, 3, 2]
-            layer = Up(start_ch * 2 ** d, start_ch * 2 ** (d-1), clip(d+1, 2, 3))
-            self.up.append(layer)
+            num_conv = 2 if d == 1 else 3
+            layer = Up(start_ch * 2 ** d, clip(d+1, 2, 3))
+            self.up.add_module(f'up_{d+1:02d}', layer)
 
         # Last up
-        self.up.append(nn.Sequential(
-            Up(32, 2),
-            Conv3d(16, out_ch, kern_size=1, padding=0)
-        ))
+        self.up.add_module('last_up', Up(start_ch * 2, start_ch))
+
+        # Out conv
+        self.out_conv = nn.Conv3d(start_ch, out_ch, kernel_size=1)
 
     def forward(self, x):
-        short_cut = []
+        x = self.in_conv(x) + x
+
+        short_cut = [x]
         for layer in self.down:
-            s, x = layer(x)
-            short_cut.append(x)
+            x = self.down[layer](x)
+            # no need to append last:
+            if len(short_cut) < self.depth - 1:
+                short_cut.append(x)
 
-        x = self.last_down(x)
         for i, layer in enumerate(self.up):
-            d = self.depth - i - 1
+            d = self.depth - i - 2
             s = short_cut[d]
-            x = layer(x, s)
+            x = self.up[layer](x, s)
 
-        return x
+        return self.out_conv(x)

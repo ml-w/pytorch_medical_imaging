@@ -10,6 +10,7 @@ from .AttentionResidual import *
 from .CnnRnn import *
 from .SimpleFCNet import *
 from .DenseNet import *
+from .VNet import *
 
 # Exporting package
 from . import third_party_nets
