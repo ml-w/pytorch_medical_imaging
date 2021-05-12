@@ -20,12 +20,24 @@ class InvertedConv3d(nn.Module):
 
 
 class Conv3d(nn.Module):
-    def __init__(self, in_ch, out_ch, kern_size=3, stride=1, padding=1, bias=True):
+    def __init__(self, in_ch, out_ch, kern_size=3, stride=1, padding=1, bias=True, activation='relu'):
         super(Conv3d, self).__init__()
+        activation_funcs = {
+            'relu': nn.ReLU,
+            'prelu': nn.PReLU,
+            'leaky_relu': nn.LeakyReLU,
+            'elu': nn.ELU,
+            'tanh': nn.Tanh,
+        }
+        if not activation in activation_funcs:
+            raise AttributeError(f"Activation should be one of [{'|'.join(activation_funcs.keys())}], "
+                                 f"got {activation} instead")
+        activation = activation_funcs.get(activation)
+
         self.conv = nn.Sequential(
             nn.Conv3d(in_ch, out_ch, kern_size, stride, padding=padding, bias=bias),
             nn.BatchNorm3d(out_ch),
-            nn.ReLU(inplace=True)
+            activation(inplace=True)
         )
 
     def forward(self, x):
@@ -33,11 +45,11 @@ class Conv3d(nn.Module):
 
 
 class DoubleConv3d(nn.Module):
-    def __init__(self, in_ch, out_ch, kern_size=3, stride=1, padding=1, bias=True, dropout=0):
+    def __init__(self, in_ch, out_ch, kern_size=3, stride=1, padding=1, bias=True, dropout=0, activation='relu'):
         super(DoubleConv3d, self).__init__()
         self.conv = nn.Sequential(
-            Conv3d(in_ch, out_ch, kern_size=kern_size, stride=stride, padding=padding, bias=bias),
-            Conv3d(out_ch, out_ch, kern_size=kern_size, padding=padding, bias=bias),
+            Conv3d(in_ch, out_ch, kern_size=kern_size, stride=stride, padding=padding, bias=bias, activation=activation),
+            Conv3d(out_ch, out_ch, kern_size=kern_size, padding=padding, bias=bias, activation=activation),
             nn.Dropout3d(p = dropout, inplace=False)
         )
 
