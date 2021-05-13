@@ -39,7 +39,7 @@ class Conv3d(nn.Module):
         self.conv = nn.Sequential(
             nn.Conv3d(in_ch, out_ch, kern_size, stride, padding=padding, bias=bias),
             nn.BatchNorm3d(out_ch),
-            activation(inplace=True)
+            activation()
         )
 
     def forward(self, x):
@@ -109,11 +109,11 @@ class ResidualBlock3d(nn.Module):
 
 
 class MultiConvResBlock3d(nn.Module):
-    def __init__(self, in_ch, out_ch, num_of_convs, kern_size=5, padding=2, drop_out=0, bias=True):
+    def __init__(self, in_ch, out_ch, num_of_convs, kern_size=5, padding=2, drop_out=0, bias=True, activation='relu'):
         assert num_of_convs > 1, "Number of convolutions must be larger than 1."
         super(MultiConvResBlock3d, self).__init__()
-        self.first_conv = Conv3d(in_ch, out_ch, kern_size=kern_size, padding=padding, bias=bias)
-        self.convs = [Conv3d(out_ch,out_ch, kern_size=kern_size, padding=padding, bias=bias) for i in range(num_of_convs - 1)]
+        self.first_conv = Conv3d(in_ch, out_ch, kern_size=kern_size, padding=padding, bias=bias, activation=activation)
+        self.convs = [Conv3d(out_ch,out_ch, kern_size=kern_size, padding=padding, bias=bias, activation=activation) for i in range(num_of_convs - 1)]
         self.conv = nn.Sequential(*self.convs)
         self.dropout = nn.Dropout3d(p=drop_out)
 

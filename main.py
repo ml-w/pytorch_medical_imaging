@@ -232,8 +232,22 @@ def main(a, config, logger):
     # Training Mode
     if not mode:
         logger.log_print_tqdm("Start training...")
-        inputDataset, gtDataset = pmi_data.load_dataset()
-        valDataset, valgtDataset = pmi_data_val.load_dataset() if validation_FLAG else (None, None)
+        trainingSubjects = pmi_data.load_dataset()
+        validationSubjects = pmi_data_val.load_dataset() if validation_FLAG else (None, None)
+
+        # Prepare dataset
+        # numcpu = int(os.environ.get('SLURM_CPUS_ON_NODE', default=torch.multiprocessing.cpu_count()))
+        numcpu = 0
+        if data_pmi_loader_type is None:
+            loader = DataLoader(trainingSubjects, batch_size=param_batchsize, shuffle=True, num_workers=numcpu,
+                                drop_last=True, pin_memory=True)
+            loader_val = DataLoader(validationSubjects, batch_size=param_batchsize, shuffle=False, num_workers=numcpu,
+                                    drop_last=False, pin_memory=True) if validation_FLAG else None
+        else:
+            logger.info("Loading custom dataloader.")
+            loader_factory = PMIBatchSamplerFactory()
+            loader = loader_factory.produce_object(trainingSet, config)
+            loader_val = loader_factory.produce_object(valSet, config, force_inference=True) if validation_FLAG else None
 
         #------------------------
         # Create training solver
@@ -251,7 +265,7 @@ def main(a, config, logger):
             logger.log_print_tqdm('Wrong run_type setting!', logging.ERROR)
             return
         logger.info("Creating solver: {}".format(solver_class))
-        solver = solver_class(inputDataset, gtDataset, net,
+        solver = solver_class(net,
                               {'lr': param_lr, 'momentum': param_momentum}, bool_usecuda,
                               param_initWeight=param_initWeight, config=config)
 
@@ -266,23 +280,6 @@ def main(a, config, logger):
             solver.set_lr_decay_to_reduceOnPlateau(3, param_decay, **_lr_scheduler_dict)
         else:
             solver.set_lr_decay_exp(param_decay)
-
-        # Prepare dataset
-        numcpu = int(os.environ.get('SLURM_CPUS_ON_NODE', default=torch.multiprocessing.cpu_count()))
-        trainingSet = PMITensorDataset(inputDataset, gtDataset) # Note that this avoids dim checks.
-        valSet = PMITensorDataset(valDataset, valgtDataset) if validation_FLAG else None
-
-        # Create dataloader for training data
-        if data_pmi_loader_type is None:
-            loader = DataLoader(trainingSet, batch_size=param_batchsize, shuffle=True, num_workers=numcpu,
-                                drop_last=True, pin_memory=False)
-            loader_val = DataLoader(valSet, batch_size=param_batchsize, shuffle=False, num_workers=numcpu,
-                                    drop_last=False, pin_memory=False) if validation_FLAG else None
-        else:
-            logger.info("Loading custom dataloader.")
-            loader_factory = PMIBatchSamplerFactory()
-            loader = loader_factory.produce_object(trainingSet, config)
-            loader_val = loader_factory.produce_object(valSet, config, force_inference=True) if validation_FLAG else None
 
         # Push dataloader to solver
         solver.set_dataloader(loader, loader_val)
@@ -484,6 +481,7 @@ if __name__ == '__main__':
                 if not _section in config:
                     config.add_section(_section)
                 config.set(_section, _key, _val)
+
         # except:
         #     pre_log_message.append("Something went wrong when overriding settings.")
 

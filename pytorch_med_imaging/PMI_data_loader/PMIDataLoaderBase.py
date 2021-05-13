@@ -100,8 +100,24 @@ class PMIDataLoaderBase(object):
         else:
             return fparser['FileList'].get('testing').split(',')
 
-    def load_dataset(self):
+    def _load_default_attr(self, default_dict):
+        r"""
+        Load default dictionary as attr from loader params
         """
+        final_dict = {}
+        for key in default_dict:
+            val = default_dict[key]
+            if isinstance(val, bool):
+                final_dict[key] = self.get_from_loader_params_with_boolean(key, default_dict[key])
+            elif isinstance(val, str):
+                final_dict[key] = self.get_from_loader_params(key, default_dict[key])
+            else:
+                final_dict[key] = self.get_from_loader_params_with_eval(key, default_dict[key])
+        self._logger.debug(f"final_dict: {final_dict}")
+        self.__dict__.update(final_dict)
+
+    def load_dataset(self):
+        r"""
         Called in solver or inferencer to load arguments for the network training or actual inference. Normally you
         would need not to inherit this but you can do so to added some custom features.
 
@@ -135,6 +151,7 @@ class PMIDataLoaderBase(object):
                 Default to `None`.
 
         """
+        # Loading basic inputs
         try:
             self._input_dir = self.get_from_config('Data', 'input_dir')
             self._target_dir = self.get_from_config('Data', 'target_dir', default_value=None)
@@ -149,7 +166,6 @@ class PMIDataLoaderBase(object):
                 self._loader_params = dict(config['LoaderParams'])
             else:
                 self._loader_params = config_file
-
 
     def get_from_config(self, section, key, default_value=None, tar_dict=None):
         """
@@ -167,7 +183,6 @@ class PMIDataLoaderBase(object):
             return out
         except:
             return default_value
-
 
     def get_from_config_with_eval(self, section, key, default_value=None, tar_dict=None):
         """
@@ -194,7 +209,6 @@ class PMIDataLoaderBase(object):
         except:
             return default_value
 
-
     def get_from_config_with_boolean(self, section, key, default_value=None, tar_dict=None):
         """
         Same as :func:`get_from_loader_params` with getboolean().
@@ -212,7 +226,6 @@ class PMIDataLoaderBase(object):
             self._logger.warning("Cannot getboolean from target section {} with key {}".format(section, key))
             return default_value
 
-
     def get_from_loader_params(self, key, default_value=None):
         """
         Method for convenient value extraction. Read from self._prop_dict[LoaderParams] with default
@@ -229,7 +242,6 @@ class PMIDataLoaderBase(object):
             return out
         except:
             return default_value
-
 
     def get_from_loader_params_with_eval(self, key, default_value=None):
         """
@@ -295,3 +307,4 @@ class PMIDataLoaderBase(object):
                 _func = self.get_from_config
             out_dict[k] = _func(section, k, default_value=default_value, tar_dict=tar_dict)
         return out_dict
+

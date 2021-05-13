@@ -144,15 +144,57 @@ class TB_plotter(object):
             self._writer.add_scalar('Accuracies', args[1], writer_index)
         return args[0]
 
-    def plot_segmentation(self, gt, out, img, writer_index, Zrange=40, nrow=3):
+    def plot_segmentation(self,
+                          gt: torch.IntTensor,
+                          out: torch.FloatTensor,
+                          img: torch.FloatTensor or torch.IntTensor,
+                          writer_index: int, Zrange=40, nrow=3):
         self._last_writer_index = writer_index
         try:
-            Zrange = out.shape[0] if out.shape[0] < 40 else Zrange
+            # Check if input is 2D or 3D
+            dim = gt.ndim
 
-            ar = torch.argmax(out, 1)
-            ss = img[0] if isinstance(img, list) else img
+            # If 3D, choose a case in the batch where at least one slice has segmentation
+            if dim == 5:
+                gtsum = torch.sum(gt, dim=[2, 3, 4]).squeeze()
 
-            grid = draw_grid(ss[:Zrange].cpu(), ar[:Zrange].cpu(), ground_truth=gt[:Zrange].cpu(), thickness=2)
+                # Skip if there are no labels
+                if gtsum.sum() == 0:
+                    self._logger.warning("Mini-batch has no labels in this epoch.")
+
+                # Get the case with most labels
+                b_index = torch.argmax(gtsum)
+                gt = gt[b_index]
+                out = out[b_index]
+                img = img[b_index]
+
+                # Here Zrange is max number of slice
+                Zrange = out.shape[-1] if out.shape[-1] < 40 else Zrange
+                ar = torch.argmax(out, 0, keepdim=True)
+                ss = img[0] if isinstance(img, list) else img
+
+                # B x 1 x H x W x D
+                ss = ss[..., :Zrange].permute(3, 0, 1, 2)
+                ar = ar[..., :Zrange].permute(3, 0, 1, 2)
+                gt = gt[..., :Zrange].permute(3, 0, 1, 2)
+
+            else:
+                # TODO: Need to fix for 2D display now
+                # Here Zrange is max batch size.
+                Zrange = out.shape[0] if out.shape[0] < 40 else Zrange
+
+                ar = torch.argmax(out, 1)
+                ss = img[0] if isinstance(img, list) else img
+
+                ss = ss[..., :Zrange]
+                ar = ar[..., :Zrange]
+                gt = gt[..., :Zrange]
+
+                # self._logger.debug(f"ss: {ss.shape}")
+                # self._logger.debug(f"ar: {ar.shape}")
+                # self._logger.debug(f"gt: {gt.shape}")
+
+            grid = draw_grid(ss, ar, ground_truth=gt, thickness=2)
             self._writer.add_image('Image/Image', grid.transpose(2, 0, 1), writer_index)
 
 

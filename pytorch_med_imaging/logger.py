@@ -72,8 +72,10 @@ class Logger(object):
         if Logger.global_logger is None:
             Logger.global_logger = self
             Logger.all_loggers[logger_name] = self
+            print = self.info
             sys.excepthook= self.exception_hook
             self.info("Exception hooked to this logger.")
+
 
 
     def log_traceback(self):

@@ -1,5 +1,6 @@
 import torch
 import torch.nn as nn
+import torchio as tio
 
 from ..loss import *
 
@@ -9,7 +10,7 @@ from abc import abstractmethod
 import numpy as np
 import gc
 import ast
-from logging import Logger
+from ..logger import Logger
 
 class SolverBase(object):
     """
@@ -40,7 +41,7 @@ class SolverBase(object):
         # optional
         self._logger            = solver_configs.get('logger', None)
         if self._logger is None:
-            self._logger = Logger[self.__class__.__name__]
+            self._logger        = Logger[self.__class__.__name__]
 
         # Optimizer
         self._lr_decay          = solver_configs.get('lrdecay', None)
@@ -72,6 +73,23 @@ class SolverBase(object):
         self._logger.info("Solver were configured with options: {}".format(solver_configs))
         if  len(kwargs):
             self._logger.warning("Some solver configs were not used: {}".format(kwargs))
+
+    def _load_default_attr(self, default_dict):
+        r"""
+        Load default dictionary as attr from solver params
+        """
+        final_dict = {}
+        for key in default_dict:
+            val = default_dict[key]
+            if isinstance(val, bool):
+                final_dict[key] = self._get_params_from_solver_config_with_boolean(key, default_dict[key])
+            elif isinstance(val, str):
+                final_dict[key] = self._get_params_from_solver_config(key, default_dict[key])
+            else:
+                final_dict[key] = self._get_params_from_solver_config(key, default_dict[key], with_eval=True)
+
+        self._logger.debug(f"final_dict: {final_dict}")
+        self.__dict__.update(final_dict)
 
     def get_net(self):
         if torch.cuda.device_count() > 1:
@@ -111,8 +129,7 @@ class SolverBase(object):
             'threshold_mode':'rel'
         }
         try:
-            for keys in kwargs:
-                _default_kwargs[keys] = kwargs[keys]
+            _default_kwargs.update(kwargs)
         except:
             self._logger.warning("Extraction of parameters failed. Retreating to use default.")
 
@@ -133,7 +150,8 @@ class SolverBase(object):
         self._tb_plotter = plotter
 
     def net_to_parallel(self):
-        if torch.cuda.device_count()  > 1:
+        if (torch.cuda.device_count()  > 1) & self._iscuda:
+            self._logger.info("Multi-GPU detected, using nn.DataParallel for distributing workload.")
             self._net = nn.DataParallel(self._net)
 
     def set_loss_function(self, func: callable):
@@ -215,8 +233,9 @@ class SolverBase(object):
         # Reset dict each epoch
         self._net.train()
         self.plotter_dict = {'scalars': {}, 'epoch_num': epoch_number}
-        for step_idx, samples in enumerate(self._data_loader):
-            s, g = samples
+        for step_idx, mb in enumerate(self._data_loader):
+            s, g = self._unpack_minibatch(mb, self.unpack_keys_forward)
+            self._logger.debug(f"Max label: {torch.max(g).data}")
 
             # initiate one train step. Things should be plotted in decorator of step if needed.
             out, loss = self.step(s, g)
@@ -224,7 +243,7 @@ class SolverBase(object):
             E.append(loss.data.cpu())
             self._logger.info("\t[Step %04d] loss: %.010f"%(step_idx, loss.data))
 
-            self._step_callback(s, g, out, loss, step_idx=step_idx)
+            self._step_callback(s.float(), g, out.cpu().float(), loss.data.cpu(), step_idx=step_idx)
             del s, g, out, loss
             gc.collect()
 
@@ -337,15 +356,20 @@ class SolverBase(object):
             except:
                 self._logger.exception("Error occured in default epoch callback.")
 
-    def _get_params_from_config(self, section, key, default=None, with_eval=False):
+    def _get_params_from_config(self, section, key, default=None, with_eval=False, with_boolean=False):
         try:
             if with_eval:
-                out = self._config[section].get(key, default)
-                return ast.literal_eval(out) if isinstance(out,str) else out
+                if with_boolean:
+                    out = self._config[section].getboolean(key, default)
+                    return out
+                else:
+                    out = self._config[section].get(key, default)
+                    return ast.literal_eval(out) if isinstance(out,str) else out
             else:
                 return self._config[section].get(key, default)
         except AttributeError:
             self._logger.warning(f"Key absent in config: ({section},{key})")
+            self._logger.exception('Exception: ')
             return default
         except:
             self._logger.exception(f"Unexpected error when reading params with key: ({section}, {key})")
@@ -353,6 +377,21 @@ class SolverBase(object):
 
     def _get_params_from_solver_config(self, key, default=None, with_eval=False):
         return self._get_params_from_config('SolverParams', key, default, with_eval)
+
+    def _get_params_from_solver_config_with_boolean(self, key, default=None):
+        return self._get_params_from_config('SolverParams', key, default, True, True)
+
+    def _unpack_minibatch(self, minibatch, unpacking_keys):
+        r"""Unpack mini-batch drawn by torchio.Queue or torchio.SubjectsDataset.
+        TODO: allow custom modification after unpacking, e.g. concatentation
+        """
+        out = []
+        for key in unpacking_keys:
+            try:
+                out.append(minibatch[key][tio.DATA])
+            except AttributeError:
+                out.append(minibatch[key])
+        return out
 
 
 class SolverEarlyStopScheduler(object):

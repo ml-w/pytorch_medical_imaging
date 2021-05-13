@@ -43,7 +43,7 @@ setup(
     packages=['pytorch_med_imaging'],
     url='https://github.com/alabamagan/pytorch_medical_imaging',
     license='',
-    author='Wong Matthew Lun',
+    author='ML, Wong',
     author_email='fromosia@link.cuhk.edu.hk',
     description='',
     cmdclass = cmdclass,
@@ -55,8 +55,8 @@ setup(
             'match_dimension = pytorch_med_imaging.scripts.match_dimension:console_entry',
             'make_masks = pytorch_med_imaging.scripts.make_masks.console_entry'
         ]
-    },
+    }
     # scripts = scripts,
-    install_requires=['torchio'],
-    dependency_links=[os.path.abspath('./ThirdParty/torchio')]
+    # install_requires=['torchio'],
+    # dependency_links=[os.path.abspath('./ThirdParty/torchio')]
 )
