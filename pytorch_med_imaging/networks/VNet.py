@@ -26,7 +26,7 @@ class Down(nn.Module):
         else:
             raise AttributeError(f"Argument down_mode can only be one of ['conv'|'poo'], got {down_mode} instead")
 
-        self.conv = MultiConvResBlock3d(out_ch, out_ch, num_conv, drop_out=drop_out)
+        self.conv = MultiConvResBlock3d(out_ch, out_ch, num_conv, drop_out=drop_out, activation='prelu')
 
     def forward(self, x):
         x = self.down(x)
@@ -41,7 +41,7 @@ class Up(nn.Module):
     def __init__(self, in_ch, num_of_convs, drop_out=0):
         r"""Upwards transition. First up, than conv."""
         super(Up, self).__init__()
-        self.conv = MultiConvResBlock3d(in_ch, in_ch // 2, num_of_convs, drop_out=drop_out)
+        self.conv = MultiConvResBlock3d(in_ch, in_ch // 2, num_of_convs, drop_out=drop_out, activation='prelu')
         self.up = ConvTrans3d(in_ch, in_ch //2, kern_size=2, stride=2, padding=0)
 
     def forward(self, x, s):
@@ -56,7 +56,7 @@ class VNet(nn.Module):
         start_ch = init_conv_out_ch
 
         # First conv
-        self.add_module('in_conv', DoubleConv3d(in_ch, start_ch))
+        self.add_module('in_conv', DoubleConv3d(in_ch, start_ch, activation='prelu'))
 
         # Down
         self.down = nn.ModuleDict()
@@ -83,7 +83,6 @@ class VNet(nn.Module):
 
     def forward(self, x):
         x = self.in_conv(x) + x
-
         short_cut = [x]
         for layer in self.down:
             x = self.down[layer](x)
@@ -93,7 +92,6 @@ class VNet(nn.Module):
 
         for i, layer in enumerate(self.up):
             d = self.depth - i - 2
-            s = short_cut[d]
-            x = self.up[layer](x, s)
+            x = self.up[layer](x, short_cut[d])
 
         return self.out_conv(x)
