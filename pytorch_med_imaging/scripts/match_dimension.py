@@ -7,17 +7,17 @@ import os
 
 __all__ = ['match_dimension']
 
-def match_dimension(args):
-    if args.ids is not None:
-        if os.path.isfile(args.ids):
-            ids = [r.rstrip() for r in open(args.ids, 'r').readlines()]
-        elif args.ids.find(',') >= 0:
-            ids = args.ids.split(',')
+def match_dimension(a):
+    if a.ids is not None:
+        if os.path.isfile(a.ids):
+            ids = [r.rstrip() for r in open(a.ids, 'r').readlines()]
+        elif a.ids.find(',') >= 0:
+            ids = a.ids.split(',')
         else:
-            ids = [args.ids]
+            ids = [a.ids]
     else:
         ids = None
-    log = args.log
+    log = a.log
 
     if not ids is None:
         imsetA = ImageDataSet(a.dirA, verbose=a.verbose, dtype='uint8', debugmode=a.debug, filtermode='idlist',
@@ -44,8 +44,14 @@ def match_dimension(args):
         log.warning("The ids are not paired properly. Using overlapping of the lists.")
 
     overlapId = list(set(ida) & set(idb))
-    size_a = [tuple(imsetA.get_data_by_ID(i).shape) for i in overlapId]
-    size_b = [tuple(imsetB.get_data_by_ID(i).shape) for i in overlapId]
+    a_ids = imsetA.get_unique_IDs(globber=a.globber)
+    b_ids = imsetB.get_unique_IDs(globber=a.globber)
+    overlap_indices_a = [a_ids.index(i) for i in overlapId]
+    overlap_indices_b = [b_ids.index(i) for i in overlapId]
+
+
+    size_a = [tuple(imsetA.get_size(i)) for i in overlap_indices_a]
+    size_b = [tuple(imsetB.get_size(i)) for i in overlap_indices_b]
 
     miss_match = {}
     for i, (sa, sb) in enumerate(zip(size_a, size_b)):
@@ -97,10 +103,6 @@ def match_dimension(args):
     log.info("Try exiting cleanly")
     log.info("{:=^100}".format(" Finished "))
     del log
-    if not a.saveLog:
-        os.remove(a.log)
-
-    pass
 
 def console_entry():
     parser = argparse.ArgumentParser(
@@ -125,15 +127,22 @@ def console_entry():
                         help="For debug.")
     a = parser.parse_args()
 
-    for dir in [args.dirA, args.dirB]:
+    for dir in [a.dirA, a.dirB]:
         assert os.path.isdir(dir)
 
-    log = Logger(a.log, logger_name='scripts.match_dimension', verbose=a.verbose)
+    logpath = a.log
+    log = Logger(a.log, logger_name='scripts.match_dimension', verbose=a.verbose, keep_file=a.saveLog)
     log.info("{:=^100}".format(" Matching Dimensions "))
     sys.excepthook = log.exception_hook
     a.log = log
 
     match_dimension(a)
+
+    if not a.saveLog:
+        try:
+            os.remove(logpath)
+        except:
+            pass
 
 if __name__ == '__main__':
     console_entry()
