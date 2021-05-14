@@ -235,7 +235,6 @@ class SolverBase(object):
         self.plotter_dict = {'scalars': {}, 'epoch_num': epoch_number}
         for step_idx, mb in enumerate(self._data_loader):
             s, g = self._unpack_minibatch(mb, self.unpack_keys_forward)
-            self._logger.debug(f"Max label: {torch.max(g).data}")
 
             # initiate one train step. Things should be plotted in decorator of step if needed.
             out, loss = self.step(s, g)
