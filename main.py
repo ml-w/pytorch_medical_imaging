@@ -310,18 +310,6 @@ def main(a, config, logger):
             epoch_loss = solver.plotter_dict['scalars']['Loss/Loss']
             val_loss = solver.plotter_dict['scalars'].get('Loss/Validation Loss', None)
 
-            # Call back after each epoch, plotter_dict is plotted here
-            try:
-                logger.info("Initiate batch done callback.")
-                inputDataset.batch_done_callback()
-                logger.info("Done")
-            except NotImplementedError:
-                logger.warning("Input dataset has no batch done callback.", no_repeat=True)
-            except AttributeError:
-                logger.warning("Input dataset has no batch done callback.", no_repeat=True)
-            except Exception as e:
-                logger.exception(f"Unknown error occured during batch done callback: {e}")
-
             # use validation loss as epoch loss if it exist
             measure_loss = val_loss if val_loss is not None else epoch_loss
             backuppath = "./Backup/cp_%s_%s.pt"%(data_pmi_data_type, net_nettype) \

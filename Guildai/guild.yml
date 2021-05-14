@@ -32,6 +32,7 @@ train:
     requires:
         - file: '../Configs'
         - file: '../NPC_Segmentation'
+        - file: '../Sinus'
         - file: '../Backup/Log'
 
 train_segment:
@@ -69,6 +70,7 @@ train_segment:
     requires:
         - file: '../Configs'
         - file: '../NPC_Segmentation'
+        - file: '../Sinus'
         - file: '../Backup/Log'
 
 train_survival:
@@ -131,6 +133,7 @@ validation:
     requires:
         - file: '../Configs'
         - file: '../NPC_Segmentation'
+        - file: '../Sinus'
         - operation: train
           select: 'Backup'
     output-scalars:
@@ -163,6 +166,7 @@ validation_segment:
     requires:
         - file: '../Configs'
         - file: '../NPC_Segmentation'
+        - file: '../Sinus'
         - operation: train_segment
           select: 'Backup'
     output-scalars:

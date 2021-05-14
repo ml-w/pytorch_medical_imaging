@@ -191,18 +191,28 @@ def check_batches_files(dir, globber=None):
 
 if __name__ == '__main__':
     import pandas as pd
-    allids = [r.rstrip() for r in open('../../NPC_Segmentation/99.Testing/Survival_analysis/chemo_only.txt').readlines()]
-    datasheet = pd.read_csv('../../NPC_Segmentation/50.NPC_SurvivalAnalysis/survival_analysis_data_table.csv',
-                            index_col=0)
-    datasheet.index = datasheet.index.astype(str)
-    datasheet=datasheet.loc[allids]
-    dfs = (datasheet['DFS']*12).astype('int').to_list()
-
+    # allids = [r.rstrip() for r in open('../../NPC_Segmentation/99.Testing/Survival_analysis/chemo_only.txt').readlines()]
+    # datasheet = pd.read_csv('../../NPC_Segmentation/50.NPC_SurvivalAnalysis/survival_analysis_data_table.csv',
+    #                         index_col=0)
+    # datasheet.index = datasheet.index.astype(str)
+    # datasheet=datasheet.loc[allids]
+    # dfs = (datasheet['DFS']*12).astype('int').to_list()
+    #
+    # GenerateTestBatch(allids,
+    #                   5,
+    #                   '../../NPC_Segmentation/99.Testing/Survival_5Fold_Chemo_only_stratified_DFS/',
+    #                   stratification_class=dfs,
+    #                   validation=36,
+    #                   prefix='B'
+    #                   )
+    allids = [re.search('^[0-9]+', r) for r in os.listdir('../../Sinus/0A.NIFTI')]
+    allids.remove(None)
+    allids = [mo.group() for mo in allids]
     GenerateTestBatch(allids,
                       5,
-                      '../../NPC_Segmentation/99.Testing/Survival_5Fold_Chemo_only_stratified_DFS/',
-                      stratification_class=dfs,
-                      validation=36,
+                      '../../Sinus/99.Testing/Sinus_segment_5Folds',
+                      # stratification_class=dfs,
+                      validation= 30,
                       prefix='B'
                       )
 

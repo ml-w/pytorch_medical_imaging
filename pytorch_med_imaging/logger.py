@@ -158,7 +158,8 @@ class Logger(object):
 
 
     def __del__(self):
-        if not self._keepfile & self != Logger.get_global_logger():
+        if not self._keepfile & (self != Logger.get_global_logger() or len(Logger.all_loggers) == 1):
+            self._logger.info("Removing log file...")
             os.remove(self._log_dir)
 
 
