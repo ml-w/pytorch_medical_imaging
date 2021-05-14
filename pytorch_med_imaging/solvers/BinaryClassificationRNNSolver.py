@@ -53,7 +53,7 @@ class BinaryClassificationRNNSolver(BinaryClassificationSolver):
         self._logger.debug("loss_weight: {}".format(lossfunction_a.pos_weight))
         lossfunction_b = TverskyDiceLoss(weight=[1, self._pos_weights.mean()])
 
-        if self._iscuda:
+        if self.iscuda:
             lossfunction_a = lossfunction_a.cuda()
             lossfunction_b = lossfunction_b.cuda()
 
@@ -71,7 +71,7 @@ class BinaryClassificationRNNSolver(BinaryClassificationSolver):
             # ori_len doesn't need to be matched
         except:
             self._logger.exception("Failed to match input to network type. Falling back.")
-            if self._iscuda:
+            if self.iscuda:
                 s = self._force_cuda(s)
                 self._logger.debug("_force_cuda() typed data as: {}".format(
                     [ss.dtype for ss in s] if isinstance(s, list) else s.dtype))
@@ -183,9 +183,9 @@ class BinaryClassificationRNNSolver(BinaryClassificationSolver):
         # else:
         out = self._feed_forward(*args)
         loss = self._loss_eval(out, *args)
-        self._optimizer.zero_grad()
+        self.optimizer.zero_grad()
         loss.backward()
-        self._optimizer.step()
+        self.optimizer.step()
         return out, loss.cpu().data
 
 
@@ -201,7 +201,7 @@ class BinaryClassificationRNNSolver(BinaryClassificationSolver):
 
         # An issues is caused if the batchsize is 1, this is a work arround.
         if out.shape[0] == 1:
-            loss = self._lossfunction(out.squeeze().unsqueeze(0), g.squeeze().unsqueeze(0))
+            loss = self.lossfunction(out.squeeze().unsqueeze(0), g.squeeze().unsqueeze(0))
         else:
-            loss = self._lossfunction(out.squeeze(), g.squeeze())
+            loss = self.lossfunction(out.squeeze(), g.squeeze())
         return loss

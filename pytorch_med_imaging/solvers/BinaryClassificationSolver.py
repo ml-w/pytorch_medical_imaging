@@ -219,9 +219,9 @@ class BinaryClassificationSolver(ClassificationSolver):
         # else:
         out = self._feed_forward(*args)
         loss = self._loss_eval(out, *args)
-        self._optimizer.zero_grad()
+        self.optimizer.zero_grad()
         loss.backward()
-        self._optimizer.step()
+        self.optimizer.step()
         return out, loss.cpu().data
 
 
@@ -233,8 +233,8 @@ class BinaryClassificationSolver(ClassificationSolver):
 
         # An issues is caused if the batchsize is 1, this is a work arround.
         if out.shape[0] == 1:
-            loss = self._lossfunction(out.squeeze().unsqueeze(0), g.squeeze().unsqueeze(0))
+            loss = self.lossfunction(out.squeeze().unsqueeze(0), g.squeeze().unsqueeze(0))
         else:
-            loss = self._lossfunction(out.squeeze(), g.squeeze())
+            loss = self.lossfunction(out.squeeze(), g.squeeze())
         return loss
 

@@ -88,7 +88,7 @@ class ClassificationSolver(SolverBase):
             s = self._match_type_with_network(s)
         except:
             self._logger.exception("Failed to match input to network type. Falling back.")
-            if self._iscuda:
+            if self.iscuda:
                 s = self._force_cuda(s)
                 self._logger.debug("_force_cuda() typed data as: {}".format(
                     [ss.dtype for ss in s] if isinstance(s, list) else s.dtype))
@@ -103,9 +103,9 @@ class ClassificationSolver(SolverBase):
         # g = [Variable(gg) for gg in g] if isinstance(g, list) else Variable(g)
 
         if isinstance(s, list):
-            out = self._net.forward(*s)
+            out = self.net.forward(*s)
         else:
-            out = self._net.forward(s)
+            out = self.net.forward(s)
         _pairs = zip(out.flatten().data.cpu(), g.flatten().data.cpu(), torch.sigmoid(out).flatten().data.cpu())
         _df = pd.DataFrame(_pairs, columns=['res', 'g', 'sig_res'], dtype=float)
         self._logger.debug('\n' + _df.to_string())
@@ -114,10 +114,10 @@ class ClassificationSolver(SolverBase):
 
     def _loss_eval(self, *args):
         out, s, g = args
-        if self._iscuda:
+        if self.iscuda:
             g = self._force_cuda(g)
 
-        loss = self._lossfunction(out.squeeze(), g.squeeze().long())
+        loss = self.lossfunction(out.squeeze(), g.squeeze().long())
         return loss
 
     def validation(self):
@@ -125,19 +125,19 @@ class ClassificationSolver(SolverBase):
             self._logger.warning("Validation skipped because no loader is available.")
             return []
         with torch.no_grad():
-            self._net.eval()
+            self.net.eval()
 
             decisions = []
             validation_loss = []
             for s, g in tqdm(self._data_loader_val, desc="Validation", position=2):
-                if self._iscuda:
+                if self.iscuda:
                         s = [ss.cuda() for ss in s] if isinstance(s, list) else s.cuda()
                         g = [gg.cuda() for gg in g] if isinstance(g, list) else g.cuda()
 
                 if isinstance(s, list):
-                    res = self._net(*s)
+                    res = self.net(*s)
                 else:
-                    res = self._net(s)
+                    res = self.net(s)
                 # res = torch.(res, dim=1)
                 while res.dim() < 2:
                     res = res.unsqueeze(0)

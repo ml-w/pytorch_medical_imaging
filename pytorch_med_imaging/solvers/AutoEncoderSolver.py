@@ -65,13 +65,13 @@ class AutoEncoderSolver(SolverBase):
         else:
             s = Variable(s).float()
 
-        if self._iscuda:
+        if self.iscuda:
             s = self._force_cuda(s)
 
         if isinstance(s, list):
-            out = self._net.forward(*s)
+            out = self.net.forward(*s)
         else:
-            out = self._net.forward(s)
+            out = self.net.forward(s)
 
         return out
 
@@ -82,10 +82,10 @@ class AutoEncoderSolver(SolverBase):
         else:
             g = Variable(g, requires_grad=False)
 
-        if self._iscuda:
+        if self.iscuda:
             g = self._force_cuda(g)
 
-        loss = self._lossfunction(out, g)
+        loss = self.lossfunction(out, g)
         return loss
 
 

@@ -140,7 +140,7 @@ class SegmentationSolver(SolverBase):
                 else:
                     res = self._net(s)
                 res = F.log_softmax(res, dim=1)
-                loss = self._lossfunction(res, g.squeeze().long())
+                loss = self.lossfunction(res, g.squeeze().long())
                 validation_loss.append(loss.item())
                 self._logger.debug("_val_step_loss: {}".format(loss.data.item()))
 
@@ -174,7 +174,7 @@ class SegmentationSolver(SolverBase):
         else:
             s = Variable(s).float()
 
-        if self._iscuda:
+        if self.iscuda:
             s = self._force_cuda(s)
 
         if isinstance(s, list):
@@ -191,10 +191,10 @@ class SegmentationSolver(SolverBase):
         else:
             g = Variable(g, requires_grad=False)
 
-        if self._iscuda:
+        if self.iscuda:
             g = self._force_cuda(g)
 
-        loss = self._lossfunction(out, g.squeeze().long())
+        loss = self.lossfunction(out, g.squeeze().long())
         return loss
 
     def decay_optimizer(self, *args):
@@ -232,13 +232,13 @@ class SegmentationSolver(SolverBase):
         s = self.sigmoid_params['stretch']
         d = self.sigmoid_params['delay']
         cap = self.sigmoid_params['cap']
-        if isinstance(self._lossfunction, nn.CrossEntropyLoss):
-            self._logger.log_print_tqdm('Current weight: ' + str(self._lossfunction.weight), 20)
+        if isinstance(self.lossfunction, nn.CrossEntropyLoss):
+            self._logger.log_print_tqdm('Current weight: ' + str(self.lossfunction.weight), 20)
             offset = self._decayed_time + self._decay_init_weight
             new_weight = torch.as_tensor([self.sigmoid_plus(offset, self.class_weights[i], s, d, cap) for i in range(len(
                 self.class_weights))])
-            self._lossfunction.weight.copy_(new_weight)
-            self._logger.log_print_tqdm('New weight: ' + str(self._lossfunction.weight), 20)
+            self.lossfunction.weight.copy_(new_weight)
+            self._logger.log_print_tqdm('New weight: ' + str(self.lossfunction.weight), 20)
 
 
     @staticmethod

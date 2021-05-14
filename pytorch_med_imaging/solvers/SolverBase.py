@@ -33,22 +33,31 @@ class SolverBase(object):
         super(SolverBase, self).__init__()
 
         # required
-        self._optimizer         = solver_configs.get('optimizer', None)
-        self._lossfunction      = solver_configs.get('lossfunction', None)
-        self._net               = solver_configs.get('net', None)
-        self._iscuda            = solver_configs.get('iscuda', None)
+        default_dict = {
+            'optmizer': None,
+            'lossfunction': None,
+            'net': None,
+            'iscuda': None,
+            'lr_decay': None,
+            'mom_decay': None,
+            'lr_decay_func': lambda epoch: np.exp(-self.lr_decay * epoch),
+            'mom_decay_func': lambda mom: np.max(0.2, mom * np.exp(-self.mom_decay)),
+            'lr_schedular': None
+        }
+        default_dict.update((k, solver_configs[k]) for k in default_dict.keys() & solver_configs.keys())
+        required_att = ('optimizer', 'lossfunction', 'net', 'iscuda')
+
+        if any([default_dict[k] is None for k in required_att]):
+            raise AttributeError(f"Must specify these attributes: {','.join(required_att)}")
+        self.__dict__.update(default_dict)
+
 
         # optional
         self._logger            = solver_configs.get('logger', None)
         if self._logger is None:
             self._logger        = Logger[self.__class__.__name__]
 
-        # Optimizer
-        self._lr_decay          = solver_configs.get('lrdecay', None)
-        self._mom_decay         = solver_configs.get('momdecay', None)
-        self._lr_decay_func     = lambda epoch: np.exp(-self._lr_decay * epoch)
-        self._mom_decay_func    = lambda mom: np.max(0.2, mom * np.exp(-self._mom_decay))
-        self._lr_schedular      = None
+        # Optimizer attributies
         self._called_time = 0
         self._decayed_time= 0
 
@@ -66,7 +75,7 @@ class SolverBase(object):
         self.plotter_dict      = {}
 
         # create loss function if not specified
-        if self._lossfunction is None:
+        if self.lossfunction is None:
             self._logger.info("Trying to create loss function.")
             self.create_lossfunction()
 
@@ -94,26 +103,26 @@ class SolverBase(object):
     def get_net(self):
         if torch.cuda.device_count() > 1:
             try:
-                return self._net.module
+                return self.net.module
             except AttributeError:
-                return self._net
+                return self.net
         else:
-            return self._net
+            return self.net
 
     def get_optimizer(self):
-        return self._optimizer
+        return self.optimizer
 
     def set_lr_decay(self, decay):
-        self._lr_decay = decay
+        self.lr_decay = decay
 
     def set_lr_decay_exp(self, decay):
-        self._lr_decay = decay
-        self._lr_schedular = torch.optim.lr_scheduler.ExponentialLR(self._optimizer, self._lr_decay)
+        self.lr_decay = decay
+        self.lr_schedular = torch.optim.lr_scheduler.ExponentialLR(self.optimizer, self.lr_decay)
 
     def set_lr_decay_func(self, func):
         assert callable(func), "Insert function not callable!"
-        self._lr_decay_func = func
-        self._lr_schedular = torch.optim.lr_scheduler.LambdaLR(self._optimizer, self._lr_decay_func)
+        self.lr_decay_func = func
+        self.lr_schedular = torch.optim.lr_scheduler.LambdaLR(self.optimizer, self.lr_decay_func)
 
     def set_dataloader(self, dataloader, data_loader_val=None):
         self._data_loader = dataloader
@@ -134,13 +143,13 @@ class SolverBase(object):
             self._logger.warning("Extraction of parameters failed. Retreating to use default.")
 
         self._logger.debug("Set lr_scheduler to decay on plateau with params: {}.".format(_default_kwargs))
-        self._lr_schedular = torch.optim.lr_scheduler.ReduceLROnPlateau(
-            self._optimizer,
+        self.lr_schedular = torch.optim.lr_scheduler.ReduceLROnPlateau(
+            self.optimizer,
             **_default_kwargs
         )
 
     def set_momentum_decay(self, decay):
-        self._mom_decay = decay
+        self.mom_decay = decay
 
     def set_momentum_decay_func(self, func):
         assert callable(func), "Insert function not callable!"
@@ -150,19 +159,19 @@ class SolverBase(object):
         self._tb_plotter = plotter
 
     def net_to_parallel(self):
-        if (torch.cuda.device_count()  > 1) & self._iscuda:
+        if (torch.cuda.device_count()  > 1) & self.iscuda:
             self._logger.info("Multi-GPU detected, using nn.DataParallel for distributing workload.")
-            self._net = nn.DataParallel(self._net)
+            self.net = nn.DataParallel(self.net)
 
     def set_loss_function(self, func: callable):
         self._logger.debug("loss functioning override.")
         # Check if its cuda mode
-        is_cuda = self._lossfunction.is_cuda
-        del self._lossfunction
+        is_cuda = self.lossfunction.is_cuda
+        del self.lossfunction
         if is_cuda:
-            self._lossfunction = func.cuda()
+            self.lossfunction = func.cuda()
         else:
-            self._lossfunction = func
+            self.lossfunction = func
 
     def create_lossfunction(self, *args, **kwargs):
         r"""
@@ -192,8 +201,8 @@ class SolverBase(object):
 
         # Create loss function accordingly
         if not _lossfunction is None and issubclass(_lossfunction, nn.Module):
-            self._lossfunction = _lossfunction(**_loss_params)
-            return self._lossfunction
+            self.lossfunction = _lossfunction(**_loss_params)
+            return self.lossfunction
         else:
             self._logger.warning(f"Cannot create loss function using: {_lossfunction}")
             return None
@@ -201,28 +210,28 @@ class SolverBase(object):
     def step(self, *args):
         out = self._feed_forward(*args)
         loss = self._loss_eval(out, *args)
-        self._optimizer.zero_grad()
+        self.optimizer.zero_grad()
         loss.backward()
-        self._optimizer.step()
+        self.optimizer.step()
 
         self._called_time += 1
         return out, loss.cpu().data
 
     def decay_optimizer(self, *args):
-        if not self._lr_schedular is None:
+        if not self.lr_schedular is None:
             try:
-                self._lr_schedular.step(*args)
+                self.lr_schedular.step(*args)
             except:
-                self._lr_schedular.step()
-        if not self._mom_decay is None:
-            for pg in self._optimizer.param_groups:
-                pg['momentum'] = self._mom_decay_func(pg['momemtum'])
+                self.lr_schedular.step()
+        if not self.mom_decay is None:
+            for pg in self.optimizer.param_groups:
+                pg['momentum'] = self.mom_decay_func(pg['momemtum'])
         self._decayed_time += 1
         self._log_print("Decayed optimizer...")
 
     def inference(self, *args):
         with torch.no_grad():
-            out = self._net.forward(*list(args))
+            out = self.net.forward(*list(args))
         return out
 
     def solve_epoch(self, epoch_number):
@@ -231,7 +240,7 @@ class SolverBase(object):
         """
         E = []
         # Reset dict each epoch
-        self._net.train()
+        self.net.train()
         self.plotter_dict = {'scalars': {}, 'epoch_num': epoch_number}
         for step_idx, mb in enumerate(self._data_loader):
             s, g = self._unpack_minibatch(mb, self.unpack_keys_forward)
@@ -242,7 +251,7 @@ class SolverBase(object):
             E.append(loss.data.cpu())
             self._logger.info("\t[Step %04d] loss: %.010f"%(step_idx, loss.data))
 
-            self._step_callback(s.float(), g, out.cpu().float(), loss.data.cpu(), step_idx=step_idx)
+            self._step_callback(s.float(), g, out.cpu().float(), loss.data.cpu(), step_idx=epoch_number)
             del s, g, out, loss
             gc.collect()
 
@@ -283,7 +292,7 @@ class SolverBase(object):
         assert isinstance(tensor, list) or torch.is_tensor(tensor) or isinstance(tensor, tuple), \
             "_match_type_with_network: input type error! Got type: {}".format(tensor)
 
-        for name, module in self._net.named_modules():
+        for name, module in self.net.named_modules():
             try:
                 self._net_weight_type = module.weight.type()
                 #self._logger.debug("Module type is: {}".format(self._net_weight_type))
@@ -351,7 +360,7 @@ class SolverBase(object):
         else:
             try:
                 self._tb_plotter.plot_scalars(writer_index, scalars)
-                self._tb_plotter.plot_weight_histogram(self._net, writer_index)
+                self._tb_plotter.plot_weight_histogram(self.net, writer_index)
             except:
                 self._logger.exception("Error occured in default epoch callback.")
 

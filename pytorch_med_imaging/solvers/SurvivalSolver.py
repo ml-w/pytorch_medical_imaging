@@ -147,7 +147,7 @@ class SurvivalSolver(SolverBase):
             g = self._match_type_with_network(g)
         except:
             self._logger.exception("Failed to match input to network type. Falling back.")
-            if self._iscuda:
+            if self.iscuda:
                 s = self._force_cuda(s)
                 g = self._force_cuda(g)
                 self._logger.debug("_force_cuda() typed data as: {}".format(
@@ -163,7 +163,7 @@ class SurvivalSolver(SolverBase):
 
     def _loss_eval(self, *args):
         out, G = args
-        loss = self._lossfunction(out, G[:, :-1], G[:,-1]) # last column reserved for event status
+        loss = self.lossfunction(out, G[:, :-1], G[:, -1]) # last column reserved for event status
         return loss
 
     def __dep_step(self, *args):
@@ -182,14 +182,14 @@ class SurvivalSolver(SolverBase):
         # Loss might be nan
         if torch.isnan(loss):
             self._logger.warning("Loss was nan, skipping iteration.")
-            self._optimizer.zero_grad()
+            self.optimizer.zero_grad()
             loss.backward()
             self._called_time += 1
             return out, loss.cpu().data
         else:
-            self._optimizer.zero_grad()
+            self.optimizer.zero_grad()
             loss.backward()
-            self._optimizer.step()
+            self.optimizer.step()
 
             self._called_time += 1
             return out, loss.cpu().data
