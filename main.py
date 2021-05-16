@@ -12,17 +12,17 @@ import torch.nn as nn
 from torch.utils.data import DataLoader
 import configparser
 import numpy as np
+from pytorch_med_imaging.PMI_data_loader import PMIBatchSamplerFactory, PMIDataFactory
+from pytorch_med_imaging.med_img_dataset import PMITensorDataset
 
 # This package
-from ..PMI_data_loader import PMIBatchSamplerFactory, PMIDataFactory
-from ..med_img_dataset import PMITensorDataset
-from ..networks import *
+from pytorch_med_imaging.networks import *
 # from pytorch_med_imaging.networks import third_party_nets
-from ..tb_plotter import TB_plotter
+from pytorch_med_imaging.tb_plotter import TB_plotter
 
-from ..logger import Logger
-from . import *
-from ..inferencers import *
+from pytorch_med_imaging.logger import Logger
+from pytorch_med_imaging.solvers import *
+from pytorch_med_imaging.inferencers import *
 
 from tensorboardX import SummaryWriter
 import torch.autograd as autograd
