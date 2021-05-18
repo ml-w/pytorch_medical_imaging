@@ -557,8 +557,9 @@ class ImageDataSet(PMIDataBase):
                                                      f"\tsource: {src_im.GetSize()}\ttarget: {out_im.GetSize()}"
 
         out_im.CopyInformation(src_im)
-        sitk.WriteImage(out_im, outputdirectory +'/' + prefix + os.path.basename(self.data_source_path[index]))
-
+        out_name = outputdirectory +'/' + prefix + os.path.basename(self.data_source_path[index])
+        self._logger.info(f"Writing {out_name}")
+        sitk.WriteImage(out_im, out_name)
 
     def get_unique_values(self):
         r"""Get the tensor of all unique values in basedata. Only for integer tensors

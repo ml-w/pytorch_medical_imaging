@@ -18,16 +18,17 @@ __all__ = ['ClassificationInferencer']
 class ClassificationInferencer(InferencerBase):
     def __init__(self, input_data, out_dir, batch_size, net, checkpoint_dir, iscuda, logger=None, target_data=None,
                  config=None):
-        inference_configs = {}
-        inference_configs['indataset']      = input_data
-        inference_configs['batchsize']      = batch_size
-        inference_configs['net']            = net
-        inference_configs['netstatedict']   = checkpoint_dir
-        inference_configs['logger']         = logger
-        inference_configs['outdir']         = out_dir
-        inference_configs['iscuda']         = iscuda
-        inference_configs['target_data']    = target_data
-        inference_configs['config']         = config
+        inference_configs = {
+            'indataset':      input_data,
+            'batchsize':      batch_size,
+            'net':            net,
+            'netstatedict':   checkpoint_dir,
+            'logger':         logger,
+            'outdir':         out_dir,
+            'iscuda':         iscuda,
+            'target_data':    target_data,
+            'config':         config
+        }
         super(ClassificationInferencer, self).__init__(inference_configs)
 
     def _input_check(self):
@@ -45,19 +46,19 @@ class ClassificationInferencer(InferencerBase):
                 self._net = self._net(in_chan, out_chan)
                 self._ATTENTION_FLAG=False
 
-        self._logger.log_print_tqdm("Loading checkpoint from: " + self._net_state_dict, 20)
-        self._net.load_state_dict(torch.load(self._net_state_dict), strict=False)
+        self._logger.log_print_tqdm("Loading checkpoint from: " + self.net_state_dict, 20)
+        self._net.load_state_dict(torch.load(self.net_state_dict), strict=False)
         # self._net = nn.DataParallel(self._net)
         self._net.train(False)
         self._net.eval()
-        if self._iscuda:
+        if self.iscuda:
             self._net = self._net.cuda()
 
 
         return self._net
 
-    def _create_dataloader(self):
-        self._data_loader = DataLoader(self._in_dataset, batch_size=self._batchsize,
+    def _prepare_data(self):
+        self._data_loader = DataLoader(self._in_dataset, batch_size=self.batchsize,
                                        shuffle=False, num_workers=0, drop_last=False)
         return self._data_loader
 
@@ -87,12 +88,6 @@ class ClassificationInferencer(InferencerBase):
                 # write_out_image.SetDirection(ref_im.GetDirection())p
                 write_out_image.SetSpacing(new_space)
 
-                #
-                # for k in [1, 2, 3]:
-                #     new_metadata['pixdim[%s]'%k] = "%.05f"%new_space[k-1]
-                #
-                # write_out_image = ImageDataSet.WrapImageWithMetaData(
-                #     atten_im.transpose([2, 0, 1, 3]), new_metadata)
                 WriteImage(write_out_image, os.path.join(attention_outdir,
                                                          str(id) + '_attention_%02d.nii.gz'%j))
 
@@ -227,5 +222,5 @@ class ClassificationInferencer(InferencerBase):
         dl.write(self._outdir)
         return dl
 
-    def overload_dataloader(self, loader):
+    def set_dataloader(self, loader):
         self._data_loader = loader

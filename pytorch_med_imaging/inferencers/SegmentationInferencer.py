@@ -1,145 +1,133 @@
-from ..med_img_dataset import ImageDataSet, ImagePatchesLoader, ImagePatchesLoader3D
+import os
+
+from ..med_img_dataset import ImageDataSet
+from ..PMI_data_loader.PMIDataLoaderBase import PMIDataLoaderBase
 from .InferencerBase import InferencerBase
 from torch.utils.data import DataLoader
 import torch
+import torch.nn as nn
 import torch.nn.functional as F
+import torchio as tio
 import numpy as np
 from tqdm import *
+from configparser import ConfigParser
 
 __all__ = ['SegmentationInferencer']
 
 class SegmentationInferencer(InferencerBase):
-    def __init__(self, input_data, out_dir, batch_size, net, checkpoint_dir, iscuda, logger=None, target_data=None,
-                 config=None, **kwargs):
-        inference_configs = {}
-        inference_configs['indataset']      = input_data
-        inference_configs['batchsize']      = batch_size
-        inference_configs['net']            = net
-        inference_configs['netstatedict']   = checkpoint_dir
-        inference_configs['logger']         = logger
-        inference_configs['outdir']         = out_dir
-        inference_configs['iscuda']         = iscuda
-        inference_configs['target_data']    = target_data
-        inference_configs['config']         = config
-        self._out_dataset = None # For storing result of inference
+    def __init__(self,
+                 batch_size: int,
+                 net: nn.Module or str,
+                 checkpoint_dir: str,
+                 out_dir: str,
+                 iscuda: bool,
+                 pmi_data_loader: PMIDataLoaderBase,
+                 config: ConfigParser or dict,
+                 **kwargs):
+        r"""
+        Use for segmentation inference.
 
-        super(SegmentationInferencer, self).__init__(inference_configs)
+        Attributes:
+            unpack_keys_forward (list of str):
+                String to unpack the data for input forward.
+            gt_keys (list of str):
+                String to unpack target.
+
+        Args:
+            batch_size (int):
+                Mini-batch size.
+            net (nn.Module or str):
+                The network. If str, `ast.literal_eval` will be used to convert it into a network.
+            checkpoint_dir (str):
+                Where the torch state dict is located.
+            out_dir (str):
+                Where the output products are placed
+            iscuda (bool):
+                Whether to use GPU or not.
+            pmi_data_loader (PMIDataLoaderBase):
+                Required to load the
+            **kwargs:
+        """
+        inference_configs = {
+            'batch_size':       batch_size,
+            'net':              net,
+            'net_state_dict':   checkpoint_dir,
+            'outdir':           out_dir,
+            'iscuda':           iscuda,
+            'pmi_data_loader':  pmi_data_loader
+        }
+        self._out_dataset = None # For storing result of inference
+        super(SegmentationInferencer, self).__init__(inference_configs, config=config, **kwargs)
+
+        default_attr = {
+            'unpack_keys_inference': ['input']
+        }
+        self._load_default_attr(default_attr)
 
 
     def _input_check(self):
-        assert isinstance(self._in_dataset, ImageDataSet) or \
-               isinstance(self._in_dataset, ImagePatchesLoader), "Input dataset type is wrong."
-
+        assert isinstance(self.pmi_data_loader, PMIDataLoaderBase), "The pmi_data_loader was not configured correctly."
+        if not os.path.isdir(self.outdir):
+            # Try to make dir first
+            os.makedirs(self.outdir, exist_ok=True)
+            assert os.path.isdir(self.outdir), f"Cannot open output directory: {self.outdir}"
         return 0
 
-    def _create_net(self):
-        if not hasattr(self._net, 'forward'):
-            self._logger.info("Creating network.")
-            try:
-                if isinstance(self._in_dataset[0], tuple) or isinstance(self._in_dataset[0], list):
-                    inchan = self._in_dataset[0][0].shape[0]
-                else:
-                    inchan = self._in_dataset[0].size()[0]
-
-            except AttributeError:
-                self._logger.log_print_tqdm("Retreating to indim=3, inchan=1.", 30)
-                inchan = 1
-            except Exception as e:
-                self._logger.log_print_tqdm(str(e), 40)
-                self._logger.log_print_tqdm("Terminating", 40)
-                return
-            self._net = self._net(inchan, 2)
-
-        # net = nn.DataParallel(net)
-        self._logger.log_print_tqdm("Loading checkpoint from: " + self._net_state_dict, 20)
-        self._net.load_state_dict(torch.load(self._net_state_dict))
-        self._net.train(False)
-        self._net.eval()
-        if self._iscuda:
-            self._net = self._net.cuda()
-
-        return self._net
-
-
-    def _create_dataloader(self):
-        self._data_loader = DataLoader(self._in_dataset, batch_size=self._batchsize,
-                                       shuffle=False, num_workers=8)
-        return self._data_loader
-
+    def _prepare_data(self):
+        r"""Currently torchio only can perform inference using GridSampler."""
+        self._inference_subjects, self._inference_sampler = self.pmi_data_loader._load_data_set_inference()
 
     def _get_net_out_features(self):
+        raise DeprecationWarning("This function is deprecated")
+        return
         with torch.no_grad():
             test_in = next(iter(self._data_loader))
-            if self._iscuda:
+            if self.iscuda:
                test_in = self._match_type_with_network(test_in)
 
             if isinstance(test_in, list):
-                out = self._net(*test_in).size()[1]
+                out = self.net(*test_in).size()[1]
             else:
-                out = self._net(test_in).size()[1]
+                out = self.net(test_in).size()[1]
             del test_in
         return out
 
 
     def write_out(self):
         last_batch_dim = 0
-
         # compute size to pass to piece_patches
-        out_size = list(self._in_dataset.size())
-        out_features = self._get_net_out_features()
-        out_size[1] = out_features
-
-        out_tensor = torch.zeros(out_size)
+        in_image_data = self.pmi_data_loader.data['input']
 
         with torch.no_grad():
-            for index, samples in enumerate(tqdm(self._data_loader, desc="Steps")):
-                s = samples
-                s = self._match_type_with_network(s)
+            # Do inference subject by subject if sampler is not None
+            if not self._inference_sampler is None:
+                self.patch_size = self.pmi_data_loader.patch_size
+                self._logger.info(f"Operating in patch-based mode with patch-size: {self.patch_size}")
+                for index, subject in enumerate(tqdm(self._inference_subjects, desc="Steps")):
+                    # sample and inference
+                    self._logger.info(f"Processing subject: {subject}")
+                    self._inference_sampler.set_subject(subject)
+                    dataloader = DataLoader(self._inference_sampler, batch_size=self.batch_size, num_workers=8)
+                    aggregator = tio.GridAggregator(self._inference_sampler, 'max')
 
-                if isinstance(s, list):
-                    out = self._net.forward(*s).squeeze()
-                else:
-                    out = self._net.forward(s).squeeze()
+                    for mb in tqdm(dataloader, desc="Patch", position=1):
+                        s = self._unpack_minibatch(mb, self.unpack_keys_inference)
+                        s = self._match_type_with_network(s)
 
-                while out.dim() < last_batch_dim and last_batch_dim != 0:
-                    out = out.unsqueeze(0)
-                    self._logger.log_print_tqdm('Unsqueezing last batch.' + str(out.shape))
-                # out = F.log_softmax(out, dim=1)
-                # val, out = torch.max(out, 1)
-                while out.dim() != out_tensor.dim():
-                    out = out.unsqueeze(0)
-                out_tensor[index * self._batchsize: index * self._batchsize + out.shape[0]] = out.data.cpu()
-                last_batch_dim = out.dim()
-                del out
-
-        if isinstance(self._in_dataset, ImagePatchesLoader) or \
-                isinstance(self._in_dataset, ImagePatchesLoader3D):
-            out_tensor = self._in_dataset.piece_patches(out_tensor)
-
-
-        if isinstance(out_tensor, list):
-            self._logger.log_print_tqdm("Writing with list mode", 20)
-            towrite = []
-            for i, out in enumerate(out_tensor):
-                out = F.log_softmax(out, dim=0)
-                out = torch.argmax(out, dim=0)
-                towrite.append(out.int())
-
-            # Save output if we have the ground truth for summary
-            if self._TARGET_DATASET_EXIST_FLAG:
-                self._out_dataset = towrite
-
-            self._in_dataset.Write(towrite, self._outdir)
-        else:
-            self._logger.log_print_tqdm("Writing with tensor mode", 20)
-            out_tensor = F.log_softmax(out_tensor, dim=1)
-            out_tensor = torch.argmax(out_tensor, dim=1)
-
-            # Save output if we have the ground truth for summary
-            if self._TARGET_DATASET_EXIST_FLAG:
-                self._out_dataset = out_tensor.int()
-
-            self._in_dataset.Write(out_tensor.squeeze().int(), self._outdir)
+                        if isinstance(s, list):
+                            out = self.net.forward(*s).squeeze()
+                        else:
+                            out = self.net.forward(s).squeeze()
+                        aggregator.add_batch(out, mb[tio.LOCATION])
+                    out = aggregator.get_output_tensor()
+                    out = F.log_softmax(out, dim=0)
+                    out = torch.argmax(out, dim=0)
+                    out = out.squeeze().permute(2, 1, 0).int()    # torchio convention (H x W x D) to sitk convention (D x W x H)
+                    in_image_data.write_uid(out, index, self.outdir)
+            else:
+                # Else operate directly on subject dataset
+                self._logger.info(f"Operating on whole image.")
+                raise NotImplementedError("Operating on whole image not suppported yet.")
 
 
     def display_summary(self):
@@ -149,10 +137,16 @@ class SegmentationInferencer(InferencerBase):
         """
         from pytorch_med_imaging.scripts.analysis import segmentation_analysis
 
+        # terminated if there are not gt data
+        if self.pmi_data_loader.data['gt'] is None:
+            self._logger.info("Ground-truth data was not specified.")
+        else:
+            self._logger.info(f"Ground-truth data specified, trying to compute summary.")
+
         arguments = ['-a',
-                     '--test-data', self._outdir,
-                     '--gt-data', self._target_dataset.rootdir,
-                     '--idlist', str(list(set(self._target_dataset.get_unique_IDs())))
+                     '--test-data', self.outdir,
+                     '--gt-data', self.pmi_data_loader.data['gt'].root_dir,
+                     '--idlist', str(list(set(self.pmi_data_loader.data['gt'].get_unique_IDs())))
                      ]
 
         try:

@@ -19,6 +19,25 @@ class SegmentationSolver(SolverBase):
     def __init__(self,
                  net, param_optim, param_iscuda,
                  param_initWeight=None, logger=None, config=None):
+        r"""
+
+        Attributes:
+            unpack_keys_forward (list):
+                Keys to unpack the torchio subjects into data array for forward function.
+            sigmoid_params (dict):
+                Default to {'delay': 15, 'stretch': 2, 'cap': 0.3}.
+            class_weights (float):
+                Weight of each class used in lossfunction.
+            optmizer
+
+        Args:
+            net:
+            param_optim:
+            param_iscuda:
+            param_initWeight:
+            logger:
+            config:
+        """
         assert isinstance(logger, Logger) or logger is None, "Logger incorrect settings!"
 
         if logger is None:
@@ -31,24 +50,13 @@ class SegmentationSolver(SolverBase):
         # Default attributes
         default_attr = {
             'unpack_keys_forward': ['input', 'gt'], # used to unpack torchio drawn minibatches
-            'gt_keys': ['gt'],
-            'sigmoid_params': {'delay': 15, 'stretch': 2, 'cap': 0.3},
-            'class_weights': None,
-            'optimizer': 'Adam'             # ['Adam'|'SGD']
+            'gt_keys':             ['gt'],
+            'sigmoid_params':      {'delay': 15, 'stretch': 2, 'cap': 0.3},
+            'class_weights':       None,
+            'optimizer_type':      'Adam'             # ['Adam'|'SGD']
         }
         self._load_default_attr(default_attr)
 
-        # TODO: Think about how to differentiate input to net.forward and input to loss.forward
-        '''
-        Before torchio:
-        * pmi_data -> pmi_data_loader -> pmi_solver
-        
-        Problems:
-        ! List are not becoming data
-        
-        Solution Syntax:
-        E.g. 'input_1 + input_2', id  ==> [torch.concat([row['input_1'][tio.DATA],row['input_2'][tio.DATA]]), row['id']]
-        '''
 
         # Prepare data
         #-------------
@@ -73,10 +81,11 @@ class SegmentationSolver(SolverBase):
 
         # Create optimizer and loss function
         lossfunction = nn.CrossEntropyLoss(weight=self.loss_init_weights) #TODO: Allow custom loss function
-        if self.optimizer == 'Adam':
+        if self.optimizer_type == 'Adam':
             optimizer = optim.Adam(net.parameters(), lr=param_optim['lr'])
-        elif self.optimizer == 'SGD':
-            optimizer = optim.SGD(net.parameters(), lr=param_optim['lr'], momentum=param_optim['momentum'])
+        elif self.optimizer_type == 'SGD':
+            optimizer = optim.SGD(net.parameters(), lr=param_optim['lr'],
+                                  momentum=param_optim['momentum'])
         else:
             raise AttributeError(f"Expecting optimzer to be one of ['Adam'|'SGD']")
 
@@ -129,16 +138,16 @@ class SegmentationSolver(SolverBase):
         with torch.no_grad():
             validation_loss = []
             perfs = []
-            self._net.eval()
+            self.net.eval()
             for mb in auto.tqdm(self._data_loader_val, desc="Validation", position=2):
                 s, g = self._unpack_minibatch(mb, self.unpack_keys_forward)
                 s = self._match_type_with_network(s)
                 g = self._match_type_with_network(g) # no assumption but should be long in segmentation only.
 
                 if isinstance(s, list):
-                    res = self._net(*s)
+                    res = self.net(*s)
                 else:
-                    res = self._net(s)
+                    res = self.net(s)
                 res = F.log_softmax(res, dim=1)
                 loss = self.lossfunction(res, g.squeeze().long())
                 validation_loss.append(loss.item())
@@ -159,7 +168,7 @@ class SegmentationSolver(SolverBase):
             dsc = self._DICE(tps, fps, tns, fns)
             mean_val_loss = np.mean(np.array(validation_loss).flatten())
             self._logger.info("Validation Result VAL: %.05f DSC: %.05f"%(mean_val_loss, dsc))
-        self._net = self._net.train()
+        self.net = self.net.train()
 
         self.plotter_dict['scalars']['Loss/Validation Loss'] = mean_val_loss
         self.plotter_dict['scalars']['Perf/Validation DSC'] = dsc
@@ -178,9 +187,9 @@ class SegmentationSolver(SolverBase):
             s = self._force_cuda(s)
 
         if isinstance(s, list):
-            out = self._net.forward(*s)
+            out = self.net.forward(*s)
         else:
-            out = self._net.forward(s)
+            out = self.net.forward(s)
 
         return out
 
@@ -243,6 +252,7 @@ class SegmentationSolver(SolverBase):
 
     @staticmethod
     def sigmoid_plus(x, init, stretch, delay, cap):
+        r"""Sigmoid function to alter class weights"""
         # sigmoid increase to cap.
         out = (init + (cap - init) * 1. / (1 + np.exp(- x / stretch + delay * 2 / stretch)))
 

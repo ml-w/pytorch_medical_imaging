@@ -14,43 +14,44 @@ from ..logger import Logger
 
 class SolverBase(object):
     """
-
     Args:
         solver_configs (dict):
-            Child class should prepare the configuration. Some keys are compulsary.
-
-    Kwargs:
-        'net_init': Initialization method. (Not implemented)
+            Child class should prepare the configuration. Some keys are compulsory.
+        **kwargs
 
     Attributes:
-        _optimizer (torch.optim.Optimizer):
-            This is the optimizer.
+        optimizer (nn.Module):
+            Optimizer for training.
+        lossfunction (nn.Module):
+            Loss function.
+        net (str or nn.Module):
+
         plotter_dict (dict):
             This dict could be used by the child class to perform plotting after validation or in each step.
 
     """
-    def __init__(self, solver_configs, **kwargs):
+    def __init__(self, solver_configs: dict, **kwargs):
         super(SolverBase, self).__init__()
 
-        # required
-        default_dict = {
-            'optmizer': None,
-            'lossfunction': None,
-            'net': None,
-            'iscuda': None,
-            'lr_decay': None,
-            'mom_decay': None,
-            'lr_decay_func': lambda epoch: np.exp(-self.lr_decay * epoch),
-            'mom_decay_func': lambda mom: np.max(0.2, mom * np.exp(-self.mom_decay)),
-            'lr_schedular': None
+        # these attributes requires evaluation and cannot be get directly from the ini file.
+        default_attr = {
+            'optimizer':        None,   # required
+            'lossfunction':     None,   # required
+            'net':              None,   # required
+            'iscuda':           None,   # required
+            'lr_decay':         None,
+            'mom_decay':        None,
+            'lr_decay_func':    lambda epoch: np.exp(-self.lr_decay * epoch),
+            'mom_decay_func':   lambda mom: np.max(0.2, mom * np.exp(-self.mom_decay)),
+            'lr_schedular':     None
         }
-        default_dict.update((k, solver_configs[k]) for k in default_dict.keys() & solver_configs.keys())
+        default_attr.update((k, solver_configs[k]) for k in default_attr.keys() & solver_configs.keys())
         required_att = ('optimizer', 'lossfunction', 'net', 'iscuda')
 
-        if any([default_dict[k] is None for k in required_att]):
+        if any([default_attr[k] is None for k in required_att]):
+            self._logger.error("Some required attributes are not specified.")
             raise AttributeError(f"Must specify these attributes: {','.join(required_att)}")
-        self.__dict__.update(default_dict)
-
+        self.__dict__.update(default_attr)
 
         # optional
         self._logger            = solver_configs.get('logger', None)
@@ -58,8 +59,8 @@ class SolverBase(object):
             self._logger        = Logger[self.__class__.__name__]
 
         # Optimizer attributies
-        self._called_time = 0
-        self._decayed_time= 0
+        self._called_time       = 0
+        self._decayed_time      = 0
 
         # Added config not used in base class
         self._config            = kwargs.get('config', None)
@@ -85,7 +86,7 @@ class SolverBase(object):
 
     def _load_default_attr(self, default_dict):
         r"""
-        Load default dictionary as attr from solver params
+        Load default dictionary as attr from ini config, [SolverParams] section.
         """
         final_dict = {}
         for key in default_dict:

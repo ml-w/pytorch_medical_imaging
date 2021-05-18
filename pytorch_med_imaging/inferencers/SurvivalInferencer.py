@@ -42,19 +42,19 @@ class SurvivalInferencer(InferencerBase):
             self._logger.log_print_tqdm("Cannot create network with 'save_mask' attribute!", 20)
             self._net = self._net(in_chan, out_chan)
 
-        self._logger.log_print_tqdm("Loading checkpoint from: " + self._net_state_dict, 20)
-        self._net.load_state_dict(torch.load(self._net_state_dict), strict=False)
+        self._logger.log_print_tqdm("Loading checkpoint from: " + self.net_state_dict, 20)
+        self._net.load_state_dict(torch.load(self.net_state_dict), strict=False)
         # self._net = nn.DataParallel(self._net)
         self._net.train(False)
         self._net.eval()
-        if self._iscuda:
+        if self.iscuda:
             self._net = self._net.cuda()
 
 
         return self._net
 
-    def _create_dataloader(self):
-        self._data_loader = DataLoader(self._in_dataset, batch_size=self._batchsize,
+    def _prepare_data(self):
+        self._data_loader = DataLoader(self._in_dataset, batch_size=self.batchsize,
                                        shuffle=False, num_workers=0, drop_last=False)
         return self._data_loader
 
@@ -145,7 +145,7 @@ class SurvivalInferencer(InferencerBase):
         import fnmatch
         import pandas as pd
         # Look for other checkpoints
-        cp_dir = os.path.dirname(self._net_state_dict)
+        cp_dir = os.path.dirname(self.net_state_dict)
         all_cps = fnmatch.filter(os.listdir(cp_dir), "*.pt")
         all_cps.sort()
 

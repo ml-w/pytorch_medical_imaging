@@ -27,27 +27,7 @@ from pytorch_med_imaging.inferencers import *
 from tensorboardX import SummaryWriter
 import torch.autograd as autograd
 autograd.set_detect_anomaly(True)
-# import your own newtork
 
-# This controls the available networks (Deprecated)
-# available_networks = {'UNet':UNet_p,
-#                       'UNetPosAware': UNetPosAware,
-#                       'UNetLocTexAware': UNetLocTexAware,
-#                       'UNetLocTexHist': UNetLocTexHist,
-#                       'UNetLocTexHistDeeper': UNetLocTexHistDeeper,
-#                       'UNetLocTexHist_MM': partial(UNetLocTexHist, fc_inchan=204),
-#                       'UNetLocTexHistDeeper_MM': partial(UNetLocTexHistDeeper, fc_inchan=204),
-#                       'DenseUNet': DenseUNet2D,
-#                       'AttentionUNet': AttentionUNet,
-#                       'AttentionDenseUNet': AttentionDenseUNet2D,
-#                       'AttentionUNetPosAware': AttentionUNetPosAware,
-#                       'AttentionUNetLocTexAware': AttentionUNetLocTexAware,
-#                       'LLinNet': LLinNet,
-#                       'AttentionResidual': AttentionResidualNet,
-#                       'AxialAttentionResidual/64': AttentionResidualNet_64,
-#                       'AxialAttentionResidual/SW': AttentionResidualNet_SW,
-#                       'AxialAttentionResGRUNet': AttentionResidualGRUNet
-#                       }
 
 def init_weights(m):
     if type(m) == nn.Conv2d:
@@ -299,8 +279,8 @@ def main(a, config, logger):
             solver.get_net().load_state_dict(torch.load(checkpoint_load), strict=False)
         else:
             logger.log_print_tqdm("Checkpoint doesn't exist!")
-        solver.net_to_parallel()
 
+        solver.net_to_parallel()
 
         lastloss = 1e32
         logger.log_print_tqdm("Start training...")
@@ -329,6 +309,7 @@ def main(a, config, logger):
                 torch.save(solver.get_net().state_dict(), backuppath.replace('.pt', '_{:03d}.pt'.format(i)))
 
             # TODO: early stopping if criteria true
+            # early_stop = earlystopper.step(loss)
 
             try:
                 current_lr = next(solver.get_optimizer().param_groups)['lr']
@@ -362,35 +343,24 @@ def main(a, config, logger):
         elif run_type == 'Survival':
             infer_class = SurvivalInferencer
         else:
-            logger.log_print_tqdm('Wrong run_type setting!', logging.ERROR)
+            logger.error('Wrong run_type setting!')
             raise NotImplementedError("Not implemented inference type: {}".format(run_type))
 
+        inferencer = infer_class(param_batchsize,
+                                 net,
+                                 checkpoint_load,
+                                 dir_output,
+                                 bool_usecuda,
+                                 pmi_data,
+                                 config)
 
-        try:
-            inputDataset, gtDataset = pmi_data._load_data_set_training()
-            inferencer = infer_class(inputDataset, dir_output, param_batchsize,
-                                     net, checkpoint_load,
-                                     bool_usecuda, target_data=gtDataset, config=config)
-            logger.info("Performing inference with ground-truth data.")
-        except AttributeError as e:
-            # in case ground-truth is not found, _load_data_set_training will return Attr error.
-            logger.exception(e)
-            logger.log_print("Falling back to just doing inference", logger.DEBUG)
-            inputDataset= pmi_data.load_dataset()
-            inferencer = infer_class(inputDataset, dir_output, param_batchsize,
-                                     net, checkpoint_load,
-                                     bool_usecuda, config=config)
-        except Exception as e:
-            logger.exception(e)
-            logger.critical("Terminating because inferencer cannot be created.")
-            return 10
 
         # Pass PMI to inferencer if its specified
         if not data_pmi_loader_kwargs is None:
             logger.info("Overriding loader, setting to: {}".format(data_pmi_loader_kwargs))
             loader_factory = PMIBatchSamplerFactory()
             loader = loader_factory.produce_object(inputDataset, config)
-            inferencer.overload_dataloader(loader)
+            inferencer.set_dataloader(loader)
             logger.info("New loader type: {}".format(loader.__class__.__name__))
 
 

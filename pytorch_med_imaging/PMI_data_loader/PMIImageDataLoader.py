@@ -164,6 +164,11 @@ class PMIImageDataLoader(PMIDataLoaderBase):
         gt_out = self._read_image(self._target_dir, dtype=self.data_types[1])
         prob_out = self._prepare_probmap()
 
+        self.data = {'input':   img_out,
+                     'gt':      gt_out,
+                     'probmap': prob_out
+                    }
+
         # Create subjects & queue
         if prob_out is not None:
             subjects = [tio.Subject(input=a, gt=b, probmap=c)
@@ -181,10 +186,19 @@ class PMIImageDataLoader(PMIDataLoaderBase):
             return subjects
 
 
-    def _load_data_set_inference(self):
+    def _load_data_set_inference(self) -> [tio.Queue, tio.GridSampler] or [tio.SubjectsDataset, None]:
         """Same as :func:`_load_data_set_training` in this class."""
-        img_out = self._read_image(self._input_dir)
+        img_out = self._read_image(self._input_dir, dtype=self.data_types[0])
         prob_out = self._prepare_probmap()
+
+        if not self._target_dir is None:
+            gt_out = self._read_image(self._target_dir, dtype=self.data_types[1])
+        else:
+            gt_out = None
+
+        self.data = {'input': img_out,
+                     'gt': gt_out,
+                     'probmap': prob_out}
 
         if prob_out is not None:
             subjects = [tio.Subject(input=a, probmap=b) for a, b in zip(img_out.data, prob_out.data)]
@@ -192,8 +206,13 @@ class PMIImageDataLoader(PMIDataLoaderBase):
             subjects = [tio.Subject(input=a) for a in img_out.data]
 
         # No transform for subjects
-        subjects = tio.SubjectDataset(subjects=subjects)
-        return subjects
+        subjects = tio.SubjectsDataset(subjects=subjects)
+        if not self.patch_size is None:
+            overlap = [ps // 2 for ps in self.patch_size]
+            sampler = tio.GridSampler(patch_size=self.patch_size, patch_overlap=overlap)
+            return subjects, sampler
+        else:
+            return subjects, None
 
     def _prepare_probmap(self):
         r"""Load probability map if its specified."""

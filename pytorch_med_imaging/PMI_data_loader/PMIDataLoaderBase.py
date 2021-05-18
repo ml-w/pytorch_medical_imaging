@@ -298,6 +298,8 @@ class PMIDataLoaderBase(object):
         Returns:
             out_dict (dict): Dictionary with
         """
+        import warnings
+        warnings.deprecation()
 
         out_dict = {}
         for k, default_value, eval_flag in zip(tar_keys, tar_def_values, tar_eval_flag):
