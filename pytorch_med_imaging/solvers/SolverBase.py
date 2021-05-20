@@ -252,7 +252,8 @@ class SolverBase(object):
             E.append(loss.data.cpu())
             self._logger.info("\t[Step %04d] loss: %.010f"%(step_idx, loss.data))
 
-            self._step_callback(s.float(), g, out.cpu().float(), loss.data.cpu(), step_idx=epoch_number)
+            self._step_callback(s.float(), g, out.cpu().float(), loss.data.cpu(),
+                                step_idx=epoch_number * len(self._data_loader) + step_idx)
             del s, g, out, loss
             gc.collect()
 

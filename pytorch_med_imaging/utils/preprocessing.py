@@ -6,6 +6,7 @@ import multiprocessing as mpi
 from tqdm import *
 import random
 import argparse
+import pandas as pd
 sitk.ProcessObject_GlobalWarningDisplayOff()
 from pytorch_med_imaging.logger import Logger
 

@@ -1,6 +1,5 @@
 from .PMIDataLoaderBase import PMIDataLoaderBase
 from .. import med_img_dataset
-from ..med_img_dataset.computations import ImageDataSetWithTexture
 
 import re
 import torchio as tio
