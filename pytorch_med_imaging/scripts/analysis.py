@@ -243,7 +243,7 @@ def EVAL(seg, gt, vars):
     gtindexes = gt.get_unique_IDs()
     segindexes = seg.get_unique_IDs()
 
-    for i, row in enumerate(auto.tqdm(segindexes)):
+    for i, row in enumerate(auto.tqdm(segindexes, desc='Eval')):
         logger.info("Computing {}".format(row))
         # check if both have same ID
         try:
