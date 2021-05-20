@@ -30,7 +30,8 @@ def remap_label(map_dict: dict,
 def label_statistics(label_dir,
                      id_globber = None,
                      num_workers = 8,
-                     verbose = True) -> pd.DataFrame:
+                     verbose = True,
+                     normalized = False) -> pd.DataFrame:
     r"""Return the data statistics of the labels"""
     # Prepare torchio sampler
     labelimages = ImageDataSet(label_dir, verbose=verbose, dtype='uint8', idGlobber=id_globber)
@@ -41,9 +42,13 @@ def label_statistics(label_dir,
     for i, s in enumerate(auto.tqdm(dataloader)):
         label = s['label']
         val, counts = torch.unique(label[tio.DATA], return_counts=True)
+        if normalized:
+            counts = counts / counts.sum()
+
         row = pd.Series(data = counts.tolist(), index=val.tolist(), name=labelimages.get_unique_IDs()[i])
         out_df = out_df.join(row, how='outer')
     out_df.fillna(0, inplace=True)
+    out_df = out_df.T
 
     # Compute sum of counts
     dsum = out_df.sum()
