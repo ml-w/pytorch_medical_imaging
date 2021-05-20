@@ -1,22 +1,31 @@
 import argparse
 import os
-
+from ..logger import Logger
 
 class pmi_console_entry(argparse.ArgumentParser):
-    def __init__(self):
+    def __init__(self, addargs: str):
         super(pmi_console_entry, self).__init__()
 
-    def make_console_entry_io(self):
-        self.add_argument('-i', '--input', type=str, action='store', dest='input',
-                          help='Input directory that contains the DICOMs.')
-        self.add_argument('-o', '--output', type=str, action='store', dest='output',
-                          help='Output directory to hold the nii files.')
-        self.add_argument('-g', '--idglobber', action='store', default=None, dest='idglobber',
-                          help='Specify the globber to glob the ID from the DICOM paths.')
-        self.add_argument('--idlist', default=None,
-                          help='Pass ID list to class ImageDataSet.')
-        self.add_argument('-v', '--verbose', action='store_true',
-                          help="Verbosity.")
+        default_arguments = {
+            'i': (['-i', '--input'],    {'type': str, 'help': 'Input directory that contains nii.gz or DICOM files.'}),
+            'o': (['-o', '--output'],   {'type': str, 'help': 'Directory for generated output.'}),
+            'O': (['-o', '--outfile'],  {'type': str, 'help': 'Directory for generated file.'}),
+            'g': (['-g', '--idglobber'],{'type': str, 'help': 'Globber for globbing case IDs.', 'default': None}),
+            'L': (['-l', '--idlist'],   {'type': str, 'help': 'List or txt file directory for loading only specific ids.', 'default': None}),
+            'n': (['-n', '--numworker'],{'type': int, 'help': 'Specify number of workers.', 'default': 10}),
+            'v': (['-v', '--verbose'],  {'action': 'store_true', 'help': 'Verbosity.'}),
+        }
+
+        for k in addargs:
+            args, kwargs = default_arguments[k]
+            self.add_argument(*args, **kwargs)
+
+        # For convinient, but not very logical to put this here
+        self.logger = Logger('pmi_script',  verbose=False, keep_file=False)
+
+    @staticmethod
+    def make_console_entry_io():
+        return pmi_console_entry('iogLv')
 
 
     def parse_args(self, *args, **kwargs):
@@ -26,4 +35,7 @@ class pmi_console_entry(argparse.ArgumentParser):
         if hasattr(a, 'output'):
             if not os.path.isdir(a.output):
                 os.makedirs(a.output, exist_ok=True)
+
+        if hasattr(a, 'verbose'):
+            self.logger._verbose = a.verbose
         return a

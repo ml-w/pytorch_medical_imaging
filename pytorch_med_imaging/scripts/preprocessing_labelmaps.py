@@ -1,4 +1,4 @@
-from ..utils.preprocessing_labelmaps import remap_label as rl
+from ..utils.preprocessing_labelmaps import remap_label as rl, label_statistics
 from ..med_img_dataset import ImageDataSet
 from .console_entry import pmi_console_entry
 import os
@@ -23,3 +23,10 @@ def remap_label():
     rl(remap_dict, dataset, args.output, args.numworker)
 
 
+
+def pmi_label_statistics():
+    parser = pmi_console_entry('iOgLnv')
+    args = parser.parse_args()
+
+    df = label_statistics(args.input, args.idglobber, args.numworker, verbose=args.verbose)
+    df.to_csv(args.outfile)
