@@ -9,6 +9,7 @@ import argparse
 import pandas as pd
 sitk.ProcessObject_GlobalWarningDisplayOff()
 from pytorch_med_imaging.logger import Logger
+from typing import Optional, Union
 
 __all__ = ['recursive_list_dir']
 
@@ -131,4 +132,35 @@ def make_mask_from_dir(indir, outdir, threshold_lower, threshold_upper, inside_t
     p.close()
     p.join()
 
+
+def mask_image_with_label(in_label: sitk.Image,
+                          mask_label: sitk.Image,
+                          mask_index: Optional[int] = None,
+                          mask_dilation: Optional[int] = 0) -> sitk.Image:
+    r"""Mask a label map with another label map
+
+    Args:
+        in_label (sitk.Image): Input
+        mask_label (sitk.Image): Output
+        mask_index (int, Optional): If an index is provided, it will be used for masking.
+        mask_dilation (int, Optional): If a value is provided, binary map is dilated before masking.
+    """
+    # Error check
+    assert mask_dilation >= 0, "Dilation radius cannot be negative."
+
+    # If index is provided, make a binary mask out of it
+    if mask_index is not None:
+        mask_label = mask_label == mask_index
+        pass
+
+    # Otherwise, use all non-zero labels
+    mask_label = sitk.LabelImageToLabelMap(mask_label)
+    mask_label = sitk.LabelMapToBinary(mask_label)
+
+    # Dilation if specified
+    if mask_dilation > 0:
+        mask_label = sitk.BinaryDilate(mask_label, mask_dilation, sitk.sitkBall)
+
+    # Masking
+    return sitk.Mask(in_label, mask_label, float(sitk.GetArrayFromImage(in_label).min()))
 
