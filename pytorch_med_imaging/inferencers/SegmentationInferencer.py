@@ -60,7 +60,8 @@ class SegmentationInferencer(InferencerBase):
         super(SegmentationInferencer, self).__init__(inference_configs, config=config, **kwargs)
 
         default_attr = {
-            'unpack_keys_inference': ['input']
+            'unpack_keys_inf': ['input'],
+            'inf_samples_per_vol': 25
         }
         self._load_default_attr(default_attr)
 
@@ -99,19 +100,22 @@ class SegmentationInferencer(InferencerBase):
         in_image_data = self.pmi_data_loader.data['input']
 
         with torch.no_grad():
-            # Do inference subject by subject if sampler is not None
+            # Do inference subject by subject if sampler is not None`
             if not self._inference_sampler is None:
                 self.patch_size = self.pmi_data_loader.patch_size
                 self._logger.info(f"Operating in patch-based mode with patch-size: {self.patch_size}")
-                for index, subject in enumerate(tqdm(self._inference_subjects, desc="Steps")):
+                for index, subject in enumerate(tqdm(self._inference_subjects, desc="Steps", position=0)):
                     # sample and inference
                     self._logger.info(f"Processing subject: {subject}")
-                    self._inference_sampler.set_subject(subject)
+                    if isinstance(self._inference_sampler, tio.GridSampler):
+                        self._inference_sampler.set_subject(subject)
+                    elif isinstance(self._inference_sampler, tio.WeightedSampler):
+                        self._inference_sampler.set_subject(subject, self.inf_samples_per_vol)
                     dataloader = DataLoader(self._inference_sampler, batch_size=self.batch_size, num_workers=8)
                     aggregator = tio.GridAggregator(self._inference_sampler, 'max')
 
                     for mb in tqdm(dataloader, desc="Patch", position=1):
-                        s = self._unpack_minibatch(mb, self.unpack_keys_inference)
+                        s = self._unpack_minibatch(mb, self.unpack_keys_inf)
                         s = self._match_type_with_network(s)
 
                         if isinstance(s, list):
@@ -121,6 +125,7 @@ class SegmentationInferencer(InferencerBase):
                         aggregator.add_batch(out, mb[tio.LOCATION])
                     out = aggregator.get_output_tensor()
                     out = F.log_softmax(out, dim=0)
+                    out[0] += 1E-7 # Work arround be behavior of torch.argmax(torch.zerso(3)) = 2 instead of 0
                     out = torch.argmax(out, dim=0)
                     out = out.squeeze().permute(2, 1, 0).int()    # torchio convention (H x W x D) to sitk convention (D x W x H)
                     in_image_data.write_uid(out, index, self.outdir)

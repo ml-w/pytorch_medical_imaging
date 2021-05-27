@@ -1,7 +1,5 @@
-from .PMIImagePatchesLoader import PMIImagePatchesLoader
 from .PMIImageFeaturePair import PMIImageFeaturePair
 from .PMIImageDataLoader import PMIImageDataLoader
-from .PMIImageMCFeaturePair import PMIImageMCFeaturePair
 from pytorch_med_imaging.logger import Logger
 import traceback as tr
 
@@ -11,9 +9,7 @@ class PMIDataFactory(object):
     def __init__(self):
         self._possible_products = {
             'PMIImageDataLoader': PMIImageDataLoader,
-            'PMIImagePatchesLoader': PMIImagePatchesLoader,
             'PMIImageFeaturePair': PMIImageFeaturePair,
-            'PMIImageMCFeaturePair': PMIImageMCFeaturePair
         }
 
         self._logger = Logger[__class__.__name__]

@@ -208,7 +208,11 @@ class PMIImageDataLoader(PMIDataLoaderBase):
         subjects = tio.SubjectsDataset(subjects=subjects)
         if not self.patch_size is None:
             overlap = [ps // 2 for ps in self.patch_size]
-            sampler = tio.GridSampler(patch_size=self.patch_size, patch_overlap=overlap)
+            # If no probmap, return GridSampler, otherwise, return weighted sampler
+            if self.data['probmap'] is None:
+                sampler = tio.GridSampler(patch_size=self.patch_size, patch_overlap=overlap)
+            else:
+                sampler = self.sampler
             return subjects, sampler
         else:
             return subjects, None
