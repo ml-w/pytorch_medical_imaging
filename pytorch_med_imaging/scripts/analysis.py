@@ -237,7 +237,8 @@ def Volume(TP, FP, TN, FN):
     return (TP + FN)
 
 def EVAL(seg, gt, vars):
-    df = pd.DataFrame(columns=['Filename','ImageIndex'] + list(vars.keys()))
+    # df = pd.DataFrame(columns=['Filename','ImageIndex'] + list(vars.keys()))
+    df = pd.DataFrame()
     logger = Logger['EVAL']
 
     gtindexes = gt.get_unique_IDs()
@@ -258,16 +259,17 @@ def EVAL(seg, gt, vars):
                             columns=['Filename', 'TestParentDirectory',
                                      'ImageIndex',
                                      'Index'] +
-                                    list(vars.keys()))
+                                    list(vars.keys())
+                                )
             df = df.append(data)
             continue
 
         ss = seg[i]
         gg = gt[gtindexes.index(segindexes[i])]
         if not isinstance(ss, np.ndarray):
-            ss = ss.numpy().astype('bool')
+            ss = ss.numpy().astype('int')
         if not isinstance(gg, np.ndarray):
-            gg = gg.numpy().astype('bool')
+            gg = gg.numpy().astype('int')
 
         # Check if two images have the same number of slices
         logger.debug("Shapes: {}, {}".format(ss.shape, gg.shape))
@@ -282,43 +284,61 @@ def EVAL(seg, gt, vars):
             logger.debug("Shape after cropping: {}, {}".format(ss.shape, gg.shape))
 
 
-        try:
-            TP, FP, TN, FN = np.array(perf_measure(gg.flatten(), ss.flatten()), dtype=float)
-        except:
-            logger.error("Somthing wrong with: {}".format(segindexes[i]))
-            continue
-        if TP == 0:
-            logger.warning("No TP hits for {}".format(row))
-            continue
-        values = []
-        for keys in vars:
-            if keys in ['ASD', 'GTV-Target', 'GTV-Predict']:
-                values.append(vars[keys](gg, ss, gt.get_spacing(i)))
-            else:
-                values.append(vars[keys](TP, FP, TN, FN))
-            # try:
-            #     if keys in ['ASD', 'GTV-test', 'GTV-seg']:
-            #         values.append(vars[keys](gg, ss, gt.get_spacing(i)))
-            #     else:
-            #         values.append(vars[keys](TP, FP, TN, FN))
-            # except:
-            #     # tqdm.write("Error encounter for {}".format(keys))
-            #     values.append(np.nan)
-            #     # auto.tqdm.write(e)
+        # Check how many class were there, if more than one, do the analysis for each class, and then as a whole
+        classes = np.unique(gg)
 
-        data = pd.DataFrame([[os.path.basename(seg.get_data_source(i)),
-                              os.path.basename(
-                                      os.path.dirname(
-                                          seg.get_data_source(i))
-                                  ),
-                              seg._filterargs['regex'],
-                              gt.get_internal_slice_index(i),
-                              int(segindexes[i])] + values],
-                            columns=['Filename', 'TestParentDirectory',
-                                     'TestFilter', 'ImageIndex', 'Index'] +
-                                    list(vars.keys()))
-        df = df.append(data)
-        df.set_index('Index')
+        for c in classes:
+            # Skip null class
+            if c == 0:
+                continue
+
+            ggg = (gg == c)
+            sss = (ss == c)
+
+            try:
+                TP, FP, TN, FN = np.array(perf_measure(ggg.flatten().astype('bool'),
+                                                       sss.flatten().astype('bool')),
+                                          dtype=float)
+            except:
+                logger.error("Somthing wrong with: {}".format(segindexes[i]))
+                continue
+            if TP == 0:
+                logger.warning("No TP hits for {}".format(row))
+                continue
+            values = []
+            for keys in vars:
+                if keys in ['ASD', 'Volume-Target', 'Volume-Predict']:
+                    values.append(vars[keys](ggg, sss, gt.get_spacing(i)))
+                else:
+                    values.append(vars[keys](TP, FP, TN, FN))
+                # try:
+                #     if keys in ['ASD', 'GTV-test', 'GTV-seg']:
+                #         values.append(vars[keys](gg, ss, gt.get_spacing(i)))
+                #     else:
+                #         values.append(vars[keys](TP, FP, TN, FN))
+                # except:
+                #     # tqdm.write("Error encounter for {}".format(keys))
+                #     values.append(np.nan)
+                #     # auto.tqdm.write(e)
+            # Construct multi-index
+            row_name = pd.MultiIndex.from_tuples([(int(segindexes[i]), c)], names=('StudyNumber', 'Class'))
+            data = pd.DataFrame([[os.path.basename(seg.get_data_source(i)),
+                                  os.path.basename(
+                                          os.path.dirname(
+                                              seg.get_data_source(i))
+                                      ),
+                                  seg._filterargs['regex'],
+                                  gt.get_internal_slice_index(i),
+                                  ] + values],
+                                columns=['Filename', 'TestParentDirectory',
+                                         'TestFilter', 'ImageInternalIndex'] +
+                                        list(vars.keys()),
+                                index=row_name
+                                )
+
+            df = pd.concat([df, data])
+            # logger.info(f'\n{df.to_string()}')
+        # df.set_index('Index')
     return df
 
 def segmentation_analysis(raw_args=None):
@@ -338,7 +358,9 @@ def segmentation_analysis(raw_args=None):
                        help='add global consistency error to analysis.')
     parse.add_argument('-c', '--CR', action='store_true', default=False, dest='cr',
                        help='add corresponding ratio to analysis.')
-    parse.add_argument('--asd', action='store', default=False, dest='asd',
+    parse.add_argument('--volume', action='store_true', dest='volume',
+                       help='Compute volume of the data.')
+    parse.add_argument('--asd', action='store_true', default=False, dest='asd',
                        help='add average surface distance to analysis.')
     parse.add_argument('-a', '--all', action='store_true', default=False, dest='all', help='use all available analysis.')
     parse.add_argument('--idlist', action='store', default=None, dest='idlist', help='Read id from a txt file.')
@@ -354,6 +376,8 @@ def segmentation_analysis(raw_args=None):
                        help='Additional label that will be marked under the column "Note"')
     parse.add_argument('--verbose', action='store_true', dest='verbose',
                        help='Print results.')
+    parse.add_argument('--debug', action='store_true',
+                       help='Debug mode.')
     args = parse.parse_args(raw_args)
     assert os.path.isdir(args.testset) and os.path.isdir(args.gtset), "Path error!"
 
@@ -376,6 +400,9 @@ def segmentation_analysis(raw_args=None):
         vars['CR'] = CorrespondenceRatio
     if args.asd:
         vars['ASD'] = ASD
+    if args.asd:
+        vars['Volume-Predict'] = GrossVolume_Test
+        vars['Volume-Target'] = GrossVolume_Seg
     if args.all:
         vars = {'GCE': GCE,
                 'JAC': JAC,
@@ -383,8 +410,8 @@ def segmentation_analysis(raw_args=None):
                 'VD': VD,
                 'PPV': PrecisionRate,
                 'CR': CorrespondenceRatio,
-                'GTV-Predict': GrossVolume_Test,
-                'GTV-Target': GrossVolume_Seg,
+                'Volume-Predict': GrossVolume_Test,
+                'Volume-Target': GrossVolume_Seg,
                 'PM': PercentMatch,
                 'ASD': ASD}
 
@@ -403,32 +430,31 @@ def segmentation_analysis(raw_args=None):
     if not idlist is None:
         imset = ImageDataSet(args.testset, readmode='recursive',
                              filtermode='both', regex=args.testfilter, idlist=idlist,
-                             verbose=True, debugmode=False, dtype='uint8')
+                             verbose=True, debugmode=args.debug, dtype='uint8')
     else:
         imset = ImageDataSet(args.testset, readmode='recursive',
                              filtermode='regex', regex=args.testfilter,
-                             verbose=True, debugmode=False, dtype='uint8')
+                             verbose=True, debugmode=args.debug, dtype='uint8')
     gtset = ImageDataSet(args.gtset, filtermode='both', readmode='recursive',
                          regex=args.gtfilter, idlist=imset.get_unique_IDs(),
-                         verbose=True, debugmode=False, dtype='uint8')
+                         verbose=True, debugmode=args.debug, dtype='uint8')
 
     results = EVAL(imset, gtset, vars)
     try:
-        results = results.sort_values('Index')
-        results = results.set_index('Index')
+        results = results.sort_index(0, 'index')
         results.index = results.index.astype(str)
 
         if args.verbose:
-            print(results.to_string())
-            print(results.mean())
-            print(results.median())
+            Logger['main'].info("\n"+results.to_string())
+            Logger['main'].info(f"Mean:\n{results.mean()}")
+            Logger['main'].info(f"Median:\n{results.median()}")
     except:
         if args.verbose:
-            print(results.to_string())
-            print("Mean")
-            print(results.mean())
-            print("Median")
-            print(results.median())
+            Logger['main'].info(results.to_string())
+            Logger['main'].info("Mean")
+            Logger['main'].info(results.mean())
+            Logger['main'].info("Median")
+            Logger['main'].info(results.median())
 
 
     if not args.label is None:
@@ -438,14 +464,17 @@ def segmentation_analysis(raw_args=None):
         try:
             # Append if file exist
             if os.path.isfile(args.save) and args.append:
-                print("Appending...")
+                Logger['main'].info("Appending...")
                 with open(args.save, 'a') as f:
                     results.to_csv(f, mode='a', header=False)
             else:
-                print("Saving...")
-                results.to_csv(args.save)
+                Logger['main'].info("Saving...")
+                if args.save.endswith('.xlsx'):
+                    results.to_excel(args.save)
+                else:
+                    results.to_csv(args.save)
         except:
-            print("Cannot save to: ", args.save)
+            Logger['main'].warning("Cannot save to: ", args.save)
     return results
 
 if __name__ == '__main__':
