@@ -10,7 +10,7 @@ import fnmatch
 global logger
 
 
-def largest_connected_body(in_im: sitk.Image or str):
+def keep_n_largest_connected_body(in_im: sitk.Image or str, n: int = 1):
     r"""
     This function cast the input into binary label, extract the largest connected component and return the
     results.
@@ -33,15 +33,27 @@ def largest_connected_body(in_im: sitk.Image or str):
     # extract largest connected body
     filter = sitk.ConnectedComponentImageFilter()
     out_im = filter.Execute(out_im)
+    n_objs = filter.GetObjectCount()
 
 
     shape_stats = sitk.LabelShapeStatisticsImageFilter()
     shape_stats.Execute(out_im)
     sizes = [shape_stats.GetPhysicalSize(i) for i in range(1, filter.GetObjectCount())]
-    max_idx = np.argmax(sizes) + 1
+    sizes_rank = np.argsort(sizes)[::-1] # descending order
+    keep_labels = sizes_rank[:n] + 1
 
     # copy image information
-    out_im = out_im == max_idx
+    out_im = sitk.Image(in_im)
+    for i in range(n_objs):
+        if (i + 1) in keep_labels:
+            continue
+        else:
+            # remove from original input if label is not kept.
+            out_im = out_im - sitk.Mask(in_im, in_im == i + 1)
+
+    # Make output binary if only largest is extracted.
+    if n == 1:
+        out_im = out_im != 0
     return out_im
 
 
