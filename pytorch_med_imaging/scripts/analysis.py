@@ -321,7 +321,7 @@ def EVAL(seg, gt, vars):
                 #     values.append(np.nan)
                 #     # auto.tqdm.write(e)
             # Construct multi-index
-            row_name = pd.MultiIndex.from_tuples([(int(segindexes[i]), c)], names=('StudyNumber', 'Class'))
+            row_name = pd.MultiIndex.from_tuples([(str(segindexes[i]), c)], names=('StudyNumber', 'Class'))
             data = pd.DataFrame([[os.path.basename(seg.get_data_source(i)),
                                   os.path.basename(
                                           os.path.dirname(
@@ -372,6 +372,8 @@ def segmentation_analysis(raw_args=None):
     parse.add_argument('--gt-data', action='store', type=str, dest='gtset', required=True)
     parse.add_argument('--gt-filter', action='store', type=str,
                        dest='gtfilter', default=None, help='Filter for ground truth data.')
+    parse.add_argument('--id-globber', action='store', type=str, default=None, dest='idGlobber',
+                       help="Specify globber for ImageDataSet")
     parse.add_argument('--added-label', action='store', type=str, dest='label',
                        help='Additional label that will be marked under the column "Note"')
     parse.add_argument('--verbose', action='store_true', dest='verbose',
@@ -429,13 +431,13 @@ def segmentation_analysis(raw_args=None):
 
     if not idlist is None:
         imset = ImageDataSet(args.testset, readmode='recursive',
-                             filtermode='both', regex=args.testfilter, idlist=idlist,
+                             filtermode='both', regex=args.testfilter, idlist=idlist, idGlobber=args.idGlobber,
                              verbose=True, debugmode=args.debug, dtype='uint8')
     else:
         imset = ImageDataSet(args.testset, readmode='recursive',
-                             filtermode='regex', regex=args.testfilter,
+                             filtermode='regex', regex=args.testfilter, idGlobber=args.idGlobber,
                              verbose=True, debugmode=args.debug, dtype='uint8')
-    gtset = ImageDataSet(args.gtset, filtermode='both', readmode='recursive',
+    gtset = ImageDataSet(args.gtset, filtermode='both', readmode='recursive', idGlobber=args.idGlobber,
                          regex=args.gtfilter, idlist=imset.get_unique_IDs(),
                          verbose=True, debugmode=args.debug, dtype='uint8')
 
@@ -450,11 +452,11 @@ def segmentation_analysis(raw_args=None):
             Logger['main'].info(f"Median:\n{results.median()}")
     except:
         if args.verbose:
-            Logger['main'].info(results.to_string())
-            Logger['main'].info("Mean")
-            Logger['main'].info(results.mean())
-            Logger['main'].info("Median")
-            Logger['main'].info(results.median())
+            Logger['main'].info("\n"+results.to_string())
+            Logger['main'].info("{:-^50}".format('Mean'))
+            Logger['main'].info("\n"+results.mean().to_string())
+            Logger['main'].info("{:-^50}".format('Median'))
+            Logger['main'].info("\n"+results.median().to_string())
 
 
     if not args.label is None:
