@@ -1,10 +1,13 @@
 import os
 import torchio as tio
 import torch
+import numpy as np
+
 from torch.utils.data import DataLoader
 from ..med_img_dataset import ImageDataSet
 import tqdm.auto as auto
 import pandas as pd
+import SimpleITK as sitk
 
 __all__ = ['remap_label']
 
@@ -35,17 +38,26 @@ def label_statistics(label_dir,
     r"""Return the data statistics of the labels"""
     # Prepare torchio sampler
     labelimages = ImageDataSet(label_dir, verbose=verbose, dtype='uint8', idGlobber=id_globber)
-    subjects = tio.SubjectsDataset([tio.Subject(label=a) for a in labelimages.data])
-    dataloader = DataLoader(subjects, num_workers=num_workers)
 
     out_df = pd.DataFrame()
-    for i, s in enumerate(auto.tqdm(dataloader)):
-        label = s['label']
-        val, counts = torch.unique(label[tio.DATA], return_counts=True)
-        if normalized:
-            counts = counts / counts.sum()
+    for i, s in enumerate(auto.tqdm(labelimages.data_source_path)):
+        s = sitk.ReadImage(s)
+        shape_stat = sitk.LabelShapeStatisticsImageFilter()
+        shape_stat.Execute(s)
+        val = list(shape_stat.GetLabels())
+        counts = np.asarray([shape_stat.GetNumberOfPixels(v) for v in val])
 
-        row = pd.Series(data = counts.tolist(), index=val.tolist(), name=labelimages.get_unique_IDs()[i])
+        # Calculate null labels
+        total_counts = np.prod(s.GetSize())
+        null_count = total_counts - counts.sum()
+
+        val = np.concatenate([[0], val])
+        counts = np.concatenate([[null_count], counts])
+
+        # normalize
+        if normalized:
+            counts = counts / counts[1:].sum()
+        row = pd.Series(data = counts.tolist(), index=val, name=labelimages.get_unique_IDs()[i])
         out_df = out_df.join(row, how='outer')
     out_df.fillna(0, inplace=True)
     out_df = out_df.T
@@ -57,4 +69,6 @@ def label_statistics(label_dir,
     davg.name = 'avg'
 
     out_df = out_df.append([dsum, davg])
+    labelimages._logger.info(f"\n{out_df.to_string()}")
+
     return out_df
