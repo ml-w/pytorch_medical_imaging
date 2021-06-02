@@ -445,18 +445,15 @@ def segmentation_analysis(raw_args=None):
     try:
         results = results.sort_index(0, 'index')
         results.index = results.index.astype(str)
-
-        if args.verbose:
-            Logger['main'].info("\n"+results.to_string())
-            Logger['main'].info(f"Mean:\n{results.mean()}")
-            Logger['main'].info(f"Median:\n{results.median()}")
     except:
-        if args.verbose:
-            Logger['main'].info("\n"+results.to_string())
-            Logger['main'].info("{:-^50}".format('Mean'))
-            Logger['main'].info("\n"+results.mean().to_string())
-            Logger['main'].info("{:-^50}".format('Median'))
-            Logger['main'].info("\n"+results.median().to_string())
+        pass
+
+    if args.verbose:
+        Logger['main'].info("\n"+results.to_string())
+        Logger['main'].info("{:-^50}".format('Mean'))
+        Logger['main'].info("\n"+results[vars.keys()].groupby('Class').mean().to_string())
+        Logger['main'].info("{:-^50}".format('Median'))
+        Logger['main'].info("\n"+results[vars.keys()].groupby('Class').median().to_string())
 
 
     if not args.label is None:
