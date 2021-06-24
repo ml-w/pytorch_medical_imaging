@@ -54,7 +54,7 @@ def label_statistics(label_dir,
         val = np.concatenate([[0], val])
         counts = np.concatenate([[null_count], counts])
 
-        # normalize
+        # normalizem exclude null label
         if normalized:
             counts = counts / counts[1:].sum()
         row = pd.Series(data = counts.tolist(), index=val, name=labelimages.get_unique_IDs()[i])

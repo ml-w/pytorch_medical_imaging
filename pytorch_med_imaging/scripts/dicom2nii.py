@@ -23,7 +23,9 @@ def dicom2nii(a, logger):
                                     None, # TODO: Port these two arguments to command too
                                     None,
                                     a.idglobber,
-                                    a.usepid)
+                                    a.usepid,
+                                    a.usefname,
+                                    a.input)
 
 def console_entry():
     parser = argparse.ArgumentParser()
@@ -35,6 +37,8 @@ def console_entry():
                         help='Depth of DICOM file search.')
     parser.add_argument('-g', '--idglobber', action='store', default=None, dest='idglobber',
                         help='Specify the globber to glob the ID from the DICOM paths.')
+    parser.add_argument('--use-top-level-fname', action='store_true', dest='usefname',
+                        help='Use top level file name immediately after the input directory as ID.')
     parser.add_argument('--use-patient-id', action='store_true', dest='usepid',
                         help='Use patient id as file id.')
     parser.add_argument('--log', action='store_true', dest='log',

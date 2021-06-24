@@ -14,7 +14,9 @@ def dicom2nii(folder: str,
               out_dir: str =None,
               seq_filters: list or str = None,
               idglobber: str = None,
-              use_patient_id: bool = False) -> None:
+              use_patient_id: bool = False,
+              use_top_level_fname: bool = False,
+              input = None) -> None:
     """
     Covert a series under specified folder into an nii.gz image.
     """
@@ -35,6 +37,7 @@ def dicom2nii(folder: str,
         idglobber = "(?i)(NPC|P|RHO|T1rhoNPC)?[0-9]{3,5}"
 
     folder = os.path.abspath(folder)
+    logger.debug(f"{folder}")
     f = folder.replace('\\', '/')
 
     matchobj = re.search(idglobber, os.path.basename(f))
@@ -49,7 +52,7 @@ def dicom2nii(folder: str,
     series = sitk.ImageSeriesReader_GetGDCMSeriesIDs(f)
 
     for ss in series:
-        # print.info(f"{ss}")
+        logger.debug(f"{ss}")
         reader = sitk.ImageSeriesReader()
         reader.SetFileNames(sitk.ImageSeriesReader_GetGDCMSeriesFileNames(
             f,
@@ -66,9 +69,13 @@ def dicom2nii(folder: str,
         # Replace prefix if use patient id for file id
         if use_patient_id:
             prefix1 = headerreader.GetMetaData('0010|0020').rstrip(' ')
+        if use_top_level_fname:
+            logger.debug(f"{os.path.split(folder.replace(input, ''))}")
+            prefix1 = os.path.split(folder.replace(input, ''))[0]
+
         outname = out_dir + '/%s-%s+%s.nii.gz'%(prefix1,
-                                              headerreader.GetMetaData('0008|103e').rstrip().replace(' ','_'),
-                                              headerreader.GetMetaData('0020|0011').rstrip()) # Some series has the same series name, need this to differentiate
+                                                re.sub(' +', '_', headerreader.GetMetaData('0008|103e').rstrip()),
+                                                headerreader.GetMetaData('0020|0011').rstrip()) # Some series has the same series name, need this to differentiate
 
         # Skip if dicom tag (0008|103e) contains substring in seq_filters
         if not seq_filters is None:
@@ -242,7 +249,9 @@ def batch_dicom2nii(folderlist, out_dir,
                     workers=8,
                     seq_fileters=None,
                     idglobber = None,
-                    use_patient_id = False):
+                    use_patient_id = False,
+                    use_top_level_fname = False,
+                    input = None):
     import multiprocessing as mpi
     logger = Logger['mpi_dicom2nii']
     logger.debug(f"use: {use_patient_id}")
@@ -250,7 +259,7 @@ def batch_dicom2nii(folderlist, out_dir,
     pool = mpi.Pool(workers)
     for f in folderlist:
         # dicom2nii(f, out_dir, seq_fileters, idglobber, use_patient_id)
-        pool.apply_async(dicom2nii, args=[f, out_dir, seq_fileters, idglobber, use_patient_id])
+        pool.apply_async(dicom2nii, args=[f, out_dir, seq_fileters, idglobber, use_patient_id, use_top_level_fname, input])
     pool.close()
     pool.join()
 

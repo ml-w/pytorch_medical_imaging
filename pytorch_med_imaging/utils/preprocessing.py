@@ -20,20 +20,25 @@ def recursive_list_dir(searchDepth, rootdir):
     :param rootdir:
     :return:
     """
-    dirs = os.listdir(rootdir)
-    nextlayer = []
-    for D in dirs:
-        if os.path.isdir(rootdir + "/" + D):
-            nextlayer.append(rootdir + "/" + D)
+    # dirs = os.listdir(rootdir)
+    # nextlayer = []
+    # for D in dirs:
+    #     if os.path.isdir(rootdir + "/" + D):
+    #         nextlayer.append(rootdir + "/" + D)
+    #
+    # DD = []
+    # if searchDepth >= 0 and len(nextlayer) != 0:
+    #     for N in nextlayer:
+    #         K = recursive_list_dir(searchDepth - 1, N)
+    #         if not K is None:
+    #             DD.extend(K)
 
     DD = []
-    if searchDepth >= 0 and len(nextlayer) != 0:
-        for N in nextlayer:
-            K = recursive_list_dir(searchDepth - 1, N)
-            if not K is None:
-                DD.extend(K)
+    for r, d, f in os.walk(rootdir, followlinks=False):
+        if len(f) != 0:
+            DD.extend([os.path.join(r, dd) for dd in d])
 
-    DD.extend(nextlayer)
+    # DD.extend(nextlayer)
     return DD
 
 
