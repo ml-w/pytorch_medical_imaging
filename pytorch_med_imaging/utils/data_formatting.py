@@ -70,8 +70,9 @@ def dicom2nii(folder: str,
         if use_patient_id:
             prefix1 = headerreader.GetMetaData('0010|0020').rstrip(' ')
         if use_top_level_fname:
-            logger.debug(f"{os.path.split(folder.replace(input, ''))}")
-            prefix1 = os.path.split(folder.replace(input, ''))[0]
+            path = os.path.normpath(folder.replace(input, '')).lstrip(os.sep) # lstrip to make sure its not starting from /
+            logger.debug(f"{path.split(os.sep)}")
+            prefix1 = path.split(os.sep)[0]
 
         outname = out_dir + '/%s-%s+%s.nii.gz'%(prefix1,
                                                 re.sub(' +', '_', headerreader.GetMetaData('0008|103e').rstrip()),
