@@ -50,6 +50,7 @@ setup(
     ext_modules = ext_modules,
     entry_points = {
         'console_scripts': [
+            'pmi-main = pytorch_med_imaging.main:console_entry',
             'pmi-dicom2nii = pytorch_med_imaging.scripts.dicom2nii:console_entry',
             'pmi-analysis-segment = pytorch_med_imaging.scripts.analysis:segmentation_analysis',
             'pmi-match_dimension = pytorch_med_imaging.scripts.match_dimension:console_entry',
@@ -57,7 +58,7 @@ setup(
             'pmi-labels_remap = pytorch_med_imaging.scripts.preprocessing_labelmaps:remap_label',
             'pmi-labels_statistic = pytorch_med_imaging.scripts.preprocessing_labelmaps:pmi_label_statistics'
         ]
-    }
+    },
     # scripts = scripts,
     # install_requires=['torchio'],
     # dependency_links=[os.path.abspath('./ThirdParty/torchio')]
