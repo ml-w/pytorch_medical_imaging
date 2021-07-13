@@ -61,10 +61,10 @@ class Logger(object):
         handler = logging.FileHandler(log_dir)
         handler.setFormatter(formatter)
 
-        stream_handler = TqdmLoggingHandler(verbose=verbose)
-        stream_handler.setFormatter(formatter)
+        self._stream_handler = TqdmLoggingHandler(verbose=verbose)
+        self._stream_handler.setFormatter(formatter)
         self._logger.addHandler(handler)
-        self._logger.addHandler(stream_handler)
+        self._logger.addHandler(self._stream_handler)
         self._logger.setLevel(level=log_levels[log_level])
 
         self.info("Loging to file at: {}".format(os.path.abspath(log_dir)))
@@ -78,6 +78,9 @@ class Logger(object):
             self.info("Exception hooked to this logger.")
 
 
+    def set_verbose(self, b):
+        self._stream_handler.verbose=b
+        self._verbose=b
 
     def log_traceback(self):
         self.exception()
@@ -120,8 +123,8 @@ class Logger(object):
 
 
     def exception_hook(self, *args):
-        self.error('Uncaught exception:', exc_info=args)
-        self.exception(args[-1])
+        self.error('Uncaught exception:')
+        self._logger.exception(args[-1], exc_info=args)
 
     def __class_getitem__(cls, item):
         if cls.global_logger is None:
@@ -156,7 +159,6 @@ class Logger(object):
             return Logger.global_logger
         else:
             raise AttributeError("Global logger was not created.")
-
 
     def __del__(self):
         if not self._keepfile & (self != Logger.get_global_logger() or len(Logger.all_loggers) == 1):
