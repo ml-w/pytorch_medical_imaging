@@ -20,24 +20,12 @@ def recursive_list_dir(searchDepth, rootdir):
     :param rootdir:
     :return:
     """
-    # dirs = os.listdir(rootdir)
-    # nextlayer = []
-    # for D in dirs:
-    #     if os.path.isdir(rootdir + "/" + D):
-    #         nextlayer.append(rootdir + "/" + D)
-    #
-    # DD = []
-    # if searchDepth >= 0 and len(nextlayer) != 0:
-    #     for N in nextlayer:
-    #         K = recursive_list_dir(searchDepth - 1, N)
-    #         if not K is None:
-    #             DD.extend(K)
 
     DD = []
     for r, d, f in os.walk(rootdir, followlinks=False):
         if len(f) != 0:
-            DD.extend([os.path.join(r, dd) for dd in d])
-
+            # DD.extend([os.path.join(r, dd) for dd in d])
+            DD.append(r)
     # DD.extend(nextlayer)
     return DD
 
@@ -116,12 +104,12 @@ def make_mask(inimage,
     except Exception as e:
         print(e)
 
-def make_mask_from_dir(indir, outdir, threshold_lower, threshold_upper, inside_to_1):
+def make_mask_from_dir(indir, outdir, threshold_lower, threshold_upper, inside_to_1, num_worker=10):
     r"""Make mask from a directory"""
     if not os.path.isdir(outdir):
         os.mkdir(outdir)
 
-    p = mpi.Pool(10)
+    p = mpi.Pool(num_worker)
     processes = []
     filelist = os.listdir(indir)
     filelist = [indir + '/' + f for f in filelist]
