@@ -284,7 +284,9 @@ class ImageDataSet(PMIDataBase):
             if isinstance(self._filterargs['idlist'], str):
                 self._idlist = [r.strip() for r in open(self._filterargs['idlist'], 'r').readlines()]
             elif self._filterargs['idlist'] is None:
+                # Glob ids from filenames instead
                 self._logger.warning('Idlist input is None!')
+                self._idlist = file_ids
                 pass
             else:
                 self._idlist = self._filterargs['idlist']
