@@ -104,7 +104,7 @@ def match_dimension(a):
     log.info("{:=^100}".format(" Finished "))
     del log
 
-def console_entry():
+def console_entry(*args, **kwargs):
     parser = argparse.ArgumentParser(
         description="Check and match the dimensions if the images in [dirA] and [dirB]")
     parser.add_argument('dirA', metavar='dirA', action='store', type=str,
@@ -125,7 +125,7 @@ def console_entry():
                         help='If true, program will not delete log file with clean exit.')
     parser.add_argument('-d', '--debug', dest='debug', action='store_true',
                         help="For debug.")
-    a = parser.parse_args()
+    a = parser.parse_args(*args, **kwargs)
 
     for dir in [a.dirA, a.dirB]:
         assert os.path.isdir(dir)

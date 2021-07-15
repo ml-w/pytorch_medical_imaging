@@ -15,9 +15,12 @@ def dicom2nii(a, logger):
             logger.error("Error making output directory.")
             return
 
-    logger.info(f"idglobber: {a.idglobber}")
-    logger.info(f"use: {a.usepid}")
+    logger.info(f"Specified ID globber: {a.idglobber}")
+    logger.info(f"Use patient ID: {a.usepid}")
+    ids = a.idlist.split(',') if not a.idlist is None else None
     dicom_dirs = preprocessing.recursive_list_dir(a.depth, a.input)
+    logger.info(f"Dirs:\n{dicom_dirs}")
+
     data_formatting.batch_dicom2nii(dicom_dirs,
                                     a.output,
                                     None, # TODO: Port these two arguments to command too
@@ -25,7 +28,8 @@ def dicom2nii(a, logger):
                                     a.idglobber,
                                     a.usepid,
                                     a.usefname,
-                                    a.input)
+                                    a.input,
+                                    ids)
 
 def console_entry():
     parser = argparse.ArgumentParser()
@@ -37,6 +41,8 @@ def console_entry():
                         help='Depth of DICOM file search.')
     parser.add_argument('-g', '--idglobber', action='store', default=None, dest='idglobber',
                         help='Specify the globber to glob the ID from the DICOM paths.')
+    parser.add_argument('--idlist', action='store', dest='idlist',
+                        help='Only do conversion if the globbed ID is in the list. e.g. ["ID1", "ID2", ...]')
     parser.add_argument('--use-top-level-fname', action='store_true', dest='usefname',
                         help='Use top level file name immediately after the input directory as ID.')
     parser.add_argument('--use-patient-id', action='store_true', dest='usepid',

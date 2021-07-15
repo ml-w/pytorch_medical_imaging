@@ -1,20 +1,19 @@
 from ..utils.preprocessing_labelmaps import remap_label as rl, label_statistics
 from ..med_img_dataset import ImageDataSet
-from .console_entry import pmi_console_entry
+from .console_entry import PMI_ConsoleEntry
 import os
 import ast
 
-__all__ = ['remap_label']
+__all__ = ['remap_label', 'pmi_label_statistics']
 
-def remap_label():
+def remap_label(*args, **kwargs):
     r"""Remap labels"""
-    parser = pmi_console_entry()
-    parser.make_console_entry_io()
+    parser = PMI_ConsoleEntry.make_console_entry_io()
     parser.add_argument('-m', '--remap', type=str, action='store',
                         help="Remap dictionary.")
     parser.add_argument('-n', '--num-worker', dest='numworker', type=int, default=8, action='store',
                         help="Number of workers.")
-    args = parser.parse_args()
+    args = parser.parse_args(*args, **kwargs)
     assert os.path.isdir(args.output), f"Cannot open output directory: {args.output}"
 
     remap_dict = ast.literal_eval(args.remap)
@@ -24,10 +23,10 @@ def remap_label():
 
 
 
-def pmi_label_statistics():
-    parser = pmi_console_entry('iOgLnv')
+def pmi_label_statistics(*args, **kwargs):
+    parser = PMI_ConsoleEntry('iOgLnv')
     parser.add_argument('--normalize', action='store_true', help="Normalize the pixel count.")
-    args = parser.parse_args()
+    args = parser.parse_args(*args, **kwargs)
 
     df = label_statistics(args.input, args.idglobber, args.numworker, verbose=args.verbose, normalized=args.normalize)
     if args.outfile.endswith('.csv'):

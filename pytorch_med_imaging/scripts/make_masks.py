@@ -3,7 +3,7 @@ import argparse
 
 __all__ = ['console_entry']
 
-def console_entry():
+def console_entry(*args, **kwargs):
     parser = argparse.ArgumentParser(
         description="Create mask using binary threshold filter for all images in a directory.")
     parser.add_argument('-i', '--input', dest='input', action='store',
@@ -18,7 +18,7 @@ def console_entry():
                         help="If used this flag, pixels with value inside the bound will be 0 in the output.")
     parser.add_argument('--fill-holes', dest='fill_holes', action='store_true',
                         help="If used this flag, masks are filled slice-by-slice. (Implementing)")
-    a = parser.parse_args()
+    a = parser.parse_args(*args, **kwargs)
 
     make_mask_from_dir(a.input,
                        a.output,

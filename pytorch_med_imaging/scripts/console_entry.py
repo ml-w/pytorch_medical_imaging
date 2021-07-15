@@ -2,9 +2,9 @@ import argparse
 import os
 from ..logger import Logger
 
-class pmi_console_entry(argparse.ArgumentParser):
-    def __init__(self, addargs: str):
-        super(pmi_console_entry, self).__init__()
+class PMI_ConsoleEntry(argparse.ArgumentParser):
+    def __init__(self, addargs: str = ''):
+        super(PMI_ConsoleEntry, self).__init__()
 
         default_arguments = {
             'i': (['-i', '--input'],    {'type': str, 'help': 'Input directory that contains nii.gz or DICOM files.'}),
@@ -25,11 +25,11 @@ class pmi_console_entry(argparse.ArgumentParser):
 
     @staticmethod
     def make_console_entry_io():
-        return pmi_console_entry('iogLv')
+        return PMI_ConsoleEntry('iogLv')
 
 
     def parse_args(self, *args, **kwargs):
-        a = super(pmi_console_entry, self).parse_args(*args, **kwargs)
+        a = super(PMI_ConsoleEntry, self).parse_args(*args, **kwargs)
 
         # Create output dir
         if hasattr(a, 'output'):
