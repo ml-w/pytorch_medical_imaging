@@ -8,17 +8,15 @@ import random
 import argparse
 import pandas as pd
 sitk.ProcessObject_GlobalWarningDisplayOff()
-from pytorch_med_imaging.logger import Logger
+from pytorch_med_imaging.logger import Logger, LogExceptions
 from typing import Optional, Union
+import multiprocessing as mpi
 
 __all__ = ['recursive_list_dir']
 
 def recursive_list_dir(searchDepth, rootdir):
-    """
-      Recursively lo
-    :param searchDepth:
-    :param rootdir:
-    :return:
+    r"""
+    Recursively list directories only.
     """
 
     DD = []
@@ -59,39 +57,48 @@ def make_mask(inimage,
             Input image.
         outdir (str):
             Ouptut directory.
-        threshold_lower:
-        threshold_upper:
-        inside_to_1:
-        pos:
-
-    Returns:
-
+        threshold_lower (float):
+            Lower threshold.
+        threshold_upper (float, Optional):
+            Upper threshold. If none is provided, use the maximum value of the image as the threshold.
+            Default to None.
+        inside_to_1 (bool, Optional):
+            If True, values inside the threholds becomes 1, else 0. Default to be True.
+        pos (int):
+            For MPI purpose, don't use.
     """
+    workerid = mpi.current_process().name
+    logger = Logger['utils.preprocessing-%s'%workerid]
+
     if isinstance(inimage, str):
-        print(inimage)
+        logger.info(f"Handling: {inimage}")
         inimage = sitk.ReadImage(inimage)
+
+    if threshold_upper is None:
+        threshold_upper = sitk.GetArrayFromImage(inimage).max()
 
     # setup variables
     inside_value = 1 if inside_to_1 else 0
     outside_value = 0 if inside_to_1 else 1
 
     # might need to cast type correctly in the future
-
     gttest = sitk.BinaryThreshold(inimage,
                                   upperThreshold=float(threshold_upper),
                                   lowerThreshold=float(threshold_lower),
                                   insideValue=bool(inside_value),
                                   outsideValue=bool(outside_value))
+
     gttest = sitk.BinaryDilate(gttest, [15, 15, 0], sitk.BinaryMorphologicalOpeningImageFilter.Ball)
     gttest = sitk.BinaryErode(gttest, [15, 15, 0], sitk.BinaryMorphologicalOpeningImageFilter.Ball)
     # gttest = sitk.BinaryMorphologicalClosing(gttest, [0, 25, 25], sitk.BinaryMorphologicalOpeningImageFilter.Ball)
     ss = []
 
+
     if pos == -1:
         try:
             pos = int(mpi.current_process().name.split('-')[-1])
         except Exception as e:
-            tqdm.write(e)
+            logger.exception(e)
 
     try:
         for i in trange(gttest.GetSize()[-1], position=pos, desc=mpi.current_process().name):
@@ -100,24 +107,28 @@ def make_mask(inimage,
         # gttest = sitk.BinaryDilate(gttest, [0, 3, 3], sitk.BinaryDilateImageFilter.Ball)
         gttest.CopyInformation(inimage)
         sitk.WriteImage(gttest, outdir)
+        logger.info(f"Written to: {outdir}")
         return 0
     except Exception as e:
-        print(e)
+        logger.exception(e)
 
 def make_mask_from_dir(indir, outdir, threshold_lower, threshold_upper, inside_to_1, num_worker=10):
     r"""Make mask from a directory"""
+    import fnmatch
     if not os.path.isdir(outdir):
         os.mkdir(outdir)
 
     p = mpi.Pool(num_worker)
     processes = []
     filelist = os.listdir(indir)
+    filelist = fnmatch.filter(filelist, '*.nii.gz')
     filelist = [indir + '/' + f for f in filelist]
+
 
     for i, f in enumerate(filelist):
         outname = f.replace(indir, outdir)
         # make_mask(f, outname, threshold_lower, threshold_upper, inside_to_1)
-        subp = p.apply_async(make_mask, (f, outname, threshold_lower, threshold_upper, inside_to_1))
+        subp = p.apply_async(LogExceptions(make_mask), (f, outname, threshold_lower, threshold_upper, inside_to_1))
         processes.append(subp)
 
     for pp in processes:
