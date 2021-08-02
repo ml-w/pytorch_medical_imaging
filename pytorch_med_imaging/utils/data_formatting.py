@@ -16,7 +16,8 @@ def dicom2nii(folder: str,
               idglobber: str = None,
               use_patient_id: bool = False,
               use_top_level_fname: bool = False,
-              input = None) -> None:
+              input = None,
+              idlist = None) -> None:
     """
     Covert a series under specified folder into an nii.gz image.
     """
@@ -46,7 +47,18 @@ def dicom2nii(folder: str,
         prefix1 = matchobj.group()
     else:
         prefix1 = "NA"
-    logger.debug(f"prefix: {prefix1}")
+
+    if use_top_level_fname:
+        path = os.path.normpath(folder.replace(input, '')).lstrip(os.sep) # lstrip to make sure its not starting from /
+        logger.debug(f"{path.split(os.sep)}")
+        prefix1 = path.split(os.sep)[0]
+    logger.debug(f"ID: {prefix1}")
+
+    # Check ID list and drop if input is not in idlist (not None)
+    if not idlist is None:
+        if not prefix1 in idlist:
+            logger.info(f"Skipping {prefix1} because target not in idlist.")
+            return
 
     # Read file
     series = sitk.ImageSeriesReader_GetGDCMSeriesIDs(f)
@@ -66,13 +78,15 @@ def dicom2nii(folder: str,
         headerreader.LoadPrivateTagsOn()
         headerreader.ReadImageInformation()
 
+        # Warn if pid and original prefix is not the same
+        pid = headerreader.GetMetaData('0010|0020').rstrip(' ')
+        if pid != prefix1:
+            logger.warning(f"Prefix and patient ID are not the same! (folder: {prefix1}, PID: {pid})")
+
         # Replace prefix if use patient id for file id
         if use_patient_id:
-            prefix1 = headerreader.GetMetaData('0010|0020').rstrip(' ')
-        if use_top_level_fname:
-            path = os.path.normpath(folder.replace(input, '')).lstrip(os.sep) # lstrip to make sure its not starting from /
-            logger.debug(f"{path.split(os.sep)}")
-            prefix1 = path.split(os.sep)[0]
+            prefix1 = pid
+
 
         outname = out_dir + '/%s-%s+%s.nii.gz'%(prefix1,
                                                 re.sub(' +', '_', headerreader.GetMetaData('0008|103e').rstrip()),
@@ -252,15 +266,16 @@ def batch_dicom2nii(folderlist, out_dir,
                     idglobber = None,
                     use_patient_id = False,
                     use_top_level_fname = False,
-                    input = None):
+                    input = None,
+                    idlist = None):
     import multiprocessing as mpi
     logger = Logger['mpi_dicom2nii']
-    logger.debug(f"use: {use_patient_id}")
 
     pool = mpi.Pool(workers)
     for f in folderlist:
+        logger.info(f"Creating job for: {f}.")
         # dicom2nii(f, out_dir, seq_fileters, idglobber, use_patient_id)
-        pool.apply_async(dicom2nii, args=[f, out_dir, seq_fileters, idglobber, use_patient_id, use_top_level_fname, input])
+        pool.apply_async(dicom2nii, args=[f, out_dir, seq_fileters, idglobber, use_patient_id, use_top_level_fname, input, idlist])
     pool.close()
     pool.join()
 
