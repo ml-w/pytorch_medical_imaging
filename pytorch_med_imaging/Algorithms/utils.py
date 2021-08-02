@@ -87,20 +87,23 @@ def directory_sorter(dir, sort_dict=None, pre_filter=None):
     all_nii_files = fnmatch.filter(all_nii_files,'*nii.gz')
 
     if sort_dict is None:
-        sort_dict = {'T2WFS':   "(?i)(?=.*T2.*)(?=.*(fs|stir).*)",
-                     'T2W':     "(?i)(?=.*T2.*)(?!.*(fs|stir).*)",
-                     'CE-T1WFS':"(?i)(?=.*T1.*)(?=.*\+[cC].*)(?=.*(fs|stir).*)",
-                     'CE-T1W':  "(?i)(?=.*T1.*)(?=.*\+[cC].*)(?!.*(fs|stir).*)",
-                     'T1W':     "(?i)(?=.*T1.*)(?!.*\+[cC].*)(?!.*(fs|stir).*)"
+        sort_dict = {'T1rho':   "(?i)(?=.*T1rho.*)",
+                     'T2WFS':   "(?i)(?=.*T2.*)(?=.*(fs|stir|spir).*)",
+                     'T2W':     "(?i)(?=.*T2.*)(?!.*(fs|stir|spir).*)",
+                     'CE-T1WFS':"(?i)(?=.*T1.*)(?=.*\+[cC].*)(?=.*(fs|stir|spir).*)",
+                     'CE-T1W':  "(?i)(?=.*T1.*)(?=.*\+[cC].*)(?!.*(fs|stir|spir).*)",
+                     'T1W':     "(?i)(?=.*T1.*)(?!.*\+[cC].*)(?!.*(fs|stir|spir).*)",
+                     'E-Thrive':"(?i)(?=.*e-thrive.*)",
                  }
 
     if pre_filter is None:
         pre_filter = {'SURVEY': "(?i)(?=.*survey.*)",
-                      'NECK': "(?i)(?=.*neck.*)"}
+                      'NECK': "(?i)(?=.*neck.*)",
+                      'DWI': "(?i)(?=.*dwi.*)"}
 
-    directions = {'_COR': "(?i)(?=.*cor.*)",
-                  '_TRA': "(?i)(?=.*tra.*)",
-                  '_SAG': "(?i)(?=.*sag.*)",}
+    directions = {'_COR': "(?=.*cor.*)",
+                  '_TRA': "(?=.*tra.*)",
+                  '_SAG': "(?=.*sag.*)",}
 
     for p in pre_filter:
         if not os.path.isdir(dir + '/' + p):
@@ -162,7 +165,11 @@ def directory_index(dir, out_csv, id_globber="(^[a-zA-Z0-9]+)"):
         if not f in idset:
             idset[f] = []
 
-        files = os.listdir(os.path.join(dir, f))
+        try:
+            files = os.listdir(os.path.join(dir, f))
+        except NotADirectoryError:
+            print(f"{f} is not a directory!")
+            continue
         for ff in files:
             if not ff.endswith('.gz') and not ff.endswith('.nii'):
                 continue
@@ -183,12 +190,18 @@ def directory_index(dir, out_csv, id_globber="(^[a-zA-Z0-9]+)"):
         row = pd.DataFrame([row], columns=col)
         outdf = outdf.append(row)
 
-    outdf.to_csv(out_csv, index=False)
+    outdf.set_index("Study Number", inplace=True)
+    outdf.sort_index(inplace=True)
+    outdf = outdf.reindex(sorted(outdf.columns), axis=1)
+    outdf.to_csv(out_csv)
 
 
 if __name__ == '__main__':
-    # directory_sorter('../NPC_Segmentation/0A.NIFTI_ALL/Malignant')
-    directory_index('../NPC_Segmentation/0A.NIFTI_ALL/Malignant', '/home/lwong/FTP/temp/images.csv')
+    # directory_sorter('/media/storage/Data/NPC_Segmentation/0A.NIFTI_ALL/All')
+    # directory_index('../NPC_Segmentation/0A.NIFTI_ALL/Malignant', '/home/lwong/FTP/temp/images.csv')
+    directory_index('/media/storage/Data/NPC_Segmentation/0A.NIFTI_ALL/All',
+                    '/media/storage/Data/NPC_Segmentation/0A.NIFTI_ALL/All/images.csv',
+                    id_globber="^(P|T|NPC|RHO|K)?[0-9]+")
 
 
 
