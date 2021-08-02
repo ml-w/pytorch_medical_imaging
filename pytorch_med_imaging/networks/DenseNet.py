@@ -46,15 +46,15 @@ class DenseNet3d(nn.Module):
 
         # init conv
         self.inconv = nn.Sequential(
-            Conv3d(in_ch, init_conv_features, kern_size=[3, 7, 7], stride=[1, 2, 2], padding=[1, 3, 3]),
+            Conv3d(in_ch, init_conv_features, kern_size=[5, 5, 5], stride=[2, 2, 2], padding=[2, 2, 2]),
             nn.Dropout3d(p=dropout),
-            nn.MaxPool3d(kernel_size=[1, 3, 3], stride=[1, 2, 2], padding=[0, 1, 1]),
+            nn.MaxPool3d(kernel_size=[2, 2, 2], stride=[2, 2, 2]),
         )
 
         features = init_conv_features
         self.dense_blocks = nn.Sequential()
         for i, num_layers in enumerate(block_config):
-            block = DenseBlock3d(features, k, num_layers, kernsize=[1, 3, 3], dropout=dropout, bn_size=bn_size)
+            block = DenseBlock3d(features, k, num_layers, kernsize=[3, 3, 3], dropout=dropout, bn_size=bn_size)
             self.dense_blocks.add_module('dense_block_%02d'%(i+1), block)
             features = features + num_layers * k
 
