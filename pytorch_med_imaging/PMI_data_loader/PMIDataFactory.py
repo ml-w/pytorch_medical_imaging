@@ -31,6 +31,7 @@ class PMIDataFactory(object):
         # Force loading training data
         force_train_data = config['General'].get('force_train_data', False)
         if force_train_data:
+            self._logger.info("Force loading training dataset!")
             run_mode = 'training'
         debug = config['General'].getboolean('debug', False)
         self._logger.log_print_tqdm("Creating object: {}".format(requested_datatype))
