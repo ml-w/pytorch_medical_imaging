@@ -29,7 +29,7 @@ class PMIDataFactory(object):
         requested_datatype = config['LoaderParams']['PMI_datatype_name']
         run_mode = config['General'].get('run_mode', 'training')
         # Force loading training data
-        force_train_data = config['General'].get('force_train_data', False)
+        force_train_data = config['General'].getboolean('force_train_data', False)
         if force_train_data:
             self._logger.info("Force loading training dataset!")
             run_mode = 'training'
