@@ -4,7 +4,7 @@ import os, sys, traceback
 import hashlib
 from tqdm import *
 
-__all__ = ['Logger']
+__all__ = ['Logger', 'LogExceptions']
 
 class Logger(object):
     global_logger = None
@@ -160,11 +160,30 @@ class Logger(object):
         else:
             raise AttributeError("Global logger was not created.")
 
-    def __del__(self):
-        if not self._keepfile & (self != Logger.get_global_logger() or len(Logger.all_loggers) == 1):
-            self._logger.info("Removing log file...")
-            os.remove(self._log_dir)
+    # def __del__(self):
+    #     if not self._keepfile & (self != Logger.get_global_logger() or len(Logger.all_loggers) == 1):
+    #         self._logger.info("Removing log file...")
+    #         os.remove(self._log_dir)
 
+class LogExceptions(object):
+    def __init__(self, callable):
+        self.__callable = callable
+
+    def __call__(self, *args, **kwargs):
+        try:
+            result = self.__callable(*args, **kwargs)
+        except AttributeError:
+            pass
+        except Exception as e:
+            # Here we add some debugging help. If multiprocessing's
+            # debugging is on, it will arrange to log the traceback
+            Logger['OMG-SomethingsWrong']._logger.error(traceback.format_exc())
+            # Re-raise the original exception so the Pool worker can
+            # clean up
+            raise
+
+        # It was fine, give a normal answer
+        return result
 
 class TqdmLoggingHandler(logging.Handler):
     def __init__(self, level=logging.NOTSET, verbose=False):
@@ -181,6 +200,7 @@ class TqdmLoggingHandler(logging.Handler):
             raise
         except:
             self.handleError(record)
+
 
 class LevelFormatter(logging.Formatter):
     def __init__(self, fmt=None, datefmt=None, level_fmts={}):

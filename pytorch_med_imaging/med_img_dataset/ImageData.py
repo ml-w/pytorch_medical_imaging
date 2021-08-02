@@ -252,6 +252,10 @@ class ImageDataSet(PMIDataBase):
             if self.verbose:
                 self._logger.info("Reading from "+f)
 
+            if not os.path.isfile(f):
+                self._logger.warning("Cannot find file!")
+                self._logger.debug(f"{os.listdir(os.path.dirname(f))}")
+
             # if dtype is uint, treat as label
             if np.issubdtype(self.dtype, np.unsignedinteger):
                 im = tio.LabelMap(f)

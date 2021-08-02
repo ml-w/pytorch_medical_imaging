@@ -163,6 +163,7 @@ class SegmentationSolver(SolverBase):
                 fp = (res_b * ~fg).int().sum().float().cpu().item()
                 fn = (~res_b * fg).int().sum().float().cpu().item()
                 perfs.append([tp, tn, fp, fn])
+                del mb
 
             tps, tns, fps, fns = torch.tensor(perfs).sum(dim=0)
             dsc = self._DICE(tps, fps, tns, fns)
