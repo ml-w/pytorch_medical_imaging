@@ -302,6 +302,12 @@ class ImageDataSet(PMIDataBase):
             file_dirs = tmp_file_dirs[keep].tolist()
             filtered_away.extend(tmp_file_dirs[np.invert(keep)])
 
+            # Check if there are still things in the list
+            if len(file_dirs) == 0:
+                self._logger.warning("Nothing lefted in the file list after id-filtering! "
+                                     "That can't be right, continue with all files found.")
+                file_dirs = tmp_file_dirs.tolist()
+
         # Fitlter by regex
         # --------------
         if self._filtermode == 'regex' or self._filtermode == 'both':
@@ -331,9 +337,21 @@ class ImageDataSet(PMIDataBase):
                     self._logger.debug(f"file_dirs: {file_dirs}")
                 except:
                     self._logger.exception("Unknown error when trying to filter by regex.")
-                file_dirs = np.array(file_dirs)[keep].tolist()
+                tmp_file_dirs = np.array(file_dirs)
+                file_dirs = tmp_file_dirs[keep].tolist()
+                filtered_away.extend(tmp_file_dirs[np.invert(keep)])
             else:  # else use wild card
+                tmp_file_dirs = np.array(file_dirs)
                 file_dirs = fnmatch.filter(file_dirs, "*" + self._filterargs['regex'] + "*")
+                filtered_away.extend(list(set(tmp_file_dirs) - set(file_dirs)))
+
+            # Check if there are still things in the list
+            if len(file_dirs) == 0:
+                self._logger.warning(
+                    "Nothing lefted in the file list after regex-filtering! "
+                    "That can't be right, continue with all files found.")
+                file_dirs = tmp_file_dirs.tolist()
+
         if len(removed_fnames) > 0:
             removed_fnames.sort()
             for fs in removed_fnames:
