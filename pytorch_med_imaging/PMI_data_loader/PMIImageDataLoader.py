@@ -149,7 +149,7 @@ class PMIImageDataLoader(PMIDataLoaderBase):
         """
         self._image_class = med_img_dataset.ImageDataSet
         img_data =  self._image_class(root_dir, verbose=self._verbose, debugmode=self._debug, filtermode='both',
-                                 regex=self._regex, idlist=self._idlist, **kwargs)
+                                      regex=self._regex, idlist=self._idlist, idGlobber=self.idGlobber, **kwargs)
         return img_data
 
     def _load_data_set_training(self):
@@ -191,7 +191,12 @@ class PMIImageDataLoader(PMIDataLoaderBase):
         prob_out = self._prepare_probmap()
 
         if not self._target_dir is None:
-            gt_out = self._read_image(self._target_dir, dtype=self.data_types[1])
+            try:
+                gt_out = self._read_image(self._target_dir, dtype=self.data_types[1])
+            except:
+                self._logger.exception("Can't load from: {}".format(self._target_dir))
+                self._logger.warning("Skipping ground-truth data loading.")
+                gt_out = None
         else:
             gt_out = None
 
