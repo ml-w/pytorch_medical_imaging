@@ -122,11 +122,12 @@ class PMIImageDataLoader(PMIDataLoaderBase):
         # Build transform
         self.transform = tio.Compose((
             tio.ToCanonical(),
-            tio.CropOrPad(),
-            tio.RandomAffine(scales=[0.9, 1.1], degress=10),
+            tio.RandomAffine(scales=[0.9, 1.1], degrees=10),
             tio.RandomFlip('lr'),
-            tio.RandomNoise(std=(0, 8))
+            tio.RandomNoise(std=(0, 8)),
+            tio.RandomRescale(500, (1, 255), 'corner-pixel')
         )) if self.augmentation else None
+        self._logger.debug(f"Built transform: {self.transform}")
 
         self.data_types = self.data_types.split('-')
 
@@ -227,7 +228,11 @@ class PMIImageDataLoader(PMIDataLoaderBase):
          # Load probability map if specified
         if self._probmap_dir is not None:
             self._logger.info("Loading probmap.")
-            prob_out = self._read_image(self._probmap_dir, dtype=float)
+            try:
+                prob_out = self._read_image(self._probmap_dir, dtype='uint32')
+            except:
+                self._logger.warning(f"Couldn't open probmap from: {self._probmap_dir}", no_repeat=True)
+                prob_out = None
         else:
             prob_out = None
         return prob_out
