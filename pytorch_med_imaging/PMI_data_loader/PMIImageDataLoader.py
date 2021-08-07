@@ -229,7 +229,7 @@ class PMIImageDataLoader(PMIDataLoaderBase):
         if self._probmap_dir is not None:
             self._logger.info("Loading probmap.")
             try:
-                prob_out = self._read_image(self._probmap_dir, dtype='uint32')
+                prob_out = self._read_image(self._probmap_dir, dtype='uint32') # torchio requires Integer probmap
             except:
                 self._logger.warning(f"Couldn't open probmap from: {self._probmap_dir}", no_repeat=True)
                 prob_out = None
