@@ -244,6 +244,10 @@ def EVAL(seg, gt, vars):
     gtindexes = gt.get_unique_IDs()
     segindexes = seg.get_unique_IDs()
 
+    # If nothing in segindex, report error
+    if len(segindexes) == 0:
+        raise ArithmeticError('Cannot glob ID from tested segmentation.')
+
     for i, row in enumerate(auto.tqdm(segindexes, desc='Eval')):
         logger.info("Computing {}".format(row))
         # check if both have same ID
@@ -446,6 +450,7 @@ def segmentation_analysis(raw_args=None):
         results = results.sort_index(0, 'index')
         results.index = results.index.astype(str)
     except:
+        # Sometimes this reports error as intended, but I forgot why. Just keep this.
         pass
 
     if args.verbose:
@@ -469,7 +474,13 @@ def segmentation_analysis(raw_args=None):
             else:
                 Logger['main'].info("Saving...")
                 if args.save.endswith('.xlsx'):
-                    results.to_excel(args.save)
+                    with pd.ExcelWriter(args.save) as writer:
+                        results.to_excel(writer, sheet_name='Segmentation Results')
+                        # also write the mean and median results
+                        results[vars.keys()].groupby('Class').mean().to_excel(writer, sheet_name='Mean')
+                        results[vars.keys()].groupby('Class').median().to_excel(writer, sheet_name='Median')
+
+                        writer.save()
                 else:
                     results.to_csv(args.save)
         except:
