@@ -426,7 +426,7 @@ def segmentation_analysis(raw_args=None):
             if os.path.isfile(args.idlist):
                 idlist = [r.rstrip() for r in open(args.idlist, 'r').readlines()]
             else:
-                idlist = eval(args.idlist)
+                idlist = args.idlist.split(',')
         except:
             print("Can't read idlist properly.")
             idlist = None
