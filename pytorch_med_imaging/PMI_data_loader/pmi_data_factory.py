@@ -1,5 +1,5 @@
-from .PMIImageFeaturePair import PMIImageFeaturePair
-from .PMIImageDataLoader import PMIImageDataLoader
+from .pmi_img_feat_pair_dataloader import PMIImageFeaturePair
+from .pmi_image_dataloader import PMIImageDataLoader
 from pytorch_med_imaging.logger import Logger
 import traceback as tr
 

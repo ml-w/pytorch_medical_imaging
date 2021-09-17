@@ -1,6 +1,6 @@
 from torch.nn.utils.rnn import pack_padded_sequence
 from torch.utils.data import DataLoader
-from .PMIBatchZeroPadSampler import *
+from .pmi_batch_zero_pad_sampler import *
 
 from ..logger import Logger
 

@@ -1,4 +1,4 @@
-from .PMIDataLoaderBase import PMIDataLoaderBase
+from .pmi_dataloader_base import PMIDataLoaderBase
 from .. import med_img_dataset
 
 import re

@@ -1,4 +1,4 @@
-from .PMIImageDataLoader import PMIImageDataLoader
+from .pmi_image_dataloader import PMIImageDataLoader
 from torch.utils.data import TensorDataset
 from .. import med_img_dataset
 

@@ -1,4 +1,4 @@
-from .PMIImageFeaturePair import PMIImageFeaturePair
+from .pmi_img_feat_pair_dataloader import PMIImageFeaturePair
 from .. import med_img_dataset
 
 __all__ = ['PMIImageMCFeaturePair']
