@@ -42,8 +42,6 @@ def GenerateFileList(files):
         df = df.append(tmp)
     return df[list(regex_dict.keys()) + ['None']]
 
-
-
 def GenerateTestBatch(ids, k_fold, outdir, prefix="Batch_", exclude_list=None, stratification_class=None, validation=0):
     import configparser
     try:
@@ -61,22 +59,10 @@ def GenerateTestBatch(ids, k_fold, outdir, prefix="Batch_", exclude_list=None, s
             for v in validation_ids:
                 ids.remove(v)
         else:
-            classes = list(set(stratification_class))
-            classes_prob = {c: stratification_class.count(c) / float(len(ids)) for c in classes}
-            p = [classes_prob[s] / float(stratification_class.count(s)) for s in stratification_class]
-            print(len(p), len(ids))
-            validation_ids = random.choice(ids, size=validation, p=p, replace=False)
-
-
-            tmp_stras = {i: stra for i, stra in zip(ids, stratification_class)}
-            for v in validation_ids:
-                tmp_stras.pop(v)
-            ids = list(tmp_stras.keys())
-            stratification_class = [tmp_stras[k] for k in tmp_stras]
+            _, validation_ids = model_selection.train_test_split(ids, test_size=validation, stratify=stratification_class)
 
         val_file = open(os.path.join(outdir, 'Validation.txt'), 'w')
         val_file.writelines([str(v) + '\n' for v in validation_ids])
-
 
     # Set up output dictionary for writing
     out = {}
@@ -114,8 +100,6 @@ def GenerateTestBatch(ids, k_fold, outdir, prefix="Batch_", exclude_list=None, s
         test_ids = [str(x) for x in test_ids]
         print("Train: %d, Test: %d"%(len(train_ids), len(test_ids)))
         out[i] = {'train_id': train_ids, 'test_ids': test_ids}
-
-
 
     # Output files
     for k in range(k_fold):
@@ -191,32 +175,22 @@ def check_batches_files(dir, globber=None):
 
 if __name__ == '__main__':
     import pandas as pd
-    # allids = [r.rstrip() for r in open('../../NPC_Segmentation/99.Testing/Survival_analysis/chemo_only.txt').readlines()]
-    # datasheet = pd.read_csv('../../NPC_Segmentation/50.NPC_SurvivalAnalysis/survival_analysis_data_table.csv',
-    #                         index_col=0)
-    # datasheet.index = datasheet.index.astype(str)
-    # datasheet=datasheet.loc[allids]
-    # dfs = (datasheet['DFS']*12).astype('int').to_list()
-    #
-    # GenerateTestBatch(allids,
-    #                   5,
-    #                   '../../NPC_Segmentation/99.Testing/Survival_5Fold_Chemo_only_stratified_DFS/',
-    #                   stratification_class=dfs,
-    #                   validation=36,
-    #                   prefix='B'
-    #                   )
-    allids = [re.search('^[0-9]+', r) for r in os.listdir('../../Sinus/0A.NIFTI')]
-    allids.remove(None)
-    allids = [mo.group() for mo in allids]
-    GenerateTestBatch(allids,
-                      5,
-                      '../../Sinus/99.Testing/Sinus_segment_5Folds',
-                      # stratification_class=dfs,
-                      validation= 30,
+    from pytorch_med_imaging.med_img_dataset import ImageDataSet
+    from pathlib import Path
+
+    data_dir = Path('../../NPC_Segmentation/60.Large-Study/v1-All-Data/Original/T2WFS_TRA')
+    table_dir = Path('../../NPC_Segmentation/60.Large-Study/v1-All-Data/v1-datasheet.csv')
+    table = pd.read_csv(table_dir.__str__(), index_col=0)
+    out_file_dir = Path('../../NPC_Segmentation/99.Testing/NPC_BM_LargeStudy/v1-3fold')
+
+
+    regex = r"^[a-zA-Z]{0,3}[0-9]+"
+    images = ImageDataSet(data_dir.__str__(), verbose=True, idGlobber=regex)
+    GenerateTestBatch(images.get_unique_IDs(),
+                      3,
+                      out_file_dir.__str__(),
+                      stratification_class=table,
+                      validation=249,
                       prefix='B'
                       )
-
-    # print GenerateFileList(os.listdir('../NPC_Segmentation/06.NPC_Perfect')).to_csv('~/FTP/temp/perfect_file_list.csv')
-
-    # check_batches_files('../NPC_Segmentation/99.Testing/B06/')
 
