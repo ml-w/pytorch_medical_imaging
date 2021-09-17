@@ -1,5 +1,7 @@
 from .pmi_dataloader_base import PMIDataLoaderBase
 from .. import med_img_dataset
+from pathlib import Path
+from .augmenter_factory import create_transform_compose
 
 import re
 import torchio as tio
@@ -119,16 +121,17 @@ class PMIImageDataLoader(PMIDataLoaderBase):
         self.queue_args = [self.queue_kwargs.pop(k)
                            for k in ['max_length', 'samples_per_volume']] \
                           + [self.sampler] # follows torchio's args arrangments
-        # Build transform
-        self.transform = tio.Compose((
-            tio.ToCanonical(),
-            tio.RandomAffine(scales=[0.9, 1.1], degrees=10),
-            tio.RandomFlip('lr'),
-            tio.RandomNoise(std=(0, 8)),
-            tio.RandomRescale(500, (1, 255), 'corner-pixel')
-        )) if self.augmentation else None
-        self._logger.debug(f"Built transform: {self.transform}")
 
+        # Build transform
+        if isinstance(self.augmentation, str):
+            if Path(self.augmentation).is_file():
+                try:
+                    self.transform = create_transform(self.augmentation)
+                    self._logger.debug(f"Built transform: {self.transform}")
+                except Exception:
+                    self._logger.error(f"Failed to create augmentation from file: {self.augmentation}")
+                    self._augmentation = False
+                    self.transform = None
         self.data_types = self.data_types.split('-')
 
     def _read_image(self, root_dir, **kwargs):
