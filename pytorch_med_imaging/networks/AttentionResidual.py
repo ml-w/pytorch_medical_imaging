@@ -30,10 +30,10 @@ class SoftMaskBranch_aed2d(nn.Module):
         pass
 
     def forward(self, x):
-        mask1 = F.max_pool3d(x, [1, 3, 3], stride=[1, 2, 2])
+        mask1 = F.max_pool3d(x, [3, 3, 1], stride=[2, 2, 1])
         mask1 = self.down1(mask1)
 
-        mask2 = F.max_pool3d(mask1, [1, 3, 3], stride=[1, 2, 2])
+        mask2 = F.max_pool3d(mask1, [3, 3, 1], stride=[2, 2, 1])
         mask2 = self.down2(mask2)
 
         skip = self.skip(mask1)
@@ -104,7 +104,7 @@ class AttentionModule_Modified(nn.Module):
         self.saved_mask = None
 
     def forward(self, x):
-        res = F.relu(F.max_pool3d(x, [1, 2, 2]))
+        res = F.relu(F.max_pool3d(x, [2, 2, 1]))
         out = self.in_conv(res)
         # out += res
 
