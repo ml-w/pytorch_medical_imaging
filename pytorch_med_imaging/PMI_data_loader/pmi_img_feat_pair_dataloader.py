@@ -1,6 +1,9 @@
 from .pmi_image_dataloader import PMIImageDataLoader
+from ..med_img_dataset import DataLabel
 from torch.utils.data import TensorDataset
 from .. import med_img_dataset
+
+import torchio as tio
 
 __all__ = ['PMIImageFeaturePair']
 
@@ -54,6 +57,17 @@ class PMIImageFeaturePair(PMIImageDataLoader):
         super(PMIImageDataLoader, self).__init__(*args, **kwargs)
 
 
+    def _read_params(self, config_file=None):
+        # Image part is handled by parent class
+        super(PMIImageFeaturePair, self)._read_params(config_file)
+
+        default_attr = {
+            'excel_sheetname': None,        # If the excel has multiple sheets
+            'net_in_colname': None,         # Name(s) of the column(s) to input into the network
+            'lossfunc_in_colname': None,    # Name(s) of the column(s) to input into the loss function
+        }
+        self._load_default_attr(default_attr)
+
     def _load_data_set_training(self):
         """
         Load :class:`ImageDataSet` or :class:`ImageDataSetAugment for network input.
@@ -63,34 +77,54 @@ class PMIImageFeaturePair(PMIImageDataLoader):
             (tuple) -> (:class:`ImageDataSet` or :class:`ImageDataSetAugment`, :class:`DataLabel`)
 
         """
-        out = self._read_image(self._input_dir)
+        if self._target_dir is None:
+            raise IOError(f"Cannot load from {self._target_dir}")
 
-        if not self.get_from_loader_params('excel_sheetname', None) is None:
-            gt_dat = med_img_dataset.DataLabel.from_xlsx(self._target_dir, self.get_from_config('excel_sheetname', ))
+        img_out = self._read_image(self._input_dir)
+        mask_out = self._read_image(self._mask_dir, dtype='uint8')
+
+        # Load the datasheet
+        if not self.excel_sheetname is None:
+            gt_dat = DataLabel.from_xlsx(self._target_dir, self.excel_sheetname)
         else:
-            gt_dat = med_img_dataset.DataLabel.from_csv(self._target_dir)
+            gt_dat = DataLabel.from_csv(self._target_dir)
 
         # Load selected columns only
-        if not self.get_from_loader_params('column') is None:
-            self._logger.info("Selecting target column: {}".format(self.get_from_loader_params('column')))
-            gt_dat.set_target_column(self.get_from_loader_params('column'))
-        gt_dat.map_to_data(out)
+        if not self.lossfunc_in_colname is None:
+            self._logger.info("Selecting target column: {}".format(self.lossfunc_in_colname))
+            gt_dat.set_target_column(self.lossfunc_in_colname)
+        gt_dat.map_to_data(img_out)
 
         # Load extra column and concat if extra column options were found
-        if not self.get_from_loader_params('net_in_label_dir') is None:
-            self._logger.info("Selecting extra input columns")
-            if not self.get_from_loader_params('net_in_excel_sheetname', None) is None:
-                extra_dat = med_img_dataset.DataLabel.from_xlsx(self._target_dir, self.get_from_config('net_in_excel_sheetname', ))
+        if not self.net_in_colname is None:
+            self._logger.info(f"Selecting extra input columns: {self.net_in_colname}")
+            if not self.excel_sheetname is None:
+                extra_dat = DataLabel.from_xlsx(self._target_dir, self.excel_sheetname)
             else:
-                extra_dat = med_img_dataset.DataLabel.from_csv(self._target_dir)
-            extra_dat.set_target_column(self.get_from_loader_params('net_in_column'))
-            extra_dat.map_to_data(out)
-            self._logger.info(f"extradat: {extra_dat.size()}")
-            self._logger.info(f"out: {out}")
-            return TensorDataset(out,extra_dat) ,gt_dat
-
+                extra_dat = DataLabel.from_csv(self._target_dir)
+            extra_dat.set_target_column(self.net_incolname)
+            extra_dat.map_to_data(img_out)
+            self._logger.debug(f"extradat: {extra_dat.size()}")
+            self._logger.debug(f"out: {img_out}")
         else:
-            return out, gt_dat
+            extra_dat = None
+
+        self.data = {'input':   img_out,
+                     'gt':      gt_dat,
+                     'mask':    mask_out,
+                     'net_in_dat': extra_dat}
+
+        data_exclude_none = {k: v for k, v in self.data.items() if v is not None}
+        subjects = [tio.Subject(**{k: v for k, v in zip(self.data.keys(), row)})
+                    for row in zip(*data_exclude_none.values())]
+        subjects = tio.SubjectsDataset(subjects=subjects, transform=self.transform)
+
+        # Return the queue if patch-based methods are used.
+        if not self.patch_size is None:
+            queue = tio.Queue(subjects, *self.queue_args, **self.queue_kwargs)
+            return queue
+        else:
+            return subjects
 
     def _load_data_set_inference(self):
         # Load extra column and concat if extra column options were found

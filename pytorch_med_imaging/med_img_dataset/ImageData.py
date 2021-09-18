@@ -283,7 +283,7 @@ class ImageDataSet(PMIDataBase):
             self._logger.info("Globbing ID with globber: " + self._id_globber + " ...")
             file_basenames = [os.path.basename(f) for f in file_dirs]
             file_ids = [re.search(self._id_globber, f) for f in file_basenames]
-            file_ids = [str(mo.group()) if not mo is None else mo for mo in file_ids]
+            file_ids = [v.group() for v in file_ids if v is not None]
 
             if isinstance(self._filterargs['idlist'], str):
                 self._idlist = [r.strip() for r in open(self._filterargs['idlist'], 'r').readlines()]
@@ -295,12 +295,15 @@ class ImageDataSet(PMIDataBase):
             else:
                 self._idlist = self._filterargs['idlist']
 
-            self._logger.debug(f'{self._idlist}')
+            self._logger.debug(f'Target IDs: {self._idlist}')
+            self._logger.debug(f'All IDs: {file_ids}')
+            self._logger.debug(f"Missing ID(s): {set(self._idlist) - set(file_ids)}")
             tmp_file_dirs = np.array(file_dirs)
             keep = [id in self._idlist for id in file_ids]  # error near this could be because nothing is grabed
 
             file_dirs = tmp_file_dirs[keep].tolist()
             filtered_away.extend(tmp_file_dirs[np.invert(keep)])
+            self._logger.debug(f"Filtering away: {filtered_away}")
 
             # Check if there are still things in the list
             if len(file_dirs) == 0:
@@ -357,6 +360,7 @@ class ImageDataSet(PMIDataBase):
             for fs in removed_fnames:
                 self._logger.warning("Cannot find " + fs + " in " + self.rootdir)
         file_dirs.sort()
+        self._logger.debug(f"Reading from: {file_dirs}")
         return file_dirs
 
     def get_raw_data_shape(self):
@@ -497,6 +501,10 @@ class ImageDataSet(PMIDataBase):
 
     def __len__(self):
         return self.length
+
+    def __iter__(self):
+        for r in range(len(self)):
+            yield self.data[r]
 
     def __getitem__(self, item):
         out = self.data[item][tio.DATA]

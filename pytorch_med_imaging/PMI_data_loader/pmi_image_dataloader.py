@@ -100,7 +100,7 @@ class PMIImageDataLoader(PMIDataLoaderBase):
             'patch_size': None,
             'queue_kwargs': {},
             'sampler': 'uniform',
-            'augmentation': False
+            'augmentation': ''
         }
         self._load_default_attr(default_attr)
         # Update some kwargs with more complex default settings
@@ -124,15 +124,17 @@ class PMIImageDataLoader(PMIDataLoaderBase):
                           + [self.sampler] # follows torchio's args arrangments
 
         # Build transform
+        self.transform = None
         if isinstance(self.augmentation, str):
-            if Path(self.augmentation).is_file():
+            if self.augmentation == '':
+                self.augmentation = False
+            elif Path(self.augmentation).is_file():
                 try:
-                    self.transform = create_transform(self.augmentation)
+                    self.transform = create_transform_compose(self.augmentation)
                     self._logger.debug(f"Built transform: {self.transform}")
-                except Exception:
-                    self._logger.error(f"Failed to create augmentation from file: {self.augmentation}")
-                    self._augmentation = False
-                    self.transform = None
+                except Exception as e:
+                    self._logger.error(f"Failed to create augmentation from file: {self.augmentation}. Got {e}")
+                    self.augmentation = False
         self.data_types = self.data_types.split('-')
 
     def _read_image(self, root_dir, **kwargs):
@@ -153,6 +155,7 @@ class PMIImageDataLoader(PMIDataLoaderBase):
             :class:`med_img_dataset.ImageDataSet`
         """
         if root_dir is None:
+            self._logger.warning("Received None for root_dir arguement.")
             return None
 
         self._image_class = med_img_dataset.ImageDataSet
@@ -180,7 +183,8 @@ class PMIImageDataLoader(PMIDataLoaderBase):
 
         # Create subjects & queue
         data_exclude_none = {k: v for k, v in self.data.items() if v is not None}
-        subjects = [{k:v.data for k, v in zip(self.data.keys(), row)} for row in zip(*data_exclude_none.values())]
+        subjects = [tio.Subject(**{k:v for k, v in zip(self.data.keys(), row)})
+                    for row in zip(*data_exclude_none.values())]
         subjects = tio.SubjectsDataset(subjects=subjects, transform=self.transform)
 
         # Return the queue
