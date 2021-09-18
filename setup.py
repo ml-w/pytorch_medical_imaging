@@ -1,6 +1,6 @@
 # python setup.py build_ext --inplace
 
-from setuptools import setup
+from setuptools import setup, find_packages
 from setuptools.extension import Extension
 import numpy
 try:
@@ -40,7 +40,7 @@ scripts = [os.path.join('pytorch_med_imaging/scripts', s) for s in os.listdir('p
 setup(
     name='pytorch_medical_imaging',
     version='0.1',
-    packages=['pytorch_med_imaging'],
+    packages=find_packages(),
     url='https://github.com/alabamagan/pytorch_medical_imaging',
     license='',
     author='ML, Wong',
@@ -52,7 +52,7 @@ setup(
         'console_scripts': [
             'pmi-main = pytorch_med_imaging.main:console_entry',
             'pmi-dicom2nii = pytorch_med_imaging.scripts.dicom2nii:console_entry',
-            'pmi-analysis-segment = pytorch_med_imaging.scripts.analysis:segmentation_analysis',
+            'pmi-analysis_segment = pytorch_med_imaging.scripts.analysis:segmentation_analysis',
             'pmi-match_dimension = pytorch_med_imaging.scripts.match_dimension:console_entry',
             'pmi-make_masks = pytorch_med_imaging.scripts.make_masks:console_entry',
             'pmi-labels_remap = pytorch_med_imaging.scripts.preprocessing_labelmaps:remap_label',
