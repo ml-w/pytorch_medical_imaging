@@ -91,6 +91,7 @@ class PMIImageDataLoader(PMIDataLoaderBase):
 
         # Try to read sampling probability map
         self._probmap_dir = self.get_from_config('Data', 'prob_map_dir', None)
+        self._mask_dir = self.get_from_config('Data', 'mask_dir', None)
 
         # Default attributes:
         default_attr = {
@@ -151,6 +152,9 @@ class PMIImageDataLoader(PMIDataLoaderBase):
         See Also:
             :class:`med_img_dataset.ImageDataSet`
         """
+        if root_dir is None:
+            return None
+
         self._image_class = med_img_dataset.ImageDataSet
         img_data =  self._image_class(root_dir, verbose=self._verbose, debugmode=self._debug, filtermode='both',
                                       regex=self._regex, idlist=self._idlist, idGlobber=self.idGlobber, **kwargs)
@@ -161,24 +165,22 @@ class PMIImageDataLoader(PMIDataLoaderBase):
         Load ImageDataSet for input and segmentation.
         """
         if self._target_dir is None:
-            raise AttributeError("Object failed to load _target_dir.")
+            raise IOError(f"Cannot load from {self._target_dir}")
 
         img_out = self._read_image(self._input_dir, dtype=self.data_types[0])
         gt_out = self._read_image(self._target_dir, dtype=self.data_types[1])
+        mask_out = self._read_image(self._mask_dir, dtype='uint8')
         prob_out = self._prepare_probmap()
 
         self.data = {'input':   img_out,
                      'gt':      gt_out,
+                     'mask':    mask_out,
                      'probmap': prob_out
                     }
 
         # Create subjects & queue
-        if prob_out is not None:
-            subjects = [tio.Subject(input=a, gt=b, probmap=c)
-                        for a, b, c in zip(img_out.data, gt_out.data, prob_out.data)]
-        else:
-            subjects = [tio.Subject(input=a, gt=b)
-                        for a, b in zip(img_out.data, gt_out.data)]
+        data_exclude_none = {k: v for k, v in self.data.items() if v is not None}
+        subjects = [{k:v.data for k, v in zip(self.data.keys(), row)} for row in zip(*data_exclude_none.values())]
         subjects = tio.SubjectsDataset(subjects=subjects, transform=self.transform)
 
         # Return the queue
