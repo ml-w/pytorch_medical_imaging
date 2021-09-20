@@ -78,8 +78,21 @@ def dicom2nii(folder: str,
         headerreader.LoadPrivateTagsOn()
         headerreader.ReadImageInformation()
 
+        # Get all the tags first
+        tags = {
+            '0010|0020': None, # PID
+            '0008|103e': None, # Study description, usually they put protocol name here
+            '0020|0011': None, # Series Number
+        }
+        for dctag in tags:
+            try:
+                tags[dctag] = headerreader.GetMetaData(dctag).rstrip().rstrip(' ')
+            except RuntimeError:
+                logger.warning(f"Tag [{dctag}] missing for image {f}")
+                tags[dctag] = 'Missing'
+
         # Warn if pid and original prefix is not the same
-        pid = headerreader.GetMetaData('0010|0020').rstrip(' ')
+        pid = tags['0010|0020'].rstrip(' ')
         if pid != prefix1:
             logger.warning(f"Prefix and patient ID are not the same! (folder: {prefix1}, PID: {pid})")
 
@@ -87,10 +100,9 @@ def dicom2nii(folder: str,
         if use_patient_id:
             prefix1 = pid
 
-
         outname = out_dir + '/%s-%s+%s.nii.gz'%(prefix1,
-                                                re.sub(' +', '_', headerreader.GetMetaData('0008|103e').rstrip()),
-                                                headerreader.GetMetaData('0020|0011').rstrip()) # Some series has the same series name, need this to differentiate
+                                                re.sub(' +', '_', tags['0008|103e']),
+                                                tags['0020|0011']) # Some series has the same series name, need this to differentiate
 
         # Skip if dicom tag (0008|103e) contains substring in seq_filters
         if not seq_filters is None:
@@ -101,12 +113,12 @@ def dicom2nii(folder: str,
                     if i != len(seq_filters) - 1:
                         regex += '|'
                 regex += ')'
-                if re.match(regex, headerreader.GetMetaData('0008|103e')) is None:
-                    print("skipping ", headerreader.GetMetaData('0008|103e'), "from ", f)
+                if re.match(regex, tags['0008|103e']) is None:
+                    logger.warning("skipping ", tags['0008|103e'], "from ", f)
                     continue
             elif isinstance(seq_filters, str):
-                if re.match(seq_filters, headerreader.GetMetaData('0008|103e')) is None:
-                    print("skipping ", headerreader.GetMetaData('0008|103e'), "from ", f)
+                if re.match(seq_filters, tags['0008|103e']) is None:
+                    logger.warning("skipping ", tags['0008|103e'], "from ", f)
                     continue
 
         # Write image
@@ -274,7 +286,7 @@ def batch_dicom2nii(folderlist, out_dir,
     pool = mpi.Pool(workers)
     for f in folderlist:
         logger.info(f"Creating job for: {f}.")
-        # dicom2nii(f, out_dir, seq_fileters, idglobber, use_patient_id)
+        # dicom2nii(f, out_dir, seq_fileters, idglobber, use_patient_id,use_top_level_fname, input, idlist)
         pool.apply_async(dicom2nii, args=[f, out_dir, seq_fileters, idglobber, use_patient_id, use_top_level_fname, input, idlist])
     pool.close()
     pool.join()

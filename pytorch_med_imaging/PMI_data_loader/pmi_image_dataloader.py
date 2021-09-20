@@ -117,8 +117,10 @@ class PMIImageDataLoader(PMIDataLoaderBase):
         self.queue_kwargs = default_queue_kwargs
         if (self.sampler == 'weighted') & (self._probmap_dir is not None):
             self.sampler = tio.WeightedSampler(patch_size=self.patch_size, probability_map='probmap')
-        else:
+        elif self.patch_size != None:
             self.sampler = tio.UniformSampler(patch_size=self.patch_size)
+        else:
+            self.sampler = None
         self.queue_args = [self.queue_kwargs.pop(k)
                            for k in ['max_length', 'samples_per_volume']] \
                           + [self.sampler] # follows torchio's args arrangments
@@ -212,12 +214,14 @@ class PMIImageDataLoader(PMIDataLoaderBase):
 
         self.data = {'input': img_out,
                      'gt': gt_out,
+                     'mask': mask_out,
                      'probmap': prob_out}
 
-        if prob_out is not None:
-            subjects = [tio.Subject(input=a, probmap=b) for a, b in zip(img_out.data, prob_out.data)]
-        else:
-            subjects = [tio.Subject(input=a) for a in img_out.data]
+        # Create subjects & queue
+        data_exclude_none = {k: v for k, v in self.data.items() if v is not None}
+        subjects = [tio.Subject(**{k:v for k, v in zip(self.data.keys(), row)})
+                    for row in zip(*data_exclude_none.values())]
+        subjects = tio.SubjectsDataset(subjects=subjects, transform=self.transform)
 
         # No transform for subjects
         subjects = tio.SubjectsDataset(subjects=subjects)

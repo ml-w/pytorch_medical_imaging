@@ -19,7 +19,6 @@ def get_unique_IDs(fnames, globber=None):
     idlist.sort()
     return idlist
 
-
 def get_fnames_by_IDs(fnames, idlist, globber=None):
     _logger = Logger['algorithm.utils']
     if globber is None:

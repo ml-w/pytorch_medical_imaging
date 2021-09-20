@@ -35,19 +35,16 @@ class SlicewiseAttentionRAN(nn.Module):
         super(SlicewiseAttentionRAN, self).__init__()
 
         self.save_weight=save_weight
-        self.in_conv1 = Conv3d(in_ch, first_conv_ch, kern_size=[3, 3, 1], stride=[2, 2, 1], padding=[2, 2, 0])
+        self.in_conv1 = Conv3d(in_ch, first_conv_ch, kern_size=[3, 3, 1], stride=[1, 1, 1], padding=[1, 1, 0])
 
         # Slicewise attention layer
         self.in_sw = nn.Sequential(
-            DoubleConv3d(first_conv_ch,
+            nn.MaxPool3d([2, 2, 1]),
+            DoubleConv3d(int(first_conv_ch),
                          int(first_conv_ch * 2),
-                         kern_size=[3, 3, 1], padding=0, dropout=0.2),
+                         kern_size=[3, 3, 1], padding=0, dropout=0.1, activation='leaky_relu'),
             nn.MaxPool3d([2, 2, 1]),
-            DoubleConv3d(int(first_conv_ch * 2),
-                         int(first_conv_ch * 2**2),
-                         kern_size=[3, 3, 1], padding=0, dropout=0.2),
-            nn.MaxPool3d([2, 2, 1]),
-            DoubleConv3d(int(first_conv_ch * 2**2), 1, kern_size=1, padding=0, dropout=0.2),
+            DoubleConv3d(int(first_conv_ch * 2), 1, kern_size=1, padding=0, dropout=0.1, activation='leaky_relu'),
             nn.AdaptiveAvgPool3d([1, 1, None])
         )
         self.x_w = None
@@ -55,15 +52,16 @@ class SlicewiseAttentionRAN(nn.Module):
         # RAN
         self.in_conv2 = ResidualBlock3d(first_conv_ch, 256)
         self.att1 = AttentionModule_Modified(256, 256, save_mask=save_mask)
-        self.r1 = ResidualBlock3d(256, 512, p=0.3)
+        self.r1 = ResidualBlock3d(256, 512, p=0.1)
         self.att2 = AttentionModule_Modified(512, 512, save_mask=save_mask)
-        self.r2 = ResidualBlock3d(512, 1024, p=0.3)
+        self.r2 = ResidualBlock3d(512, 1024, p=0.1)
         self.att3 = AttentionModule_Modified(1024, 1024, save_mask=save_mask)
-        self.out_conv1 = ResidualBlock3d(1024, 2048, p=0.3)
+        self.out_conv1 = ResidualBlock3d(1024, 2048, p=0.1)
 
         # Output layer
         self.out_fc1 = nn.Sequential(
             nn.Linear(2048, 1024),
+            nn.BatchNorm1d(1024),
             nn.ReLU()
         )
         self.out_fc2 = nn.Linear(1024, out_ch)
@@ -75,10 +73,10 @@ class SlicewiseAttentionRAN(nn.Module):
 
 
         # Construct slice weight
-        x_w = self.in_sw(x).squeeze()
-        x_w = (torch.sigmoid(x_w) - 0.5) * 10 + 5. # make the range larger.
-        if self.save_weight:
-            self.x_w = x_w.data.cpu()
+        # x_w = self.in_sw(x).squeeze()
+        # x_w = (torch.sigmoid(x_w) - 0.5) * 10 + 5. # make the range larger.
+        # if self.save_weight:
+        #     self.x_w = x_w.data.cpu()
 
         # Permute the axial dimension to the last
         x = F.max_pool3d(x, [2, 2, 1], stride=[2, 2, 1]).permute([1, 2, 3, 0, 4])
@@ -86,7 +84,7 @@ class SlicewiseAttentionRAN(nn.Module):
         new_shape = list(x_shape[:3]) + [x_shape[-2] * x_shape[-1]]
         x = x.reshape(new_shape)
 
-        x = x * x_w.view([-1]).expand_as(x)
+        # x = x * x_w.view([-1]).expand_as(x)
 
         # Resume dimension
         x = x.view(x_shape).permute([3, 0, 1, 2, 4])
@@ -103,11 +101,14 @@ class SlicewiseAttentionRAN(nn.Module):
 
         if x.dim() < 3:
             x = x.unsqueeze(0)
+
+
         x = x.permute([1, 0, 2])
-        x = x * x_w.expand_as(x)
+        # x = x * x_w.expand_as(x)
         x = x.permute([1, 0, 2]).max(dim=-1).values
+
         x = self.out_fc1(x)
-        x = torch.sigmoid(x)
+        # x = torch.sigmoid(x)
         x = self.out_fc2(x)
         while x.dim() < 2:
             x = x.unsqueeze(0)

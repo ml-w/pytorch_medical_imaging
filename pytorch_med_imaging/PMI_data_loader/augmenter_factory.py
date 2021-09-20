@@ -61,7 +61,6 @@ def create_transform_compose(yaml_file: Path) -> tio.Compose:
                 _args = [i for i in _content if not isinstance(i, dict)]
                 _kwargs = [i for i in _content if isinstance(i, dict)]
                 _kwargs = {} if len(_kwargs) == 0 else _kwargs[0]
-                print(_kwargs)
                 steps.append(_transfer_cls(*_args, **_kwargs))
 
             # If its just a dict, its kwargs

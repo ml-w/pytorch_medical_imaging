@@ -14,8 +14,8 @@ __all__ = ['BinaryClassificationSolver']
 
 
 class BinaryClassificationSolver(ClassificationSolver):
-    def __init__(self, in_data, gt_data, net, param_optim, param_iscuda,
-                 param_initWeight=None, logger=None, **kwargs):
+    def __init__(self, net, param_optim, param_iscuda,
+                 param_initWeight=None, logger=None, config=None, **kwargs):
         """
         Solver for classification tasks.
 
@@ -49,47 +49,29 @@ class BinaryClassificationSolver(ClassificationSolver):
             logger = Logger[self.__class__.__name__]
 
         # Recalculate number of one_hot slots and rebuild the lab
+        self._config = config
         self._logger = logger
         self._logger.info("Rebuilding classification solver to binary classification.")
-        try:
-            numberOfClasses = gt_data[0].size()[0] # (B X C), where C is the number of binary questions
-        except IndexError:
-            self._logger.warning("Ground-truth data has 0-dimension. Assuming number of class is 1.")
-            numberOfClasses = 1
 
+        # Default attributes
+        default_attr = {
+            'unpack_keys_forward': ['input', 'gt'], # used to unpack torchio drawn minibatches
+            'gt_keys':             ['gt'],
+            'sigmoid_params':      {'delay': 15, 'stretch': 2, 'cap': 0.3},
+            'class_weights':       None,
+            'optimizer_type':      'Adam'             # ['Adam'|'SGD']
+        }
+        self._load_default_attr(default_attr)
 
-        # Compute class weight
-        self._pos_weights = torch.zeros(numberOfClasses)
-        gts = gt_data.to_numpy()
-        bsize = len(gt_data)
-        for c in range(numberOfClasses):
-            # self._pos_weights[c] = (bsize - gts[:,c].sum()) / float(gts[:,c].sum()) # N_0 / N_1
-            self._pos_weights[c] = 10.
-        self._logger.debug("Computed loss pos_weight: {}".format(self._pos_weights))
+        optimizer = self.create_optimizer(net.parameters(), param_optim)
 
-        # Define the network
-        if not hasattr(net, 'forward'):
-            self._logger.info("Net is not created yet, trying to create it.")
-            if isinstance(in_data[0], list):
-                inchan = in_data[0][0].size()[1]
-            else:
-                inchan = in_data[0][0].size()[1]
-            self._logger.info("Found number of binary classes {}.".format(numberOfClasses))
-            net = net(inchan, numberOfClasses)
-        self._net = net
+        lossfunction = nn.BCEWithLogitsLoss(reduction='mean', pos_weight=self.class_weights) # Combined with sigmoid.
 
-        optimizer = optim.Adam(net.parameters(), lr=param_optim['lr'])
-        lossfunction_a = nn.BCEWithLogitsLoss(reduction='mean', pos_weight=self._pos_weights) # Combined with sigmoid.
-        lossfunction_b = TverskyDiceLoss(weight=[1, self._pos_weights.mean()])
-        # lossfunction_b = FocalLoss()
-        # lossfunction = FocalLoss()
         iscuda = param_iscuda
         if param_iscuda:
-            # lossfunction = lossfunction.cuda()
-            lossfunction_a = lossfunction_a.cuda()
-            lossfunction_b = lossfunction_b.cuda()
+            self._logger.info("Moving lossfunction and network to GPU.")
+            lossfunction = lossfunction.cuda()
             net = net.cuda()
-        lossfunction = lambda s, g: lossfunction_a(s, g) + lossfunction_b(s, g)
 
         solver_configs = {}
         solver_configs['optimizer'] = optimizer
@@ -97,7 +79,6 @@ class BinaryClassificationSolver(ClassificationSolver):
         solver_configs['net'] = net
         solver_configs['iscuda'] = iscuda
         solver_configs['logger'] = logger
-
 
         # Call the creater in SolverBase instead.
         super(ClassificationSolver, self).__init__(solver_configs, **kwargs)
@@ -109,7 +90,7 @@ class BinaryClassificationSolver(ClassificationSolver):
             return []
 
         with torch.no_grad():
-            self._net = self._net.eval()
+            self.net = self.net.eval()
 
             decisions = None # (B x N)
             validation_loss = []
@@ -117,7 +98,8 @@ class BinaryClassificationSolver(ClassificationSolver):
             dics = []
             gts = []
 
-            for s, g in auto.tqdm(self._data_loader_val, desc="Validation", position=2):
+            for mb in auto.tqdm(self._data_loader_val, desc="Validation", position=2):
+                s, g = self._unpack_minibatch(mb, self.unpack_keys_forward)
                 s = self._match_type_with_network(s)
                 g = self._match_type_with_network(g)
 
@@ -125,14 +107,11 @@ class BinaryClassificationSolver(ClassificationSolver):
                     self._logger.debug(f"Before call s_size = {s.shape}; g_size = {g.shape}")
                 except:
                     pass
-                # if self._iscuda:
-                    # s = [ss.cuda() for ss in s] if isinstance(s, list) else s.cuda() # Done by match_type
-                    # g = [gg.cuda() for gg in g] if isinstance(g, list) else g.cuda()
 
                 if isinstance(s, list):
-                    res = self._net(*s)
+                    res = self.net(*s)
                 else:
-                    res = self._net(s)
+                    res = self.net(s)
 
                 # align dimensions
                 while res.dim() < 2:
@@ -191,7 +170,7 @@ class BinaryClassificationSolver(ClassificationSolver):
         validation_loss = np.mean(np.array(validation_loss).flatten())
         self._logger.debug("_val_perfs: \n%s"%restable.T.to_string())
         self._logger.info("Validation Result - ACC: %.05f, VAL: %.05f"%(acc, validation_loss))
-        self._net = self._net.train()
+        self.net = self.net.train()
         self.plotter_dict['scalars']['Loss/Validation Loss'] = validation_loss
         self.plotter_dict['scalars']['Performance/ACC'] = acc
         for param, val in per_mean.iteritems():
@@ -224,17 +203,24 @@ class BinaryClassificationSolver(ClassificationSolver):
         self.optimizer.step()
         return out, loss.cpu().data
 
+    def _step_callback(self, s, g, out, loss, step_idx=None):
+        self.plotter_dict
 
     def _loss_eval(self, *args):
         out, s, g = args
         #out (B x C) g (B x C)
+        out = self._match_type_with_network(out)
         g = self._match_type_with_network(g)
-        self._logger.debug(f"_loss_eval(): out_size = {out.shape};g_size = {g.shape}")
+
+        if out.shape[0] > 1:
+            out = out.squeeze().unsqueeze(1)
+            g = g.squeeze().unsqueeze(1)
+        self._logger.debug(f"_loss_eval size - out: {out.shape} g: {g.shape}")
 
         # An issues is caused if the batchsize is 1, this is a work arround.
         if out.shape[0] == 1:
             loss = self.lossfunction(out.squeeze().unsqueeze(0), g.squeeze().unsqueeze(0))
         else:
-            loss = self.lossfunction(out.squeeze(), g.squeeze())
+            loss = self.lossfunction(out, g)
         return loss
 

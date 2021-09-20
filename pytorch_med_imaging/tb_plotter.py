@@ -95,7 +95,7 @@ class TB_plotter(object):
 
                     _g = (_g * 254.).squeeze()[0].numpy().astype('uint8')
                     # self._logger.debug(f"_g Min: {_g.min()} Max: {_g.max()}")
-                    _g = applyColorMap(_g, COLORMAP_BONE)
+                    _g = applyColorMap(_g, COLORMAP_JET)
                     _g = _g[np.newaxis].astype('float32') / 254.
                     self._logger.debug("_g size: {}".format(_g.shape))
                     # self._logger.debug("_grid size: {}".format(_grid.shape))

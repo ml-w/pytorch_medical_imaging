@@ -71,6 +71,7 @@ class SolverBase(object):
         self._data_loader       = None
         self._data_loader_val   = None
         self._tb_plotter        = None
+        self._local_rank        = 0
 
         # external_att
         self.plotter_dict      = {}
@@ -217,6 +218,27 @@ class SolverBase(object):
 
         self._called_time += 1
         return out, loss.cpu().data
+
+    def create_optimizer(self,
+                         net_params,
+                         param_optim) -> torch.optim:
+        r"""
+        Create optimizer based on provided specifications
+        Args:
+            net_params:
+            param_optim:
+
+        Returns:
+
+        """
+        if self.optimizer_type == 'Adam':
+            optimizer = torch.optim.Adam(net_params, lr=param_optim['lr'])
+        elif self.optimizer_type == 'SGD':
+            optimizer = torch.optim.SGD(net_params, lr=param_optim['lr'],
+                                  momentum=param_optim['momentum'])
+        else:
+            raise AttributeError(f"Expecting optimzer to be one of ['Adam'|'SGD']")
+        return optimizer
 
     def decay_optimizer(self, *args):
         if not self.lr_schedular is None:
@@ -399,8 +421,10 @@ class SolverBase(object):
         for key in unpacking_keys:
             try:
                 out.append(minibatch[key][tio.DATA])
-            except AttributeError:
+            except (AttributeError, IndexError):
                 out.append(minibatch[key])
+            except Exception as e:
+                self._logger.exception(f"Receive unknown exception during minibactch unpacking for: {key}")
         return out
 
 

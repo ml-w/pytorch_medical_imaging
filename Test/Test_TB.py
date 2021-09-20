@@ -4,48 +4,51 @@ import torch.nn as nn
 from torchvision.utils import make_grid
 from torch.utils.data import TensorDataset, DataLoader
 
-from pytorch_med_imaging.PMI_data_loader import PMIImageMCFeaturePair, PMIDataFactory
+from pytorch_med_imaging.PMI_data_loader import pmi_img_feat_pair_multichan_dataloader, PMIDataFactory
 from pytorch_med_imaging.tb_plotter import TB_plotter
 from pytorch_med_imaging.logger import Logger
 from pytorch_med_imaging.networks.layers import *
 from pytorch_med_imaging.networks import CNNGRU
+from pytorch_med_imaging.networks.specialized import *
 from tensorboardX import SummaryWriter
-
+from pathlib import Path
 import configparser as cf
 
 os.chdir('../')
 
 main_logger = Logger('./Test_TB.log', logger_name='main', verbose=True, log_level='debug')
 
-parser = cf.ConfigParser()
-parser.read('./Configs/Survival/GRU/Survival_MC_5Fold_00_l3_LR.ini')
+ini_file = Path('./Configs/BM_LargerStudy/BM_test.ini')
+if not ini_file.is_file():
+    raise IOError("Diu nei")
+parser = cf.ConfigParser(interpolation=cf.ExtendedInterpolation())
+parser.read(str(ini_file))
+print(parser.sections())
 parser['General']['debug'] = 'True'
 
 
 pmi_data = PMIDataFactory().produce_object(parser)
 
-net = CNNGRU(4,1,first_conv_out_ch=32,decode_layers=3,embedding_size=(20,20,20),gru_layers=2,dropout=0.2)
-net.load_state_dict(torch.load(parser['Checkpoint']['cp_load_dir']))
+net = eval(parser['Network']['network_type'])
+# net.load_state_dict(torch.load(parser['Checkpoint']['cp_load_dir']))
 
 
 writer = SummaryWriter('/media/storage/PytorchRuns/Test_GRU')
 tb_plotter = TB_plotter(tb_writer=writer)
 
-tb_plotter.register_modules(net.in_conv1, 'in_conv1', None)
-tb_plotter.register_modules(net.decode[0], 'decode1', None)
+tb_plotter.register_modules(net.in_conv1, 'in_conv1')
 
 net = nn.DataParallel(net)
 net = net.cuda()
 
-s, g = pmi_data._load_data_set_training()
-dataset = TensorDataset(s, g)
-loader = DataLoader(dataset, batch_size=int(parser['RunParams']['batch_size']), shuffle=False, drop_last=False)
+loader = pmi_data._load_data_set_training()
+loader = DataLoader(loader, batch_size=int(parser['RunParams']['batch_size']), shuffle=False, drop_last=False)
 
 with torch.no_grad():
-    for i, (ss, gg) in enumerate(loader):
-        ss = ss.float().cuda()
-        net(ss)
-
+    for i, mb in enumerate(loader):
+        s, g = [mb[key] for key in eval(parser['SolverParams']['unpack_keys_forward'])]
+        s = s['data'].cuda()
+        net(s)
         tb_plotter.plot_collected_module_output(i)
 
         if i == 5:

@@ -14,8 +14,8 @@ import pandas as pd
 __all__ = ['ClassificationSolver']
 
 class ClassificationSolver(SolverBase):
-    def __init__(self,in_data, gt_data, net, param_optim, param_iscuda,
-                 param_initWeight=None, logger=None, **kwargs):
+    def __init__(self, net, param_optim, param_iscuda,
+                 param_initWeight=None, logger=None, confing=None, **kwargs):
         """
         Solver for classification tasks.
 
@@ -46,28 +46,34 @@ class ClassificationSolver(SolverBase):
         assert isinstance(logger, Logger) or logger is None, "Logger incorrect settings!"
 
         if logger is None:
-            logger = Logger[self.__class__.__name__]
+            self._logger = Logger[self.__class__.__name__]
 
+        self._config = config
         self._decay_init_weight = param_initWeight
 
         solver_configs = {}
+
+        # Default attributes
+        default_attr = {
+            'unpack_keys_forward': ['input', 'gt'], # used to unpack torchio drawn minibatches
+            'gt_keys':             ['gt'],
+            'sigmoid_params':      {'delay': 15, 'stretch': 2, 'cap': 0.3},
+            'class_weights':       None,
+            'optimizer_type':      'Adam'             # ['Adam'|'SGD']
+        }
+        self._load_default_attr(default_attr)
+
         # check unique class in gt
-        logger.info("Detecting number of classes...")
-        numOfClasses = len(gt_data.get_unique_values())
-        numOfClasses = 2 if numOfClasses < 2 else numOfClasses
-        logger.info("Find %i classes.."%(numOfClasses))
-
-
-
-        if not hasattr(net, 'forward'):
-            self._logger.info("Creating network object...")
-            inchan = in_data[0].size()[0]
-            net = net(inchan, numOfClasses)
+        #-------------------------
+        if self.class_weights is None:
+            self._logger.warning("Automatic computing weigths are not supported now!")
+            raise DeprecationWarning("Automatic computing weigths are not supported now!")
 
         # Create optimizer and loss function
         lossfunction = nn.CrossEntropyLoss()
         # optimizer = optim.Adam(net.parameters(), lr=param_optim['lr'], momentum=param_optim['momentum'])
-        optimizer = optim.Adam(net.parameters(), lr=param_optim['lr'])
+        optimizer = self.create_optimizer(net.parameters(), param_optim)
+
         iscuda = param_iscuda
         if param_iscuda:
             lossfunction = lossfunction.cuda()
@@ -77,7 +83,6 @@ class ClassificationSolver(SolverBase):
         solver_configs['lossfunction'] = lossfunction
         solver_configs['net'] = net
         solver_configs['iscuda'] = iscuda
-        solver_configs['logger'] = logger
 
         super(ClassificationSolver, self).__init__(solver_configs, **kwargs)
 
@@ -86,26 +91,16 @@ class ClassificationSolver(SolverBase):
         s, g = args
         try:
             s = self._match_type_with_network(s)
-        except:
+        except Exception as e:
             self._logger.exception("Failed to match input to network type. Falling back.")
-            if self.iscuda:
-                s = self._force_cuda(s)
-                self._logger.debug("_force_cuda() typed data as: {}".format(
-                    [ss.dtype for ss in s] if isinstance(s, list) else s.dtype))
-
-
-        # if isinstance(s, list):
-        #      [ss.requires_grad_() for ss in s]
-        # else:
-        #     s.requires_grad_()
-        # Variable is deprecated in pyTorch v1.5
-        # s = [Variable(ss) for ss in s] if isinstance(s, list) else Variable(s)
-        # g = [Variable(gg) for gg in g] if isinstance(g, list) else Variable(g)
+            raise RuntimeError("Feed forward failure") from e
 
         if isinstance(s, list):
             out = self.net.forward(*s)
         else:
             out = self.net.forward(s)
+
+        # Print step information
         _pairs = zip(out.flatten().data.cpu(), g.flatten().data.cpu(), torch.sigmoid(out).flatten().data.cpu())
         _df = pd.DataFrame(_pairs, columns=['res', 'g', 'sig_res'], dtype=float)
         self._logger.debug('\n' + _df.to_string())
@@ -117,7 +112,10 @@ class ClassificationSolver(SolverBase):
         if self.iscuda:
             g = self._force_cuda(g)
 
-        loss = self.lossfunction(out.squeeze(), g.squeeze().long())
+        out = out.squeeze()
+        g = g.squeeze().unsqueeze(1).long()
+        self._logger.debug(f"Output size out: {out.shape} g: {g.shape}")
+        loss = self.lossfunction(out, g)
         return loss
 
     def validation(self):

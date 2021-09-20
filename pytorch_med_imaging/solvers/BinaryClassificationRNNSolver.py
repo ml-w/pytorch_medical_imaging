@@ -101,7 +101,7 @@ class BinaryClassificationRNNSolver(BinaryClassificationSolver):
             #                             pad_axis=1,
             #                             batch_size=batch_size,
             #                             shuffle=False, num_workers=0, drop_last=False, pin_memory=False)
-            self._net = self._net.eval()
+            self._net = self.net.eval()
 
             decisions = None # (B x N)
             validation_loss = []

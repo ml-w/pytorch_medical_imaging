@@ -62,7 +62,7 @@ class SegmentationSolver(SolverBase):
         #-------------
         if self.class_weights is None:
             self._logger.warning("Automatic computing weigths are not supported now!")
-            self.class_weights = 0
+            raise DeprecationWarning("Automatic computing weigths are not supported now!")
             # self._logger.info("Computing weights.")
             # self.auto_compute_class_weights(gt_data, param_initWeight)
 
@@ -81,13 +81,7 @@ class SegmentationSolver(SolverBase):
 
         # Create optimizer and loss function
         lossfunction = nn.CrossEntropyLoss(weight=self.loss_init_weights) #TODO: Allow custom loss function
-        if self.optimizer_type == 'Adam':
-            optimizer = optim.Adam(net.parameters(), lr=param_optim['lr'])
-        elif self.optimizer_type == 'SGD':
-            optimizer = optim.SGD(net.parameters(), lr=param_optim['lr'],
-                                  momentum=param_optim['momentum'])
-        else:
-            raise AttributeError(f"Expecting optimzer to be one of ['Adam'|'SGD']")
+        optimizer = self.create_optimizer(net.parameters(), param_optim)
 
         iscuda = param_iscuda
         if param_iscuda:

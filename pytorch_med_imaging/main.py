@@ -17,6 +17,8 @@ from .med_img_dataset import PMITensorDataset
 
 # This package
 from .networks import *
+from .networks.third_party_nets import *
+from .networks.specialized import *
 # from pytorch_med_imaging.networks import third_party_nets
 from .tb_plotter import TB_plotter
 

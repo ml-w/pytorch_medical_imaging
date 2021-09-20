@@ -81,11 +81,13 @@ class Up(nn.Module):
             'nearest' : nn.Upsample(scale_factor=self._up_fact, mode='nearest'),
             'bilinear': nn.Upsample(scale_factor=self._up_fact, mode='bilinear', align_corners=True),
             'cubic': nn.Upsample(scale_factor=self._up_fact, mode='bicubic', align_corners=True),
-            'learn': nn.ConvTranspose2d(in_chan // self._up_fact, in_chan // self._up_fact, kernel_size=self._up_fact,
+            'learn': nn.ConvTranspose2d(in_chan // self._up_fact,
+                                        in_chan // self._up_fact,
+                                        kernel_size=self._up_fact,
                                         stride= self._up_fact)
         }
         if not up_mode in self.upsampling:
-            raise AttributeError("Avilable upsample modes: " + ','.join(self.upsampling.keys()))
+            raise AttributeError("Available upsample modes: " + ','.join(self.upsampling.keys()))
 
 
         self.upsample = self.upsampling[up_mode]
@@ -173,8 +175,8 @@ class UNet_p(nn.Module):
         * :class:`Down`
 
     .. note::
-        For exact implementation of the original UNet proposed in [1], use `layers=4`, `up_mode='learn'` and
-        `down_mode='max'`. It is also noted that there are numerous variant that are proven more useful  and
+        For closest implementation of the original UNet proposed in [1], use `layers=4`, `up_mode='learn'` and
+        `down_mode='max'`. It is also noted that there are numerous variant that are proven more useful and
         apparently this implementation is not the best implementation of a network with encoder-decoder structure.
 
     """
@@ -191,14 +193,19 @@ class UNet_p(nn.Module):
         self.inconv = ReflectiveDoubleConv(in_chan, self._start_chans)
 
         # Downs
-        self.downs = nn.ModuleList([Down(self._start_chans * 2 ** i, self._start_chans * 2 ** (i + 1), down_mode,
-                                         dropout=dropout) \
-                      for i in range(layers)])
+        down_chans = [(self._start_chans * 2 ** i,
+                       self._start_chans * 2 ** (i + 1))
+                      for i in range(layers)]
+        self.downs = nn.ModuleList([Down(*dc, down_mode, dropout=dropout)
+                                    for dc in down_chans])
+
 
         # Ups
-        self.ups = nn.ModuleList([Up(self._start_chans * 2 ** (layers - i), self._start_chans * 2 ** (layers - i - 1),
-                       up_mode=up_mode, dropout=dropout) for i in range(layers)])
-
+        up_chans = [(self._start_chans * 2 ** (layers - i),
+                     self._start_chans * 2 ** (layers - i - 1))
+                    for i in range(layers)]
+        self.ups = nn.ModuleList([Up(*uc, up_mode=up_mode, dropout=dropout)
+                                  for uc in up_chans])
         self.lastconv = nn.Conv2d(self._start_chans, out_chan, 1)
 
     def forward(self, x):
@@ -215,12 +222,13 @@ class UNet_p(nn.Module):
         short_conn = [x]
         for i, d in enumerate(self.downs):
             x = d(x)
-            # Except last layer
-            if i < self._layers - 1: # 0, 1, 2
+            # Except the last layer, which goes by x
+            if i != self._layers - 1:
                 short_conn.append(x)
 
         for i, u in enumerate(self.ups):
-            x = u(short_conn[self._layers - i - 1], x)
+            print(short_conn[-i - 1].shape)
+            x = u(short_conn[-i - 1], x)
         x = self.lastconv(x)
         return x
 
