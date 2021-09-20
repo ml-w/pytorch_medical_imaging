@@ -47,7 +47,6 @@ class PMIDataFactory(object):
         except Exception as e:
             import sys
             cl, exc, tb = sys.exc_info()
-            Logger.Log_Print("Error when creating object {}".format(requested_datatype), 40)
-            Logger.Log_Print("Original error is {}.".format(tr.print_tb(tb)))
-            Logger.Log_Print("Possible targets are {}.".format(",".join(self._possible_products.keys())))
+            self._logger.info("Error when creating object {}".format(requested_datatype))
+            self._logger.info("Possible targets are {}.".format(",".join(self._possible_products.keys())))
             raise e
