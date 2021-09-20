@@ -6,6 +6,7 @@ from torchvision.utils import make_grid
 from pytorch_med_imaging.Algorithms.visualization import draw_grid
 from functools import partial
 from cv2 import applyColorMap, COLORMAP_JET
+import numpy as np
 
 __all__ = ['TB_plotter']
 
@@ -18,11 +19,12 @@ class TB_plotter(object):
         self._last_writer_index = 0
         self._registered_module_config = {}
         self._write_n_iteration = 1000
+        self._image_max_dim = (128, 128)
 
         self._logger.info("Configured to plot to: {}".format(self._writer.logdir))
 
 
-    def register_modules(self, module: torch.nn.Module, name: str, cmap: str):
+    def register_modules(self, module: torch.nn.Module, name: str, cmap: str = 'jet'):
         """
         Registers a modules so that its output is plotted.
         """
@@ -78,12 +80,20 @@ class TB_plotter(object):
                 # Display all channels in same im
                 for b in range(mod_output.shape[0]):
                     _grid = []
-                    for s in range(mod_output.shape[2]):
-                        _g = make_grid(mod_output[b, :, s].unsqueeze(1), nrow=5, normalize=True).unsqueeze(0)
-                        _g = (_g * 255).squeeze()[0].numpy().astype('uint8')
-                        _g = applyColorMap(_g, COLORMAP_JET)
-                        # self._logger.debug("_g size: {}".format(_g.shape))
-                        _grid.append(torch.from_numpy(_g).unsqueeze(0))
+                    _mod_out_slice = mod_output[b, ..., int(mod_output.shape[-1] // 2)]
+                    _size = np.min(np.asarray([self._image_max_dim,
+                                               _mod_out_slice.shape[-2:]]),
+                                   axis=0)
+                    self._logger.debug(f"Resized from {_mod_out_slice.shape} -> {_size}")
+
+                    _mod_out_slice = torch.nn.functional.adaptive_avg_pool2d(_mod_out_slice,
+                                                                             _size)
+
+                    _g = make_grid(_mod_out_slice.unsqueeze(1), nrow=5, normalize=True).unsqueeze(0)
+                    _g = (_g * 255).squeeze()[0].numpy().astype('uint8')
+                    _g = applyColorMap(_g, COLORMAP_JET)
+                    # self._logger.debug("_g size: {}".format(_g.shape))
+                    _grid.append(torch.from_numpy(_g).unsqueeze(0))
                     _grid = torch.cat(_grid, dim=0)
                     # self._logger.debug("_grid size: {}".format(_grid.shape))
                     self._writer.add_images("{}/Slice_{:d}".format(name, b), _grid, dataformats='NWHC')
