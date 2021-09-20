@@ -5,8 +5,9 @@ from tensorboardX import SummaryWriter
 from torchvision.utils import make_grid
 from pytorch_med_imaging.Algorithms.visualization import draw_grid
 from functools import partial
-from cv2 import applyColorMap, COLORMAP_JET
+from cv2 import *
 import numpy as np
+import matplotlib.pyplot as plt
 
 __all__ = ['TB_plotter']
 
@@ -89,14 +90,19 @@ class TB_plotter(object):
                     _mod_out_slice = torch.nn.functional.adaptive_avg_pool2d(_mod_out_slice,
                                                                              _size)
 
-                    _g = make_grid(_mod_out_slice.unsqueeze(1), nrow=5, normalize=True).unsqueeze(0)
-                    _g = (_g * 255).squeeze()[0].numpy().astype('uint8')
-                    _g = applyColorMap(_g, COLORMAP_JET)
-                    # self._logger.debug("_g size: {}".format(_g.shape))
-                    _grid.append(torch.from_numpy(_g).unsqueeze(0))
-                    _grid = torch.cat(_grid, dim=0)
+                    _g = make_grid(_mod_out_slice.unsqueeze(1), nrow=5,
+                                   normalize=True).unsqueeze(0)
+
+                    _g = (_g * 254.).squeeze()[0].numpy().astype('uint8')
+                    # self._logger.debug(f"_g Min: {_g.min()} Max: {_g.max()}")
+                    _g = applyColorMap(_g, COLORMAP_BONE)
+                    _g = _g[np.newaxis].astype('float32') / 254.
+                    self._logger.debug("_g size: {}".format(_g.shape))
                     # self._logger.debug("_grid size: {}".format(_grid.shape))
-                    self._writer.add_images("{}/Slice_{:d}".format(name, b), _grid, dataformats='NWHC')
+                    # fig, ax = plt.subplots(1, 1, figsize=(10, 10))
+                    # ax.imshow(_g)
+                    # plt.show()
+                    self._writer.add_images("{}/Slice_{:d}".format(name, b), _g, dataformats='NWHC')
 
             # Clean outputs to save mem
             del self._registered_module_config[name]['data']
