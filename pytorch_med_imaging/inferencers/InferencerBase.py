@@ -36,6 +36,11 @@ class InferencerBase(object):
         default_attr.update((k, inferencer_configs[k]) for k in default_attr.keys() & inferencer_configs.keys())
         required_att = ('net', 'net_state_dict', 'iscuda', 'outdir', 'pmi_data_loader')
 
+        # optional
+        self._logger = inferencer_configs.get('Logger', None)
+        if self._logger is None:
+            self._logger = Logger[self.__class__.__name__]
+
         if any([default_attr[k] is None for k in required_att]):
             self._logger.error("Some required attributes are not specified.")
             raise AttributeError(f"Must specify these attributes: {','.join(required_att)}")
@@ -43,10 +48,7 @@ class InferencerBase(object):
 
         self._config = kwargs.get('config', None)
 
-        # optional
-        self._logger = inferencer_configs.get('Logger', None)
-        if self._logger is None:
-            self._logger = Logger[self.__class__.__name__]
+
 
         assert isinstance(self._logger, Logger) or self._logger is None, "Incorrect logger."
 
