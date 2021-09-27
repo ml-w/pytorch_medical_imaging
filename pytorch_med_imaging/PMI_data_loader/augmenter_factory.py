@@ -1,16 +1,20 @@
 import yaml
 import torchio as tio
 from pathlib import Path
+from typing import Optional
 
 __all__ = ['create_transform_compose']
 
-def create_transform_compose(yaml_file: Path) -> tio.Compose:
+def create_transform_compose(yaml_file: Path,
+                             exclude_augment: Optional[bool] = False) -> tio.Compose:
     r"""
     Read yaml file that allows you to create a `tio.Compose` object for use to augment/pre-process the input images
 
     Args:
         yaml_file (str or Path):
             The yaml file.
+        exclude_augment (bool, Optional):
+            If true, the transforms that are in the augmentation list will not be added.
 
     Returns:
         tio.Compose
@@ -36,6 +40,24 @@ def create_transform_compose(yaml_file: Path) -> tio.Compose:
           - 'corner-pixel'
         ```
     """
+    _augmentation_transforms = [
+        tio.OneOf,
+        tio.RandomFlip,
+        tio.RandomAffine,
+        tio.RandomElasticDeformation,
+        tio.RandomAnisotropy,
+        tio.RandomMotion,
+        tio.RandomGhosting,
+        tio.RandomSpike,
+        tio.RandomBiasField,
+        tio.RandomBlur,
+        tio.RandomNoise,
+        tio.RandomSwap,
+        tio.RandomLabelsToImage,
+        tio.RandomGamma,
+
+    ]
+
     yaml_file = Path(yaml_file)
     if not yaml_file.exists():
         raise IOError("Cannot open transform file.")
@@ -50,6 +72,8 @@ def create_transform_compose(yaml_file: Path) -> tio.Compose:
         if not hasattr(tio, key):
             raise AttributeError(f"The transform '{key}' is not available in tio.")
         _transfer_cls = eval('tio.' + key)
+        if _transfer_cls in _augmentation_transforms and exclude_augment:
+            continue
 
         # Get and parse the attributes
         _content = data_loaded.get(key, None)

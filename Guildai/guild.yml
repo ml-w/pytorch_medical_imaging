@@ -1,6 +1,6 @@
 train:
     description: Train a model.
-    main: main
+    main: pytorch_med_imaging.main
     flags:
         config: "Configs/Survival/Test.ini"
         epoch: 50
@@ -37,7 +37,7 @@ train:
 
 train_segment:
     description: Train a model.
-    main: main
+    main: pytorch_med_imaging.main
     flags:
         config: "Configs/Survival/Test.ini"
         epoch: 50
@@ -75,7 +75,7 @@ train_segment:
 
 train_survival:
     description: Train a model.
-    main: main
+    main: pytorch_med_imaging.main
     flags:
         config: "Configs/Survival/Test.ini"
         epoch: 50
@@ -112,7 +112,7 @@ train_survival:
 
 validation:
     decription: Validate the trained model. Should be used in pipeline, otherwise it won't find the checkpoint.
-    main: main --inference
+    main: pytorch_med_imaging.main --inference
     flags:
         batch-size: 4
         config: "Configs/Survival/Test.ini"
@@ -145,7 +145,7 @@ validation:
 
 validation_segment:
     decription: Validate the trained model. Should be used in pipeline, otherwise it won't find the checkpoint.
-    main: main --inference
+    main: pytorch_med_imaging.main --inference
     flags:
         batch-size: 4
         config: "Configs/Survival/Test.ini"
@@ -176,7 +176,7 @@ validation_segment:
 
 validation_survival:
     decription: Validate the trained model. Should be used in pipeline, otherwise it won't find the checkpoint.
-    main: main --inference
+    main: pytorch_med_imaging.main --inference
     flags:
         batch-size: 4
         config: "Configs/Survival/Test.ini"

@@ -3,6 +3,7 @@ from ..med_img_dataset import DataLabel
 from torch.utils.data import TensorDataset
 from .. import med_img_dataset
 
+from typing import Optional
 import torchio as tio
 
 __all__ = ['PMIImageFeaturePair']
@@ -68,13 +69,9 @@ class PMIImageFeaturePair(PMIImageDataLoader):
         }
         self._load_default_attr(default_attr)
 
-    def _load_data_set_training(self):
+    def _load_data_set_training(self,
+                                exclude_augment: Optional[bool] = False) -> tio.Queue or tio.SubjectsDataset:
         """
-        Load :class:`ImageDataSet` or :class:`ImageDataSetAugment for network input.
-        Load :class:`DataLabel` as target.
-
-        Returns:
-            (tuple) -> (:class:`ImageDataSet` or :class:`ImageDataSetAugment`, :class:`DataLabel`)
 
         """
         if self._target_dir is None:
@@ -112,11 +109,19 @@ class PMIImageFeaturePair(PMIImageDataLoader):
         self.data = {'input':   img_out,
                      'gt':      gt_dat,
                      'mask':    mask_out,
-                     'net_in_dat': extra_dat}
+                     'net_in_dat': extra_dat,
+                     'uid': img_out.get_unique_IDs()
+                     }
+        # create transform
+        self._create_transform(exclude_augment=exclude_augment)
 
+        # exclude where self.data items are `None`
         data_exclude_none = {k: v for k, v in self.data.items() if v is not None}
-        subjects = [tio.Subject(**{k: v for k, v in zip(self.data.keys(), row)})
+
+        # Create subject list
+        subjects = [tio.Subject(**{k: v for k, v in zip(data_exclude_none.keys(), row)})
                     for row in zip(*data_exclude_none.values())]
+        self._logger.debug(f"subjects: {subjects[0]}")
         subjects = tio.SubjectsDataset(subjects=subjects, transform=self.transform)
 
         # Return the queue if patch-based methods are used.
@@ -126,19 +131,29 @@ class PMIImageFeaturePair(PMIImageDataLoader):
         else:
             return subjects
 
-    def _load_data_set_inference(self):
-        # Load extra column and concat if extra column options were found
-        if not self.get_from_loader_params('net_in_label_dir') is None:
-            self._logger.info("Selecting extra input columns")
-            if not self.get_from_loader_params('net_in_excel_sheetname', None) is None:
-                extra_dat = med_img_dataset.DataLabel.from_xlsx(self._target_dir, self.get_from_config('net_in_excel_sheetname', ))
-            else:
-                extra_dat = med_img_dataset.DataLabel.from_csv(self._target_dir)
-            extra_dat.set_target_column(self.get_from_loader_params('net_in_column'))
-            im_dat = super(PMIImageFeaturePair, self)._load_data_set_inference()
-            extra_dat.map_to_data(im_dat)
+    def _load_data_set_inference(self) -> tio.Queue or tio.SubjectsDataset:
+        img_out = self._read_image(self._input_dir)
+        mask_out = self._read_image(self._mask_dir, dtype='uint8')
 
-            return TensorDataset(im_dat, extra_dat)
+        # TODO: net_in_dat was assume to be in the same excel file as target_dir, which is not correct assumption
+        self.data = {'input':   img_out,
+                     'mask':    mask_out,
+                     'uid': img_out.get_unique_IDs()
+                     }
+
+        # create transform
+        self._create_transform(exclude_augment=True)
+
+        # Create subject list
+        data_exclude_none = {k: v for k, v in self.data.items() if v is not None}
+        subjects = [tio.Subject(**{k: v for k, v in zip(data_exclude_none.keys(), row)})
+                    for row in zip(*data_exclude_none.values())]
+        subjects = tio.SubjectsDataset(subjects=subjects, transform=self.transform)
+
+        # Return the queue if patch-based methods are used.
+        if not self.patch_size is None:
+            queue = tio.Queue(subjects, *self.queue_args, **self.queue_kwargs)
+            return queue
         else:
-            return super(PMIImageFeaturePair, self)._load_data_set_inference()
+            return subjects
 

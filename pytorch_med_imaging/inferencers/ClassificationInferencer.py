@@ -1,5 +1,6 @@
 from .InferencerBase import InferencerBase
 from ..med_img_dataset import ImageDataSet, DataLabel, ImageDataMultiChannel
+from ..PMI_data_loader.pmi_dataloader_base import PMIDataLoaderBase
 from torch.utils.data import DataLoader
 from tqdm import *
 from torch.autograd import Variable
@@ -11,56 +12,38 @@ from SimpleITK import WriteImage, ReadImage, GetImageFromArray
 from ..networks.GradCAM import *
 from torchvision.utils import make_grid
 from imageio import imsave
-from pytorch_med_imaging.Algorithms.visualization import draw_overlay_heatmap
+from ..Algorithms.visualization import draw_overlay_heatmap
+
 
 __all__ = ['ClassificationInferencer']
 
 class ClassificationInferencer(InferencerBase):
-    def __init__(self, input_data, out_dir, batch_size, net, checkpoint_dir, iscuda, logger=None, target_data=None,
-                 config=None):
+    def __init__(self,
+                 batch_size,
+                 net,
+                 checkpoint_dir,
+                 out_dir,
+                 iscuda,
+                 pmi_data_loader,
+                 config,
+                 **kwargs):
         inference_configs = {
-            'indataset':      input_data,
-            'batchsize':      batch_size,
-            'net':            net,
-            'netstatedict':   checkpoint_dir,
-            'logger':         logger,
-            'outdir':         out_dir,
-            'iscuda':         iscuda,
-            'target_data':    target_data,
-            'config':         config
+            'batch_size':       batch_size,
+            'net':              net,
+            'net_state_dict':   checkpoint_dir,
+            'outdir':          out_dir,
+            'iscuda':           iscuda,
+            'pmi_data_loader':  pmi_data_loader
         }
-        super(ClassificationInferencer, self).__init__(inference_configs)
+        super(ClassificationInferencer, self).__init__(inference_configs, config=config, **kwargs)
 
     def _input_check(self):
+        assert isinstance(self.pmi_data_loader, PMIDataLoaderBase), "The pmi_data_loader was not configured correctly."
+        if not os.path.isdir(self.outdir):
+            # Try to make dir first
+            os.makedirs(self.outdir, exist_ok=True)
+            assert os.path.isdir(self.outdir), f"Cannot open output directory: {self.outdir}"
         return 0
-
-    def _create_net(self):
-        if not hasattr(self._net, 'forward'):
-            in_chan = self._in_dataset[0].size()[0]
-            out_chan = 2 #TODO: Temp fix
-            try:
-                self._net = self._net(in_chan, out_chan, save_mask=False, save_weight=True)
-                self._ATTENTION_FLAG=True
-            except:
-                self._logger.log_print_tqdm("Cannot create network with 'save_mask' attribute!", 20)
-                self._net = self._net(in_chan, out_chan)
-                self._ATTENTION_FLAG=False
-
-        self._logger.log_print_tqdm("Loading checkpoint from: " + self.net_state_dict, 20)
-        self._net.load_state_dict(torch.load(self.net_state_dict), strict=False)
-        # self._net = nn.DataParallel(self._net)
-        self._net.train(False)
-        self._net.eval()
-        if self.iscuda:
-            self._net = self._net.cuda()
-
-
-        return self._net
-
-    def _prepare_data(self):
-        self._data_loader = DataLoader(self._in_dataset, batch_size=self.batchsize,
-                                       shuffle=False, num_workers=0, drop_last=False)
-        return self._data_loader
 
     def attention_write_out(self, attention_list):
         attention_outdir = os.path.dirname(self._outdir)
@@ -93,9 +76,8 @@ class ClassificationInferencer(InferencerBase):
 
         pass
 
-
     def grad_cam_write_out(self, target_layer):
-        gradcam = GradCam(self._net, target_layer)
+        gradcam = GradCam(self.net, target_layer)
 
         out_tensor = []
         cam_tensor = []
@@ -149,8 +131,6 @@ class ClassificationInferencer(InferencerBase):
             outname = os.path.join(outdir, "%s_gradcam.jpg"%ids[i])
             imsave(outname, hm)
 
-
-
     def write_out(self):
         out_tensor = []
         out_decisions = {}
@@ -158,27 +138,24 @@ class ClassificationInferencer(InferencerBase):
         out_slice_attention = []
         last_batch_dim = 0
         with torch.no_grad():
-            for index, samples in enumerate(tqdm(self._data_loader, desc="Steps")):
-                s = samples
-                if (isinstance(s, tuple) or isinstance(s, list)) and len(s) > 1:
-                    s = [Variable(ss, requires_grad=False).float() for ss in s]
-
-                if self._data_loader:
-                    s = [ss.cuda() for ss in s] if isinstance(s, list) else s.cuda()
+            for index, mb in enumerate(tqdm(self._inference_subjects, desc="Steps", position=0)):
+                self._logger.info(f"Operating with subject: {mb}")
+                s = self._unpack_minibatch(mb, self.unpack_keys_inf)
+                s = self._match_type_with_network(s)
 
                 if isinstance(s, list):
-                    out = self._net.forward(*s).squeeze()
+                    out = self.net.forward(*s).squeeze()
                 else:
-                    out = self._net.forward(s).squeeze()
+                    out = self.net.forward(s).squeeze()
 
-                while ((out.dim() < last_batch_dim) or (out.dim()< 2)) and last_batch_dim != 0:
+                while ((out.dim() < last_batch_dim) or (out.dim() < 2)) and last_batch_dim != 0:
                     out = out.unsqueeze(0)
                     self._logger.log_print_tqdm('Unsqueezing last batch.' + str(out.shape))
 
                 out_tensor.append(out.data.cpu())
                 if self._ATTENTION_FLAG:
-                    # out_attention.append(self._net.get_mask())
-                    out_slice_attention.append(self._net.get_slice_attention())
+                    # out_attention.append(self.net.get_mask())
+                    out_slice_attention.append(self.net.get_slice_attention())
 
                 last_batch_dim = out.dim()
                 del out, s
@@ -191,7 +168,7 @@ class ClassificationInferencer(InferencerBase):
 
             out_tensor = torch.cat(out_tensor, dim=0)
             dl = self._writter(out_tensor, out_attention=out_attention, out_slice_attention=out_slice_attention)
-            print(dl._data_table.to_string())
+            self._logger.info(dl._data_table.to_string())
 
     def _writter(self, out_tensor, out_attention =None, out_slice_attention=None):
         out_decisions = {}

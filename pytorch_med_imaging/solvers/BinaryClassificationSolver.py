@@ -203,9 +203,6 @@ class BinaryClassificationSolver(ClassificationSolver):
         self.optimizer.step()
         return out, loss.cpu().data
 
-    def _step_callback(self, s, g, out, loss, step_idx=None):
-        self.plotter_dict
-
     def _loss_eval(self, *args):
         out, s, g = args
         #out (B x C) g (B x C)

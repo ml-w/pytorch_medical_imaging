@@ -36,7 +36,6 @@ class InferencerBase(object):
         default_attr.update((k, inferencer_configs[k]) for k in default_attr.keys() & inferencer_configs.keys())
         required_att = ('net', 'net_state_dict', 'iscuda', 'outdir', 'pmi_data_loader')
 
-        # optional
         self._logger = inferencer_configs.get('Logger', None)
         if self._logger is None:
             self._logger = Logger[self.__class__.__name__]
@@ -48,6 +47,11 @@ class InferencerBase(object):
 
         self._config = kwargs.get('config', None)
 
+        # optional attributes
+        default_attr = {
+            'unpack_keys_inf': ['input'],
+        }
+        self._load_default_attr(default_attr)
 
 
         assert isinstance(self._logger, Logger) or self._logger is None, "Incorrect logger."

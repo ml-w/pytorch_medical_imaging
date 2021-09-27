@@ -60,7 +60,6 @@ class SegmentationInferencer(InferencerBase):
         super(SegmentationInferencer, self).__init__(inference_configs, config=config, **kwargs)
 
         default_attr = {
-            'unpack_keys_inf': ['input'],
             'inf_samples_per_vol': 25
         }
         self._load_default_attr(default_attr)

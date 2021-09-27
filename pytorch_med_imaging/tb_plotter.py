@@ -9,6 +9,8 @@ from cv2 import *
 import numpy as np
 import matplotlib.pyplot as plt
 
+from typing import Union, Optional
+
 __all__ = ['TB_plotter']
 
 class TB_plotter(object):
@@ -55,7 +57,7 @@ class TB_plotter(object):
         self._logger.debug("Writing collected outputs.")
         self._last_writer_index = writer_index
 
-        for name in self._registered_module_config:
+        for i, name in enumerate(self._registered_module_config):
             if not 'data' in self._registered_module_config[name]:
                 self._logger.warning("No data collected for module: {}".format(name))
                 continue
@@ -73,43 +75,66 @@ class TB_plotter(object):
                 ))
                 continue
 
-            if mod_output.dim() == 4:
-                # Display all batch in same im
-                _grid = make_grid(mod_output, nrow=5, normalize=True)
-                self._writer.add_image(name, _grid)
-            elif mod_output.dim() == 5:
-                # Display all channels in same im
-                for b in range(mod_output.shape[0]):
-                    _grid = []
-                    _mod_out_slice = mod_output[b, ..., int(mod_output.shape[-1] // 2)]
-                    _size = np.min(np.asarray([self._image_max_dim,
-                                               _mod_out_slice.shape[-2:]]),
-                                   axis=0)
-                    self._logger.debug(f"Resized from {_mod_out_slice.shape} -> {_size}")
-
-                    _mod_out_slice = torch.nn.functional.adaptive_avg_pool2d(_mod_out_slice,
-                                                                             _size)
-
-                    _g = make_grid(_mod_out_slice.unsqueeze(1), nrow=5,
-                                   normalize=True).unsqueeze(0)
-
-                    _g = (_g * 254.).squeeze()[0].numpy().astype('uint8')
-                    # self._logger.debug(f"_g Min: {_g.min()} Max: {_g.max()}")
-                    _g = applyColorMap(_g, COLORMAP_JET)
-                    _g = _g[np.newaxis].astype('float32') / 254.
-                    self._logger.debug("_g size: {}".format(_g.shape))
-                    # self._logger.debug("_grid size: {}".format(_grid.shape))
-                    # fig, ax = plt.subplots(1, 1, figsize=(10, 10))
-                    # ax.imshow(_g)
-                    # plt.show()
-                    self._writer.add_images("{}/Slice_{:d}".format(name, b), _g, dataformats='NWHC')
+            self.plot_tensor(mod_output, "{}/Item_{:d}".format(name, i), writer_index, )
 
             # Clean outputs to save mem
             del self._registered_module_config[name]['data']
 
 
+    def plot_tensor(self,
+                    tensor: torch.FloatTensor,
+                    name:str,
+                    writer_index: int,
+                    cmap: Optional[str] = 'jet',
+                    grid_by: Optional[str] = 'batch') -> None:
+        _cmap = {
+            'jet': COLORMAP_JET,
+            'bone': COLORMAP_BONE,
+            'cool': COLORMAP_COOL,
+            'hot': COLORMAP_HOT
+        }
+        assert cmap in _cmap, f"Available cmaps are: [{','.join(_cmap.keys())}], got `{cmap}` instead."
 
-    def plot_tensor(self, im, name:str, writer_index: int, cmap:str):
+        _axis = {
+            'batch': 0,
+            'ch': 1,
+            'slice': 4
+        }
+        assert grid_by in _axis , f"Available grid axes are: [{','.join(_cmap.keys())}], got `{grid_by}` instead"
+
+
+        if tensor.dim() == 4:
+            # Display all batch in same im
+            _grid = make_grid(tensor, nrow=5, normalize=True)
+            self._writer.add_image(name, _grid)
+        elif tensor.dim() == 5:
+            # put axis to grid to second, display only mid slice unless `slice` is specified in grid_by,
+            _a_grid = _axis[grid_by]
+            _a_fixed = [_axis[k] for k in _axis if k != grid_by]
+            _index = [tensor.shape[i] // 2 if i in _a_fixed else slice(None) for i in range(tensor.dim())]
+            _tensor = tensor[tuple(_index)]
+            _tensor = _tensor.unsqueeze(_a_fixed[0])
+            _tensor = _tensor.unsqueeze(_a_fixed[1])
+            _tensor = _tensor.transpose(_a_grid, 0).squeeze().unsqueeze(1)
+
+            # Display all channels in same im
+            _grid = []
+            _size = np.min(np.asarray([self._image_max_dim,
+                                       _tensor.shape[-2:]]),
+                           axis=0)
+            self._logger.debug(f"Resized from {_tensor.shape} -> {_size}")
+
+            # Down scale the image
+            _tensor = torch.nn.functional.adaptive_avg_pool2d(_tensor, _size)
+
+            self._logger.debug(f"_tensor: {_tensor.shape}")
+            _g = make_grid(_tensor, nrow=5,
+                           normalize=True).unsqueeze(0)
+            self._logger.debug("_g size: {}".format(_g.shape))
+            _g = (_g * 254.).squeeze()[0].numpy().astype('uint8')
+            _g = applyColorMap(_g, _cmap[cmap])
+            _g = _g[np.newaxis].astype('float32') / 254.
+            self._writer.add_images(name, _g, dataformats='NWHC', global_step=writer_index)
         pass
 
     def get_writer(self):

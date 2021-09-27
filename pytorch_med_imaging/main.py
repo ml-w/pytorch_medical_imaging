@@ -39,18 +39,18 @@ def init_weights(m):
 
 def prepare_tensorboard_writer(bool_plot, dir_lsuffix, net_nettype, logger):
     if bool_plot:
-        tensorboard_rootdir = os.environ['TENSORBOARD_LOGDIR']
         try:
+            tensorboard_rootdir = os.environ['TENSORBOARD_LOGDIR']
             if not os.path.isdir(tensorboard_rootdir):
                 logger.log_print_tqdm("Cannot read from TENORBOARD_LOGDIR, retreating to default path...",
-                         logging.WARNING)
+                                      logging.WARNING)
                 tensorboard_rootdir = "/media/storage/PytorchRuns"
 
 
             logger.info("Creating TB writer, writing to directory: {}".format(tensorboard_rootdir))
             writer = SummaryWriter(tensorboard_rootdir + "/%s-%s-%s" % (net_nettype,
-                                                                     dir_lsuffix,
-                                                                     datetime.datetime.now().strftime("%Y%m%d-%H%M%S")))
+                                                                        dir_lsuffix,
+                                                                        datetime.datetime.now().strftime("%Y%m%d-%H%M%S")))
             writer = TB_plotter(writer)
 
 
@@ -371,8 +371,6 @@ def main(a, config, logger):
             loader = loader_factory.produce_object(inputDataset, config)
             inferencer.set_dataloader(loader)
             logger.info("New loader type: {}".format(loader.__class__.__name__))
-
-
 
         if write_mode == 'GradCAM':
             #TODO: custom grad cam layers

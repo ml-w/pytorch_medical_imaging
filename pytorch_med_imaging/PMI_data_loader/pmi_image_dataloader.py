@@ -3,7 +3,6 @@ from .. import med_img_dataset
 from pathlib import Path
 from .augmenter_factory import create_transform_compose
 
-import re
 import torchio as tio
 
 __all__ = ['PMIImageDataLoader']
@@ -127,16 +126,6 @@ class PMIImageDataLoader(PMIDataLoaderBase):
 
         # Build transform
         self.transform = None
-        if isinstance(self.augmentation, str):
-            if self.augmentation == '':
-                self.augmentation = False
-            elif Path(self.augmentation).is_file():
-                try:
-                    self.transform = create_transform_compose(self.augmentation)
-                    self._logger.debug(f"Built transform: {self.transform}")
-                except Exception as e:
-                    self._logger.error(f"Failed to create augmentation from file: {self.augmentation}. Got {e}")
-                    self.augmentation = False
         self.data_types = self.data_types.split('-')
 
     def _read_image(self, root_dir, **kwargs):
@@ -180,8 +169,12 @@ class PMIImageDataLoader(PMIDataLoaderBase):
         self.data = {'input':   img_out,
                      'gt':      gt_out,
                      'mask':    mask_out,
-                     'probmap': prob_out
+                     'probmap': prob_out,
+                     'uid':     img_out.get_unique_IDs()
                     }
+
+        # Create transform
+        self._create_transform()
 
         # Create subjects & queue
         data_exclude_none = {k: v for k, v in self.data.items() if v is not None}
@@ -215,7 +208,12 @@ class PMIImageDataLoader(PMIDataLoaderBase):
         self.data = {'input': img_out,
                      'gt': gt_out,
                      'mask': mask_out,
-                     'probmap': prob_out}
+                     'probmap': prob_out,
+                     'uid': img_out.get_unique_IDs()
+                     }
+
+        # Creat transform
+        self._create_transform(exclude_augment = True)
 
         # Create subjects & queue
         data_exclude_none = {k: v for k, v in self.data.items() if v is not None}

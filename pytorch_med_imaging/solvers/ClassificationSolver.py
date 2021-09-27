@@ -15,7 +15,7 @@ __all__ = ['ClassificationSolver']
 
 class ClassificationSolver(SolverBase):
     def __init__(self, net, param_optim, param_iscuda,
-                 param_initWeight=None, logger=None, confing=None, **kwargs):
+                 param_initWeight=None, logger=None, config=None, **kwargs):
         """
         Solver for classification tasks.
 
@@ -67,7 +67,6 @@ class ClassificationSolver(SolverBase):
         #-------------------------
         if self.class_weights is None:
             self._logger.warning("Automatic computing weigths are not supported now!")
-            raise DeprecationWarning("Automatic computing weigths are not supported now!")
 
         # Create optimizer and loss function
         lossfunction = nn.CrossEntropyLoss()
@@ -101,10 +100,14 @@ class ClassificationSolver(SolverBase):
             out = self.net.forward(s)
 
         # Print step information
-        _pairs = zip(out.flatten().data.cpu(), g.flatten().data.cpu(), torch.sigmoid(out).flatten().data.cpu())
-        _df = pd.DataFrame(_pairs, columns=['res', 'g', 'sig_res'], dtype=float)
+        _df = pd.DataFrame.from_dict({f'res_{d}': list(out[:,d].cpu().detach().numpy())
+                                      for d in range(out.shape[-1])})
+        _df_gt = pd.DataFrame.from_dict({'gt': list(g.flatten().cpu().detach().numpy())})
+        _df_sigres = pd.DataFrame.from_dict({f'sig_{d}': list(torch.sigmoid(out[:,d]).cpu().detach().numpy())
+                                             for d in range(out.shape[-1])})
+        _df = pd.concat([_df, _df_gt, _df_sigres], axis=1)
         self._logger.debug('\n' + _df.to_string())
-        del _pairs, _df
+        del _df
         return out
 
     def _loss_eval(self, *args):
@@ -113,7 +116,7 @@ class ClassificationSolver(SolverBase):
             g = self._force_cuda(g)
 
         out = out.squeeze()
-        g = g.squeeze().unsqueeze(1).long()
+        g = g.squeeze().long()
         self._logger.debug(f"Output size out: {out.shape} g: {g.shape}")
         loss = self.lossfunction(out, g)
         return loss
@@ -127,10 +130,10 @@ class ClassificationSolver(SolverBase):
 
             decisions = []
             validation_loss = []
-            for s, g in tqdm(self._data_loader_val, desc="Validation", position=2):
-                if self.iscuda:
-                        s = [ss.cuda() for ss in s] if isinstance(s, list) else s.cuda()
-                        g = [gg.cuda() for gg in g] if isinstance(g, list) else g.cuda()
+            for mb in tqdm(self._data_loader_val, desc="Validation", position=2):
+                s, g = self._unpack_minibatch(mb, self.unpack_keys_forward)
+                s = self._match_type_with_network(s)
+                g = self._match_type_with_network(g)
 
                 if isinstance(s, list):
                     res = self.net(*s)

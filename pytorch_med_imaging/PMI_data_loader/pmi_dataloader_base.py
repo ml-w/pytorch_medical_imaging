@@ -2,6 +2,9 @@ import os
 import re
 import configparser
 from abc import *
+from pathlib import Path
+
+from .augmenter_factory import create_transform_compose
 from ..logger import Logger
 
 class PMIDataLoaderBase(object):
@@ -309,4 +312,16 @@ class PMIDataLoaderBase(object):
                 _func = self.get_from_config
             out_dict[k] = _func(section, k, default_value=default_value, tar_dict=tar_dict)
         return out_dict
+
+    def _create_transform(self, exclude_augment = False):
+        if isinstance(self.augmentation, str):
+            if Path(self.augmentation).is_file():
+                try:
+                    self.transform = create_transform_compose(self.augmentation, exclude_augment=exclude_augment)
+                    self._logger.debug(f"Built transform: {self.transform}")
+                except Exception as e:
+                    self._logger.error(f"Failed to create augmentation from file: {self.augmentation}. Got {e}")
+                    self.augmentation = False
+            else:
+                self._logger.warning("Transform file provided but could not be located!")
 
