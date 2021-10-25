@@ -29,7 +29,9 @@ def dicom2nii(a, logger):
                                     a.usepid,
                                     a.usefname,
                                     a.input,
-                                    ids)
+                                    ids,
+                                    a.prefix,
+                                    a.debug,)
 
 def console_entry():
     parser = argparse.ArgumentParser()
@@ -41,7 +43,11 @@ def console_entry():
                         help='Depth of DICOM file search.')
     parser.add_argument('-g', '--idglobber', action='store', default=None, dest='idglobber',
                         help='Specify the globber to glob the ID from the DICOM paths.')
-    parser.add_argument('--idlist', action='store', dest='idlist',
+    parser.add_argument('--debug', action='store_true',
+                        help="Debug mode.")
+    parser.add_argument('--prefix', default="", type=str,
+                        help="Add a preffix to the patient's ID.")
+    parser.add_argument('--idlist', action='store', dest='idlist', default=None, type=str,
                         help='Only do conversion if the globbed ID is in the list. e.g. ["ID1", "ID2", ...]')
     parser.add_argument('--use-top-level-fname', action='store_true', dest='usefname',
                         help='Use top level file name immediately after the input directory as ID.')
