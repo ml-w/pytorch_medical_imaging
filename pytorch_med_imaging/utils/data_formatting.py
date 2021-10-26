@@ -114,13 +114,19 @@ def dicom2nii(folder: str,
 
             # Replace prefix if use patient id for file id
             if use_patient_id:
-                prefix1 = pid
+                logger.info(f"Replacing prefix with DICOM tag PID: {pid}")
+                prefix2 = pid
+            else:
+                prefix2 = prefix1
 
+            # Add prefix
             if len(prefix) > 0:
-                prefix1 = prefix + prefix1
+                prefix2 = prefix + prefix2
 
-            outname = out_dir + '/%s-%s+%s.nii.gz'%(prefix1,
-                                                    re.sub(' +', '_', tags['0008|103e']),
+            description = re.sub(' +', '_', tags['0008|103e'])
+            description = re.sub('\/+', '_', description)       # Remove slash because some people are stupid and put it in description
+            outname = out_dir + '/%s-%s+%s.nii.gz'%(prefix2,
+                                                    description,
                                                     tags['0020|0011']) # Some series has the same series name, need this to differentiate
 
             # Skip if dicom tag (0008|103e) contains substring in seq_filters
