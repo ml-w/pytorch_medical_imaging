@@ -64,7 +64,8 @@ def dicom2nii(folder: str,
             prefix1 = "NA"
 
         if use_top_level_fname:
-            path = os.path.normpath(folder.replace(input, '')).lstrip(os.sep) # lstrip to make sure its not starting from /
+            path = str(folder.replace(str(Path(input).absolute()), '/')).lstrip(os.sep) # lstrip to make sure its not starting from /
+            logger.debug(f"{folder.replace(str(Path(input).absolute()), '/')}")
             logger.debug(f"{path.split(os.sep)}")
             prefix1 = path.split(os.sep)[0]
         logger.debug(f"ID: {prefix1}")
