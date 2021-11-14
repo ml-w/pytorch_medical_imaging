@@ -1,8 +1,11 @@
 import pandas as pd
 import re
-from sklearn import model_selection
 import os
+from sklearn import model_selection
 from numpy import random
+from pathlib import Path
+
+from typing import List, Union, Optional, Iterable
 
 def GenerateFileList(files):
     regex_dict = {'T1W':        "((?=.*T1.*)(?!.*FS.*)(?!.*[cC].*))",
@@ -42,7 +45,35 @@ def GenerateFileList(files):
         df = df.append(tmp)
     return df[list(regex_dict.keys()) + ['None']]
 
-def GenerateTestBatch(ids, k_fold, outdir, prefix="Batch_", exclude_list=None, stratification_class=None, validation=0):
+def GenerateTestBatch(ids: Iterable,
+                      k_fold: int,
+                      outdir: Path,
+                      prefix: Optional[str] = "Batch_",
+                      exclude_list: Optional[List] = None,
+                      stratification_class: Optional[pd.Series] = None,
+                      validation: Optional[int] = 0) -> None:
+    r"""
+
+    Args:
+        ids (list or tuple):
+            The unique identifiers to identify each case.
+        k_fold (int):
+            Number of folds to make.
+        outdir (Path or str):
+            Path to deposit the fold configurations.
+        prefix (str, Optional):
+            If not None, a string prefix will be given to the output files. Default to "Batch_".
+        exclude_list (Iterable, Optional):
+            If not None, the IDs in this list will be first removed from `ids` before K-fold partitions. Default to None.
+        stratification_class (Iterable, Optional):
+            If not None, the K-fold is arranged with stratification referencing this. Default to None.
+        validation (int, Optional):
+            If > 0, a validation set with `validation` cases will also be created and deposite to "Validation.txt"
+
+
+    Returns:
+
+    """
     import configparser
     try:
         ids = list(ids.tolist())
@@ -56,10 +87,12 @@ def GenerateTestBatch(ids, k_fold, outdir, prefix="Batch_", exclude_list=None, s
     if validation > 0:
         if stratification_class is None:
             validation_ids = random.choice(ids, size=validation, replace=False)
-            for v in validation_ids:
-                ids.remove(v)
         else:
             _, validation_ids = model_selection.train_test_split(ids, test_size=validation, stratify=stratification_class)
+
+        # Remove validation files from list
+        for v in validation_ids:
+            ids.remove(v)
 
         val_file = open(os.path.join(outdir, 'Validation.txt'), 'w')
         val_file.writelines([str(v) + '\n' for v in validation_ids])
@@ -86,7 +119,7 @@ def GenerateTestBatch(ids, k_fold, outdir, prefix="Batch_", exclude_list=None, s
         get_split = lambda x: splitter.split(x)
     else:
         splitter = model_selection.StratifiedKFold(n_splits=k_fold, shuffle=True)
-        get_split = lambda x: splitter.split(x, stratification_class)
+        get_split = lambda x: splitter.split(x, stratification_class.loc[ids])
 
     # Create folder if not exist
     os.makedirs(outdir, exist_ok=True)
@@ -179,18 +212,26 @@ if __name__ == '__main__':
     from pathlib import Path
 
     data_dir = Path('../../NPC_Segmentation/60.Large-Study/v1-All-Data/Original/T2WFS_TRA')
-    table_dir = Path('../../NPC_Segmentation/60.Large-Study/v1-All-Data/v1-datasheet.csv')
-    table = pd.read_csv(table_dir.__str__(), index_col=0)
-    out_file_dir = Path('../../NPC_Segmentation/99.Testing/NPC_BM_LargeStudy/v1-3fold')
+    table_dir = Path('../../NPC_Segmentation/60.Large-Study/v1-All-Data/v1-DataSheet.xlsx')
+    table = pd.read_excel(table_dir.__str__(), index_col='Study Number')
+    out_file_dir = Path('../../NPC_Segmentation/99.Testing/NPC_BM_LargeStudy/v3-3fold')
 
 
     regex = r"^[a-zA-Z]{0,3}[0-9]+"
     images = ImageDataSet(data_dir.__str__(), verbose=True, idGlobber=regex)
-    GenerateTestBatch(images.get_unique_IDs(),
+    im_ids =images.get_unique_IDs()
+
+    # Check if all images are available
+    for i in table.index:
+        if i not in im_ids:
+            print(f"Dropping: {i}")
+            table.drop(i, axis=0, inplace=True)
+
+    GenerateTestBatch(table.index,
                       3,
                       out_file_dir.__str__(),
-                      stratification_class=table,
-                      validation=249,
+                      stratification_class=table['TStage'],
+                      validation=len(table) // 10,
                       prefix='B'
                       )
 
