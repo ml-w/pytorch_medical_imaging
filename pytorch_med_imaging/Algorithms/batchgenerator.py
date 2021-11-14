@@ -53,6 +53,8 @@ def GenerateTestBatch(ids: Iterable,
                       stratification_class: Optional[pd.Series] = None,
                       validation: Optional[int] = 0) -> None:
     r"""
+    Seperate the `ids` into K-fold with stratification. The configurations are stored in .ini files with session
+    `FileList` and attributes `testing` and `training`.
 
     Args:
         ids (list or tuple):
@@ -69,9 +71,6 @@ def GenerateTestBatch(ids: Iterable,
             If not None, the K-fold is arranged with stratification referencing this. Default to None.
         validation (int, Optional):
             If > 0, a validation set with `validation` cases will also be created and deposite to "Validation.txt"
-
-
-    Returns:
 
     """
     import configparser
