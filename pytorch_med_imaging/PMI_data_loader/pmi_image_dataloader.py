@@ -104,8 +104,8 @@ class PMIImageDataLoader(PMIDataLoaderBase):
         self._load_default_attr(default_attr)
         # Update some kwargs with more complex default settings
         default_queue_kwargs = {
-                    'max_length': 150,
-                    'samples_per_volume': 25,
+                    'max_length': 15,
+                    'samples_per_volume': 1,
                     'num_workers': 16,
                     'shuffle_subjects': True,
                     'shuffle_patches':  True,
@@ -185,9 +185,18 @@ class PMIImageDataLoader(PMIDataLoaderBase):
         # Return the queue
         if not self.patch_size is None:
             queue = tio.Queue(subjects, *self.queue_args, **self.queue_kwargs)
-            return queue
         else:
-            return subjects
+            # Set queue_args and queue_kwargs to load the whole image for each object to allow for caching
+            shape_of_input = subjects[0].shape
+
+            # Reset sampler
+            self.sampler = tio.GridSampler(patch_size = shape_of_input[1:]) # first dim is batch
+            self.queue_args[-1] = self.sampler
+
+            # Create queue
+            queue = tio.Queue(subjects, *self.queue_args, **self.queue_kwargs)
+        self._logger.debug(f"Created queue: {queue}")
+        return queue
 
 
     def _load_data_set_inference(self) -> [tio.Queue, tio.GridSampler] or [tio.SubjectsDataset, None]:
@@ -232,7 +241,21 @@ class PMIImageDataLoader(PMIDataLoaderBase):
                 sampler = self.sampler
             return subjects, sampler
         else:
-            return subjects, None
+            # Set queue_args and queue_kwargs to load the whole image for each object to allow for caching
+            shape_of_input = subjects[0].shape
+
+            # Reset sampler
+            self.sampler = tio.GridSampler(patch_size = shape_of_input[1:]) # first dim is batch
+            self.queue_args[-1] = self.sampler
+
+            # Set arguments for inference
+            _inf_dic = self.queue_kwargs
+            _inf_dic['shuffle_subjects'] = False
+            _inf_dic['shuffle_subjects'] = False
+
+            # Create queue
+            queue = tio.Queue(subjects, *self.queue_args, **_inf_dic)
+            return queue
 
     def _prepare_probmap(self):
         r"""Load probability map if its specified."""

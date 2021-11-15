@@ -124,12 +124,38 @@ class PMIImageFeaturePair(PMIImageDataLoader):
         self._logger.debug(f"subjects: {subjects[0]}")
         subjects = tio.SubjectsDataset(subjects=subjects, transform=self.transform)
 
-        # Return the queue if patch-based methods are used.
+        return self._create_queue(exclude_augment, subjects)
+
+    def _create_queue(self, exclude_augment, subjects):
+        # Return the queue
         if not self.patch_size is None:
-            queue = tio.Queue(subjects, *self.queue_args, **self.queue_kwargs)
-            return queue
+            overlap = [ps // 2 for ps in self.patch_size]
+            # If no probmap, return GridSampler, otherwise, return weighted sampler
+            if self.data['probmap'] is None:
+                sampler = tio.GridSampler(patch_size=self.patch_size, patch_overlap=overlap)
+            else:
+                sampler = self.sampler
+            return subjects, sampler
         else:
-            return subjects
+            # Set queue_args and queue_kwargs to load the whole image for each object to allow for caching
+            shape_of_input = subjects[0].shape
+
+            # Reset sampler
+            self.sampler = tio.UniformSampler(patch_size=shape_of_input[1:])  # first dim is batch
+            self.queue_args[-1] = self.sampler
+
+            # if exclude augment, don't shuffle
+            if exclude_augment:
+                _inf_dic = self.queue_kwargs
+                _inf_dic['shuffle_subjects'] = False
+                _inf_dic['shuffle_subjects'] = False
+            else:
+                _inf_dic = self.queue_kwargs
+
+            # Create queue
+            queue = tio.Queue(subjects, *self.queue_args, **self.queue_kwargs)
+            self._logger.debug(f"Created queue: {queue}")
+            return queue
 
     def _load_data_set_inference(self) -> tio.Queue or tio.SubjectsDataset:
         img_out = self._read_image(self._input_dir)
@@ -150,10 +176,4 @@ class PMIImageFeaturePair(PMIImageDataLoader):
                     for row in zip(*data_exclude_none.values())]
         subjects = tio.SubjectsDataset(subjects=subjects, transform=self.transform)
 
-        # Return the queue if patch-based methods are used.
-        if not self.patch_size is None:
-            queue = tio.Queue(subjects, *self.queue_args, **self.queue_kwargs)
-            return queue
-        else:
-            return subjects
-
+        return self._create_queue(exclude_augment, subjects)
