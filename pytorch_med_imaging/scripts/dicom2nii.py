@@ -23,7 +23,7 @@ def dicom2nii(a, logger):
 
     data_formatting.batch_dicom2nii(dicom_dirs,
                                     a.output,
-                                    None, # TODO: Port these two arguments to command too
+                                    a.num_workers, # TODO: Port these two arguments to command too
                                     None,
                                     a.idglobber,
                                     a.usepid,
@@ -43,6 +43,8 @@ def console_entry():
                         help='Depth of DICOM file search.')
     parser.add_argument('-g', '--idglobber', action='store', default=None, dest='idglobber',
                         help='Specify the globber to glob the ID from the DICOM paths.')
+    parser.add_argument('-n', '--num-workers', type=int, default=None,
+                        help="Specify number of workers. If not specified, use all CPU cores.")
     parser.add_argument('--debug', action='store_true',
                         help="Debug mode.")
     parser.add_argument('--prefix', default="", type=str,
