@@ -26,9 +26,12 @@ class BinaryClassificationInferencer(ClassificationInferencer):
         out_tensor = []
         last_batch_dim = 0
         with torch.no_grad():
-            for index, mb in enumerate(tqdm(self._inference_subjects, desc="Steps")):
+            dataloader = DataLoader(self._inference_subjects, batch_size=self.batch_size, shuffle=False)
+            for index, mb in enumerate(tqdm(dataloader, desc="Steps")):
                 s = self._unpack_minibatch(mb, self.unpack_keys_inf)
                 s = self._match_type_with_network(s)
+
+                self._logger.debug(f"s size: {s.shape if not isinstance(s, list) else [ss.shape for ss in s]}")
 
                 # Squeezing output directly cause problem if the output has only one output channel.
                 if isinstance(s, list):
@@ -43,7 +46,7 @@ class BinaryClassificationInferencer(ClassificationInferencer):
                     self._logger.log_print_tqdm('Unsqueezing last batch.' + str(out.shape))
 
                 out_tensor.append(out.data.cpu())
-                uids.append(mb['uid'])
+                uids.extend(mb['uid'])
                 if 'gt' in mb:
                     gt.append(mb['gt'])
 
@@ -79,7 +82,8 @@ class BinaryClassificationInferencer(ClassificationInferencer):
                 out_decisions[f'Truth_{i}'] = gt[:, i].tolist()
                 self._TARGET_DATASET_EXIST_FLAG = True
 
-
+        import pprint
+        self._logger.debug(f"out_decision: {pprint.pformat(out_decisions)}")
         dl = DataLabel.from_dict(out_decisions)
         dl.write(self.outdir)
         self._dl = dl

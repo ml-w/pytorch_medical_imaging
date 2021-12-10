@@ -70,10 +70,9 @@ class SlicewiseAttentionRAN(nn.Module):
 
 
         # Construct slice weight
-        # x_w = self.in_sw(x).squeeze()
-        # x_w = (torch.sigmoid(x_w) - 0.5) * 10 + 5. # make the range larger.
-        # if self.save_weight:
-        #     self.x_w = x_w.data.cpu()
+        x_w = self.in_sw(x).squeeze()
+        if self.save_weight:
+            self.x_w = x_w.data.cpu()
 
         # Permute the axial dimension to the last
         x = F.max_pool3d(x, [2, 2, 1], stride=[2, 2, 1]).permute([1, 2, 3, 0, 4])
@@ -81,7 +80,7 @@ class SlicewiseAttentionRAN(nn.Module):
         new_shape = list(x_shape[:3]) + [x_shape[-2] * x_shape[-1]]
         x = x.reshape(new_shape)
 
-        # x = x * x_w.view([-1]).expand_as(x)
+        x = x * x_w.view([-1]).expand_as(x)
 
         # Resume dimension
         x = x.view(x_shape).permute([3, 0, 1, 2, 4])
@@ -99,10 +98,7 @@ class SlicewiseAttentionRAN(nn.Module):
         if x.dim() < 3:
             x = x.unsqueeze(0)
 
-
-        # x = x.permute([1, 0, 2])
-        # x = x * x_w.expand_as(x)
-        # x = x.permute([1, 0, 2]).max(dim=-1).values
+        # Get best prediction across the slices
         x = x.max(dim=-1).values
 
         x = self.out_fc1(x)

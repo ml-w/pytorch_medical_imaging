@@ -14,7 +14,8 @@ def create_transform_compose(yaml_file: Path,
         yaml_file (str or Path):
             The yaml file.
         exclude_augment (bool, Optional):
-            If true, the transforms that are in the augmentation list will not be added.
+            If true, the transforms that are in the augmentation list will not be added. Use in inference mode. Default
+            to false.
 
     Returns:
         tio.Compose
@@ -55,7 +56,7 @@ def create_transform_compose(yaml_file: Path,
         tio.RandomSwap,
         tio.RandomLabelsToImage,
         tio.RandomGamma,
-
+        tio.RandomRescale
     ]
 
     yaml_file = Path(yaml_file)
@@ -71,23 +72,26 @@ def create_transform_compose(yaml_file: Path,
         # Check if the specified filter exist in tio
         if not hasattr(tio, key):
             raise AttributeError(f"The transform '{key}' is not available in tio.")
-        _transfer_cls = eval('tio.' + key)
-        if _transfer_cls in _augmentation_transforms and exclude_augment:
+        try:
+            _transform_cls = eval('tio.' + key)
+        except AttributeError:
+            _transform_cls = eval(key)
+        if (_transform_cls in _augmentation_transforms) and exclude_augment:
             continue
 
         # Get and parse the attributes
         _content = data_loaded.get(key, None)
         if _content is None:
-            steps.append(_transfer_cls())
+            steps.append(_transform_cls())
         else:
             # For list, there could be both args and kwargs.
             if isinstance(_content, list):
                 _args = [i for i in _content if not isinstance(i, dict)]
                 _kwargs = [i for i in _content if isinstance(i, dict)]
                 _kwargs = {} if len(_kwargs) == 0 else _kwargs[0]
-                steps.append(_transfer_cls(*_args, **_kwargs))
+                steps.append(_transform_cls(*_args, **_kwargs))
 
             # If its just a dict, its kwargs
             elif isinstance(_content, dict):
-                steps.append(_transfer_cls(**_content))
+                steps.append(_transform_cls(**_content))
     return tio.Compose(tuple(steps))
