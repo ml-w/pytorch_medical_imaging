@@ -228,7 +228,6 @@ class PMIImageDataLoader(PMIDataLoaderBase):
         data_exclude_none = {k: v for k, v in self.data.items() if v is not None}
         subjects = [tio.Subject(**{k:v for k, v in zip(self.data.keys(), row)})
                     for row in zip(*data_exclude_none.values())]
-        subjects = tio.SubjectsDataset(subjects=subjects, transform=self.transform)
 
         # No transform for subjects
         subjects = tio.SubjectsDataset(subjects=subjects)
