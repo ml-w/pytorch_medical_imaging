@@ -110,7 +110,9 @@ class PMIImageDataLoader(PMIDataLoaderBase):
                     'shuffle_subjects': True,
                     'shuffle_patches':  True,
                     'start_background': True,
-                    'verbose': True
+                    'verbose': True,
+                    'patch_sampling_callback': None,
+                    'create_new_attribute': None
         }
         default_queue_kwargs.update(self.queue_kwargs)
         self.queue_kwargs = default_queue_kwargs
@@ -154,7 +156,8 @@ class PMIImageDataLoader(PMIDataLoaderBase):
                                       regex=self._regex, idlist=self._idlist, idGlobber=self.idGlobber, **kwargs)
         return img_data
 
-    def _load_data_set_training(self):
+    def _load_data_set_training(self,
+                                exclude_augment: bool = False):
         """
         Load ImageDataSet for input and segmentation.
         """
@@ -174,7 +177,7 @@ class PMIImageDataLoader(PMIDataLoaderBase):
                     }
 
         # Create transform
-        self._create_transform()
+        self._create_transform(exclude_augment=exclude_augment)
 
         # Create subjects & queue
         data_exclude_none = {k: v for k, v in self.data.items() if v is not None}
@@ -183,20 +186,7 @@ class PMIImageDataLoader(PMIDataLoaderBase):
         subjects = tio.SubjectsDataset(subjects=subjects, transform=self.transform)
 
         # Return the queue
-        if not self.patch_size is None:
-            queue = tio.Queue(subjects, *self.queue_args, **self.queue_kwargs)
-        else:
-            # Set queue_args and queue_kwargs to load the whole image for each object to allow for caching
-            shape_of_input = subjects[0].shape
-
-            # Reset sampler
-            self.sampler = tio.GridSampler(patch_size = shape_of_input[1:]) # first dim is batch
-            self.queue_args[-1] = self.sampler
-
-            # Create queue
-            queue = tio.Queue(subjects, *self.queue_args, **self.queue_kwargs)
-        self._logger.debug(f"Created queue: {queue}")
-        return queue
+        return self._create_queue(exclude_augment, subjects)
 
 
     def _load_data_set_inference(self) -> [tio.Queue, tio.GridSampler] or [tio.SubjectsDataset, None]:
@@ -230,31 +220,7 @@ class PMIImageDataLoader(PMIDataLoaderBase):
                     for row in zip(*data_exclude_none.values())]
 
         # No transform for subjects
-        subjects = tio.SubjectsDataset(subjects=subjects)
-        if not self.patch_size is None:
-            overlap = [ps // 2 for ps in self.patch_size]
-            # If no probmap, return GridSampler, otherwise, return weighted sampler
-            if self.data['probmap'] is None:
-                sampler = tio.GridSampler(patch_size=self.patch_size, patch_overlap=overlap)
-            else:
-                sampler = self.sampler
-            return subjects, sampler
-        else:
-            # Set queue_args and queue_kwargs to load the whole image for each object to allow for caching
-            shape_of_input = subjects[0].shape
-
-            # Reset sampler
-            self.sampler = tio.GridSampler(patch_size = shape_of_input[1:]) # first dim is batch
-            self.queue_args[-1] = self.sampler
-
-            # Set arguments for inference
-            _inf_dic = self.queue_kwargs
-            _inf_dic['shuffle_subjects'] = False
-            _inf_dic['shuffle_subjects'] = False
-
-            # Create queue
-            queue = tio.Queue(subjects, *self.queue_args, **_inf_dic)
-            return queue
+        return self._create_queue(True, subjects)
 
     def _prepare_probmap(self):
         r"""Load probability map if its specified."""
@@ -280,4 +246,40 @@ class PMIImageDataLoader(PMIDataLoaderBase):
                 self.patch_size = ref_im_shape
             else:
                 self.patch_size = ref_im_shape
+
+    def _create_queue(self, exclude_augment, subjects):
+        # Return the queue
+        if not self.patch_size is None:
+            overlap = [ps // 2 for ps in self.patch_size]
+            # If no probmap, return GridSampler, otherwise, return weighted sampler
+            if self.data['probmap'] is None:
+                sampler = tio.GridSampler(patch_size=self.patch_size, patch_overlap=overlap)
+            else:
+                sampler = self.sampler
+            return subjects, sampler
+        else:
+            # Set queue_args and queue_kwargs to load the whole image for each object to allow for caching
+            shape_of_input = subjects[0].shape
+
+            # Reset sampler
+            self.sampler = tio.UniformSampler(patch_size=shape_of_input[1:])  # first dim is batch
+            self.queue_args[-1] = self.sampler
+
+            # if exclude augment, don't shuffle
+            if exclude_augment:
+                queue_dict = self.queue_kwargs
+                queue_dict['shuffle_subjects'] = False
+            else:
+                queue_dict = self.queue_kwargs
+
+            # Create queue
+            # If option to use post-sampling processing was provided, use CallbackQueue instead
+            if 'patch_sampling_callback' in queue_dict:
+                pass
+            else: # Else use the normal queue
+                pass
+
+            queue = tio.Queue(subjects, *self.queue_args, **queue_dict)
+            self._logger.debug(f"Created queue: {queue}")
+            return queue
 

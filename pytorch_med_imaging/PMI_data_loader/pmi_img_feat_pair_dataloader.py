@@ -1,7 +1,5 @@
 from .pmi_image_dataloader import PMIImageDataLoader
 from ..med_img_dataset import DataLabel
-from torch.utils.data import TensorDataset
-from .. import med_img_dataset
 
 from typing import Optional
 import torchio as tio
@@ -126,37 +124,6 @@ class PMIImageFeaturePair(PMIImageDataLoader):
 
         return self._create_queue(exclude_augment, subjects)
 
-    def _create_queue(self, exclude_augment, subjects):
-        # Return the queue
-        if not self.patch_size is None:
-            overlap = [ps // 2 for ps in self.patch_size]
-            # If no probmap, return GridSampler, otherwise, return weighted sampler
-            if self.data['probmap'] is None:
-                sampler = tio.GridSampler(patch_size=self.patch_size, patch_overlap=overlap)
-            else:
-                sampler = self.sampler
-            return subjects, sampler
-        else:
-            # Set queue_args and queue_kwargs to load the whole image for each object to allow for caching
-            shape_of_input = subjects[0].shape
-
-            # Reset sampler
-            self.sampler = tio.UniformSampler(patch_size=shape_of_input[1:])  # first dim is batch
-            self.queue_args[-1] = self.sampler
-
-            # if exclude augment, don't shuffle
-            if exclude_augment:
-                _inf_dic = self.queue_kwargs
-                _inf_dic['shuffle_subjects'] = False
-                _inf_dic['shuffle_subjects'] = False
-            else:
-                _inf_dic = self.queue_kwargs
-
-            # Create queue
-            queue = tio.Queue(subjects, *self.queue_args, **self.queue_kwargs)
-            self._logger.debug(f"Created queue: {queue}")
-            return queue
-
     def _load_data_set_inference(self) -> tio.Queue or tio.SubjectsDataset:
         img_out = self._read_image(self._input_dir)
         mask_out = self._read_image(self._mask_dir, dtype='uint8')
@@ -176,4 +143,4 @@ class PMIImageFeaturePair(PMIImageDataLoader):
                     for row in zip(*data_exclude_none.values())]
         subjects = tio.SubjectsDataset(subjects=subjects, transform=self.transform)
 
-        return self._create_queue(exclude_augment, subjects)
+        return self._create_queue(True, subjects)
