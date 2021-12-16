@@ -419,12 +419,23 @@ class SolverBase(object):
         """
         out = []
         for key in unpacking_keys:
-            try:
-                out.append(minibatch[key][tio.DATA])
-            except (AttributeError, IndexError):
-                out.append(minibatch[key])
-            except Exception as e:
-                self._logger.exception(f"Receive unknown exception during minibactch unpacking for: {key}")
+            if isinstance(key, (tuple, list)):
+                _out = []
+                for kk in key:
+                    try:
+                        _out.append(minibatch[kk][tio.DATA])
+                    except (AttributeError, IndexError):
+                        _out.append(minibatch[kk])
+                    except Exception as e:
+                        self._logger.exception(f"Receive unknown exception during minibactch unpacking for: {key}")
+                out.append(_out)
+            else:
+                try:
+                    out.append(minibatch[key][tio.DATA])
+                except (AttributeError, IndexError):
+                    out.append(minibatch[key])
+                except Exception as e:
+                    self._logger.exception(f"Receive unknown exception during minibactch unpacking for: {key}")
         return out
 
 
