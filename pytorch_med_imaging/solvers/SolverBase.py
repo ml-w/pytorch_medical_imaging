@@ -428,7 +428,7 @@ class SolverBase(object):
                         _out.append(minibatch[kk])
                     except Exception as e:
                         self._logger.exception(f"Receive unknown exception during minibactch unpacking for: {key}")
-                out.append(_out)
+                out.append(tuple(_out))
             else:
                 try:
                     out.append(minibatch[key][tio.DATA])
