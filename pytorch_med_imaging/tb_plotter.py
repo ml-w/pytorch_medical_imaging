@@ -192,11 +192,12 @@ class TB_plotter(object):
                           writer_index: int, Zrange=40, nrow=3):
         self._last_writer_index = writer_index
         try:
-            # Check if input is 2D or 3D
-            dim = gt.ndim
+            # Check if input is 2D or 3D, Check number of non-zero dim beyond B and C dimension
+            shape = gt.shape
+            dim = sum([s > 1 for s in shape[2:]])
 
             # If 3D, choose a case in the batch where at least one slice has segmentation
-            if dim == 5:
+            if dim == 3:
                 gtsum = torch.sum(gt, dim=[2, 3, 4]).squeeze()
 
                 # Skip if there are no labels
@@ -219,21 +220,31 @@ class TB_plotter(object):
                 ar = ar[..., :Zrange].permute(3, 0, 1, 2)
                 gt = gt[..., :Zrange].permute(3, 0, 1, 2)
 
-            else:
-                # TODO: Need to fix for 2D display now
+            elif dim == 2:
+                # Skip case if there are no labels
+                gtsum = torch.sum(gt, dim=list(range(2,gt.dim()))).squeeze()
+                if gtsum.sum() == 0:
+                    self._logger.warning("Mini-batch has no labels in this iteration.")
+
+                # collapse the dimension that is 1
+                gt = TB_plotter._collapse_to_2d(gt)
+                img = TB_plotter._collapse_to_2d(img)
+
                 # Here Zrange is max batch size.
                 Zrange = out.shape[0] if out.shape[0] < 40 else Zrange
 
                 ar = torch.argmax(out, 1)
                 ss = img[0] if isinstance(img, list) else img
 
-                ss = ss[..., :Zrange]
-                ar = ar[..., :Zrange]
-                gt = gt[..., :Zrange]
+                ss = ss[:Zrange]
+                ar = ar[:Zrange]
+                gt = gt[:Zrange]
 
-                # self._logger.debug(f"ss: {ss.shape}")
-                # self._logger.debug(f"ar: {ar.shape}")
-                # self._logger.debug(f"gt: {gt.shape}")
+                self._logger.debug(f"ss: {ss.shape}")
+                self._logger.debug(f"ar: {ar.shape}")
+                self._logger.debug(f"gt: {gt.shape}")
+            else:
+                raise IndexError(f"Dimension of the label is incorrect: {gt.shape}")
 
             grid = draw_grid(ss, ar, ground_truth=gt, thickness=2)
             self._writer.add_image('Image/Image', grid.transpose(2, 0, 1), writer_index)
@@ -245,7 +256,21 @@ class TB_plotter(object):
         except:
             self._logger.exception("Error when plotting segmentation.")
 
+    @staticmethod
+    def _collapse_to_2d(tensor: torch.Tensor):
+        r"""Collapse the image into 2D if ones exist in it. E.g. (B × C × H × W × 1) -> (B × C × H × W), irregard where
+        this 1 is. If there are no dimension or more than one dimension has has a shape of 1, raise an error."""
+        if tensor.dim() == 4:
+            # Do nothing if already (B × C × H × W)
+            return tensor
 
-    # def plot_classification(self, gt, out, writer_index):
-    #     try:
+        # Collapse otherwise
+        ones = tensor.shape[2:].count(1)
+        if (ones > 1 or ones == 0):
+            raise IndexError(f"Label is not a set of 2D images: {tensor.shape}")
+        d = tensor.shape[2:].index(1) + 2
+        new_shape = list(tensor.shape)
+        new_shape.pop(d)
+        tensor = tensor.reshape(new_shape)
+        return tensor
 
