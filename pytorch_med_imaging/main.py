@@ -4,6 +4,7 @@ import os, gc
 import re
 import logging
 import datetime
+from pathlib import Path
 
 # Propietary
 from functools import partial
@@ -28,6 +29,8 @@ from .inferencers import *
 
 from tensorboardX import SummaryWriter
 import torch.autograd as autograd
+import torch.multiprocessing
+torch.multiprocessing.set_sharing_strategy('file_system')
 autograd.set_detect_anomaly(True)
 
 
@@ -40,17 +43,17 @@ def init_weights(m):
 def prepare_tensorboard_writer(bool_plot, dir_lsuffix, net_nettype, logger):
     if bool_plot:
         try:
-            tensorboard_rootdir = os.environ['TENSORBOARD_LOGDIR']
-            if not os.path.isdir(tensorboard_rootdir):
+            tensorboard_rootdir =  Path(os.environ['TENSORBOARD_LOGDIR'])
+            if not tensorboard_rootdir.is_dir():
                 logger.log_print_tqdm("Cannot read from TENORBOARD_LOGDIR, retreating to default path...",
                                       logging.WARNING)
-                tensorboard_rootdir = "/media/storage/PytorchRuns"
+                tensorboard_rootdir = Path("/media/storage/PytorchRuns")
 
 
             logger.info("Creating TB writer, writing to directory: {}".format(tensorboard_rootdir))
-            writer = SummaryWriter(tensorboard_rootdir + "/%s-%s-%s" % (net_nettype,
-                                                                        dir_lsuffix,
-                                                                        datetime.datetime.now().strftime("%Y%m%d-%H%M%S")))
+            writer = SummaryWriter(tensorboard_rootdir.joinpath(
+                "%s-%s-%s" % (net_nettype,dir_lsuffix,datetime.datetime.now().strftime("%Y%m%d-%H%M%S"))).__str__()
+            )
             writer = TB_plotter(writer)
 
 
@@ -228,9 +231,9 @@ def main(a, config, logger):
         # numcpu = int(os.environ.get('SLURM_CPUS_ON_NODE', default=torch.multiprocessing.cpu_count()))
         numcpu = 0
         if data_pmi_loader_type is None:
-            loader = DataLoader(trainingSubjects, batch_size=param_batchsize, shuffle=True, num_workers=0,
+            loader = DataLoader(trainingSubjects, batch_size=param_batchsize, shuffle=True, num_workers=numcpu,
                                 drop_last=True, pin_memory=True)
-            loader_val = DataLoader(validationSubjects, batch_size=param_batchsize, shuffle=False, num_workers=0,
+            loader_val = DataLoader(validationSubjects, batch_size=param_batchsize, shuffle=False, num_workers=numcpu,
                                     drop_last=False, pin_memory=True) if validation_FLAG else None
         else:
             logger.info("Loading custom dataloader.")
