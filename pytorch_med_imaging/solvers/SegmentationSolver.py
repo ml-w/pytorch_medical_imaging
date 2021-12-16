@@ -295,5 +295,10 @@ class SegmentationSolver(SolverBase):
             self._logger.warning("There are no tb_plotter.")
             return
 
+        # sometimes there extra inputs provided to forward, conventionally, the first input should be the image
+        # therefore, use image for plotting
+        if isinstance(s, (tuple, list)):
+            s = s[0]
+
         if step_idx % 10 == 0:
-            self._tb_plotter.plot_segmentation(g, out, s, step_idx)
+            self._tb_plotter.plot_segmentation(g, out, s.float(), step_idx)
