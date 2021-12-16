@@ -2,6 +2,7 @@ import yaml
 import torchio as tio
 from pathlib import Path
 from typing import Optional
+from .lambda_tio_adaptor import LambdaAdaptor
 
 __all__ = ['create_transform_compose']
 

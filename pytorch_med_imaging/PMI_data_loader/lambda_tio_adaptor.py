@@ -1,5 +1,5 @@
 from typing import Sequence, Optional, Union
-from functools import wraps
+from functools import wraps, update_wrapper
 import torch
 from torchio.typing import TypeCallable
 from torchio.data.subject import Subject
@@ -7,6 +7,7 @@ from torchio.constants import TYPE
 from torchio.transforms import Transform
 from torchio import Queue
 
+from tqdm.auto import tqdm
 import multiprocessing as mpi
 from ..logger import Logger
 
@@ -94,29 +95,39 @@ class CallbackQueue(Queue):
         super(CallbackQueue, self).__init__(*args, **kwargs)
         self.callback = patch_sampling_callback
         self.create_new_attribute = create_new_attribute
-        self._logger = Logger[self.__class__.__name__]
+
 
     def _fill(self):
         super(CallbackQueue, self)._fill()
         if self.callback is None or self.create_new_attribute is None:
-            self._logger.warning("CallbackQueue was called but a callback function or an attribute string was not"
-                                 "supplied! Using default behavior of tio.Queue")
             return
 
-        if self.num_workers > 0 :
+        res = []
+        if self.num_workers  > 1 and False:
+            # This results in OSError: Too many open files, don't know why
             # Create thread pool
-            pool = mpi.Pool(self.num_workers)
+            for i in range(len(self.patches_list) // self.num_workers + 1):
+                print(i, "/", len(self.patches_list) // self.num_workers + 1)
+                with mpi.Pool(self.num_workers) as pool:
+                    # for each patch, execute function
+                    try:
+                        p = pool.map_async(self.callback,
+                                           self.patches_list[self.num_workers * i: self.num_workers * (i+1)])
+                    except IndexError:
+                        p = pool.map_async(self.callback,
+                                           self.patches_list[self.num_workers * i:])
+                    pool.close()
+                    pool.join()
 
-            # for each patch, execute function
-            p = pool.map_async(self.callback, self.patches_list)
-            pool.close()
-            pool.join()
+                    res.extend(p.get())
+                    pool.terminate()
+                    del pool, p
+                # with futures.ProcessPoolExecutor(max_workers=self.num_workers) as executor:
+                #     res = executor.map(self.callback, self.patches_list[self.num_workers * i: self.num_workers * (i+1)])
 
-            # Put patch back into place
-            res = p.get()
         else:
-            res = []
-            for p in self.patches_list:
+            # Seems like can only do signle thread
+            for p in tqdm(self.patches_list):
                 res.append(self.callback(p))
         self._map_to_new_attr(res)
 
@@ -129,7 +140,7 @@ class CallbackQueue(Queue):
                                  f"{len(self.patches_list)}).")
             for p, r in zip(self.patches_list, res):
                 p[self.create_new_attribute] = r
-        elif isinstance(self.create_new_attribute, [str, tuple]):
+        elif isinstance(self.create_new_attribute, (str, tuple)):
             for p, r in zip(self.patches_list, res):
                 if not len(r) == len(self.create_new_attribute):
                     raise IndexError(f"Expect result to have the same length (got {len(r)}) as the patch list got "

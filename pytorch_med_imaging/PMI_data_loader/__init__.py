@@ -3,9 +3,10 @@ from .pmi_batch_sampler_factory import *
 from .pmi_batch_zero_pad_sampler import *
 from .pmi_data_factory import *
 
+from .lambda_tio_adaptor import *
 from .augmenter_factory import *
 
-__all__ = ['DatatypeDictionary', 'PMIDataFactory']
+__all__ = ['DatatypeDictionary', 'PMIDataFactory', 'LambdaAdaptor', 'CallbackQueue']
 
 DatatypeDictionary = {
     'seg': PMIImageDataLoader,

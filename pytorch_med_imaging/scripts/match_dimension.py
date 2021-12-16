@@ -4,6 +4,8 @@ import sys
 import configparser
 import argparse
 import os
+import numpy as np
+from pprint import pformat
 
 __all__ = ['match_dimension']
 
@@ -50,18 +52,32 @@ def match_dimension(a):
     overlap_indices_b = [b_ids.index(i) for i in overlapId]
 
 
-    size_a = [tuple(imsetA.get_size(i)) for i in overlap_indices_a]
-    size_b = [tuple(imsetB.get_size(i)) for i in overlap_indices_b]
+    miss_matches = {}
+    prop_a = [imsetA.get_properties(i) for i in overlap_indices_a]
+    prop_b = [imsetB.get_properties(i) for i in overlap_indices_b]
+    for i, (pa, pb) in enumerate(zip(prop_a, prop_b)):
+        if not all([np.allclose(pa[k], pb[k]) for k in pa]):
+            miss_matches[overlapId[i]] = {}
+            for k in pa:
+                if not np.allclose(pa[k], pb[k]):
+                    miss_matches[overlapId[i]][k] = {'A': pa[k], 'B': pb[k]}
 
-    miss_match = {}
-    for i, (sa, sb) in enumerate(zip(size_a, size_b)):
-        if sa != sb:
-            miss_match[overlapId[i]] = {'A': sa, 'B': sb}
+    # size_a = [tuple(imsetA.get_size(i)) for i in overlap_indices_a]
+    # size_b = [tuple(imsetB.get_size(i)) for i in overlap_indices_b]
+    # spacing_a = [tuple(imsetA.get_spacing(i)) for i in overlap_indices_a]
+    # spacing_b = [tuple(imsetB.get_spacing(i)) for i in overlap_indices_b]
+    #
+    # miss_match = {}
+    # for i, (sa, sb) in enumerate(zip(size_a, size_b)):
+    #     if sa != sb:
+    #         miss_match[overlapId[i]] = {'A': sa, 'B': sb}
+    # miss_match_spacing = []
+    # for i, (sa, sb) in enumerate(zip(spacing_a, spacing_b)):
+    #     if sa != sb:
+    #         miss_match[overlapId[i]] = {'A': sa, 'B': sb}
 
-    if len(miss_match) > 0:
-        log.info(f"Miss-match list: {','.join(miss_match.keys())}")
-        log.info(f"Size-list: ")
-        log.info('\n' + '\n'.join([f"{idx}: {miss_match[idx]['A']} - {miss_match[idx]['B']}" for idx in miss_match]))
+    if len(miss_matches):
+        log.info(f"Miss-match list: \n{pformat(miss_matches)}")
 
         if len(missing) > 0:
             log.warning("Missing in directory B!")

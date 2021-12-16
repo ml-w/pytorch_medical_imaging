@@ -77,9 +77,13 @@ class outconv(nn.Module):
 
 
 class UNet(nn.Module):
-    def __init__(self, n_channels, outchan=None, residual=False):
+    def __init__(self, in_ch, out_ch=None, residual=False):
         super(UNet, self).__init__()
-        self.inc = inconv(n_channels, 64)
+        self._in_chan = in_ch
+        self._out_ch = in_ch if out_ch is None else out_ch
+
+
+        self.inc = inconv(in_ch, 64)
         self.down1 = down(64, 128)
         self.down2 = down(128, 256)
         self.down3 = down(256, 512)
@@ -88,7 +92,7 @@ class UNet(nn.Module):
         self.up2 = up(512, 128, True)
         self.up3 = up(256, 64, True)
         self.up4 = up(128, 64, True)
-        self.outc = outconv(64, n_channels) if outchan is None else outconv(64, outchan)
+        self.outc = outconv(64, in_ch) if out_ch is None else outconv(64, out_ch)
         self.residual= residual
         # self.steps=nn.Parameter(0, requires_grad=False)
 
@@ -276,7 +280,13 @@ class UNetLocTexHistDeeper(UNet):
         self.dropout2 = nn.Dropout2d(0.3, inplace=False)
 
 
-    def forward(self, x, pos):
+    def forward(self, x: torch.Tensor, pos: torch.Tensor):
+        r"""Input (B × C × H × W × 1)
+        """
+        if self._in_chan == 1:
+            x = x.squeeze().unsqueeze(1)
+        else:
+            x = x.squeeze()
         x1 = self.inc(x)        # 128
         x2 = self.down1(x1)     # 64
         x3 = self.down2(x2)     # 32

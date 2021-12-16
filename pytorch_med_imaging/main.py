@@ -228,9 +228,9 @@ def main(a, config, logger):
         # numcpu = int(os.environ.get('SLURM_CPUS_ON_NODE', default=torch.multiprocessing.cpu_count()))
         numcpu = 0
         if data_pmi_loader_type is None:
-            loader = DataLoader(trainingSubjects, batch_size=param_batchsize, shuffle=True, num_workers=numcpu,
+            loader = DataLoader(trainingSubjects, batch_size=param_batchsize, shuffle=True, num_workers=0,
                                 drop_last=True, pin_memory=True)
-            loader_val = DataLoader(validationSubjects, batch_size=param_batchsize, shuffle=False, num_workers=numcpu,
+            loader_val = DataLoader(validationSubjects, batch_size=param_batchsize, shuffle=False, num_workers=0,
                                     drop_last=False, pin_memory=True) if validation_FLAG else None
         else:
             logger.info("Loading custom dataloader.")

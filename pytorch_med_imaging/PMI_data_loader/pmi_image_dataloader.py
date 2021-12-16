@@ -1,8 +1,11 @@
 from .pmi_dataloader_base import PMIDataLoaderBase
 from .. import med_img_dataset
-from pathlib import Path
+from .computations import *
 from .augmenter_factory import create_transform_compose
+from .lambda_tio_adaptor import CallbackQueue
 
+from pathlib import Path
+from functools import partial
 import torchio as tio
 
 __all__ = ['PMIImageDataLoader']
@@ -99,22 +102,24 @@ class PMIImageDataLoader(PMIDataLoaderBase):
             'patch_size': None,
             'queue_kwargs': {},
             'sampler': 'uniform',
-            'augmentation': ''
+            'augmentation': '',
+            'create_new_attribute': "",
+            'patch_sampling_callback': "",
+            'patch_sampling_callback_kwargs': {}
         }
         self._load_default_attr(default_attr)
+        self._logger.info(f"Read local attributes: {[self.__getattribute__(i) for i in default_attr]}")
         # Update some kwargs with more complex default settings
         default_queue_kwargs = {
-                    'max_length': 15,
-                    'samples_per_volume': 1,
-                    'num_workers': 16,
-                    'shuffle_subjects': True,
-                    'shuffle_patches':  True,
-                    'start_background': True,
-                    'verbose': True,
-                    'patch_sampling_callback': None,
-                    'create_new_attribute': None
+            'max_length': 15,
+            'samples_per_volume': 1,
+            'num_workers': 16,
+            'shuffle_subjects': True,
+            'shuffle_patches':  True,
+            'start_background': True,
+            'verbose': True,
         }
-        default_queue_kwargs.update(self.queue_kwargs)
+        default_queue_kwargs.update(self.queue_kwargs)  # self.queue_kwargs is loaded by _load_default_attr
         self.queue_kwargs = default_queue_kwargs
         if (self.sampler == 'weighted') & (self._probmap_dir is not None):
             self.sampler = tio.WeightedSampler(patch_size=self.patch_size, probability_map='probmap')
@@ -169,19 +174,13 @@ class PMIImageDataLoader(PMIDataLoaderBase):
         mask_out = self._read_image(self._mask_dir, dtype='uint8')
         prob_out = self._prepare_probmap()
 
-        self.data = {'input':   img_out,
-                     'gt':      gt_out,
-                     'mask':    mask_out,
-                     'probmap': prob_out,
-                     'uid':     img_out.get_unique_IDs()
-                    }
-
+        self.data = self._prepare_data(gt_out, img_out, mask_out, prob_out)
         # Create transform
         self._create_transform(exclude_augment=exclude_augment)
 
         # Create subjects & queue
         data_exclude_none = {k: v for k, v in self.data.items() if v is not None}
-        subjects = [tio.Subject(**{k:v for k, v in zip(self.data.keys(), row)})
+        subjects = [tio.Subject(**{k:v for k, v in zip(data_exclude_none.keys(), row)})
                     for row in zip(*data_exclude_none.values())]
         subjects = tio.SubjectsDataset(subjects=subjects, transform=self.transform)
 
@@ -204,13 +203,7 @@ class PMIImageDataLoader(PMIDataLoaderBase):
         else:
             gt_out = None
 
-        self.data = {'input': img_out,
-                     'gt': gt_out,
-                     'mask': mask_out,
-                     'probmap': prob_out,
-                     'uid': img_out.get_unique_IDs()
-                     }
-
+        self.data = self._prepare_data(gt_out, img_out, None, prob_out)
         # Creat transform
         self._create_transform(exclude_augment = True)
 
@@ -222,11 +215,27 @@ class PMIImageDataLoader(PMIDataLoaderBase):
         # No transform for subjects
         return self._create_queue(True, subjects)
 
+    def _prepare_data(self, gt_out, img_out, mask_out, prob_out):
+        """
+        Convinient method to create data that will be loaded as subjects
+
+        """
+        data = {'input': img_out,
+                'gt': gt_out,
+                'mask': mask_out,
+                'probmap': prob_out,
+                'uid': img_out.get_unique_IDs()
+                }
+        for k in ['input', 'gt', 'mask', 'probmap']:
+            if isinstance(data[k], med_img_dataset.ImageDataSet):
+                data[f'{k}-shape'] = data[k].get_raw_data_shape()
+        return data
+
     def _prepare_probmap(self):
         r"""Load probability map if its specified."""
-         # Load probability map if specified
+        # Load probability map if specified
         if self._probmap_dir is not None:
-            self._logger.info("Loading probmap.")
+            self._logger.info(f"Loading probmap from: {self._probmap_dir}")
             try:
                 prob_out = self._read_image(self._probmap_dir, dtype='uint32') # torchio requires Integer probmap
             except:
@@ -256,7 +265,6 @@ class PMIImageDataLoader(PMIDataLoaderBase):
                 sampler = tio.GridSampler(patch_size=self.patch_size, patch_overlap=overlap)
             else:
                 sampler = self.sampler
-            return subjects, sampler
         else:
             # Set queue_args and queue_kwargs to load the whole image for each object to allow for caching
             shape_of_input = subjects[0].shape
@@ -265,21 +273,26 @@ class PMIImageDataLoader(PMIDataLoaderBase):
             self.sampler = tio.UniformSampler(patch_size=shape_of_input[1:])  # first dim is batch
             self.queue_args[-1] = self.sampler
 
-            # if exclude augment, don't shuffle
-            if exclude_augment:
-                queue_dict = self.queue_kwargs
-                queue_dict['shuffle_subjects'] = False
-            else:
-                queue_dict = self.queue_kwargs
+        # if exclude augment, don't shuffle
+        if exclude_augment:
+            queue_dict = self.queue_kwargs
+            queue_dict['shuffle_subjects'] = False
+        else:
+            queue_dict = self.queue_kwargs
 
-            # Create queue
-            # If option to use post-sampling processing was provided, use CallbackQueue instead
-            if 'patch_sampling_callback' in queue_dict:
-                pass
-            else: # Else use the normal queue
-                pass
-
+        # Create queue
+        # If option to use post-sampling processing was provided, use CallbackQueue instead
+        if  self.patch_sampling_callback != "":
+            _callback_func = eval(self.patch_sampling_callback)
+            _callback_func = partial(_callback_func, **self.patch_sampling_callback_kwargs)
+            queue = CallbackQueue(subjects, *self.queue_args,
+                                  patch_sampling_callback=_callback_func,
+                                  create_new_attribute=self.create_new_attribute,
+                                  **queue_dict)
+        else: # Else use the normal queue
+            # queue_dict.pop('patch_sampling_callback')
+            # queue_dict.pop('create_new_attribute')
             queue = tio.Queue(subjects, *self.queue_args, **queue_dict)
-            self._logger.debug(f"Created queue: {queue}")
-            return queue
+        self._logger.debug(f"Created queue: {queue}")
+        return queue
 
