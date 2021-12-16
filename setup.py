@@ -16,17 +16,17 @@ cmdclass = {}
 ext_modules = []
 if use_cython:
     ext_modules += [
-        Extension("med_img_dataset.computations._LocalNeighborhoodDifferencePattern",
+        Extension("pytorch_med_imaging.med_img_dataset.computations._LocalNeighborhoodDifferencePattern",
                   ["pytorch_med_imaging/med_img_dataset/computations/_LocalNeighborhoodDifferencePattern.pyx"],
                   include_dirs=[numpy.get_include()]),
     ]
     ext_modules += [
-        Extension("med_img_dataset.computations._interpolation",
+        Extension("pytorch_med_imaging.med_img_dataset.computations._interpolation",
                   ["pytorch_med_imaging/med_img_dataset/computations/_interpolation.pxd"],
                   include_dirs=[numpy.get_include()]),
     ]
     ext_modules += [
-        Extension("med_img_dataset.computations._prob_func",
+        Extension("pytorch_med_imaging.med_img_dataset.computations._prob_func",
                   ["pytorch_med_imaging/med_img_dataset/computations/_prob_func.pyx"],
                   include_dirs=[numpy.get_include()]),
     ]
