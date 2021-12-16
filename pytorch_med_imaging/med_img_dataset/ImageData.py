@@ -368,7 +368,8 @@ class ImageDataSet(PMIDataBase):
         return [self.get_size(i) for i in range(len(self.metadata))]
 
     def check_shape_identical(self, target_imset):
-        r"""Check if file shape is identical to another ImageDataSet."""
+        r"""Check if file shape is identical to another ImageDataSet.
+        TODO: Add spacing, origin check into this function (Hint: see match_dimension.py)"""
         assert isinstance(target_imset, ImageDataSet), "Target is not image dataset."
 
         self_shape = self.get_raw_data_shape()
@@ -485,6 +486,7 @@ class ImageDataSet(PMIDataBase):
         index before returning the 3D size.
         """
         if self._byslices >= 0:
+            raise DeprecationWarning("Load by slice is deprecated.")
             return [int(self.metadata[self.get_internal_index(id)]['dim'][i + 1]) for i in range(3)]
         else:
             id = id % len(self.metadata)
@@ -495,9 +497,36 @@ class ImageDataSet(PMIDataBase):
         gives 3D spacing."""
         id = id % len(self.metadata)
         if self._byslices >= 0:
+            raise DeprecationWarning("Load by slice is deprecated.")
             return [round(self.metadata[self.get_internal_index(id)]['pixdim'][i + 1], 8) for i in range(3)]
         else:
             return [round(self.metadata[id]['pixdim'][i+1], 8) for i in range(3)]
+
+    def get_origin(self, id):
+        r"""Get the origin of the image."""
+        origin = [round(self.metadata[id][k], 3) for k in ['qoffset_x',
+                                                          'qoffset_y',
+                                                          'qoffset_z']]
+        return origin
+
+    def get_direction(self, id):
+        direction = [round(self.metadata[id][k], 3) for k in ['quatern_b',
+                                                             'quatern_c',
+                                                             'quatern_d']]
+        return direction
+
+    def get_properties(self, id):
+        r"""Get the properties of the target data inlucing spacing, orientation, origin, dimension...etc"""
+        id = id % len(self.metadata)
+
+        size = self.get_size(id)
+        spacing = self.get_spacing(id)
+        origin = self.get_origin(id)
+        direction = self.get_direction(id)
+        return {'size': size,
+                'spacing': spacing,
+                'origin': origin,
+                'direction': direction}
 
     def __len__(self):
         return self.length
