@@ -125,11 +125,9 @@ class CallbackQueue(Queue):
                 res.extend(p.get())
                 pool.terminate()
                 del pool, p
-                # with futures.ProcessPoolExecutor(max_workers=self.num_workers) as executor:
-                #     res = executor.map(self.callback, self.patches_list[self.num_workers * i: self.num_workers * (i+1)])
 
         else:
-            # Seems like can only do signle thread
+            # Do it in a single thread. Could be slow.
             for p in tqdm(self.patches_list):
                 res.append(self.callback(p))
         self._map_to_new_attr(res)
