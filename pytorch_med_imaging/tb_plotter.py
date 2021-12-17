@@ -240,9 +240,9 @@ class TB_plotter(object):
                 ar = ar[:Zrange]
                 gt = gt[:Zrange]
 
-                self._logger.debug(f"ss: {ss.shape}")
-                self._logger.debug(f"ar: {ar.shape}")
-                self._logger.debug(f"gt: {gt.shape}")
+                # self._logger.debug(f"ss: {ss.shape}")
+                # self._logger.debug(f"ar: {ar.shape}")
+                # self._logger.debug(f"gt: {gt.shape}")
             else:
                 raise IndexError(f"Dimension of the label is incorrect: {gt.shape}")
 
