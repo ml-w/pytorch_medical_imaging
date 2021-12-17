@@ -1,5 +1,5 @@
 from typing import Sequence, Optional, Union
-from functools import wraps, update_wrapper
+from functools import wraps, update_wrapper, partial
 import torch
 from torchio.typing import TypeCallable
 from torchio.data.subject import Subject
@@ -77,7 +77,15 @@ class LambdaAdaptor(Transform):
 
 class CallbackQueue(Queue):
     """
-    An adaptor to execute some callback function after the queue sampled the patches.
+    An adaptor to execute some callback function after the queue sampled the patches. For this to work properly, you
+    must set the data sharing strategy to 'file_system', otherwise, you migth observe "OS Error: too many opened files"
+
+    .. code-block:: python
+        import torch.multiprocessing
+        torch.multiprocessing.set_sharing_strategy('file_system')
+
+    The call back functions should be written in PMI_data_loader.computations, symbols should be exported from the
+    __init__.py file.
 
     Args:
         patch_sampling_callback (callable, Optional):
@@ -103,25 +111,20 @@ class CallbackQueue(Queue):
             return
 
         res = []
-        if self.num_workers  > 1 and False:
-            # This results in OSError: Too many open files, don't know why
+        if self.num_workers  > 1:
+            # This results in OSError: Too many open files, don't know why, but can be worked around by
+            # setting ulimit -n [large number], > 100000
             # Create thread pool
-            for i in range(len(self.patches_list) // self.num_workers + 1):
-                print(i, "/", len(self.patches_list) // self.num_workers + 1)
-                with mpi.Pool(self.num_workers) as pool:
-                    # for each patch, execute function
-                    try:
-                        p = pool.map_async(self.callback,
-                                           self.patches_list[self.num_workers * i: self.num_workers * (i+1)])
-                    except IndexError:
-                        p = pool.map_async(self.callback,
-                                           self.patches_list[self.num_workers * i:])
-                    pool.close()
-                    pool.join()
+            with mpi.Pool(self.num_workers) as pool:
+                # for each patch, execute function
+                p = pool.map_async(self.callback,
+                                       self.patches_list)
+                pool.close()
+                pool.join()
 
-                    res.extend(p.get())
-                    pool.terminate()
-                    del pool, p
+                res.extend(p.get())
+                pool.terminate()
+                del pool, p
                 # with futures.ProcessPoolExecutor(max_workers=self.num_workers) as executor:
                 #     res = executor.map(self.callback, self.patches_list[self.num_workers * i: self.num_workers * (i+1)])
 

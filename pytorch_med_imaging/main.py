@@ -40,7 +40,7 @@ def init_weights(m):
         m.bias.data.fill_(0.01)
 
 
-def prepare_tensorboard_writer(bool_plot, dir_lsuffix, net_nettype, logger):
+def prepare_tensorboard_writer(bool_plot, _, net_nettype, logger):
     if bool_plot:
         try:
             tensorboard_rootdir =  Path(os.environ['TENSORBOARD_LOGDIR'])
@@ -52,11 +52,9 @@ def prepare_tensorboard_writer(bool_plot, dir_lsuffix, net_nettype, logger):
 
             logger.info("Creating TB writer, writing to directory: {}".format(tensorboard_rootdir))
             writer = SummaryWriter(tensorboard_rootdir.joinpath(
-                "%s-%s-%s" % (net_nettype,dir_lsuffix,datetime.datetime.now().strftime("%Y%m%d-%H%M%S"))).__str__()
+                "%s-%s" % (net_nettype,datetime.datetime.now().strftime("%Y%m%d-%H%M%S"))).__str__()
             )
             writer = TB_plotter(writer)
-
-
 
         except:
             logger.warning("Logger creation encounters failure, falling back to no writer.")
@@ -231,9 +229,9 @@ def main(a, config, logger):
         # numcpu = int(os.environ.get('SLURM_CPUS_ON_NODE', default=torch.multiprocessing.cpu_count()))
         numcpu = 0
         if data_pmi_loader_type is None:
-            loader = DataLoader(trainingSubjects, batch_size=param_batchsize, shuffle=True, num_workers=numcpu,
+            loader = DataLoader(trainingSubjects, batch_size=param_batchsize, shuffle=True, num_workers=0,
                                 drop_last=True, pin_memory=True)
-            loader_val = DataLoader(validationSubjects, batch_size=param_batchsize, shuffle=False, num_workers=numcpu,
+            loader_val = DataLoader(validationSubjects, batch_size=param_batchsize, shuffle=False, num_workers=0,
                                     drop_last=False, pin_memory=True) if validation_FLAG else None
         else:
             logger.info("Loading custom dataloader.")

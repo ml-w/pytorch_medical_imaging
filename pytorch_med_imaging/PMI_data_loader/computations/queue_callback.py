@@ -30,6 +30,7 @@ def loc_text_hist(subject: Subject,
     """
     Compute the normalized location and the texture features deduced by local binary patter and local neighbourhood
     pattern. The output vector is concatanated in the format {[LBP_histogram],[LNDP_histogram],[Location],[Distance]}.
+
     Args:
         subject (Subject):
             Subject passed to the function after sampling of patches in Queue.
