@@ -276,7 +276,7 @@ class SolverBase(object):
 
             self._step_callback(s, g, out.cpu().float(), loss.data.cpu(),
                                 step_idx=epoch_number * len(self._data_loader) + step_idx)
-            del s, g, out, loss
+            del s, g, out, loss, mb
             gc.collect()
 
         epoch_loss = np.array(E).mean()

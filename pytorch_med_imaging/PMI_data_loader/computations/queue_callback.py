@@ -14,6 +14,8 @@ from typing import Sequence, Union, Optional
 from torchio import Subject
 from torchio.constants import TYPE, DATA, LOCATION
 
+import time
+
 import gc
 
 __all__ = ['loc_text_hist']
@@ -68,7 +70,7 @@ def loc_text_hist(subject: Subject,
         if ori_shape is not None:
             loc = _getpos(subject[LOCATION], subject.spacing, ori_shape)
             result = torch.cat([result, loc])
-        results.append(result)
+        results.append(torch.clone(result.detach()))
 
     if len(results) > 1:
         return results
@@ -88,21 +90,24 @@ def _img_to_histogram(image: torch.Tensor, bins=256) -> torch.Tensor:
     Returns:
         torch.Tensor
     """
-    # only deal with 2D images
-    image = image.squeeze(0)
-    if image.ndim != 2:
-        raise ArithmeticError("Function is designed for only 2D inputs")
+    # prevent backpropagation
+    with torch.no_grad():
+        time.sleep(np.random.rand()*.5)
+        # only deal with 2D images
+        image = image.squeeze(0)
+        if image.ndim != 2:
+            raise ArithmeticError("Function is designed for only 2D inputs")
 
-    texture_lndp= torch.tensor(lndp(image.data.squeeze().numpy(), 1)).view_as(image).type_as(image)
-    texture_lbp = torch.tensor(lbp(image.data.squeeze().numpy(), 1)).view_as(image).type_as(image)
-    hist_lbp = np.histogram(texture_lbp, bins=bins, range=(0, 255.), density=True)
-    hist_lndp = np.histogram(texture_lndp, bins=bins, range=(0, 255.), density=True)
-    hist_lbp = hist_lbp[0]
-    hist_lndp = hist_lndp[0]
-    feats = torch.cat([torch.tensor(hist_lbp).float(),
-                       torch.tensor(hist_lndp).float()])
-    del texture_lbp, texture_lndp, hist_lbp, hist_lndp
-    gc.collect()
+        texture_lndp= torch.tensor(lndp(image.data.squeeze().numpy(), 1)).view_as(image).type_as(image)
+        texture_lbp = torch.tensor(lbp(image.data.squeeze().numpy(), 1)).view_as(image).type_as(image)
+        hist_lbp = np.histogram(texture_lbp, bins=bins, range=(0, 255.), density=True)
+        hist_lndp = np.histogram(texture_lndp, bins=bins, range=(0, 255.), density=True)
+        hist_lbp = hist_lbp[0]
+        hist_lndp = hist_lndp[0]
+        feats = torch.cat([torch.tensor(hist_lbp).float(),
+                           torch.tensor(hist_lndp).float()])
+        del texture_lbp, texture_lndp, hist_lbp, hist_lndp
+        gc.collect()
     return feats
 
 def _getpos(index: Sequence[int],
@@ -131,4 +136,4 @@ def _getpos(index: Sequence[int],
     rel_coord = torch.Tensor((patch_pos - cent) * spacing)
     distance = torch.Tensor([np.linalg.norm(rel_coord)])
 
-    return torch.cat([rel_coord, distance])
+    return torch.clone(torch.cat([rel_coord, distance]))
