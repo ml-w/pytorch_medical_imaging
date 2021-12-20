@@ -1,3 +1,5 @@
+import gc
+
 import numpy as np
 import torch
 import torch.nn as nn
@@ -139,25 +141,26 @@ class SegmentationSolver(SolverBase):
                 g = self._match_type_with_network(g) # no assumption but should be long in segmentation only.
 
                 if isinstance(s, list):
-                    res = self.net(*s)
+                    res = self.net.forward(*s)
                 else:
-                    res = self.net(s)
+                    res = self.net.forward(s)
                 res = F.log_softmax(res, dim=1)
                 loss = self.lossfunction(res, g.squeeze().long())
-                validation_loss.append(loss.item())
-                self._logger.debug("_val_step_loss: {}".format(loss.data.item()))
+                validation_loss.append(loss.detach().cpu().data.item())
+                self._logger.debug("_val_step_loss: {}".format(loss.cpu().data.item()))
 
                 # Compute hit and misses
                 res_b = res.argmax(dim=1)
-                res_b = res_b.bool().flatten()
-                fg = g.bool().flatten()
+                res_b = res_b.bool().flatten().detach().cpu()
+                fg = g.bool().flatten().detach().cpu()
 
                 tp = (res_b * fg).int().sum().float().cpu().item()
                 tn = (~res_b * ~fg).int().sum().float().cpu().item()
                 fp = (res_b * ~fg).int().sum().float().cpu().item()
                 fn = (~res_b * fg).int().sum().float().cpu().item()
                 perfs.append([tp, tn, fp, fn])
-                del mb
+                del mb, s, g, res_b, fg, tp, tn, fp, fn, loss
+                gc.collect()
 
             tps, tns, fps, fns = torch.tensor(perfs).sum(dim=0)
             dsc = self._DICE(tps, fps, tns, fns)
@@ -301,4 +304,8 @@ class SegmentationSolver(SolverBase):
             s = s[0]
 
         if step_idx % 10 == 0:
-            self._tb_plotter.plot_segmentation(g, out, s.float(), step_idx)
+            # make sure they are not remaining in the gpu.
+            self._tb_plotter.plot_segmentation(g.cpu(), out.cpu(), s.cpu().float(), step_idx)
+
+        # delete references
+        del s, g, out
