@@ -1,6 +1,11 @@
 from typing import Sequence, Optional, Union
 from functools import wraps, update_wrapper, partial
+
 import torch
+import torch.multiprocessing
+torch.multiprocessing.set_sharing_strategy('file_system')
+
+import torchio
 from torchio.typing import TypeCallable
 from torchio.data.subject import Subject
 from torchio.constants import TYPE
@@ -8,13 +13,13 @@ from torchio.transforms import Transform
 from torchio import Queue
 
 from tqdm.auto import tqdm
-import multiprocessing as mpi
+import torch.multiprocessing as mpi
 from ..logger import Logger
 
 __all__ = ['LambdaAdaptor', 'CallbackQueue']
 
 class LambdaAdaptor(Transform):
-    """Applies a user-defined function as transform, store the results to designated attribute if specified
+    r"""Applies a user-defined function as transform, store the results to designated attribute if specified
 
     Args:
         function: Callable that receives and returns a 4D
@@ -37,7 +42,6 @@ class LambdaAdaptor(Transform):
         ...     return 2 * x
         >>> double_transform = tio.Lambda(double)
     """  # noqa: E501
-
     def __init__(
             self,
             function: TypeCallable,
@@ -76,7 +80,7 @@ class LambdaAdaptor(Transform):
 
 
 class CallbackQueue(Queue):
-    """
+    r"""
     An adaptor to execute some callback function after the queue sampled the patches. For this to work properly, you
     must set the data sharing strategy to 'file_system', otherwise, you migth observe "OS Error: too many opened files"
 
@@ -117,20 +121,23 @@ class CallbackQueue(Queue):
             # Create thread pool
             with mpi.Pool(self.num_workers) as pool:
                 # for each patch, execute function
-                p = pool.map_async(self.callback,
-                                       self.patches_list)
+                patch_list = [torchio.Subject(p.copy()) for p in self.patches_list] # Make a copy
+                [p.load() for p in patch_list] # Load in main thread
+                p = pool.map_async(partial(self.callback),
+                                   patch_list)
                 pool.close()
                 pool.join()
 
                 res.extend(p.get())
-                pool.terminate()
-                del pool, p
 
+                pool.terminate()
+                del pool, p, patch_list
         else:
             # Do it in a single thread. Could be slow.
             for p in tqdm(self.patches_list):
                 res.append(self.callback(p))
         self._map_to_new_attr(res)
+        del res
 
     def _map_to_new_attr(self, res):
         # check if list or str was supplied to self.create_new_attribute

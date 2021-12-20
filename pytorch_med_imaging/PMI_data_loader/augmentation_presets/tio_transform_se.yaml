@@ -7,3 +7,5 @@ RandomFlip:
   - 'lr'
 RandomNoise:
   std: [0, 8]
+Resample:
+  - 'input'
