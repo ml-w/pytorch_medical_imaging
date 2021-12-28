@@ -22,7 +22,8 @@ def dicom2nii(folder: str,
               input = None,
               idlist = None,
               prefix = "",
-              debug = False) -> None:
+              debug = False,
+              dump_meta_data = False) -> None:
     """
     Covert a series under specified folder into an nii.gz image.
     This tries to assign a unique ID to each of the converted images, either based on their patient id DICOM tag or
@@ -151,6 +152,16 @@ def dicom2nii(folder: str,
             logger.info(f"Writting: {outname}")
             outimage.SetMetaData('intent_name', headerreader.GetMetaData('0010|0020').rstrip())
             sitk.WriteImage(outimage, outname)
+
+            # Write metadata
+            if dump_meta_data:
+                meta_data_dir = outname.replace('.nii.gz', '.json')
+                all_dicom_tags = {k: headerreader.GetMetaData(k) for k in headerreader.GetMetaDataKeys()}
+                if Path(meta_data_dir).is_file():
+                    logger.warning(f"Overwriting {str(meta_data_dir)}")
+                with open(str(meta_data_dir), 'w') as jf:
+                    json.dump(all_dicom_tags, jf)
+
             del reader
     except Exception as e:
         logger.exception(e)
