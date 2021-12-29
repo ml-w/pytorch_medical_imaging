@@ -22,22 +22,23 @@ def dicom2nii(a, logger):
     logger.info(f"Dirs:\n{dicom_dirs}")
 
     data_formatting.batch_dicom2nii(dicom_dirs,
-                                    a.output,
-                                    a.num_workers, # TODO: Port these two arguments to command too
-                                    None,
-                                    a.idglobber,
-                                    a.usepid,
-                                    a.usefname,
-                                    a.input,
-                                    ids,
-                                    a.prefix,
-                                    a.debug,)
+                                    out_dir = a.output,
+                                    workers = a.num_workers, 
+                                    seq_filters = None,
+                                    idglobber = a.idglobber,
+                                    use_patient_id = a.usepid,
+                                    use_top_level_fname = a.usefname,
+                                    input = a.input,
+                                    idlist = ids,
+                                    prefix = a.prefix,
+                                    debug = a.debug,
+                                    dump_meta_data = a.dump_dicom_tags)
 
 def console_entry():
     parser = argparse.ArgumentParser()
     parser.add_argument('-i', '--input', type=str, action='store', dest='input',
                         help='Input directory that contains the DICOMs.')
-    parser.add_argument('-o', '--output', type=str, action='store', dest='output',
+    parser.add_argument('-o', '--output', type=str, action='store', dest='output', default= None,
                         help='Output directory to hold the nii files.')
     parser.add_argument('-d', '--depth', type=int, action='store', default=3, dest='depth',
                         help='Depth of DICOM file search.')
@@ -45,6 +46,8 @@ def console_entry():
                         help='Specify the globber to glob the ID from the DICOM paths.')
     parser.add_argument('-n', '--num-workers', type=int, default=None,
                         help="Specify number of workers. If not specified, use all CPU cores.")
+    parser.add_argument('--dump-dicom-tags', action='store_true',
+                        help="If this option is specified, the dicom tags will be generated to a json text file.")
     parser.add_argument('--debug', action='store_true',
                         help="Debug mode.")
     parser.add_argument('--prefix', default="", type=str,
