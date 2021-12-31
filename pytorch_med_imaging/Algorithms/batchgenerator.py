@@ -210,15 +210,15 @@ if __name__ == '__main__':
     from pytorch_med_imaging.med_img_dataset import ImageDataSet
     from pathlib import Path
 
-    data_dir = Path('../../NPC_Segmentation/60.Large-Study/v1-All-Data/Original/T2WFS_TRA')
-    table_dir = Path('../../NPC_Segmentation/60.Large-Study/v1-All-Data/v1-DataSheet.xlsx')
-    table = pd.read_excel(table_dir.__str__(), index_col='Study Number')
-    out_file_dir = Path('../../NPC_Segmentation/99.Testing/NPC_BM_LargeStudy/v3-3fold')
+    table_dir = Path('../../NPC_Segmentation/99.Testing/Screening_Segmentation/v1_seg-datasheet.csv')
+    table = pd.read_csv(table_dir.__str__(), index_col='Study Number')
+    data_dir = Path('../../NPC_Segmentation/60.Large-Study/v1-All-Data/Normalized_2/T2WFS_TRA/01.NyulNormalized')
+    out_file_dir = Path('../../NPC_Segmentation/99.Testing/Screening_Segmentation/')
 
 
     regex = r"^[a-zA-Z]{0,3}[0-9]+"
     images = ImageDataSet(data_dir.__str__(), verbose=True, idGlobber=regex)
-    im_ids =images.get_unique_IDs()
+    im_ids =images.get_unique_IDs("^(P|T|NPC|RHO|K)?[0-9]+")
 
     # Check if all images are available
     for i in table.index:
@@ -227,9 +227,9 @@ if __name__ == '__main__':
             table.drop(i, axis=0, inplace=True)
 
     GenerateTestBatch(table.index,
-                      3,
+                      5,
                       out_file_dir.__str__(),
-                      stratification_class=table['TStage'],
+                      stratification_class=table['Tstage'],
                       validation=len(table) // 10,
                       prefix='B'
                       )

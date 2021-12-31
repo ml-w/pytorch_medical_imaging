@@ -2,8 +2,8 @@ from typing import Sequence, Optional, Union
 from functools import wraps, update_wrapper, partial
 
 import torch
-import torch.multiprocessing
-torch.multiprocessing.set_sharing_strategy('file_system')
+# import torch.multiprocessing
+# torch.multiprocessing.set_sharing_strategy('file_system')
 
 import torchio
 from torchio.typing import TypeCallable
@@ -82,7 +82,7 @@ class LambdaAdaptor(Transform):
 class CallbackQueue(Queue):
     r"""
     An adaptor to execute some callback function after the queue sampled the patches. For this to work properly, you
-    must set the data sharing strategy to 'file_system', otherwise, you migth observe "OS Error: too many opened files"
+    must set the data sharing strategy to 'file_system', otherwise, you might observe "OS Error: too many opened files"
 
     .. code-block:: python
         import torch.multiprocessing
@@ -90,6 +90,9 @@ class CallbackQueue(Queue):
 
     The call back functions should be written in PMI_data_loader.computations, symbols should be exported from the
     __init__.py file.
+
+    .. warning::
+        * Deadlock could occur easily using this Queue.
 
     Args:
         patch_sampling_callback (callable, Optional):
@@ -107,7 +110,7 @@ class CallbackQueue(Queue):
         super(CallbackQueue, self).__init__(*args, **kwargs)
         self.callback = patch_sampling_callback
         self.create_new_attribute = create_new_attribute
-
+        self._logger = Logger[__class__.__name__]
 
     def _fill(self):
         super(CallbackQueue, self)._fill()
@@ -116,22 +119,49 @@ class CallbackQueue(Queue):
 
         res = []
         if self.num_workers  > 1:
-            # This results in OSError: Too many open files, don't know why, but can be worked around by
-            # setting ulimit -n [large number], > 100000
-            # Create thread pool
-            with mpi.Pool(self.num_workers) as pool:
-                # for each patch, execute function
-                patch_list = [torchio.Subject(p.copy()) for p in self.patches_list] # Make a copy
-                [p.load() for p in patch_list] # Load in main thread
-                p = pool.map_async(partial(self.callback),
-                                   patch_list)
-                pool.close()
-                pool.join()
+            #! Note:
+            #   This results in OSError: Too many open files, don't know why, but can be worked around by
+            #   setting ulimit -n [large number], > 100000
+            #   Also, there is a fair chance that this will cause memory deadlock and hangs the whole process, thus the
+            #   operations are repeated until it works.
+            # Things tried:
+            #   * use torch.mpi, seems helpful but not fully resolve
+            #   * rerun super._fill(), lead to the dataloader thread incorrectly hangs
 
-                res.extend(p.get())
+            #  Create thread pool
+            while len(res) == 0:
+                try:
+                    [s.load() for s in self.patches_list] # pre-load the patches
+                    pool = mpi.Pool(self.num_workers)
+                    p = pool.map_async(self.callback,
+                                       self.patches_list)
+                    pool.close()
+                    pool.join()
 
-                pool.terminate()
-                del pool, p, patch_list
+                    res.extend(p.get(300))
+                    pool.terminate()
+                    del pool, p
+                except:
+                    # reset and clear the pool worker and try again
+                    pool.terminate()
+                    pool.join()
+                    del pool, p
+                    res = []
+
+                    # save the details of the failed patch list
+                    self._logger.debug(f"{self.patches_list}")
+                    self._logger.debug("{}".format('\n'.join(
+                        [','.join([str(sub.get_first_image().path),
+                                   str(sub[torchio.LOCATION])])
+                         for sub in self.patches_list]))
+                    )
+
+                    # make a copy to avoid deadlock
+                    self.patches_list = [Subject(sub) for sub in self.patches_list]
+
+
+
+
         else:
             # Do it in a single thread. Could be slow.
             for p in tqdm(self.patches_list):

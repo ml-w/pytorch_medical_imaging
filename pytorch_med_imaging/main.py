@@ -230,9 +230,9 @@ def main(a, config, logger):
         numcpu = 0
         if data_pmi_loader_type is None:
             loader = DataLoader(trainingSubjects, batch_size=param_batchsize, shuffle=True, num_workers=0,
-                                drop_last=True, pin_memory=True)
+                                drop_last=True, pin_memory=False)
             loader_val = DataLoader(validationSubjects, batch_size=param_batchsize, shuffle=False, num_workers=0,
-                                    drop_last=False, pin_memory=True) if validation_FLAG else None
+                                    drop_last=False, pin_memory=False) if validation_FLAG else None
         else:
             logger.info("Loading custom dataloader.")
             loader_factory = PMIBatchSamplerFactory()
@@ -328,9 +328,8 @@ def main(a, config, logger):
             logger.log_print_tqdm("[Epoch %04d] EpochLoss: %.010f LR: %.010f"%(i, epoch_loss, current_lr))
 
             # Plot network weight into histograms
-            if bool_plot:
-                writer.plot_weight_histogram(solver.get_net(), i)
-
+            # if bool_plot:
+            #     writer.plot_weight_histogram(solver.get_net(), i)
 
     # Evaluation mode
     else:
@@ -398,7 +397,7 @@ def main(a, config, logger):
     pass
 
 
-def console_entry():
+def console_entry(raw_args=None):
     parser = argparse.ArgumentParser(description="Training reconstruction from less projections.")
     parser.add_argument("--config", metavar='config', action='store',
                         help="Config .ini file.", type=str)
@@ -424,7 +423,7 @@ def console_entry():
                         help="Use syntax '(section1,key1)=value1;(section2,key2)=value' to override any"
                              "settings specified in the config file. Note that no space is allowed.")
 
-    a = parser.parse_args()
+    a = parser.parse_args(raw_args)
 
     assert os.path.isfile(a.config), f"Cannot find config file {a.config}! Curdir: {os.listdir('.')}"
 

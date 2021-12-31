@@ -92,9 +92,9 @@ def _img_to_histogram(image: torch.Tensor, bins=256) -> torch.Tensor:
     """
     # prevent backpropagation
     with torch.no_grad():
-        time.sleep(np.random.rand()*.5)
+        # time.sleep(np.random.rand()) # Give it a random pause to avoid deadlocks
         # only deal with 2D images
-        image = image.squeeze(0)
+        image = torch.clone(image).squeeze()
         if image.ndim != 2:
             raise ArithmeticError("Function is designed for only 2D inputs")
 

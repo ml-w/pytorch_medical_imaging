@@ -4,6 +4,9 @@ import numpy as np
 import re
 import multiprocessing as mpi
 import random
+import json
+
+from functools import partial
 from pathlib import Path
 sitk.ProcessObject_GlobalWarningDisplayOff()
 
@@ -14,7 +17,7 @@ from .preprocessing import recursive_list_dir
 __all__ = ['dicom2nii', 'batch_dicom2nii']
 
 def dicom2nii(folder: str,
-              out_dir: str =None,
+              out_dir: str = None,
               seq_filters: list or str = None,
               idglobber: str = None,
               use_patient_id: bool = False,
@@ -170,29 +173,32 @@ def dicom2nii(folder: str,
 
 def batch_dicom2nii(folderlist, out_dir,
                     workers=8,
-                    seq_fileters=None,
-                    idglobber = None,
-                    use_patient_id = False,
-                    use_top_level_fname = False,
-                    input = None,
-                    idlist = None,
-                    prefix = "",
-                    debug = False,
+                    **kwargs
                     ):
     r"""
     Batch version, use entry point in script instead of using this directly.
+
+    See Also:
+        func:`dicom2nii`
     """
     import multiprocessing as mpi
     logger = Logger['mpi_dicom2nii']
 
-    pool = mpi.Pool(workers)
-    for f in folderlist:
-        logger.info(f"Creating job for: {f}.")
-        # dicom2nii(f, out_dir, seq_fileters, idglobber, use_patient_id,use_top_level_fname, input, idlist)
-        pool.apply_async(dicom2nii, args=[f, out_dir, seq_fileters, idglobber, use_patient_id,
-                                          use_top_level_fname, input, idlist, prefix, debug])
-    pool.close()
-    pool.join()
+    if workers > 1:
+        pool = mpi.Pool(workers)
+        for f in folderlist:
+            logger.info(f"Creating job for: {f}.")
+            func = partial(dicom2nii,
+                           out_dir = out_dir,
+                           **kwargs
+                           )
+            # dicom2nii(f, out_dir, seq_fileters, idglobber, use_patient_id,use_top_level_fname, input, idlist)
+            pool.apply_async(func, args=[f])
+        pool.close()
+        pool.join()
+    else:
+        for f in folderlist:
+            dicom2nii(f, out_dir=out_dir, **kwargs)
 
 
 
