@@ -98,9 +98,8 @@ class InferencerBase(object):
         Returns:
             out (torch.Tensor)
         """
-        assert isinstance(tensor, list) or torch.is_tensor(tensor) or isinstance(tensor, tuple),\
-            "_match_type_with_network: input type error! Expected list, tuple or torch.Tensor, "\
-            "got {} instead.".format(type(tensor))
+        assert isinstance(tensor, list) or torch.is_tensor(tensor) or isinstance(tensor, tuple), \
+            "_match_type_with_network: input type error! Got type: {}".format(tensor)
 
         for name, module in self.net.named_modules():
             try:
@@ -125,14 +124,23 @@ class InferencerBase(object):
             else:
                 if tensor.type() == self._net_weight_type:
                     return tensor
-        except:
-            self._logger.warning("Can't determine if type is already followed.")
+        except Exception as e:
+            self._logger.warning(f"Can't determine if type is already followed. Input type is {type(tensor)}")
+            self._logger.exception(f"Get error {e}")
 
-        # We also expect list or tuple input too.
-        out = [ss.type(self._net_weight_type) for ss in tensor] if isinstance(tensor, list) or \
-                                                                   isinstance (tensor,tuple) else \
-            tensor.type(self._net_weight_type)
+
+        # We also expect list input too.
+        if isinstance(tensor, list) or isinstance(tensor, tuple):
+            out = []
+            for ss in tensor:
+                try:
+                    out.append(ss.type(self._net_weight_type))
+                except:
+                    out.append(ss)
+        else:
+            out = tensor.type(self._net_weight_type)
         return out
+
 
     def get_net(self):
         return self.net
@@ -198,8 +206,21 @@ class InferencerBase(object):
         """
         out = []
         for key in unpacking_keys:
-            try:
-                out.append(minibatch[key][tio.DATA])
-            except AttributeError:
-                out.append(minibatch[key])
+            if isinstance(key, (tuple, list)):
+                _out = []
+                for kk in key:
+                    try:
+                        _out.append(minibatch[kk][tio.DATA])
+                    except (AttributeError, IndexError):
+                        _out.append(minibatch[kk])
+                    except Exception as e:
+                        self._logger.exception(f"Receive unknown exception during minibactch unpacking for: {key}")
+                out.append(tuple(_out))
+            else:
+                try:
+                    out.append(minibatch[key][tio.DATA])
+                except (AttributeError, IndexError):
+                    out.append(minibatch[key])
+                except Exception as e:
+                    self._logger.exception(f"Receive unknown exception during minibactch unpacking for: {key}")
         return out

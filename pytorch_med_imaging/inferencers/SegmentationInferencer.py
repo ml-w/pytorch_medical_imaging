@@ -75,7 +75,8 @@ class SegmentationInferencer(InferencerBase):
 
     def _prepare_data(self):
         r"""Currently torchio only can perform inference using GridSampler."""
-        self._inference_subjects, self._inference_sampler = self.pmi_data_loader._load_data_set_inference()
+        self._inference_subjects, self._loader_queue,  self._inference_sampler = \
+            self.pmi_data_loader._load_data_set_inference()
 
     def _get_net_out_features(self):
         raise DeprecationWarning("This function is deprecated")
@@ -110,9 +111,16 @@ class SegmentationInferencer(InferencerBase):
                         self._inference_sampler.set_subject(subject)
                     elif isinstance(self._inference_sampler, tio.WeightedSampler):
                         self._inference_sampler.set_subject(subject, self.inf_samples_per_vol)
-                    dataloader = DataLoader(self._inference_sampler, batch_size=self.batch_size, num_workers=8)
+
+                    # Replace subjects in queue and reset the queue
+                    self._loader_queue._subjects_iterable = None
+                    self._loader_queue.subjects_dataset = [subject]
+
+                    dataloader = DataLoader(self._loader_queue, batch_size=self.batch_size, num_workers=0)
                     aggregator = tio.GridAggregator(self._inference_sampler, 'max')
 
+
+                    ndim = subject.get_first_image()[tio.DATA].dim()  # Assume channel dim always exist even if only has 1 channel
                     for mb in tqdm(dataloader, desc="Patch", position=1):
                         s = self._unpack_minibatch(mb, self.unpack_keys_inf)
                         s = self._match_type_with_network(s)
@@ -121,6 +129,11 @@ class SegmentationInferencer(InferencerBase):
                             out = self.net.forward(*s).squeeze()
                         else:
                             out = self.net.forward(s).squeeze()
+                        self._logger.debug(f"{out.shape}, {mb[tio.LOCATION].shape}")
+                        # If the original input is 3D, but 2D patches was given out here, expand it back to 3D
+                        if ndim == 4:
+                            while out.dim() < 5: # should be B x C x H x W x Z
+                                out = out.unsqueeze(-1) # last dimension is the slice dimension
                         aggregator.add_batch(out, mb[tio.LOCATION])
                     out = aggregator.get_output_tensor()
                     out = F.log_softmax(out, dim=0)
@@ -144,6 +157,7 @@ class SegmentationInferencer(InferencerBase):
         # terminated if there are not gt data
         if self.pmi_data_loader.data['gt'] is None:
             self._logger.info("Ground-truth data was not specified.")
+            return
         else:
             self._logger.info(f"Ground-truth data specified, trying to compute summary.")
 

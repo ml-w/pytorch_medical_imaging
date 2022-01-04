@@ -209,11 +209,14 @@ class PMIImageDataLoader(PMIDataLoaderBase):
 
         # Create subjects & queue
         data_exclude_none = {k: v for k, v in self.data.items() if v is not None}
-        subjects = [tio.Subject(**{k:v for k, v in zip(self.data.keys(), row)})
+        subjects = [tio.Subject(**{k:v for k, v in zip(data_exclude_none.keys(), row)})
                     for row in zip(*data_exclude_none.values())]
+        subjects = tio.SubjectsDataset(subjects=subjects)
 
         # No transform for subjects
-        return self._create_queue(True, subjects)
+        r = [subjects]
+        r.extend(list(self._create_queue(True, subjects, return_sampler=True)))
+        return r
 
     def _prepare_data(self, gt_out, img_out, mask_out, prob_out):
         """
@@ -256,7 +259,7 @@ class PMIImageDataLoader(PMIDataLoaderBase):
             else:
                 self.patch_size = ref_im_shape
 
-    def _create_queue(self, exclude_augment, subjects):
+    def _create_queue(self, exclude_augment, subjects, return_sampler=False):
         # Return the queue
         if not self.patch_size is None:
             overlap = [ps // 2 for ps in self.patch_size]
@@ -294,5 +297,9 @@ class PMIImageDataLoader(PMIDataLoaderBase):
             # queue_dict.pop('create_new_attribute')
             queue = tio.Queue(subjects, *self.queue_args, **queue_dict)
         self._logger.debug(f"Created queue: {queue}")
-        return queue
+
+        if return_sampler:
+            return queue, sampler
+        else:
+            return queue
 
