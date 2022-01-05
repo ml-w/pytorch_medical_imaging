@@ -40,10 +40,10 @@ def init_weights(m):
         m.bias.data.fill_(0.01)
 
 
-def prepare_tensorboard_writer(bool_plot, _, net_nettype, logger):
+def prepare_tensorboard_writer(bool_plot, _, net_nettype, logger) -> TB_plotter:
     if bool_plot:
         try:
-            tensorboard_rootdir =  Path(os.environ['TENSORBOARD_LOGDIR'])
+            tensorboard_rootdir =  Path(os.environ.get('TENSORBOARD_LOGDIR', '/media/storage/PytorchRuns'))
             if not tensorboard_rootdir.is_dir():
                 logger.log_print_tqdm("Cannot read from TENORBOARD_LOGDIR, retreating to default path...",
                                       logging.WARNING)
@@ -56,7 +56,7 @@ def prepare_tensorboard_writer(bool_plot, _, net_nettype, logger):
             )
             writer = TB_plotter(writer)
 
-        except:
+        except Exception as e:
             logger.warning("Logger creation encounters failure, falling back to no writer.")
             logger.exception("Logger creation encounters failure.")
             writer = None
@@ -162,7 +162,6 @@ def main(a, config, logger):
     #-----------------
     # Check directories
     for key in list(config['Data']):
-
         d = config['Data'].get(key)
         if not os.path.isfile(d) and not os.path.isdir(d) and not d == "":
             if d.endswith('.csv'):
@@ -187,8 +186,6 @@ def main(a, config, logger):
         logger.exception("Fail creating network.")
         logger.critical("Terminate.")
         return 2
-
-
 
     # Create data object
     try:
