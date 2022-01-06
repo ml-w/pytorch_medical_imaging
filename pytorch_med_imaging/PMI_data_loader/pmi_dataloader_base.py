@@ -323,5 +323,5 @@ class PMIDataLoaderBase(object):
                     self._logger.error(f"Failed to create augmentation from file: {self.augmentation}. Got {e}")
                     self.augmentation = False
             else:
-                self._logger.warning("Transform file provided but could not be located!")
+                self._logger.warning(f"Transform file provided but could not be located! Got {str(self.augmentation)}")
 

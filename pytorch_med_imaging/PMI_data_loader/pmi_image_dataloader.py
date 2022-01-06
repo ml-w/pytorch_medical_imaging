@@ -211,7 +211,7 @@ class PMIImageDataLoader(PMIDataLoaderBase):
         data_exclude_none = {k: v for k, v in self.data.items() if v is not None}
         subjects = [tio.Subject(**{k:v for k, v in zip(data_exclude_none.keys(), row)})
                     for row in zip(*data_exclude_none.values())]
-        subjects = tio.SubjectsDataset(subjects=subjects)
+        subjects = tio.SubjectsDataset(subjects=subjects, transform=self.transform)
 
         # No transform for subjects
         r = [subjects]
@@ -229,6 +229,7 @@ class PMIImageDataLoader(PMIDataLoaderBase):
                 'probmap': prob_out,
                 'uid': img_out.get_unique_IDs()
                 }
+        data['orientation'] = [i.orientation for i in img_out]
         for k in ['input', 'gt', 'mask', 'probmap']:
             if isinstance(data[k], med_img_dataset.ImageDataSet):
                 data[f'{k}-shape'] = data[k].get_raw_data_shape()

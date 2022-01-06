@@ -9,6 +9,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 import torchio as tio
 import numpy as np
+import SimpleITK as sitk
 from tqdm import *
 from configparser import ConfigParser
 
@@ -119,9 +120,8 @@ class SegmentationInferencer(InferencerBase):
                     dataloader = DataLoader(self._loader_queue, batch_size=self.batch_size, num_workers=0)
                     aggregator = tio.GridAggregator(self._inference_sampler, 'max')
 
-
                     ndim = subject.get_first_image()[tio.DATA].dim()  # Assume channel dim always exist even if only has 1 channel
-                    for mb in tqdm(dataloader, desc="Patch", position=1):
+                    for i, mb in enumerate(tqdm(dataloader, desc="Patch", position=1)):
                         s = self._unpack_minibatch(mb, self.unpack_keys_inf)
                         s = self._match_type_with_network(s)
 
@@ -136,10 +136,24 @@ class SegmentationInferencer(InferencerBase):
                                 out = out.unsqueeze(-1) # last dimension is the slice dimension
                         aggregator.add_batch(out, mb[tio.LOCATION])
                     out = aggregator.get_output_tensor()
-                    out = F.log_softmax(out, dim=0)
-                    out[0] += 1E-7 # Work arround be behavior of torch.argmax(torch.zerso(3)) = 2 instead of 0
-                    out = torch.argmax(out, dim=0)
-                    out = out.squeeze().permute(2, 1, 0).int()    # torchio convention (H x W x D) to sitk convention (D x W x H)
+
+                    out[0] += 1E-7 # Work arround be behavior of torch.argmax(torch.zero(3)) = 2 instead of 0
+                    out = torch.argmax(out, dim=0, keepdim=True).int()  # Keep dim for recovering orientation
+
+                    # If augmentation was applied, inversely apply it to recover the original image
+                    try:
+                        original_orientaiton = ''.join(subject['orientation'])
+                        self._logger.info(f"Trying to recover orientation to: {original_orientaiton}")
+                        _sub = tio.Subject(a=tio.LabelMap(tensor=out))
+                        _sub = sitk.DICOMOrient(_sub['a'].as_sitk(), original_orientaiton)
+                        out = torch.from_numpy(sitk.GetArrayFromImage(_sub)).int()
+                        # out = _sub['gt'][tio.DATA]
+                    except Exception as e:
+                        self._logger.exception(f"Recovering orientation failed: {e}")
+                        # torchio convention (H x W x D) to sitk convention (D x W x H)
+                        # * Note: No need if recovery of the orientation was done properly since as_sitk do the job - 6/1/2022
+                        out = out.squeeze().permute(2, 1, 0).int()
+
                     in_image_data.write_uid(out, index, self.outdir)
             else:
                 # Else operate directly on subject dataset

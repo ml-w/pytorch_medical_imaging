@@ -265,9 +265,10 @@ class ImageDataSet(PMIDataBase):
             self.data.append(im)
 
             # read metadata
-            im = nib.load(f)
-            im_header = im.header
+            nib_im = nib.load(f)
+            im_header = nib_im.header
             im_header_dict = {key: im_header.structarr[key].tolist() for key in im_header.structarr.dtype.names}
+            im_header_dict['orientation'] = im.orientation
             self.metadata.append(im_header_dict)
 
             self._raw_length += 1
@@ -285,15 +286,19 @@ class ImageDataSet(PMIDataBase):
             file_ids = [re.search(self._id_globber, f) for f in file_basenames]
             file_ids = [v.group() for v in file_ids if v is not None]
 
-            if isinstance(self._filterargs['idlist'], str):
+            if isinstance(self._filterargs['idlist'], str) and not self._filterargs['idlist'] == "":
+                # If its a file directory
                 self._idlist = [r.strip() for r in open(self._filterargs['idlist'], 'r').readlines()]
-            elif self._filterargs['idlist'] is None:
-                # Glob ids from filenames instead
+            elif isinstance(self._filterargs['idlist'], (list, tuple)):
+                # If its a list of IDs
+                self._idlist = self._filterargs['idlist']
+            elif self._filterargs['idlist'] in (None, ""):
+                # If None specified, glob ids from filenames instead
                 self._logger.warning('Idlist input is None!')
                 self._idlist = file_ids
-                pass
             else:
-                self._idlist = self._filterargs['idlist']
+                raise TypeError(f"ID list is not correclty spefified. Expect str, list or None, got "
+                                f"{self._filterargs['idlsit']} instead")
 
             self._logger.debug(f'Target IDs: {self._idlist}')
             self._logger.debug(f'All IDs: {file_ids}')
@@ -549,7 +554,7 @@ class ImageDataSet(PMIDataBase):
             "--------------\n"%(__class__.__name__, self.rootdir, self.length)
         # "File Paths\tSize\t\tSpacing\t\tOrigin\n"
         # printable = {'File Name': []}
-        printable = {'ID': [], 'File Name': [], 'Size': [], 'Spacing': [], 'Origin': []}
+        printable = {'ID': [], 'File Name': [], 'Size': [], 'Spacing': [], 'Origin': [], 'Orientation': []}
         for i in range(len(self.data_source_path)):
             id_mo = re.search(self._id_globber, os.path.basename(self.data_source_path[i]))
             id_mo = 'None' if id_mo is None else id_mo.group()
@@ -562,6 +567,7 @@ class ImageDataSet(PMIDataBase):
             printable['Origin'].append([round(self.metadata[i][k], 3) for k in ['qoffset_x',
                                                                                 'qoffset_y',
                                                                                 'qoffset_z']])
+            printable['Orientation'].append(self.metadata[i]['orientation'])
         data = df.from_dict(data=printable)
         data = data.set_index('ID')
         s += data.to_string()
