@@ -1,0 +1,65 @@
+dicom2nii:
+  description: Convert a series of DICOM images to a nifti image.
+  main: pytorch_med_imaging.scripts.dicom2nii -i ./init_input
+  flags-dest: args
+  flags:
+    input:
+      arg-skip: true
+    output: ./temp_dir
+    depth: 3
+    idglobber: ".*"
+    num-workers: 16
+    dump-dicom-tags: true
+  sourcecode:
+    select:
+      - '*.py'
+      - '*.pyx'
+      - '*.txt'
+      - '*.so'
+  requires:
+      - file: './asset'
+      - file: ${input}
+        rename: .* init_input
+  env:
+    LOG_INIT_SKIP: 1
+
+normalize:
+  description: Normalize T2w-fs images.
+  main: guild_operations.run_graph_inference -i ./temp_dir
+  flags-dest: args
+  flags:
+    output:     None
+    state-dir:  './asset/trained_states'
+    file:       './asset/t2w_normalization.yaml'
+    numworker:  8
+  sourcecode:
+    select:
+      - '*.py'
+      - '*.pyx'
+      - '*.txt'
+      - '*.so'
+  requires:
+    - operation: dicom2nii
+      select: 'temp_dir'
+    - file: './asset'
+  env:
+    LOG_INIT_SKIP: 1
+
+segment:
+  description: Call deep learning script to segment the normalized image
+
+radiomics:
+  description: Load radiomics models and generate results
+
+dl_classificaiton:
+  description: Call deep learning script to classify whether the case is benign or normal
+
+
+pipeline:
+  description: Run everything from DICOM to report gen.
+  flags:
+    input: None
+    output: ./output_dir
+  steps:
+    - dicom2nii input=${input} output=./temp_dir
+    - normalize input=./temp_dir output=./temp_dir
