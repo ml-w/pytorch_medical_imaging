@@ -2,13 +2,12 @@ import SimpleITK as sitk
 import numpy as np
 import os
 from pytorch_med_imaging.logger import Logger
-from utils import get_fnames_by_IDs
+from pytorch_med_imaging.Algorithms.utils import get_fnames_by_IDs
 import argparse
 import sys
 import fnmatch
 
-global logger
-
+__all__ = ['keep_n_largest_connected_body', 'edge_smoothing', 'main']
 
 def keep_n_largest_connected_body(in_im: sitk.Image or str, n: int = 1):
     r"""
@@ -32,13 +31,12 @@ def keep_n_largest_connected_body(in_im: sitk.Image or str, n: int = 1):
 
     # extract largest connected body
     filter = sitk.ConnectedComponentImageFilter()
-    out_im = filter.Execute(out_im)
-    n_objs = filter.GetObjectCount()
-
+    conn_im = filter.Execute(out_im)
+    n_objs = filter.GetObjectCount() - 1  # 0 also counted
 
     shape_stats = sitk.LabelShapeStatisticsImageFilter()
-    shape_stats.Execute(out_im)
-    sizes = [shape_stats.GetPhysicalSize(i) for i in range(1, filter.GetObjectCount())]
+    shape_stats.Execute(conn_im)
+    sizes = [shape_stats.GetPhysicalSize(i) for i in range(1, filter.GetObjectCount() + 1)]
     sizes_rank = np.argsort(sizes)[::-1] # descending order
     keep_labels = sizes_rank[:n] + 1
 
@@ -49,7 +47,7 @@ def keep_n_largest_connected_body(in_im: sitk.Image or str, n: int = 1):
             continue
         else:
             # remove from original input if label is not kept.
-            out_im = out_im - sitk.Mask(in_im, in_im == i + 1)
+            out_im = out_im - sitk.Mask(out_im, conn_im == (i + 1))
 
     # Make output binary if only largest is extracted.
     if n == 1:
@@ -84,12 +82,12 @@ def edge_smoothing(in_im: sitk.Image or str, radius):
             continue
 
         open_filter = sitk.BinaryMorphologicalOpeningImageFilter()
-        open_filter.SetKernelType(sitk.BinaryMorphologicalOpeningImageFilter.Ball)
+        open_filter.SetKernelType(sitk.sitkBall)
         open_filter.SetKernelRadius(radius)
         im_slice = open_filter.Execute(im_slice)
 
         clo_filter = sitk.BinaryMorphologicalClosingImageFilter()
-        clo_filter.SetKernelType(sitk.BinaryMorphologicalOpeningImageFilter.Ball)
+        clo_filter.SetKernelType(sitk.sitkBall)
         clo_filter.SetKernelRadius(radius)
         out_slice = clo_filter.Execute(im_slice)
         out_slice = sitk.JoinSeries(out_slice)
@@ -120,8 +118,11 @@ def main(raw_args=None):
         os.makedirs(args.output, exist_ok=True)
 
     print("Creating logger...")
-    logger = Logger(logger_name='Post-processing', log_dir=os.path.join(args.output, 'post-processing.log'))
-    logger._verbose = args.verbose
+    if Logger.global_logger is None:
+        logger = Logger(logger_name='post-processing', log_dir=os.path.join(args.output, 'post-processing.log'),
+                        verbose=args.verbose)
+    else:
+        logger = Logger['post-processing']
 
     # Hook execptions
     sys.excepthook = logger.exception_hook
@@ -152,7 +153,7 @@ def main(raw_args=None):
         logger.info(f"Processing {f}")
 
         try:
-            out_im = largest_connected_body(f)
+            out_im = keep_n_largest_connected_body(f, 1)
             out_im = edge_smoothing(out_im, args.smooth)
         except Exception:
             logger.exception(f"Error occured for {f}")
@@ -161,10 +162,10 @@ def main(raw_args=None):
         sitk.WriteImage(out_im, os.path.join(args.output, os.path.basename(f)))
         logger.info(f"Writing to {out_fname}")
 
-
-if __name__ == '__main__':
-    test_arguments = ['-i', '/home/lwong/FTP/temp/survival_seg/Seg_everything/CE-T1WFS/Survival',
-                      '-o', '/home/lwong/FTP/temp/survival_seg/Seg_everything/CE-T1WFS/Survival_post',
-                      '-v']
-
-    main(test_arguments)
+#
+# if __name__ == '__main__':
+#     test_arguments = ['-i', '/home/lwong/Source/Repos/NPC_Segmentation/NPC_Segmentation/00.RAW/HKU/segment_output',
+#                       '-o', '/home/lwong/Source/Repos/NPC_Segmentation/NPC_Segmentation/00.RAW/HKU/segment_output_2',
+#                       '-v']
+#
+#     main(test_arguments)
