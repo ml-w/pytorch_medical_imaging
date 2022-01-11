@@ -14,6 +14,7 @@ from pathlib import Path
 import argparse
 import tempfile
 
+from .report_gen import *
 import SimpleITK as sitk
 global logger
 logger = None
@@ -78,6 +79,7 @@ def main(raw_args=None):
     # Normalize target
     nii_files = list(temp_dirname.iterdir())
     normalized_dir = temp_dirname.joinpath('normalized')
+    normalized_dir.mkdir()
     if len(nii_files) == 0:
         raise FileNotFoundError(f"Nothing is found in the temporary directory.")
     run_graph_inference(f"-i {str(temp_dirname)} -o {str(normalized_dir)} "
@@ -90,7 +92,9 @@ def main(raw_args=None):
     # shutil.copy2(str(input), str(normalized_dir.joinpath('NyulNormalizer')))
     # shutil.copy2(str(input.with_name('1183.nii.gz')), str(normalized_dir.joinpath('HuangThresholding')))
 
+    #=================
     # Run segmentation
+    #=================
     override_tags = {
         '(Data,input_dir)': str(normalized_dir.joinpath('NyulNormalizer')),
         '(Data,prob_map_dir)': str(normalized_dir.joinpath('HuangThresholding')),
@@ -98,11 +102,11 @@ def main(raw_args=None):
     }
     override_string = ';'.join(['='.join([k, v]) for k, v in override_tags.items()])
     command = f"--config=./asset/pmi_config/NPC_seg.ini " \
-              f"--override={override_string} --inference".split()
+              f"--override={override_string} --inference --verbose".split()
     logger.debug(f"{command}")
     pmi_main(command)
 
-    # Slightly grow the segmented region
+    # Slightly grow the segmented region such that the patch sampling is done better
     grow_segmnetation(str(segment_output))
 
     # Re-run segmentation using the previous segmentation as sampling reference.
@@ -113,14 +117,17 @@ def main(raw_args=None):
     }
     override_string = ';'.join(['='.join([k, v]) for k, v in override_tags.items()])
     command = f"--config=./asset/pmi_config/NPC_seg.ini " \
-              f"--override={override_string} --inference".split()
+              f"--override={override_string} --inference --verbose".split()
     logger.debug(f"{command}")
     pmi_main(command)
 
     # Copy the image to output folder
-    if output_dir.joinpath('normalized_image').is_dir():
-        shutil.rmtree(str(output_dir.joinpath('normalized_image')))
-    shutil.copytree(str(normalized_dir.joinpath('NyulNormalizer')), str(output_dir.joinpath('normalized_image')))
+    normalized_image_dir = output_dir.joinpath('normalized_image')
+    if normalized_image_dir.is_dir():
+        shutil.rmtree(str(normalized_image_dir))
+    shutil.copytree(str(normalized_dir.joinpath('NyulNormalizer')), str(normalized_image_dir))
+    [shutil.copy2(str(t), str(normalized_image_dir)) for t in temp_dirname.glob('*.json')]
+
 
     # Segmentation post-processing
     command = f"-i {str(segment_output)} -o {str(segment_output)} -v".split()
@@ -128,9 +135,26 @@ def main(raw_args=None):
 
     # Run radiomics
 
-    # Run deep learning
+    #============================
+    # Run deep learning diagnosis
+    #============================
+    dl_output_dir = output_dir.joinpath('dl_diag.csv')
+    override_tags = {
+        '(Data,input_dir)': str(normalized_dir.joinpath('NyulNormalizer')),
+        '(Data,mask_dir)': str(segment_output),
+        '(Data,output_dir)': str(dl_output_dir)
+    }
+    override_string = ';'.join(['='.join([k, v]) for k, v in override_tags.items()])
+    command = f"--config=./asset/pmi_config/BM_nyul_v2.ini " \
+              f"--override={override_string} --inference".split()
+    pmi_main(command)
+
+    # Convert DL outputs to report gen data
 
     # Run gen report
+    report_dir = output_dir.joinpath('report')
+    report_dir.mkdir(exist_ok=True)
+    process_output(output_dir, report_dir)
 
 
     temp_dir.cleanup()
@@ -202,35 +226,6 @@ def get_t2w_series_files(in_dir):
         file_list = _file_list[0][1]
     return file_list
 
-def post_processing_seg(input_dir, output_dir):
-    global logger
-
-    input_dir = Path(input_dir)
-    output_dir = Path(output_dir)
-    assert input_dir.is_dir(), "Input should be a directory containing all target segmentations."
-    if not output_dir.is_dir():
-        output_dir.mkdir()
-
-    # Process all the segmentations
-    for r in output_dir.iterdir():
-        # Continue if not nii
-        if not (r.suffix.find('nii') >= 0 or r.suffix.find('gz') >= 0):
-            logger.warning(f"Find non-nii file: {str(r)}")
-            continue
-
-        # Load segmentation
-        seg = sitk.ReadImage(r)
-
-        # Extract 3D largeest connected object
-
-
-
-    # Perform 2D opening
-
-    # Compute the volume and write it to a dict
-
-    # Save files
-
 def grow_segmnetation(input_segment: Union[Path, str]) -> None:
     global logger
 
@@ -241,7 +236,54 @@ def grow_segmnetation(input_segment: Union[Path, str]) -> None:
         input_seg_dir = list(input_seg_dir.iterdir())
 
     for f in input_seg_dir:
+        # Process only nii files
+        if f.suffix.find('nii') < 0 and f.suffix.find('gz') < 0:
+            continue
         logger.info(f"Growing segmentation: {str(f)}")
         seg = sitk.Cast(sitk.ReadImage(str(f)), sitk.sitkUInt8)
         seg_out = sitk.BinaryDilate(seg, [5, 5, 2])
         sitk.WriteImage(seg_out, str(f))
+
+def process_output(root_dir: Union[Path, str], out_dir: Union[Path, str]) -> None:
+    global logger
+    global logger
+    if logger is None:
+        logger = Logger('pipeline.log', 'process_output', verbose=True, keep_file=False)
+
+    root_dir = Path(root_dir)
+    out_dir = Path(out_dir)
+
+    # Create folders to hold the itmes
+    report_dir = out_dir.joinpath('report_dir')
+    report_dir.mkdir(exist_ok=True)
+
+    for f_im, f_seg, f_tag in list(zip(root_dir.joinpath('normalized_image').glob("*nii*"),
+                                       root_dir.joinpath('segment_output').glob("*nii*"),
+                                       root_dir.joinpath('normalized_image').glob('*.json'),
+                                       root_dir.joinpath(''))):
+        write_out_data = {}
+
+        # Analyse the segmentation and the output
+        seg = sitk.ReadImage(str(f_seg))
+        stat_fil = sitk.LabelShapeStatisticsImageFilter()
+        stat_fil.Execute(seg)
+        volume = stat_fil.GetPhysicalSize(1)
+
+        write_out_data['']
+
+
+
+        logger.debug(f"{[f_im, f_seg, f_tag]}")
+        try:
+            im = draw_image(str(f_im), str(f_seg), mode=1)
+        except Exception as e:
+            logger.exception(f"diudiudiud: {e}")
+        imageio.imsave(str(out_dir.joinpath('npc_report.png')),
+                       im)
+
+        c = ReportGen_NPC_Screening(str(out_dir.joinpath(f_im.with_suffix('.pdf').name)))
+        c.dicom_tags = str(f_tag)
+        c._data_root_path = out_dir
+        c.draw()
+
+

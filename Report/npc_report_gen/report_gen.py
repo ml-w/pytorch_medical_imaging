@@ -59,8 +59,10 @@ def draw_image(img, seg, mode=0):
         return make_grid(torch.as_tensor(img[slice_range[0]:slice_range[1]+1]).unsqueeze(1), nrow=3, padding=2,
                          normalize=True).numpy().transpose(1, 2, 0)
     elif mode == 1:
-        counts = np.sum(sitk.GetArrayFromImage(seg), axis=(1, 2))
-        r = len(counts) - np.argsort(counts, kind='stable')  # reverse sort
+        counts = np.sum(sitk.GetArrayFromImage(seg), axis=(1, 2)).astype('int32')
+        non_zero_indices = np.nonzero(counts)[0]    # argsort is broken by zeros, so extract non-zero elements first
+        r = non_zero_indices[np.argsort(-counts[non_zero_indices])] # argsort element, then get its indices
+
         # check if there are more than 3 non-zero slices
         non_zero_slices = (counts != 0).sum()
 
@@ -69,21 +71,25 @@ def draw_image(img, seg, mode=0):
         cent = f.GetCentroid(1)
         cent = seg.TransformPhysicalPointToIndex(cent)
         bbox = f.GetBoundingBox(1)
-        w = bbox[3] - bbox[1]
-        h = bbox[4] - bbox[2]
-        l = max([w, h]) + 100    # fit to the size of the segmentation bounding box
-        l = min([400, l])       # but no larger than 400 x 400
+        w = abs(bbox[3] - bbox[1])
+        h = abs(bbox[4] - bbox[2])
+        l = max([w, h]) + 150    # fit to the size of the segmentation bounding box
+        l = min([400, l])        # but no larger than 400 x 400
 
         crop = {
-            'center': cent,
+            'center': [cent[1], cent[0]], # y, x
             'size': [l, l]
         }
 
+        display_slice = r[:3] # Get the three slices with largest tumor
+        display_slice.sort()  # put them in axial order
         img, seg = (torch.as_tensor(sitk.GetArrayFromImage(x).astype('float')) for x in [img, seg])
-        img, seg = img[r <= 3], seg[r <= 3]
+        img, seg = img[display_slice], seg[display_slice]
+
         # Make black slices
         if non_zero_slices < 3:
             img[-non_zero_slices:] = 0
+
         return draw_grid_contour(img, [seg], color=[(255, 100, 55)],
                                  nrow=3, padding=2, thickness=1, crop=crop, alpha=0.8)
 
@@ -151,6 +157,7 @@ class ReportGen_NPC_Screening(Canvas):
 
         # Data
         self._dicom_tags = None
+        self._data_root_path = None
 
 
     def build_frames(self):
@@ -215,7 +222,7 @@ class ReportGen_NPC_Screening(Canvas):
 
     def enrich_mri_frame(self):
         data_display = {
-            'image_dir': './example_data/npc_case/case.png', #TODO: Change this to dynamic load
+            'image_dir': None,
             'diagnosis_radiomics': None,
             'diagnosis_dl': None,
             'diganosis_overall': None,  # {0: healthy/benign hyperplasia, 1: carcinoma, -1: doubt}
@@ -225,6 +232,7 @@ class ReportGen_NPC_Screening(Canvas):
             'lesion_vol': None,  # Unit is cm3
             'remark': None
         }
+        data_display.update(self.read_data_display())
 
         column_map = {
             'diagnosis_dl': "Deep learning prediction",
@@ -335,6 +343,13 @@ class ReportGen_NPC_Screening(Canvas):
         if isinstance(val, (str, Path)):
             d = self._read_details_from_dicom_json(val)
         self._dicom_tags = d
+
+    def read_data_display(self):
+        r"""
+        Now the image is hard-coded to be "npc_report.png" under `self._data_root_path`
+        """
+        self._data_root_path = Path(self._data_root_path)
+        return {'image_dir': str(self._data_root_path.joinpath('npc_report.png'))}
 
 
 if __name__ == '__main__':
