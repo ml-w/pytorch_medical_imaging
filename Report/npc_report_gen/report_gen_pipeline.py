@@ -134,7 +134,9 @@ def main(raw_args=None):
     command = f"-i {str(segment_output)} -o {str(segment_output)} -v".split()
     seg_post_main(command)
 
+    #==============
     # Run radiomics
+    #==============
 
     #============================
     # Run deep learning diagnosis
@@ -150,13 +152,10 @@ def main(raw_args=None):
               f"--override={override_string} --inference".split()
     pmi_main(command)
 
-    # Convert DL outputs to report gen data
-
-    # Run gen report
+    # Convert DL outputs to report gen data and run gen report
     report_dir = output_dir.joinpath('report')
     report_dir.mkdir(exist_ok=True)
     process_output(output_dir, report_dir)
-
 
     temp_dir.cleanup()
 
@@ -279,6 +278,7 @@ def process_output(root_dir: Union[Path, str], out_dir: Union[Path, str]) -> Non
             diagnosis_overall = 1
         else:
             diagnosis_overall = 0
+        write_out_data['ref_dl'] = f"< {write_out_data['ref_dl']}"
 
         image_path = report_dir.joinpath(f'npc_report_{i:02d}.png')
         report_path = report_dir.joinpath(f'npc_report_{i:02d}.pdf')

@@ -132,15 +132,23 @@ class ReportGen_NPC_Screening(Canvas):
         self.patient_frame.drawBoundary(self)
 
         # text description container
+        frame_size_ = self.page_setting['frame_size']
+        frame_padding_ = self.page_setting['padding']
         self.frame = Frame(page_margin, page_margin,
-                           self.page_setting['frame_size'][0],
-                           self.page_setting['frame_size'][1] - height_frame,
-                           leftPadding=self.page_setting['padding'],
-                           bottomPadding=self.page_setting['padding'],
-                           rightPadding=self.page_setting['padding'],
-                           topPadding=self.page_setting['padding'],
+                           frame_size_[0],
+                           frame_size_[1] - height_frame,
+                           leftPadding=frame_padding_,
+                           bottomPadding=frame_padding_,
+                           rightPadding=frame_padding_,
+                           topPadding=frame_padding_,
                            showBoundary=1)
         self.frame.drawBoundary(self)
+
+        self.table_frame = Frame(page_margin + frame_size_[0] // 2,
+                                 page_margin,
+                                 frame_size_[0] // 2,
+                                 frame_size_[1],
+                                 leftPadding=0, bottomPadding=3, rightPadding=3, topPadding=0)
 
     def enrich_patient_data(self):
         items_display = {
@@ -186,7 +194,7 @@ class ReportGen_NPC_Screening(Canvas):
             'ref_radiomics': "Reference for normal",
             "ref_dl": "Reference for normal",
             'lesion_vol': "Lesion volume",
-            'remark': 'Remark'
+            'remark': 'Comment'
         }
         diganosis_overall = data_display['diagnosis_overall']
 
@@ -204,7 +212,8 @@ class ReportGen_NPC_Screening(Canvas):
 
         # If benign case or NPC case, display segmentation
         if diganosis_overall in [-1, 1]:
-            recommend = "Recommend full scan"
+            _d = "Doubtful" if diganosis_overall == -1 else "NPC"
+            recommend = f"{_d}; recommend full scan"
             msg = "Lesion detected (Three or less slices with largest tumor volume displayed)"
             color = "#a32e2c"
         else:
@@ -248,29 +257,80 @@ class ReportGen_NPC_Screening(Canvas):
 
         # remark
         story.append(LineSeparator(1, self.page_setting['padding']))
-        msg = f"<para face=courier fontSize=11 spaceAfter=10>>Remark: <br/></para>"
+        right_indent = int(self.page_setting['frame_size'][0] // 2)
+        msg = f"<para face=courier fontSize=11 spaceAfter=10 rightIndent={right_indent} >>" \
+              f"{column_map['remark']}: <br/></para>"
         story.append(Paragraph(msg))
-        msg = f"<para face=courier fontSize=11 spaceAfter=10 leftIndent=24>{data_display['remark']}</para>"
+        msg = f"<para face=courier fontSize=11 spaceAfter=10 rightIndent={right_indent } leftIndent=24>" \
+              f"{data_display['remark']}</para>"
         story.append(Paragraph(msg))
 
         self.frame.addFromList(story, self)
+        self.table_frame.addFromList([self.draw_grading_table()], self)
         pass
 
-    def prepare_canvas(self):
-        r"""
-        Draw the logos and boxes
-        """
-        page_margin = inch_to_pt(0.5) # pt
-        frame_padding = inch_to_pt(0.1) # pt
-        width, height = self.page_size
-        width_frame, height_frame = width - 2 * page_margin, height - 2 * page_margin
+    def draw_grading_table(self):
+        data = [['<b>Grade</b>', '<b>Walls</b>', '<b>Adenoid</b>'],
+                ['1: normal', '- Thin wall (1-3mm)', '- Absent/vestigial tags/nubbin'],
+                ['2: probably benign hyperplasia',
+                 '- Diffuse thickening (>3mm), symmetric size, signal intensity and contour',
+                 '<u>CE scan</u>: <br/>'
+                 '- composed of Thornwaldt <br/>'
+                 '- cyst/multiple cysts, OR symmetric size, signal intensity, and contour <br/>'
+                 '- with preserved symmetric contrast-enhancing septa perpendicular to the roof, separated by less '
+                 'enhancing columns (ie, stripped appearance)<br/>'
+                 '<u>Plain scan</u>: <br/>'
+                 '- composed of Thornwaldt <br/>'
+                 '- cyst/multiple cysts'],
+                ['3: indeterminate', '- Diffuse thickening (>3mm)<br/> '
+                                     '- asymmetric size or signal intensity or contour, which'
+                                     ' is non-expansile',
+                 '<u>CE scan</u>: <br/>'
+                 '- asymmetric size, signal intensity OR contour with preserved or partial disruption/internal '
+                 'distortion of contrast-enhancing septa<br/>'
+                 '<u>Plain scan</u>: <br/>'
+                 '- symmetric size, signal intensity, and contour'],
+                ['4: suspicious for NPC',
+                 '- Diffuse thickening (>3mm) <br/>'
+                 '- asymmetric size or signal intensity or contour, which'
+                                     ' is expansile',
+                 '<u>CE scan</u>: <br/>'
+                 '- absent CE septa in focal adenoid, OR external distortion of CE septa by an adjacent roof mass '
+                 '<br/>'
+                 '<u>Plain scan</u>: <br/>'
+                 '- asymmetric size, signal intensity or contour'],
+                ['5: probably NPC',
+                 '- focal mass',
+                 '<u>CE scan</u>: <br/>'
+                 '- absent CE septa in focal adenoid, OR external distortion of CE septa by an adjacent roof mass '
+                 'on at least 1 section'],
+                ['5b', '- Spread outside of the nasopharynx (superficial or deep)'],
+                ['5c', '- Metastic retropharyngeal or upper cervical nodes.']
+                ]
 
-        story = []
-        self.frame = Frame(page_margin, page_margin, width_frame, height_frame,
-                           leftPadding=6, bottomPadding=6, rightPadding = 6, topPadding = 6,
-                           showBoundary=1)
-        self.frame.addFromList([BalancedColumns([self.logo_text, Paragraph("Randomtext")])], self)
-        self.frame.drawBoundary(self)
+        styles = getSampleStyleSheet()
+        styleB = styles['BodyText']
+        styleB.spaceBefore = 2
+        styleB.spaceAfter = 2
+        styleB.fontSize = 6
+        styleB.leading = styleB.fontSize + 1.5
+        styleB.leftIndent = 0
+        data = [[Paragraph(s, styleB) for s in row] for row in data]
+        table_style = TableStyle(
+            [('LINEABOVE', (0, 0), (-1, 0), 1, "#000000"),
+             ('LINEABOVE', (0, 1), (-1, 1), 0.5, "#000000"),
+             ('LINEBELOW', (0, -1), (-1, -1), 1, "#000000"),
+             ('BOTTOMPADDING', (0, 0), (-1, -1), 1),
+             ('TOPPADDING', (0, 0), (-1, -1), 1),
+             ('ROWBACKGROUNDS', (0, 0), (-1, -1), ["#FFFFFF", "#ede9cc"]),
+             ('VALIGN',(0,1),(-1,-1),'TOP'),
+             ('SPAN', (1, -2), (-1, -2)),
+             ('SPAN', (1, -1), (-1, -1))]
+        )
+        t = Table(data, style=table_style, colWidths=[inch_to_pt(0.6), inch_to_pt(1.1), inch_to_pt(2)])
+        t = TopPadder(t)
+        t.hAlign = 'RIGHT'
+        return t
 
     def draw(self):
         self.build_frames()
