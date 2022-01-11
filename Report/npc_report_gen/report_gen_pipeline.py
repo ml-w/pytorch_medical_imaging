@@ -16,6 +16,7 @@ import tempfile
 
 from .report_gen import *
 import SimpleITK as sitk
+import pandas as pd
 global logger
 logger = None
 
@@ -138,7 +139,7 @@ def main(raw_args=None):
     #============================
     # Run deep learning diagnosis
     #============================
-    dl_output_dir = output_dir.joinpath('dl_diag.csv')
+    dl_output_dir = output_dir.joinpath('dl_diag')
     override_tags = {
         '(Data,input_dir)': str(normalized_dir.joinpath('NyulNormalizer')),
         '(Data,mask_dir)': str(segment_output),
@@ -257,33 +258,41 @@ def process_output(root_dir: Union[Path, str], out_dir: Union[Path, str]) -> Non
     report_dir = out_dir.joinpath('report_dir')
     report_dir.mkdir(exist_ok=True)
 
-    for f_im, f_seg, f_tag in list(zip(root_dir.joinpath('normalized_image').glob("*nii*"),
+    res_csv = pd.read_csv(list(root_dir.joinpath('dl_diag').glob('*.csv'))[0])
+    for i, (f_im, f_seg, f_tag) in enumerate(zip(root_dir.joinpath('normalized_image').glob("*nii*"),
                                        root_dir.joinpath('segment_output').glob("*nii*"),
                                        root_dir.joinpath('normalized_image').glob('*.json'),
-                                       root_dir.joinpath(''))):
-        write_out_data = {}
+                                       )):
+        # Default
+        write_out_data = {
+            'ref_radiomics': '',
+            'ref_dl': 0.5
+        }
 
         # Analyse the segmentation and the output
         seg = sitk.ReadImage(str(f_seg))
         stat_fil = sitk.LabelShapeStatisticsImageFilter()
         stat_fil.Execute(seg)
         volume = stat_fil.GetPhysicalSize(1)
+        dl_res = res_csv.iloc[i]['Prob_Class_0']
+        if dl_res >= write_out_data['ref_dl']:
+            diagnosis_overall = 1
+        else:
+            diagnosis_overall = 0
 
-        write_out_data['']
+        image_path = report_dir.joinpath(f'npc_report_{i:02d}.png')
+        report_path = report_dir.joinpath(f'npc_report_{i:02d}.pdf')
+        c = ReportGen_NPC_Screening(str(report_path))
+        im = c.draw_image(str(f_im), str(f_seg), mode=1 if diagnosis_overall in [1, -1] else 0)
+        imageio.imsave(str(image_path),im)
 
+        write_out_data['image_dir'] = str(image_path)
+        write_out_data['dicom_tags'] = str(f_tag)
+        write_out_data['lesion_vol'] = f'{volume / 100.:.02f}' # convert from mm3 to cm3
+        write_out_data['diagnosis_dl'] = f"{dl_res:.03f}"
+        write_out_data['diagnosis_overall'] = diagnosis_overall
 
-
-        logger.debug(f"{[f_im, f_seg, f_tag]}")
-        try:
-            im = draw_image(str(f_im), str(f_seg), mode=1)
-        except Exception as e:
-            logger.exception(f"diudiudiud: {e}")
-        imageio.imsave(str(out_dir.joinpath('npc_report.png')),
-                       im)
-
-        c = ReportGen_NPC_Screening(str(out_dir.joinpath(f_im.with_suffix('.pdf').name)))
-        c.dicom_tags = str(f_tag)
-        c._data_root_path = out_dir
+        c.read_data_display(write_out_data)
         c.draw()
 
 

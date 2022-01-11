@@ -1,4 +1,5 @@
 import datetime
+import tempfile
 
 from reportlab.pdfgen.canvas import Canvas
 from reportlab.lib.pagesizes import A4
@@ -10,7 +11,7 @@ from reportlab.pdfbase.ttfonts import TTFont
 pdfmetrics.registerFont(TTFont('Serif', 'LiberationSerif-Regular.ttf'))
 pdfmetrics.registerFont(TTFont('Serif-Bold', 'LiberationSerif-Bold.ttf'))
 pdfmetrics.registerFont(TTFont('Serif-Italic', 'LiberationSerif-Italic.ttf'))
-pdfmetrics.registerFont(TTFont('Courier', './asset/Courier.ttf'))
+# pdfmetrics.registerFont(TTFont('Courier', './asset/Courier.ttf'))
 
 from pathlib import Path
 from pytorch_med_imaging.utils.visualization import draw_grid_contour
@@ -19,79 +20,14 @@ import imageio
 import torch
 import SimpleITK as sitk
 import json
+import imageio
 
 import numpy as np
 
 def inch_to_pt(inch):
     return 72 * inch
 
-def draw_image(img, seg, mode=0):
-    r"""
-    Draw based of mode. If `mode=0`, 3 slices surrounding the center of image will be drawn,
-    if `mode=1`, 3 slices with the larges segmentation volume will be drawn
-    Args:
-        img:
-        seg:
 
-    Returns:
-
-    """
-    if isinstance(img, (str, Path)):
-        img = sitk.ReadImage(img)
-    if isinstance(seg, (str, Path)):
-        seg = sitk.ReadImage(seg)
-
-    if mode == 0:
-        tissue_mask = sitk.HuangThreshold(img, 0, 1, 200)
-        f = sitk.LabelShapeStatisticsImageFilter()
-        f.Execute(tissue_mask == 1)
-        cent = f.GetCentroid(1)
-        cent = seg.TransformPhysicalPointToIndex(cent)
-
-        # Compute square bounding box
-        bbox = f.GetBoundingBox(1)
-        w = bbox[3] - bbox[1]
-        h = bbox[4] - bbox[2]
-        l = max([w, h])
-
-        img = sitk.GetArrayFromImage(img[bbox[0]:bbox[0] + l, bbox[1]:bbox[1] + l, bbox[2]:bbox[5]])
-        slice_range = [cent[-1] - 1, cent[-1] + 1]
-        return make_grid(torch.as_tensor(img[slice_range[0]:slice_range[1]+1]).unsqueeze(1), nrow=3, padding=2,
-                         normalize=True).numpy().transpose(1, 2, 0)
-    elif mode == 1:
-        counts = np.sum(sitk.GetArrayFromImage(seg), axis=(1, 2)).astype('int32')
-        non_zero_indices = np.nonzero(counts)[0]    # argsort is broken by zeros, so extract non-zero elements first
-        r = non_zero_indices[np.argsort(-counts[non_zero_indices])] # argsort element, then get its indices
-
-        # check if there are more than 3 non-zero slices
-        non_zero_slices = (counts != 0).sum()
-
-        f = sitk.LabelShapeStatisticsImageFilter()
-        f.Execute(seg >= 1)
-        cent = f.GetCentroid(1)
-        cent = seg.TransformPhysicalPointToIndex(cent)
-        bbox = f.GetBoundingBox(1)
-        w = abs(bbox[3] - bbox[1])
-        h = abs(bbox[4] - bbox[2])
-        l = max([w, h]) + 150    # fit to the size of the segmentation bounding box
-        l = min([400, l])        # but no larger than 400 x 400
-
-        crop = {
-            'center': [cent[1], cent[0]], # y, x
-            'size': [l, l]
-        }
-
-        display_slice = r[:3] # Get the three slices with largest tumor
-        display_slice.sort()  # put them in axial order
-        img, seg = (torch.as_tensor(sitk.GetArrayFromImage(x).astype('float')) for x in [img, seg])
-        img, seg = img[display_slice], seg[display_slice]
-
-        # Make black slices
-        if non_zero_slices < 3:
-            img[-non_zero_slices:] = 0
-
-        return draw_grid_contour(img, [seg], color=[(255, 100, 55)],
-                                 nrow=3, padding=2, thickness=1, crop=crop, alpha=0.8)
 
 class LineSeparator(Flowable):
     """A horizontal line spanning the whole canvas"""
@@ -127,6 +63,9 @@ class ReportGen_NPC_Screening(Canvas):
     def __init__(self, *args, **kwargs):
         super(ReportGen_NPC_Screening, self).__init__(*args, **kwargs)
         # self.saveState()
+        #==========
+        # Settings
+        #==========
         self.setFont('Serif', 12)
         self.page_setting = {
             'size': A4,
@@ -143,6 +82,12 @@ class ReportGen_NPC_Screening(Canvas):
              self.page_setting['margin']] +
             list(np.asarray(self.page_setting['size']) - self.page_setting['margin'])
         )
+        self.image_setting = {
+            'max_slice_size': 400,  # Max w, h of the displayed slices (px)
+            'padding_size': 150,    # Number of pixels to pad around the tumor. If 0, dispaly tumor bounding box as FOV
+            'nrow': 3,              # Number of slices per row, pass to `make_grid
+            'n': 3,                 # Max number of slices to display, slices with largest volumes are displayed.
+        }
 
         # Assets
         self.logo_text = Paragraph("""
@@ -230,19 +175,21 @@ class ReportGen_NPC_Screening(Canvas):
             'ref_radiomics': None,
             'ref_dl': None,
             'lesion_vol': None,  # Unit is cm3
-            'remark': None
+            'remark': "None"
         }
-        data_display.update(self.read_data_display())
+        # Load data
+        data_display.update(self.data_display)
 
         column_map = {
             'diagnosis_dl': "Deep learning prediction",
             'diagnosis_radiomics': "Radiomics prediction",
             'ref_radiomics': "Reference for normal",
             "ref_dl": "Reference for normal",
-            'lesion_vol': "Lesion volume"
+            'lesion_vol': "Lesion volume",
+            'remark': 'Remark'
         }
-        # Load data
-        # TODO: write function to load properties from data
+        diganosis_overall = data_display['diagnosis_overall']
+
 
         story = []
         fixed_aspect_ratio = 3
@@ -256,8 +203,14 @@ class ReportGen_NPC_Screening(Canvas):
         color = "#469e54"
 
         # If benign case or NPC case, display segmentation
-        msg = "Lesion detected (Three or less slices with largest tumor volume displayed)"
-        color = "#a32e2c"
+        if diganosis_overall in [-1, 1]:
+            recommend = "Recommend full scan"
+            msg = "Lesion detected (Three or less slices with largest tumor volume displayed)"
+            color = "#a32e2c"
+        else:
+            recommend = "No further action needed"
+            msg = "No significant lesion detected (Three slices in the middle of image displayed)"
+            color = "#32a852"
 
         # If doubtful case, display segmentation with red warning sign
         style = getSampleStyleSheet()['Heading2']
@@ -286,8 +239,20 @@ class ReportGen_NPC_Screening(Canvas):
             desc.append(Paragraph(msg))
             msg =  f"<para face=courier fontSize=11 leftIndent=24 spaceAfter=10>>{column_map[ref]} -- {data_display[ref]}<br/></para>"
             desc.append(Paragraph(msg))
-
         story.extend(desc)
+
+        # recommendation
+        msg = f"<para face=courier fontSize=11 spaceAfter=10 >>Overall diagnosis: </para>"\
+              f"<para face=courier fontSize=11 spaceAfter=10 color={color}> <b><u>{recommend}</u></b> <br/> </para>"
+        story.append(Paragraph(msg))
+
+        # remark
+        story.append(LineSeparator(1, self.page_setting['padding']))
+        msg = f"<para face=courier fontSize=11 spaceAfter=10>>Remark: <br/></para>"
+        story.append(Paragraph(msg))
+        msg = f"<para face=courier fontSize=11 spaceAfter=10 leftIndent=24>{data_display['remark']}</para>"
+        story.append(Paragraph(msg))
+
         self.frame.addFromList(story, self)
         pass
 
@@ -344,12 +309,88 @@ class ReportGen_NPC_Screening(Canvas):
             d = self._read_details_from_dicom_json(val)
         self._dicom_tags = d
 
-    def read_data_display(self):
+    def read_data_display(self, data_display: dict):
         r"""
+        Wrapper function.
         Now the image is hard-coded to be "npc_report.png" under `self._data_root_path`
         """
-        self._data_root_path = Path(self._data_root_path)
-        return {'image_dir': str(self._data_root_path.joinpath('npc_report.png'))}
+        self.dicom_tags = data_display.pop('dicom_tags')
+        self.data_display = data_display
+
+    def draw_image(self, img, seg, mode=0):
+        r"""
+        Draw based of mode. If `mode=0`, 3 slices surrounding the center of image will be drawn,
+        if `mode=1`, 3 slices with the larges segmentation volume will be drawn
+        Args:
+            img:
+            seg:
+
+        Returns:
+
+        """
+        if isinstance(img, (str, Path)):
+            img = sitk.ReadImage(img)
+        if isinstance(seg, (str, Path)):
+            seg = sitk.ReadImage(seg)
+
+        if mode == 0:
+            tissue_mask = sitk.HuangThreshold(img, 0, 1, 200)
+            f = sitk.LabelShapeStatisticsImageFilter()
+            f.Execute(tissue_mask == 1)
+            cent = f.GetCentroid(1)
+            cent = seg.TransformPhysicalPointToIndex(cent)
+
+            # Compute square bounding box
+            bbox = f.GetBoundingBox(1)
+            w = bbox[3] - bbox[1]
+            h = bbox[4] - bbox[2]
+            l = max([w, h])
+
+            n = self.image_setting['n']
+            img = sitk.GetArrayFromImage(img[bbox[0]:bbox[0] + l, bbox[1]:bbox[1] + l, bbox[2]:bbox[5]])
+            slice_range = [cent[-1] - n // 2, cent[-1] + n // 2]
+            self.image = make_grid(torch.as_tensor(img[slice_range[0]:slice_range[1]+1]).unsqueeze(1),
+                                   nrow=self.image_setting['nrow'], padding=2, normalize=True).numpy().transpose(1, 2, 0)
+            return self.image
+        elif mode == 1:
+            counts = np.sum(sitk.GetArrayFromImage(seg), axis=(1, 2)).astype('int32')
+            non_zero_indices = np.nonzero(counts)[0]    # argsort is broken by zeros, so extract non-zero elements first
+            r = non_zero_indices[np.argsort(-counts[non_zero_indices])] # argsort element, then get its indices
+
+            # check if there are more than 3 non-zero slices
+            non_zero_slices = (counts != 0).sum()
+            n = self.image_setting['n']
+
+            f = sitk.LabelShapeStatisticsImageFilter()
+            f.Execute(seg >= 1)
+            cent = f.GetCentroid(1)
+            cent = seg.TransformPhysicalPointToIndex(cent)
+            bbox = f.GetBoundingBox(1)
+            w = abs(bbox[3] - bbox[1])
+            h = abs(bbox[4] - bbox[2])
+            l = max([w, h]) + self.image_setting['padding_size']    # fit to the size of the segmentation bounding box
+            l = min([self.image_setting['max_slice_size'], l])        # but no larger than 400 x 400
+
+            crop = {
+                'center': [cent[1], cent[0]], # y, x because of make_grid convention
+                'size': [l, l]
+            }
+
+            display_slice = r[:3] # Get the three slices with largest tumor
+            display_slice.sort()  # put them in axial order
+            img, seg = (torch.as_tensor(sitk.GetArrayFromImage(x).astype('float')) for x in [img, seg])
+            img, seg = img[display_slice], seg[display_slice]
+
+            # If not enough slices to display, make black slices
+            if non_zero_slices < n:
+                _s = img.shape[1:]
+                _b = torch.zeros([n - non_zero_slices, _s[0], _s[1]])
+                img = torch.cat([img, _b])
+                seg = torch.cat([seg, _b])
+
+            self.image = draw_grid_contour(img, [seg], color=[(255, 100, 55)],
+                                           nrow=self.image_setting['nrow'], padding=2, thickness=1, crop=crop, alpha=0.8)
+            return self.image
 
 
 if __name__ == '__main__':
