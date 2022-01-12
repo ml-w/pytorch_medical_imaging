@@ -148,7 +148,7 @@ class ReportGen_NPC_Screening(Canvas):
                                  page_margin,
                                  frame_size_[0] // 2,
                                  frame_size_[1],
-                                 leftPadding=0, bottomPadding=3, rightPadding=3, topPadding=0)
+                                 leftPadding=0, bottomPadding=0, rightPadding=0, topPadding=0)
 
     def enrich_patient_data(self):
         items_display = {
@@ -183,7 +183,14 @@ class ReportGen_NPC_Screening(Canvas):
             'ref_radiomics': None,
             'ref_dl': None,
             'lesion_vol': None,  # Unit is cm3
-            'remark': "None"
+            'remark': "Lorem ipsum dolor sit amet, consectetur adipiscing elit. "
+                      "Pellentesque ut metus et eros placerat lobortis at sed leo. "
+                      "Quisque a semper arcu. Morbi et aliquam sem. Nulla rutrum "
+                      "varius nibh non sollicitudin. In ac massa sit amet erat imperdiet "
+                      "sodales sit amet eu tortor. Ut id leo nec ante aliquet placerat at "
+                      "sit amet ante. Pellentesque vulputate elit ut purus vulputate, nec"
+                      " auctor urna rutrum. Ut pharetra, sem aliquam scelerisque commodo, "
+                      "risus lacus sodales leo, vitae auctor nisi ante a libero. "
         }
         # Load data
         data_display.update(self.data_display)
@@ -257,11 +264,11 @@ class ReportGen_NPC_Screening(Canvas):
 
         # remark
         story.append(LineSeparator(1, self.page_setting['padding']))
-        right_indent = int(self.page_setting['frame_size'][0] // 2)
+        right_indent = int(self.page_setting['frame_size'][0] // 2 + 10)
         msg = f"<para face=courier fontSize=11 spaceAfter=10 rightIndent={right_indent} >>" \
               f"{column_map['remark']}: <br/></para>"
         story.append(Paragraph(msg))
-        msg = f"<para face=courier fontSize=11 spaceAfter=10 rightIndent={right_indent } leftIndent=24>" \
+        msg = f"<para face=courier fontSize=11 spaceAfter=10 rightIndent={right_indent } leftIndent=12>" \
               f"{data_display['remark']}</para>"
         story.append(Paragraph(msg))
 
@@ -270,64 +277,98 @@ class ReportGen_NPC_Screening(Canvas):
         pass
 
     def draw_grading_table(self):
-        data = [['<b>Grade</b>', '<b>Walls</b>', '<b>Adenoid</b>'],
-                ['1: normal', '- Thin wall (1-3mm)', '- Absent/vestigial tags/nubbin'],
+        # data = [['<b>Grade</b>', '<b>Walls</b>', '<b>Adenoid</b>'],
+        #         ['1: normal', '- Thin wall (1-3mm)', '- Absent/vestigial tags/nubbin'],
+        #         ['2: probably benign hyperplasia',
+        #          '- Diffuse thickening (>3mm), symmetric size, signal intensity and contour',
+        #          '<u>CE scan</u>: <br/>'
+        #          '- composed of Thornwaldt <br/>'
+        #          '- cyst/multiple cysts, OR symmetric size, signal intensity, and contour <br/>'
+        #          '- with preserved symmetric contrast-enhancing septa perpendicular to the roof, separated by less '
+        #          'enhancing columns (ie, stripped appearance)<br/>'
+        #          '<u>Plain scan</u>: <br/>'
+        #          '- composed of Thornwaldt <br/>'
+        #          '- cyst/multiple cysts'],
+        #         ['3: indeterminate', '- Diffuse thickening (>3mm)<br/> '
+        #                              '- asymmetric size or signal intensity or contour, which'
+        #                              ' is non-expansile',
+        #          '<u>CE scan</u>: <br/>'
+        #          '- asymmetric size, signal intensity OR contour with preserved or partial disruption/internal '
+        #          'distortion of contrast-enhancing septa<br/>'
+        #          '<u>Plain scan</u>: <br/>'
+        #          '- symmetric size, signal intensity, and contour'],
+        #         ['4: suspicious for NPC',
+        #          '- Diffuse thickening (>3mm) <br/>'
+        #          '- asymmetric size or signal intensity or contour, which'
+        #                              ' is expansile',
+        #          '<u>CE scan</u>: <br/>'
+        #          '- absent CE septa in focal adenoid, OR external distortion of CE septa by an adjacent roof mass '
+        #          '<br/>'
+        #          '<u>Plain scan</u>: <br/>'
+        #          '- asymmetric size, signal intensity or contour'],
+        #         ['5: probably NPC',
+        #          '- focal mass',
+        #          '<u>CE scan</u>: <br/>'
+        #          '- absent CE septa in focal adenoid, OR external distortion of CE septa by an adjacent roof mass '
+        #          'on at least 1 section'],
+        #         ['5b', '- Spread outside of the nasopharynx (superficial or deep)'],
+        #         ['5c', '- Metastic retropharyngeal or upper cervical nodes.']
+        #         ]
+        data = [['Grading system reference (King AD et al., 2020)'],
+                ['<b>Grade</b>', '<b>Walls</b>', '<b>Adenoid</b>'],
+                ['1: normal', '- thin wall (1-3mm)', '- absent/vestigial tags/nubbin'],
                 ['2: probably benign hyperplasia',
-                 '- Diffuse thickening (>3mm), symmetric size, signal intensity and contour',
-                 '<u>CE scan</u>: <br/>'
-                 '- composed of Thornwaldt <br/>'
-                 '- cyst/multiple cysts, OR symmetric size, signal intensity, and contour <br/>'
-                 '- with preserved symmetric contrast-enhancing septa perpendicular to the roof, separated by less '
-                 'enhancing columns (ie, stripped appearance)<br/>'
-                 '<u>Plain scan</u>: <br/>'
+                 '- diffuse thickening (>3mm), symmetric size, signal intensity and contour',
                  '- composed of Thornwaldt <br/>'
                  '- cyst/multiple cysts'],
-                ['3: indeterminate', '- Diffuse thickening (>3mm)<br/> '
+                ['3: indeterminate', '- diffuse thickening (>3mm)<br/> '
                                      '- asymmetric size or signal intensity or contour, which'
                                      ' is non-expansile',
-                 '<u>CE scan</u>: <br/>'
-                 '- asymmetric size, signal intensity OR contour with preserved or partial disruption/internal '
-                 'distortion of contrast-enhancing septa<br/>'
-                 '<u>Plain scan</u>: <br/>'
                  '- symmetric size, signal intensity, and contour'],
                 ['4: suspicious for NPC',
-                 '- Diffuse thickening (>3mm) <br/>'
+                 '- diffuse thickening (>3mm) <br/>'
                  '- asymmetric size or signal intensity or contour, which'
                                      ' is expansile',
-                 '<u>CE scan</u>: <br/>'
-                 '- absent CE septa in focal adenoid, OR external distortion of CE septa by an adjacent roof mass '
-                 '<br/>'
-                 '<u>Plain scan</u>: <br/>'
                  '- asymmetric size, signal intensity or contour'],
                 ['5: probably NPC',
                  '- focal mass',
-                 '<u>CE scan</u>: <br/>'
-                 '- absent CE septa in focal adenoid, OR external distortion of CE septa by an adjacent roof mass '
-                 'on at least 1 section'],
-                ['5b', '- Spread outside of the nasopharynx (superficial or deep)'],
-                ['5c', '- Metastic retropharyngeal or upper cervical nodes.']
+                 'no grade for plain scan'],
+                ['5b', '- spread outside of the nasopharynx (superficial or deep)'],
+                ['5c', '- metastic retropharyngeal or upper cervical nodes.']
                 ]
 
         styles = getSampleStyleSheet()
         styleB = styles['BodyText']
-        styleB.spaceBefore = 2
-        styleB.spaceAfter = 2
-        styleB.fontSize = 6
-        styleB.leading = styleB.fontSize + 1.5
+        styleB.spaceBefore = 0
+        styleB.spaceAfter = 4
+        styleB.fontSize = 8
+        styleB.leading = styleB.fontSize + 2
         styleB.leftIndent = 0
         data = [[Paragraph(s, styleB) for s in row] for row in data]
+        data[0][0] = Paragraph('<i>Table: Grading system reference (King AD et al., 2020)</i>',
+                               style=ParagraphStyle(name='_',
+                                                    fontName='times',
+                                                    alignment=1,
+                                                    leading=15
+
+                                                    ))
+
+        print(data[0][0])
         table_style = TableStyle(
-            [('LINEABOVE', (0, 0), (-1, 0), 1, "#000000"),
-             ('LINEABOVE', (0, 1), (-1, 1), 0.5, "#000000"),
+            [('LINEABOVE', (0, 1), (-1, 1), 1, "#000000"),
+             ('LINEABOVE', (0, 2), (-1, 2), 0.5, "#000000"),
              ('LINEBELOW', (0, -1), (-1, -1), 1, "#000000"),
-             ('BOTTOMPADDING', (0, 0), (-1, -1), 1),
-             ('TOPPADDING', (0, 0), (-1, -1), 1),
-             ('ROWBACKGROUNDS', (0, 0), (-1, -1), ["#FFFFFF", "#ede9cc"]),
+             ('BOTTOMPADDING', (0, 0), (-1, 0), 3),
+             ('BOTTOMPADDING', (0, 1), (-1, -1), 1),
+             ('TOPPADDING', (0, 1), (-1, -1), 1),
+             ('ROWBACKGROUNDS', (0, 1), (-1, -1), ["#FFFFFF", "#ede9cc"]),
              ('VALIGN',(0,1),(-1,-1),'TOP'),
+             ('ALIGN',(0,0),(-1,0),'CENTER'),
              ('SPAN', (1, -2), (-1, -2)),
-             ('SPAN', (1, -1), (-1, -1))]
+             ('SPAN', (1, -1), (-1, -1)),
+             ('SPAN', (0, 0), (-1, 0))]
         )
-        t = Table(data, style=table_style, colWidths=[inch_to_pt(0.6), inch_to_pt(1.1), inch_to_pt(2)])
+        t = Table(data, style=table_style, colWidths=[inch_to_pt(0.8), inch_to_pt(1.5), inch_to_pt(1.5)])
         t = TopPadder(t)
         t.hAlign = 'RIGHT'
         return t
