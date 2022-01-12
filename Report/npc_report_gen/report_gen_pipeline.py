@@ -246,7 +246,6 @@ def grow_segmnetation(input_segment: Union[Path, str]) -> None:
 
 def process_output(root_dir: Union[Path, str], out_dir: Union[Path, str]) -> None:
     global logger
-    global logger
     if logger is None:
         logger = Logger('pipeline.log', 'process_output', verbose=True, keep_file=False)
 
@@ -288,7 +287,7 @@ def process_output(root_dir: Union[Path, str], out_dir: Union[Path, str]) -> Non
 
         write_out_data['image_dir'] = str(image_path)
         write_out_data['dicom_tags'] = str(f_tag)
-        write_out_data['lesion_vol'] = f'{volume / 100.:.02f}' # convert from mm3 to cm3
+        write_out_data['lesion_vol'] = f'{volume / 1000.:.02f}' # convert from mm3 to cm3
         write_out_data['diagnosis_dl'] = f"{dl_res:.03f}"
         write_out_data['diagnosis_overall'] = diagnosis_overall
 
