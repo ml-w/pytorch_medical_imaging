@@ -15,12 +15,15 @@ pdfmetrics.registerFont(TTFont('Serif-Italic', 'LiberationSerif-Italic.ttf'))
 
 from pathlib import Path
 from pytorch_med_imaging.utils.visualization import draw_grid_contour
+from pytorch_med_imaging.logger import Logger
 from torchvision.utils import make_grid
+from typing import Union, Callable, Optional
 import imageio
 import torch
 import SimpleITK as sitk
 import json
 import imageio
+import re
 
 import numpy as np
 
@@ -103,6 +106,10 @@ class ReportGen_NPC_Screening(Canvas):
         # Data
         self._dicom_tags = None
         self._data_root_path = None
+        self.diagnosis_overall = None
+
+        # Set up logger
+        self._logger = Logger['ReportGen']
 
 
     def build_frames(self):
@@ -181,7 +188,7 @@ class ReportGen_NPC_Screening(Canvas):
             'diganosis_overall': None,  # {0: healthy/benign hyperplasia, 1: carcinoma, -1: doubt}
             'operator_remarks': None,
             'ref_radiomics': None,
-            'ref_dl': None,
+            'ref_dl': None,      # larger => NPC
             'lesion_vol': None,  # Unit is cm3
             'remark': "Lorem ipsum dolor sit amet, consectetur adipiscing elit. "
                       "Pellentesque ut metus et eros placerat lobortis at sed leo. "
@@ -194,6 +201,7 @@ class ReportGen_NPC_Screening(Canvas):
         }
         # Load data
         data_display.update(self.data_display)
+        self._logger.debug(f"data_display: {data_display}")
 
         column_map = {
             'diagnosis_dl': "Deep learning prediction",
@@ -203,8 +211,21 @@ class ReportGen_NPC_Screening(Canvas):
             'lesion_vol': "Lesion volume",
             'remark': 'Comment'
         }
-        diganosis_overall = data_display['diagnosis_overall']
+        _ref_dl = re.search("[0-9\.\-]+", str(data_display['ref_dl'])).group()
+        data_display['ref_dl'] = '< ' + str(_ref_dl)
+        diagnosis_overall = self.get_overall_diagnosis(data_display['lesion_vol'],
+                                                       data_display['diagnosis_dl'],
+                                                       data_display['diagnosis_radiomics'],
+                                                       lambda x: x >= _ref_dl,
+                                                       lambda x: x >= data_display['ref_radiomics'])
+        self.diagnosis_overall = diagnosis_overall
+        # draw & save image
+        im = self.draw_image(data_display['image_nii'], data_display['segment_nii'])
+        im_file_ = tempfile.NamedTemporaryFile(mode='wb', suffix='.png')
+        imageio.imsave(im_file_, im, format='png')
+        data_display['image_dir'] = im_file_.name
 
+        self._logger.debug(f"diagnosis: {diagnosis_overall}")
 
         story = []
         fixed_aspect_ratio = 3
@@ -213,16 +234,21 @@ class ReportGen_NPC_Screening(Canvas):
                    height = (self.page_setting['frame_size'][0] - self.page_setting['padding'] * 2) // 3,
                    kind='proportional')
 
+
         # If healthy case, display COM near the nasopharynx
         msg = "No abnormally found (Three slices near the nasopharynx displayed)"
         color = "#469e54"
 
         # If benign case or NPC case, display segmentation
-        if diganosis_overall in [-1, 1]:
-            _d = "Doubtful" if diganosis_overall == -1 else "NPC"
+        if diagnosis_overall in [-1, 1]:
+            _d = "Doubtful" if diagnosis_overall == -1 else "NPC"
             recommend = f"{_d}; recommend full scan"
             msg = "Lesion detected (Three or less slices with largest tumor volume displayed)"
             color = "#a32e2c"
+        elif diagnosis_overall == 2:
+            recommend = "Benign lesion, no further action needed"
+            msg = "Benign lesion detected (Three slices in the middle of image displayed)"
+            color = "#32a852"
         else:
             recommend = "No further action needed"
             msg = "No significant lesion detected (Three slices in the middle of image displayed)"
@@ -274,6 +300,7 @@ class ReportGen_NPC_Screening(Canvas):
 
         self.frame.addFromList(story, self)
         self.table_frame.addFromList([self.draw_grading_table()], self)
+        im_file_.close()
         pass
 
     def draw_grading_table(self):
@@ -380,7 +407,6 @@ class ReportGen_NPC_Screening(Canvas):
         self.showPage()
         self.save()
 
-
     def _read_details_from_dicom(self, dicom_dir, sequence_id=None):
         pass
 
@@ -418,21 +444,20 @@ class ReportGen_NPC_Screening(Canvas):
         self.dicom_tags = data_display.pop('dicom_tags')
         self.data_display = data_display
 
-    def draw_image(self, img, seg, mode=0):
+    def draw_image(self, img, seg, mode=None):
         r"""
-        Draw based of mode. If `mode=0`, 3 slices surrounding the center of image will be drawn,
-        if `mode=1`, 3 slices with the larges segmentation volume will be drawn
-        Args:
-            img:
-            seg:
-
-        Returns:
+        Draw based of mode. mode: 0 => Display center slices, 1 => Display with segmentation
 
         """
         if isinstance(img, (str, Path)):
             img = sitk.ReadImage(img)
         if isinstance(seg, (str, Path)):
             seg = sitk.ReadImage(seg)
+        elif seg is None:
+            mode = 0
+
+        if mode is None:
+            mode = int(not self.diagnosis_overall  == 0)
 
         if mode == 0:
             tissue_mask = sitk.HuangThreshold(img, 0, 1, 200)
@@ -492,6 +517,29 @@ class ReportGen_NPC_Screening(Canvas):
             self.image = draw_grid_contour(img, [seg], color=[(255, 100, 55)],
                                            nrow=self.image_setting['nrow'], padding=2, thickness=1, crop=crop, alpha=0.8)
             return self.image
+
+    @staticmethod
+    def get_overall_diagnosis(volume,   # Unit is cm^3
+                              dl_score, # not used now
+                              rad_score,
+                              dl_thres_func: Optional[Callable] = lambda x: x >= 0.5,
+                              rad_thres_func: Optional[Callable] = lambda x: None) -> int:
+        r"""
+        Key:
+        - [0]   Normal
+        - [1]   NPC
+        - [2]   Benign hyperplasia
+        - [-1]   Doubtful
+        """
+        print(dl_score, dl_thres_func(dl_score), volume)
+        if dl_thres_func(dl_score) and float(volume) >= 0.5:
+            return 1 # NPC
+        elif not dl_thres_func(dl_score) and float(volume) >= 3:
+            return 2 # benign hyperplasia
+        elif not dl_thres_func(dl_score) and float(volume) < 0.5:
+            return 0 # normal
+        else:
+            return -1 # doubtful
 
 
 if __name__ == '__main__':

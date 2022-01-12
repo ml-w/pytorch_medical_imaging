@@ -56,7 +56,6 @@ def main(raw_args=None):
     output_dir = Path(a.output)
     if not output_dir.is_dir():
         output_dir.mkdir(exist_ok=True)
-    segment_output = output_dir.joinpath('segment_output')
 
     # TODO:
     # * put radiomics models into trained_states
@@ -69,7 +68,7 @@ def main(raw_args=None):
         _temp_dicom_dir = tempfile.TemporaryDirectory()
         [shutil.copy2(d, _temp_dicom_dir.name) for d in _dicom_files]
         dicom2nii(f"-i {_temp_dicom_dir.name} -o {str(temp_dirname)} -n {a.num_worker} -g '.*' "
-                  f"--dump-dicom-tags".split())
+                  f"--dump-dicom-tags --use-patient-id".split())
 
     elif input.is_file() and input.suffix in ('.nii', '.gz'):
         # copy that to the temp dir
@@ -79,7 +78,7 @@ def main(raw_args=None):
 
     # Normalize target
     nii_files = list(temp_dirname.iterdir())
-    normalized_dir = temp_dirname.joinpath('normalized')
+    normalized_dir = temp_dirname.joinpath('normalized_image_raw')
     normalized_dir.mkdir()
     if len(nii_files) == 0:
         raise FileNotFoundError(f"Nothing is found in the temporary directory.")
@@ -96,6 +95,7 @@ def main(raw_args=None):
     #=================
     # Run segmentation
     #=================
+    segment_output = temp_dirname.joinpath('segment_output')
     override_tags = {
         '(Data,input_dir)': str(normalized_dir.joinpath('NyulNormalizer')),
         '(Data,prob_map_dir)': str(normalized_dir.joinpath('HuangThresholding')),
@@ -122,17 +122,18 @@ def main(raw_args=None):
     logger.debug(f"{command}")
     pmi_main(command)
 
-    # Copy the image to output folder
-    normalized_image_dir = output_dir.joinpath('normalized_image')
+    # Copy the image to temp folder
+    normalized_image_dir = temp_dirname.joinpath('normalized_image')
     if normalized_image_dir.is_dir():
         shutil.rmtree(str(normalized_image_dir))
     shutil.copytree(str(normalized_dir.joinpath('NyulNormalizer')), str(normalized_image_dir))
     [shutil.copy2(str(t), str(normalized_image_dir)) for t in temp_dirname.glob('*.json')]
 
-
     # Segmentation post-processing
     command = f"-i {str(segment_output)} -o {str(segment_output)} -v".split()
     seg_post_main(command)
+    # shutil.copytree(str(segment_output), str(output_dir.joinpath(segment_output.name))) # Copy result to output dir
+
 
     #==============
     # Run radiomics
@@ -141,7 +142,7 @@ def main(raw_args=None):
     #============================
     # Run deep learning diagnosis
     #============================
-    dl_output_dir = output_dir.joinpath('dl_diag')
+    dl_output_dir = temp_dirname.joinpath('dl_diag')
     override_tags = {
         '(Data,input_dir)': str(normalized_dir.joinpath('NyulNormalizer')),
         '(Data,mask_dir)': str(segment_output),
@@ -151,11 +152,12 @@ def main(raw_args=None):
     command = f"--config=./asset/pmi_config/BM_nyul_v2.ini " \
               f"--override={override_string} --inference".split()
     pmi_main(command)
+    # shutil.copytree(str(dl_output_dir), str(output_dir.joinpath(dl_output_dir.name)))
 
     # Convert DL outputs to report gen data and run gen report
     report_dir = output_dir.joinpath('report')
     report_dir.mkdir(exist_ok=True)
-    process_output(output_dir, report_dir)
+    process_output(temp_dirname, report_dir)
 
     temp_dir.cleanup()
 
@@ -256,12 +258,12 @@ def process_output(root_dir: Union[Path, str], out_dir: Union[Path, str]) -> Non
     report_dir = out_dir.joinpath('report_dir')
     report_dir.mkdir(exist_ok=True)
 
-    res_csv = pd.read_csv(list(root_dir.joinpath('dl_diag').glob('*.csv'))[0])
+    res_csv = pd.read_csv(list(root_dir.joinpath('dl_diag').glob('*.csv'))[0], index_col=0)
     for i, (f_im, f_seg, f_tag) in enumerate(zip(root_dir.joinpath('normalized_image').glob("*nii*"),
                                        root_dir.joinpath('segment_output').glob("*nii*"),
                                        root_dir.joinpath('normalized_image').glob('*.json'),
                                        )):
-        # Default
+        # Default TODO: Move this to report_gen.py
         write_out_data = {
             'ref_radiomics': '',
             'ref_dl': 0.5
@@ -273,23 +275,18 @@ def process_output(root_dir: Union[Path, str], out_dir: Union[Path, str]) -> Non
         stat_fil.Execute(seg)
         volume = stat_fil.GetPhysicalSize(1)
         dl_res = res_csv.iloc[i]['Prob_Class_0']
-        if dl_res >= write_out_data['ref_dl']:
-            diagnosis_overall = 1
-        else:
-            diagnosis_overall = 0
-        write_out_data['ref_dl'] = f"< {write_out_data['ref_dl']}"
+        id = res_csv.iloc[i]['IDs']
+        if np.isreal(id):
+            id = str(int(id))
 
-        image_path = report_dir.joinpath(f'npc_report_{i:02d}.png')
-        report_path = report_dir.joinpath(f'npc_report_{i:02d}.pdf')
+        report_path = report_dir.joinpath(f'npc_report_{id}.pdf')
         c = ReportGen_NPC_Screening(str(report_path))
-        im = c.draw_image(str(f_im), str(f_seg), mode=1 if diagnosis_overall in [1, -1] else 0)
-        imageio.imsave(str(image_path),im)
 
-        write_out_data['image_dir'] = str(image_path)
         write_out_data['dicom_tags'] = str(f_tag)
         write_out_data['lesion_vol'] = f'{volume / 1000.:.02f}' # convert from mm3 to cm3
         write_out_data['diagnosis_dl'] = f"{dl_res:.03f}"
-        write_out_data['diagnosis_overall'] = diagnosis_overall
+        write_out_data['image_nii'] = str(f_im)
+        write_out_data['segment_nii'] = str(f_seg)
 
         c.read_data_display(write_out_data)
         c.draw()

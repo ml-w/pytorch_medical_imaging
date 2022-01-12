@@ -16,10 +16,12 @@ class Test_pipeline(unittest.TestCase):
 
     def test_main(self):
         # p = Path("example_data/npc_case/ALL_DICOM")
-        p = Path("/media/storage/Source/Repos/NPC_Segmentation/NPC_Segmentation/00.RAW/HKU/0135")
+        p = Path("/media/storage/Source/Repos/NPC_Segmentation/NPC_Segmentation/00.RAW/extra_20210426/P341")
+        # p = Path("/home/lwong/FTP/2.Projects/8.NPC_Segmentation/00.RAW/NPC_new_dx_cases/1249/")
         # p = Path("example_data/npc_case/1183-T2_FS_TRA+301.nii.gz")
+        po = Path("/media/storage/Source/Repos/NPC_Segmentation/NPC_Segmentation/00.RAW/HKU/")
         with tempfile.TemporaryDirectory() as temp_dir:
-            args = f"-i {str(p)} -o {str(p.parent)} -n 16 --verbose"
+            args = f"-i {str(p)} -o {str(po)} -n 16 --verbose"
             main(args.split())
 
     def test_post_proc_main(self):
@@ -79,10 +81,10 @@ class Test_pipeline(unittest.TestCase):
             pmi_main(command)
 
     def test_process_output(self):
-        p = Path('/media/storage/Source/Repos/NPC_Segmentation/NPC_Segmentation/00.RAW/HKU')
+        p = Path('/media/storage/Source/Repos/NPC_Segmentation/NPC_Segmentation/00.RAW/HKU/report/data_dir')
         process_output(p, p)
 
 
 if __name__ == '__main__':
     diu = Test_pipeline()
-    diu.test_process_output()
+    diu.test_main()
