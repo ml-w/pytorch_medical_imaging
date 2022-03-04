@@ -1,6 +1,7 @@
 import datetime
 import tempfile
 
+import reportlab.pdfgen.canvas
 from reportlab.pdfgen.canvas import Canvas
 from reportlab.lib.pagesizes import A4
 from reportlab.lib.styles import ParagraphStyle, getSampleStyleSheet
@@ -56,6 +57,32 @@ class LineSeparator(Flowable):
         p.close()
         canvas.setLineWidth(self.thickness)
         canvas.drawPath(p)
+
+class InteractiveCheckBox(Flowable):
+    def __init__(self, text='A Box'):
+        Flowable.__init__(self)
+        self.text = text
+        self.boxsize = 6
+
+    def draw(self):
+        self.canv.saveState()
+        self.canv.translate(len(self.text) * self.boxsize + 2, 0)
+        self.canv.drawString(-len(self.text) * self.boxsize - 2, 0, self.text)
+        form = self.canv.acroForm
+        form.checkbox(checked=False,
+                      buttonStyle='check',
+                      name=self.text,
+                      tooltip=self.text,
+                      relative=True,
+                      size=self.boxsize)
+        self.canv.restoreState()
+        return
+
+    # def wrap(self, aW, aH):
+    #     aW = self.boxsize + len(self.text) * self.boxsize
+    #     aH = self.boxsize
+    #     return (aW, aH)
+
 
 class ReportGen_NPC_Screening(Canvas):
     r"""
@@ -203,7 +230,7 @@ class ReportGen_NPC_Screening(Canvas):
                       "Pellentesque ut metus et eros placerat lobortis at sed leo. "
                       "Quisque a semper arcu. Morbi et aliquam sem. Nulla rutrum "
                       "varius nibh non sollicitudin. ",
-            "user_grade": ""
+            "user_grade": u"1 \xe2 \t 2 \xe2 \t 3 \xe2"
         }
         # Load data
         data_display.update(self.data_display)
@@ -216,7 +243,7 @@ class ReportGen_NPC_Screening(Canvas):
             "ref_dl": "Reference for normal",
             'lesion_vol': "Lesion volume",
             'remark': 'Comment',
-            'user_grade': 'Grade'
+            'user_grade': 'Grading'
         }
         _ref_dl = re.search("[0-9\.\-]+", str(data_display['ref_dl'])).group()
         data_display['ref_dl'] = '< ' + str(_ref_dl)
@@ -299,9 +326,22 @@ class ReportGen_NPC_Screening(Canvas):
                                           underline_value=True, bold_value=True)
         story.append(Paragraph(msg))
 
-        # remark
+        # separator
         story.append(LineSeparator(1, self.page_setting['padding']))
-        right_indent = int(self.page_setting['frame_size'][0] // 2 + 10)
+        right_indent = int(self.page_setting['frame_size'][0] // 2 + 10) # Room for the table
+        style = getSampleStyleSheet()['Heading3']
+        desc_title = Paragraph(f"<para face=times spaceBefore=0> <b><u> Clinical Impression </u></b></para>", style=style)
+        story.append(desc_title)
+
+        # For user grading
+        msg = f"<para face=courier fontSize=11 spaceAfter=10 rightIndent={right_indent}>>{column_map['user_grade']}</para>"
+        story.append(Paragraph(msg))
+        grade_table = Table([[InteractiveCheckBox(text=f"{i}") for i in list(range(1, 5)) + ['5a', '5b']]],
+                        colWidths=25)
+        grade_table.hAlign="LEFT"
+        story.extend([grade_table])
+
+        # remark
         msg = f"<para face=courier fontSize=11 spaceAfter=10 rightIndent={right_indent}>>" \
               f"{column_map['remark']}: <br/></para>"
         story.append(Paragraph(msg))
@@ -337,6 +377,7 @@ class ReportGen_NPC_Screening(Canvas):
 
         self.frame_p2.drawBoundary(self)
         self.frame_p2.addFromList(story, self)
+        im_file_.close()
         pass
 
     @staticmethod
@@ -344,6 +385,7 @@ class ReportGen_NPC_Screening(Canvas):
                                value,
                                *added_tags,
                                unit: Optional[str] = "",
+                               label: Optional[str] = " -- ",
                                font_size: Optional[int] = 11,
                                left_indent_level: Optional[int] = 0,
                                right_indent: Optional[int] = 0,
@@ -361,12 +403,10 @@ class ReportGen_NPC_Screening(Canvas):
             value = f"<b>{value}</b>"
 
         if value_tags is not None:
-            if isinstance(value_tags, str):
-                value_tags = [value_tags]
+            value_tags = [value_tags] if isinstance(value_tags, str) else value_tags
             value = f"</para><para face=courier fontSize={font_size} spaceAfter=10 {' '.join(value_tags)}>{value}"
-            print(value)
 
-        msg += f">{key} -- {value}{unit}<br/>"
+        msg += f">{key}{label}{value}{unit}<br/>"
         msg += "</para>"
         return msg
 
