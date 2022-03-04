@@ -17,7 +17,7 @@ from pathlib import Path
 from pytorch_med_imaging.utils.visualization import draw_grid_contour
 from pytorch_med_imaging.logger import Logger
 from torchvision.utils import make_grid
-from typing import Union, Callable, Optional
+from typing import Union, Callable, Optional, Iterable
 import imageio
 import torch
 import SimpleITK as sitk
@@ -151,6 +151,15 @@ class ReportGen_NPC_Screening(Canvas):
                            showBoundary=1)
         self.frame.drawBoundary(self)
 
+        self.frame_p2 = Frame(page_margin, page_margin,
+                              frame_size_[0],
+                              frame_size_[1],
+                              leftPadding=frame_padding_,
+                              bottomPadding=frame_padding_,
+                              rightPadding=frame_padding_,
+                              topPadding=frame_padding_,
+                              showBoundary=1)
+
         self.table_frame = Frame(page_margin + frame_size_[0] // 2,
                                  page_margin,
                                  frame_size_[0] // 2,
@@ -193,11 +202,8 @@ class ReportGen_NPC_Screening(Canvas):
             'remark': "Lorem ipsum dolor sit amet, consectetur adipiscing elit. "
                       "Pellentesque ut metus et eros placerat lobortis at sed leo. "
                       "Quisque a semper arcu. Morbi et aliquam sem. Nulla rutrum "
-                      "varius nibh non sollicitudin. In ac massa sit amet erat imperdiet "
-                      "sodales sit amet eu tortor. Ut id leo nec ante aliquet placerat at "
-                      "sit amet ante. Pellentesque vulputate elit ut purus vulputate, nec"
-                      " auctor urna rutrum. Ut pharetra, sem aliquam scelerisque commodo, "
-                      "risus lacus sodales leo, vitae auctor nisi ante a libero. "
+                      "varius nibh non sollicitudin. ",
+            "user_grade": ""
         }
         # Load data
         data_display.update(self.data_display)
@@ -209,7 +215,8 @@ class ReportGen_NPC_Screening(Canvas):
             'ref_radiomics': "Reference for normal",
             "ref_dl": "Reference for normal",
             'lesion_vol': "Lesion volume",
-            'remark': 'Comment'
+            'remark': 'Comment',
+            'user_grade': 'Grade'
         }
         _ref_dl = re.search("[0-9\.\-]+", str(data_display['ref_dl'])).group()
         data_display['ref_dl'] = '< ' + str(_ref_dl)
@@ -220,7 +227,7 @@ class ReportGen_NPC_Screening(Canvas):
                                                        lambda x: x >= data_display['ref_radiomics'])
         self.diagnosis_overall = diagnosis_overall
         # draw & save image
-        im = self.draw_image(data_display['image_nii'], data_display['segment_nii'])
+        im, sn = self.draw_image(data_display['image_nii'], data_display['segment_nii'], return_num_seg=True)
         im_file_ = tempfile.NamedTemporaryFile(mode='wb', suffix='.png')
         imageio.imsave(im_file_, im, format='png')
         data_display['image_dir'] = im_file_.name
@@ -243,19 +250,21 @@ class ReportGen_NPC_Screening(Canvas):
         if diagnosis_overall in [-1, 1]:
             _d = "Doubtful" if diagnosis_overall == -1 else "NPC"
             recommend = f"{_d}; recommend full scan"
-            msg = "Lesion detected (Three or less slices with largest tumor volume displayed)"
+            msg = f"Lesion detected (Three or less slices [{sn[0]} in {sn[1]} segmented] with largest tumor volume " \
+                  f"displayed)"
             color = "#a32e2c"
         elif diagnosis_overall == 2:
             recommend = "Benign lesion, no further action needed"
-            msg = "Benign lesion detected (Three slices in the middle of image displayed)"
-            color = "#32a852"
+            msg = f"Benign lesion detected (Three slices [{sn[0]} in {sn[1]} segmented] with largest lesion volume " \
+                  f"displayed) "
+            color = "#97a128"
         else:
             recommend = "No further action needed"
             msg = "No significant lesion detected (Three slices in the middle of image displayed)"
             color = "#32a852"
 
         # If doubtful case, display segmentation with red warning sign
-        style = getSampleStyleSheet()['Heading2']
+        style = getSampleStyleSheet()['Heading3']
         sect_title = Paragraph(f"<para face=times color={color}><b>" + msg + "</b></para>", style=style)
         story.extend([sect_title, im])
 
@@ -263,35 +272,37 @@ class ReportGen_NPC_Screening(Canvas):
         story.append(LineSeparator(1, self.page_setting['padding']))
 
         # build description
-        style = getSampleStyleSheet()['Heading2']
+        style = getSampleStyleSheet()['Heading3']
         desc_title = Paragraph(f"<para face=times spaceBefore=0> <b><u> Description </u></b></para>", style=style)
         story.append(desc_title)
 
         # lesion properties
         prop = []
         for val in ['lesion_vol']:
-            msg = f"<para face=courier fontSize=11 spaceAfter=10>>{column_map[val]} -- <u>{data_display[val]}</u>(cm^3)</para>"
+            # msg = f"<para face=courier fontSize=11 spaceAfter=10>>{column_map[val]} -- <u>{data_display[val]}</u>(cm^3)</para>"
+            msg = self.generate_key_value_msg(column_map[val], data_display[val], unit="(cm^3)")
             prop.append(Paragraph(msg))
         story.extend(prop)
 
         desc = []
         for val, ref in zip(['diagnosis_radiomics', 'diagnosis_dl'],
                             ['ref_radiomics', 'ref_dl']):
-            msg =  f"<para face=courier fontSize=11 spaceAfter=10>>{column_map[val]} -- <u>{data_display[val]}</u><br/></para>"
+            msg = self.generate_key_value_msg(column_map[val], data_display[val], underline_value=True)
             desc.append(Paragraph(msg))
-            msg =  f"<para face=courier fontSize=11 leftIndent=24 spaceAfter=10>>{column_map[ref]} -- {data_display[ref]}<br/></para>"
+            msg = self.generate_key_value_msg(column_map[ref], data_display[ref], left_indent_level=1, underline_value=False)
+            # msg =  f"<para face=courier fontSize=11 leftIndent=24 spaceAfter=10>>{column_map[ref]} -- {data_display[ref]}<br/></para>"
             desc.append(Paragraph(msg))
         story.extend(desc)
 
         # recommendation
-        msg = f"<para face=courier fontSize=11 spaceAfter=10 >>Overall diagnosis: </para>"\
-              f"<para face=courier fontSize=11 spaceAfter=10 color={color}> <b><u>{recommend}</u></b> <br/> </para>"
+        msg = self.generate_key_value_msg("Overall diagnosis", recommend, value_tags=f"color={color}",
+                                          underline_value=True, bold_value=True)
         story.append(Paragraph(msg))
 
         # remark
         story.append(LineSeparator(1, self.page_setting['padding']))
         right_indent = int(self.page_setting['frame_size'][0] // 2 + 10)
-        msg = f"<para face=courier fontSize=11 spaceAfter=10 rightIndent={right_indent} >>" \
+        msg = f"<para face=courier fontSize=11 spaceAfter=10 rightIndent={right_indent}>>" \
               f"{column_map['remark']}: <br/></para>"
         story.append(Paragraph(msg))
         msg = f"<para face=courier fontSize=11 spaceAfter=10 rightIndent={right_indent } leftIndent=12>" \
@@ -301,7 +312,63 @@ class ReportGen_NPC_Screening(Canvas):
         self.frame.addFromList(story, self)
         self.table_frame.addFromList([self.draw_grading_table()], self)
         im_file_.close()
+
+        # New page displaying all segmented slides, max num of slide displayed without messing layout is 20
+        self.showPage()
+        im = self.draw_image(data_display['image_nii'], data_display['segment_nii'], return_num_seg=True, mode=2)
+        im_file_ = tempfile.NamedTemporaryFile(mode='wb', suffix='.png')
+        imageio.imsave(im_file_, im, format='png')
+        data_display['image_dir'] = im_file_.name
+
+        story = []
+        style = getSampleStyleSheet()['Heading2']
+        msg = f"Grid of all segmented slices (PID: {self._dicom_tags['Patient ID']})"
+        sect_title = Paragraph(f"<para face=times align=center><b>" + msg + "</b></para>", style=style)
+
+        fixed_aspect_ratio = 3
+        im = Image(data_display['image_dir'],
+                   width  = (self.page_setting['frame_size'][0] - self.page_setting['padding'] * 2),
+                   height = 1E10,
+                   kind='proportional')
+        story.extend([sect_title,
+                      LineSeparator(1, self.page_setting['padding']),
+                      im,
+                      LineSeparator(1, self.page_setting['padding'])])
+
+        self.frame_p2.drawBoundary(self)
+        self.frame_p2.addFromList(story, self)
         pass
+
+    @staticmethod
+    def generate_key_value_msg(key,
+                               value,
+                               *added_tags,
+                               unit: Optional[str] = "",
+                               font_size: Optional[int] = 11,
+                               left_indent_level: Optional[int] = 0,
+                               right_indent: Optional[int] = 0,
+                               underline_value: Optional[bool] = True,
+                               bold_value: Optional[bool] = False,
+                               value_tags: Optional[Iterable[str]] = None,
+                               ):
+
+        left_indent = 2 + left_indent_level * (font_size + 3)
+        msg = f"<para face=courier fontSize={font_size} leftIndent={left_indent} spaceAfter=10 " \
+              f"rightIndent={right_indent} {' '.join(added_tags)}>"
+        if underline_value:
+            value = f"<u>{value}</u>"
+        if bold_value:
+            value = f"<b>{value}</b>"
+
+        if value_tags is not None:
+            if isinstance(value_tags, str):
+                value_tags = [value_tags]
+            value = f"</para><para face=courier fontSize={font_size} spaceAfter=10 {' '.join(value_tags)}>{value}"
+            print(value)
+
+        msg += f">{key} -- {value}{unit}<br/>"
+        msg += "</para>"
+        return msg
 
     def draw_grading_table(self):
         # data = [['<b>Grade</b>', '<b>Walls</b>', '<b>Adenoid</b>'],
@@ -445,7 +512,7 @@ class ReportGen_NPC_Screening(Canvas):
         self.dicom_tags = data_display.pop('dicom_tags')
         self.data_display = data_display
 
-    def draw_image(self, img, seg, mode=None):
+    def draw_image(self, img, seg, mode=None, return_num_seg=False):
         r"""
         Draw based of mode. mode: 0 => Display center slices, 1 => Display with segmentation
 
@@ -465,12 +532,12 @@ class ReportGen_NPC_Screening(Canvas):
             f = sitk.LabelShapeStatisticsImageFilter()
             f.Execute(tissue_mask == 1)
             cent = f.GetCentroid(1)
-            cent = seg.TransformPhysicalPointToIndex(cent)
+            cent = seg.TransformPhysicalPointToIndex(cent) # use seg instead of img because its faster
 
-            # Compute square bounding box
+            # Compute square bounding box  [xstart, ystart, start, xsize, ysize, zsize]
             bbox = f.GetBoundingBox(1)
-            w = bbox[3] - bbox[1]
-            h = bbox[4] - bbox[2]
+            w = bbox[3]
+            h = bbox[4]
             l = max([w, h])
 
             n = self.image_setting['n']
@@ -478,7 +545,10 @@ class ReportGen_NPC_Screening(Canvas):
             slice_range = [cent[-1] - n // 2, cent[-1] + n // 2]
             self.image = make_grid(torch.as_tensor(img[slice_range[0]:slice_range[1]+1]).unsqueeze(1),
                                    nrow=self.image_setting['nrow'], padding=2, normalize=True).numpy().transpose(1, 2, 0)
-            return self.image
+            if return_num_seg:
+                return self.image, None
+            else:
+                return self.image
         elif mode == 1:
             counts = np.sum(sitk.GetArrayFromImage(seg), axis=(1, 2)).astype('int32')
             non_zero_indices = np.nonzero(counts)[0]    # argsort is broken by zeros, so extract non-zero elements first
@@ -493,10 +563,11 @@ class ReportGen_NPC_Screening(Canvas):
             cent = f.GetCentroid(1)
             cent = seg.TransformPhysicalPointToIndex(cent)
             bbox = f.GetBoundingBox(1)
-            w = abs(bbox[3] - bbox[1])
-            h = abs(bbox[4] - bbox[2])
-            l = max([w, h]) + self.image_setting['padding_size']    # fit to the size of the segmentation bounding box
-            l = min([self.image_setting['max_slice_size'], l])        # but no larger than 400 x 400
+            self._logger.info(f"BBox: {bbox}")
+            w = bbox[3]
+            h = bbox[4]
+            l = max([w, h]) + self.image_setting['padding_size']      # fit to the size of the segmentation bounding box
+            l = min([self.image_setting['max_slice_size'], l])        # but no larger than 'max_slice_size'
 
             crop = {
                 'center': [cent[1], cent[0]], # y, x because of make_grid convention
@@ -505,6 +576,7 @@ class ReportGen_NPC_Screening(Canvas):
 
             display_slice = r[:3] # Get the three slices with largest tumor
             display_slice.sort()  # put them in axial order
+            ori_size = seg.GetSize()
             img, seg = (torch.as_tensor(sitk.GetArrayFromImage(x).astype('float')) for x in [img, seg])
             img, seg = img[display_slice], seg[display_slice]
 
@@ -517,6 +589,45 @@ class ReportGen_NPC_Screening(Canvas):
 
             self.image = draw_grid_contour(img, [seg], color=[(255, 100, 55)],
                                            nrow=self.image_setting['nrow'], padding=2, thickness=1, crop=crop, alpha=0.8)
+
+            if return_num_seg:
+                num_seg = bbox[-1]
+                all_slice = int(ori_size[-1])
+                return self.image, (num_seg, all_slice)
+            else:
+                return self.image
+        elif mode == 2: # Draw all slice
+            ori_size = seg.GetSize()
+            f = sitk.LabelShapeStatisticsImageFilter()
+            f.Execute(seg >= 1)
+            bbox = f.GetBoundingBox(1)
+            cent = f.GetCentroid(1)
+            cent = seg.TransformPhysicalPointToIndex(cent) # use seg instead of img because its faster
+
+            # Compute square bounding box
+            w = bbox[3]
+            h = bbox[4]
+            display_slide_u = min([bbox[2] + bbox[5] + 1, ori_size[-1] - 1])
+            display_slide_d = max([bbox[2] - 1, 0])
+            l = max([w, h])
+            l = max([w, h]) + self.image_setting['padding_size']      # fit to the size of the segmentation bounding box
+            l = min([self.image_setting['max_slice_size'], l])        # but no larger than 400 x 400
+
+            # draw all slides,
+            crop = {
+                'center': [cent[1], cent[0]], # y, x because of make_grid convention
+                'size': [l, l]
+            }
+
+            if bbox[5] > 12: # If there are more than 12 slid, set nrow to 4 for better view
+                nrow = self.image_setting['nrow'] + 1
+            else:
+                nrow = self.image_setting['nrow']
+            img, seg = (torch.as_tensor(sitk.GetArrayFromImage(x).astype('float')) for x in [img, seg])
+            img, seg = img[display_slide_d:display_slide_u], seg[display_slide_d:display_slide_u]
+            self.image = draw_grid_contour(img, [seg], color=[(255, 100, 55)],
+                                           nrow=nrow, padding=2, thickness=1, crop=crop, alpha=0.8)
+
             return self.image
 
     @staticmethod
