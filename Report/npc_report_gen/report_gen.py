@@ -406,6 +406,7 @@ class ReportGen_NPC_Screening(Canvas):
         self.enrich_mri_frame()
         self.showPage()
         self.save()
+        self._logger.info(f"Write PDF to: {self._filename}")
 
     def _read_details_from_dicom(self, dicom_dir, sequence_id=None):
         pass
