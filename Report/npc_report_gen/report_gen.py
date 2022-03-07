@@ -5,6 +5,7 @@ import reportlab.pdfgen.canvas
 from reportlab.pdfgen.canvas import Canvas
 from reportlab.lib.pagesizes import A4
 from reportlab.lib.styles import ParagraphStyle, getSampleStyleSheet
+from reportlab.lib.colors import Color
 from reportlab.platypus import *
 
 from reportlab.pdfbase import pdfmetrics
@@ -12,7 +13,7 @@ from reportlab.pdfbase.ttfonts import TTFont
 pdfmetrics.registerFont(TTFont('Serif', 'LiberationSerif-Regular.ttf'))
 pdfmetrics.registerFont(TTFont('Serif-Bold', 'LiberationSerif-Bold.ttf'))
 pdfmetrics.registerFont(TTFont('Serif-Italic', 'LiberationSerif-Italic.ttf'))
-# pdfmetrics.registerFont(TTFont('Courier', './asset/Courier.ttf'))
+pdfmetrics.registerFont(TTFont('Courier', './asset/Courier.ttf'))
 
 from pathlib import Path
 from pytorch_med_imaging.utils.visualization import draw_grid_contour
@@ -28,10 +29,11 @@ import re
 
 import numpy as np
 
-def inch_to_pt(inch):
-    return 72 * inch
+def inch_to_pt(inch, dpi=72):
+    return dpi * inch
 
-
+def pt_to_inch(pt, dpi=72):
+    return pt / dpi
 
 class LineSeparator(Flowable):
     """A horizontal line spanning the whole canvas"""
@@ -59,17 +61,22 @@ class LineSeparator(Flowable):
         canvas.drawPath(p)
 
 class InteractiveCheckBox(Flowable):
-    def __init__(self, text='A Box'):
+    r"""Check box with label"""
+    def __init__(self, text='A Box', fontsize=12):
         Flowable.__init__(self)
         self.text = text
         self.boxsize = 6
+        self.fontsize = fontsize
+        self._leading = self.fontsize * 1.2
 
     def draw(self):
         self.canv.saveState()
-        self.canv.translate(len(self.text) * self.boxsize + 2, 0)
-        self.canv.drawString(-len(self.text) * self.boxsize - 2, 0, self.text)
+        self.canv.setFont("Courier", self.fontsize)
+        self.canv.translate(len(self.text) * self.fontsize * 0.6 + 2, 0)
+        self.canv.drawString(-len(self.text) * self.fontsize * 0.6 - 2, 0, self.text)
         form = self.canv.acroForm
         form.checkbox(checked=False,
+                      y=0,
                       buttonStyle='check',
                       name=self.text,
                       tooltip=self.text,
@@ -78,10 +85,34 @@ class InteractiveCheckBox(Flowable):
         self.canv.restoreState()
         return
 
-    # def wrap(self, aW, aH):
-    #     aW = self.boxsize + len(self.text) * self.boxsize
-    #     aH = self.boxsize
-    #     return (aW, aH)
+    def wrap(self, availWidth, availHeight):
+        return (availWidth, self._leading)
+
+class InteractiveTextField(Flowable):
+    r"""Check box with label"""
+    def __init__(self,
+                 default_text='Please enter comment here',
+                 width=30,
+                 height=30,
+                 field_name='comment',
+                 left_indent=0):
+        Flowable.__init__(self)
+        self.text = default_text
+        self.width = width
+        self.height = height
+        self.left_indent = left_indent * 12
+
+    def draw(self):
+        self.canv.saveState()
+        self.canv.translate(self.left_indent, 0)
+        self.canv.acroForm.textfieldRelative(value=self.text, maxlen=1000, fieldFlags='multiline',
+                                             height=self.height, width=self.width, forceBorder=False, fontSize=10,
+                                             borderWidth=0, fontName='Courier', fillColor=Color(0.9, 0.9, 0.9))
+        self.canv.restoreState()
+        return
+
+    def wrap(self, aW, aH):
+        return (self.width, self.height)
 
 
 class ReportGen_NPC_Screening(Canvas):
@@ -226,10 +257,7 @@ class ReportGen_NPC_Screening(Canvas):
             'ref_radiomics': None,
             'ref_dl': None,      # larger => NPC
             'lesion_vol': None,  # Unit is cm3
-            'remark': "Lorem ipsum dolor sit amet, consectetur adipiscing elit. "
-                      "Pellentesque ut metus et eros placerat lobortis at sed leo. "
-                      "Quisque a semper arcu. Morbi et aliquam sem. Nulla rutrum "
-                      "varius nibh non sollicitudin. ",
+            'remark': "(Please enter comments here)",
             "user_grade": u"1 \xe2 \t 2 \xe2 \t 3 \xe2"
         }
         # Load data
@@ -243,7 +271,8 @@ class ReportGen_NPC_Screening(Canvas):
             "ref_dl": "Reference for normal",
             'lesion_vol': "Lesion volume",
             'remark': 'Comment',
-            'user_grade': 'Grading'
+            'user_grade': 'Grade',
+            'rec_action': "Impression"
         }
         _ref_dl = re.search("[0-9\.\-]+", str(data_display['ref_dl'])).group()
         data_display['ref_dl'] = '< ' + str(_ref_dl)
@@ -334,20 +363,44 @@ class ReportGen_NPC_Screening(Canvas):
         story.append(desc_title)
 
         # For user grading
-        msg = f"<para face=courier fontSize=11 spaceAfter=10 rightIndent={right_indent}>>{column_map['user_grade']}</para>"
+        msg = f"<para face=courier fontSize=11 spaceAfter=0 rightIndent={right_indent}>>{column_map['user_grade']}:</para>"
         story.append(Paragraph(msg))
-        grade_table = Table([[InteractiveCheckBox(text=f"{i}") for i in list(range(1, 5)) + ['5a', '5b']]],
-                        colWidths=25)
+        grade_table = Table([[InteractiveCheckBox(text=f"{i}", fontsize=10) for i in list(range(1, 6)) + ['5b', '5c']]],
+                            colWidths=30)
         grade_table.hAlign="LEFT"
+        grade_table.spaceAfter = 5
         story.extend([grade_table])
+
+        # recommended actions
+        msg = f"<para face=courier fontSize=11 spaceAfter=5 rightIndent={right_indent}>>{column_map['rec_action']}:</para>"
+        action_table_style = TableStyle(
+            [('VALIGN',(0,0),(-1,-1),'MIDDLE'),
+             ('ALIGN',(0,0),(-1,0),'LEFT'),
+             ]
+        )
+        action_table_tag = "<para face=courier fontSize=10 spaceAfter=10>{}</para>"
+        action_table_options = [
+            "NPC → Referral to endoscopist",
+            "Ambiguous → Referral to endoscopist",
+            "Benign hyperplasia",
+            "Normal nasopharynx"
+        ]
+        action_table = Table([[InteractiveCheckBox(text="", fontsize=6), Paragraph(action_table_tag.format(x))]
+                               for x in action_table_options], # use fontsize to control check box vertical position
+                             colWidths=[15, 230], rowHeights=15, style=action_table_style)
+        action_table.hAlign="LEFT"
+        action_table.spaceAfter=5
+        story.extend([Paragraph(msg), action_table])
 
         # remark
         msg = f"<para face=courier fontSize=11 spaceAfter=10 rightIndent={right_indent}>>" \
               f"{column_map['remark']}: <br/></para>"
         story.append(Paragraph(msg))
-        msg = f"<para face=courier fontSize=11 spaceAfter=10 rightIndent={right_indent } leftIndent=12>" \
-              f"{data_display['remark']}</para>"
-        story.append(Paragraph(msg))
+        tf = InteractiveTextField(default_text=data_display['remark'], height=95, width=220, left_indent=1)
+        story.append(tf)
+        # msg = f"<para face=courier fontSize=11 spaceAfter=10 rightIndent={right_indent } leftIndent=12>" \
+        #       f"{data_display['remark']}</para>"
+        # story.append(Paragraph(msg))
 
         self.frame.addFromList(story, self)
         self.table_frame.addFromList([self.draw_grading_table()], self)
