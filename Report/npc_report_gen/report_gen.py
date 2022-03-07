@@ -303,12 +303,18 @@ class ReportGen_NPC_Screening(Canvas):
         color = "#469e54"
 
         # If benign case or NPC case, display segmentation
-        if diagnosis_overall in [-1, 1]:
-            _d = "Doubtful" if diagnosis_overall == -1 else "NPC"
+        if diagnosis_overall == 1:
+            _d = "** NPC **"
             recommend = f"{_d}; recommend full scan"
             msg = f"Lesion detected (Three or less slices [{sn[0]} in {sn[1]} segmented] with largest tumor volume " \
                   f"displayed)"
             color = "#a32e2c"
+        elif diagnosis_overall == -1:
+            _d = "!!Conflicted conclusion!!"
+            recommend = f"{_d}; recommend manual inspection"
+            msg = f"Abnormally detected (Three or less slices [{sn[0]} in {sn[1]} segmented] with largest volume " \
+                  f"displayed)"
+            color = "#b05720"
         elif diagnosis_overall == 2:
             recommend = "Benign lesion, no further action needed"
             msg = f"Benign lesion detected (Three slices [{sn[0]} in {sn[1]} segmented] with largest lesion volume " \
@@ -406,9 +412,13 @@ class ReportGen_NPC_Screening(Canvas):
         self.table_frame.addFromList([self.draw_grading_table()], self)
         im_file_.close()
 
-        # New page displaying all segmented slides, max num of slide displayed without messing layout is 20
+        # New page displaying all segmented slides, max num of slide displayed without messing layout is 20,
+        # if there are no segmentation, display only the center 20 slides.
         self.showPage()
-        im = self.draw_image(data_display['image_nii'], data_display['segment_nii'], return_num_seg=True, mode=2)
+        if self.diagnosis_overall:
+            im = self.draw_image(data_display['image_nii'], data_display['segment_nii'], return_num_seg=True, mode=2)
+        else:
+            im = self.draw_image(data_display['image_nii'], data_display['segment_nii'], return_num_seg=True, mode=3)
         im_file_ = tempfile.NamedTemporaryFile(mode='wb', suffix='.png')
         imageio.imsave(im_file_, im, format='png')
         data_display['image_dir'] = im_file_.name
@@ -607,7 +617,8 @@ class ReportGen_NPC_Screening(Canvas):
 
     def draw_image(self, img, seg, mode=None, return_num_seg=False):
         r"""
-        Draw based of mode. mode: 0 => Display center slices, 1 => Display with segmentation
+        Draw based of mode. mode: 0 => Display center slices, 1 => Display with segmentation, 2 => Display max 20 slices
+        with segementation.
 
         """
         if isinstance(img, (str, Path)):
@@ -689,10 +700,13 @@ class ReportGen_NPC_Screening(Canvas):
                 return self.image, (num_seg, all_slice)
             else:
                 return self.image
-        elif mode == 2: # Draw all slice
+        elif mode == 2 or mode == 3: # Draw all slice
             ori_size = seg.GetSize()
             f = sitk.LabelShapeStatisticsImageFilter()
-            f.Execute(seg >= 1)
+            if mode == 2:
+                f.Execute(seg >= 1)
+            elif mode == 3:
+                f.Execute(sitk.HuangThreshold(img, 0, 1, 200) != 0)
             bbox = f.GetBoundingBox(1)
             cent = f.GetCentroid(1)
             cent = seg.TransformPhysicalPointToIndex(cent) # use seg instead of img because its faster
