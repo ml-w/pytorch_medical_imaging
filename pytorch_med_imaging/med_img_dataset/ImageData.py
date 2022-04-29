@@ -554,6 +554,15 @@ class ImageDataSet(PMIDataBase):
             "--------------\n"%(__class__.__name__, self.rootdir, self.length)
         # "File Paths\tSize\t\tSpacing\t\tOrigin\n"
         # printable = {'File Name': []}
+        if self.metadata_table is None:
+            self.update_metadata_table()
+        s += self.metadata_table.to_string()
+        return s
+
+    def update_metadata_table(self):
+        r"""
+        Populate self.metadata_table
+        """
         printable = {'ID': [], 'File Name': [], 'Size': [], 'Spacing': [], 'Origin': [], 'Orientation': []}
         for i in range(len(self.data_source_path)):
             id_mo = re.search(self._id_globber, os.path.basename(self.data_source_path[i]))
@@ -570,8 +579,8 @@ class ImageDataSet(PMIDataBase):
             printable['Orientation'].append(self.metadata[i]['orientation'])
         data = df.from_dict(data=printable)
         data = data.set_index('ID')
-        s += data.to_string()
-        return s
+        self.metadata_table = data
+        return data
 
     def write_all(self, tensor_data, outputdirectory, prefix=''):
         r"""Write data array to the output directory accordining to the image
