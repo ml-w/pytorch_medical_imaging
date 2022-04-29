@@ -190,6 +190,21 @@ class TB_plotter(object):
                           out: torch.FloatTensor,
                           img: torch.FloatTensor or torch.IntTensor,
                           writer_index: int, Zrange=40, nrow=3):
+        r"""
+
+        Args:
+            gt (torch.IntTensor):
+                Integer tensor with dimensions (B x 1 x H x W x Z). If its a batch 2D slices, put Z == 1. C == 1.
+            out (torch.FloatTensor):
+                Float tensor with dimensions (B x C x H x W X Z)
+            img:
+            writer_index:
+            Zrange:
+            nrow:
+
+        Returns:
+
+        """
         self._last_writer_index = writer_index
         try:
             # Check if input is 2D or 3D, Check number of non-zero dim beyond B and C dimension
@@ -244,7 +259,7 @@ class TB_plotter(object):
                 # self._logger.debug(f"ar: {ar.shape}")
                 # self._logger.debug(f"gt: {gt.shape}")
             else:
-                raise IndexError(f"Dimension of the label is incorrect: {gt.shape}")
+                raise IndexError(f"Dimension of the label is incorrect: {gt.shape}. Expect dim 2 or 3, got: {dim}")
 
             grid = draw_grid(ss, ar, ground_truth=gt, thickness=2)
             self._writer.add_image('Image/Image', grid.transpose(2, 0, 1), writer_index)
