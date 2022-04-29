@@ -1,6 +1,6 @@
 from .InferencerBase import InferencerBase
 from ..med_img_dataset import DataLabel, PMIDataBase
-from ..logger import Logger
+from mnts.mnts_logger import MNTSLogger
 from torch.utils.data import DataLoader
 from tqdm import *
 import os
@@ -219,7 +219,7 @@ class SurvivalInferencer(InferencerBase):
 
         c_index = top/float(bot)
         if np.isnan(c_index):
-            Logger[__class__.__name__].warning("Got nan when computing concordance. Replace by 0.")
+            MNTSLogger[__class__.__name__].warning("Got nan when computing concordance. Replace by 0.")
             c_index = 0
 
         return np.clip(c_index, 0, 1)

@@ -1,5 +1,5 @@
 from .ClassificationSolver import ClassificationSolver
-from ..logger import Logger
+from mnts.mnts_logger import MNTSLogger
 
 from torch import optim
 from torch.utils.data import DataLoader, TensorDataset
@@ -43,10 +43,10 @@ class BinaryClassificationSolver(ClassificationSolver):
         Returns:
            :class:`ClassificaitonSolver` object
         """
-        assert isinstance(logger, Logger) or logger is None, "Logger incorrect settings!"
+        assert isinstance(logger, MNTSLogger) or logger is None, "Logger incorrect settings!"
 
         if logger is None:
-            logger = Logger[self.__class__.__name__]
+            logger = MNTSLogger[self.__class__.__name__]
 
         # Recalculate number of one_hot slots and rebuild the lab
         self._config = config

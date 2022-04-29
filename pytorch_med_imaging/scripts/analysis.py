@@ -1,11 +1,15 @@
 import matplotlib as mpl
-mpl.use('Qt5Agg')
+try:
+    mpl.use('Qt5Agg')
+except:
+    # Guard to prevent error
+    pass
 import numpy as np
 import os
 import pandas as pd
 
 from pytorch_med_imaging.med_img_dataset import ImageDataSet
-from pytorch_med_imaging.logger import Logger
+from mnts.mnts_logger import MNTSLogger
 import tqdm.auto as auto
 import argparse
 from surface_distance import compute_surface_distances, compute_average_surface_distance
@@ -239,7 +243,7 @@ def Volume(TP, FP, TN, FN):
 def EVAL(seg, gt, vars):
     # df = pd.DataFrame(columns=['Filename','ImageIndex'] + list(vars.keys()))
     df = pd.DataFrame()
-    logger = Logger['EVAL']
+    logger = MNTSLogger['EVAL']
 
     gtindexes = gt.get_unique_IDs()
     segindexes = seg.get_unique_IDs()
@@ -387,7 +391,7 @@ def segmentation_analysis(raw_args=None):
     args = parse.parse_args(raw_args)
     assert os.path.isdir(args.testset) and os.path.isdir(args.gtset), "Path error!"
 
-    logger = Logger('./Analysis.log', 'main', verbose=args.verbose)
+    logger = MNTSLogger('./Analysis.log', 'main', verbose=args.verbose)
 
     vars = {}
     if args.dice:
@@ -454,11 +458,11 @@ def segmentation_analysis(raw_args=None):
         pass
 
     if args.verbose:
-        Logger['main'].info("\n"+results.to_string())
-        Logger['main'].info("{:-^50}".format('Mean'))
-        Logger['main'].info("\n"+results[vars.keys()].groupby('Class').mean().to_string())
-        Logger['main'].info("{:-^50}".format('Median'))
-        Logger['main'].info("\n"+results[vars.keys()].groupby('Class').median().to_string())
+        MNTSLogger['main'].info("\n" + results.to_string())
+        MNTSLogger['main'].info("{:-^50}".format('Mean'))
+        MNTSLogger['main'].info("\n" + results[vars.keys()].groupby('Class').mean().to_string())
+        MNTSLogger['main'].info("{:-^50}".format('Median'))
+        MNTSLogger['main'].info("\n" + results[vars.keys()].groupby('Class').median().to_string())
 
 
     if not args.label is None:
@@ -468,11 +472,11 @@ def segmentation_analysis(raw_args=None):
         try:
             # Append if file exist
             if os.path.isfile(args.save) and args.append:
-                Logger['main'].info("Appending...")
+                MNTSLogger['main'].info("Appending...")
                 with open(args.save, 'a') as f:
                     results.to_csv(f, mode='a', header=False)
             else:
-                Logger['main'].info("Saving...")
+                MNTSLogger['main'].info("Saving...")
                 if args.save.endswith('.xlsx'):
                     with pd.ExcelWriter(args.save) as writer:
                         results.to_excel(writer, sheet_name='Segmentation Results')
@@ -484,7 +488,7 @@ def segmentation_analysis(raw_args=None):
                 else:
                     results.to_csv(args.save)
         except:
-            Logger['main'].warning("Cannot save to: ", args.save)
+            MNTSLogger['main'].warning("Cannot save to: ", args.save)
     return results
 
 if __name__ == '__main__':

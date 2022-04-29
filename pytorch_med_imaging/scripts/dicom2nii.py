@@ -1,4 +1,4 @@
-from pytorch_med_imaging.logger import Logger
+from mnts.mnts_logger import MNTSLogger
 from pytorch_med_imaging.utils import preprocessing, data_formatting
 import argparse
 import os
@@ -23,7 +23,7 @@ def dicom2nii(a, logger):
 
     data_formatting.batch_dicom2nii(dicom_dirs,
                                     out_dir = a.output,
-                                    workers = a.num_workers, 
+                                    workers = a.num_workers,
                                     seq_filters = None,
                                     idglobber = a.idglobber,
                                     use_patient_id = a.usepid,
@@ -34,7 +34,7 @@ def dicom2nii(a, logger):
                                     debug = a.debug,
                                     dump_meta_data = a.dump_dicom_tags)
 
-def console_entry():
+def console_entry(raw_args=None):
     parser = argparse.ArgumentParser()
     parser.add_argument('-i', '--input', type=str, action='store', dest='input',
                         help='Input directory that contains the DICOMs.')
@@ -60,9 +60,9 @@ def console_entry():
                         help='Use patient id as file id.')
     parser.add_argument('--log', action='store_true', dest='log',
                         help='Keep log file under ./dicom2nii.log')
-    a = parser.parse_args()
+    a = parser.parse_args(raw_args)
 
-    logger = Logger('./dicom2nii.log', logger_name='dicom2nii', verbose=True, keep_file=a.log)
+    logger = MNTSLogger('./dicom2nii.log', logger_name='dicom2nii', verbose=True, keep_file=a.log)
     logger.info("Recieve argumetns: {}".format(a))
 
     dicom2nii(a, logger)

@@ -1,5 +1,5 @@
 from ..med_img_dataset import ImageDataSet
-from ..logger import Logger
+from mnts.mnts_logger import MNTSLogger
 import sys
 import configparser
 import argparse
@@ -147,7 +147,7 @@ def console_entry(*args, **kwargs):
         assert os.path.isdir(dir)
 
     logpath = a.log
-    log = Logger(a.log, logger_name='scripts.match_dimension', verbose=a.verbose, keep_file=a.saveLog)
+    log = MNTSLogger(a.log, logger_name='scripts.match_dimension', verbose=a.verbose, keep_file=a.saveLog)
     log.info("{:=^100}".format(" Matching Dimensions "))
     sys.excepthook = log.exception_hook
     a.log = log

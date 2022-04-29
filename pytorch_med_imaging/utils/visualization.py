@@ -5,6 +5,7 @@ import cv2
 import numpy as np
 import os
 from pytorch_med_imaging.med_img_dataset import ImageDataSet
+from mnts.mnts_logger import MNTSLogger
 
 colormaps = {
     'Default': None,
@@ -342,7 +343,7 @@ def draw_grid_contour(im_grid, seg, crop=None, nrow=None, offset=0, background=0
         seg (list):
             Input 3D segmentation list, each should have a dimension of 3 with configuration Z x W x H.
         crop (dict, Optional):
-            If provided with key `{'center': [w, h] 'size': [sw, sh] or int }`, the image is cropped
+            If provided with key `{'center': [h, w] 'size': [sh, sw] or int }`, the image is cropped
             first before making the grid. Default to None.
         nrow (int, Optional):
             Passed to function `make_grid`. Automatically calculated if its None to be the square
@@ -364,6 +365,7 @@ def draw_grid_contour(im_grid, seg, crop=None, nrow=None, offset=0, background=0
         torch.Tensor
     """
     assert (offset >= 0) or (offset is None), "In correct offset setting!"
+    logger = MNTSLogger['draw_grid_contour']
 
     if not crop is None:
         center = crop['center']
@@ -410,8 +412,8 @@ def draw_grid_contour(im_grid, seg, crop=None, nrow=None, offset=0, background=0
             _a, contours, _b = cv2.findContours(ss_grid, mode=cv2.RETR_EXTERNAL,
                                                 method=cv2.CHAIN_APPROX_SIMPLE)
         except Exception as e:
-            print(f"Find contour encounter problem. Falling back...")
-            print(e)
+            logger.warning(f"Find contour encounter problem. Falling back...")
+            logger.exception(e)
             contours, _b = cv2.findContours(ss_grid, mode=cv2.RETR_EXTERNAL,
                                             method=cv2.CHAIN_APPROX_SIMPLE)
         a_contours.append(contours)
@@ -437,6 +439,6 @@ def draw_grid_contour(im_grid, seg, crop=None, nrow=None, offset=0, background=0
         im_grid = cv2.addWeighted(im_grid, 1, temp, alpha, 0)
         del temp
     except Exception as e:
-        print("Fail again to draw contour")
-        print(e)
+        logger.error("Fail again to draw contour")
+        logger.exception(e)
     return im_grid

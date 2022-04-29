@@ -1,7 +1,7 @@
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from pytorch_med_imaging.logger import Logger
+from mnts.mnts_logger import MNTSLogger
 
 class FocalLoss(nn.Module):
     r"""
@@ -43,7 +43,7 @@ class FocalLoss(nn.Module):
         self._reduction = reduction
         self._weight = torch.tensor(weight)
         self._with_sigmoid = with_sigmoid
-        self._logger = Logger[self.__class__.__name__]
+        self._logger = MNTSLogger[self.__class__.__name__]
         self._logger.debug("Set up loss with gamma: {}".format(self._gamma))
         self.register_buffer('weight', self._weight)
         self.register_buffer('gamma', self._gamma)

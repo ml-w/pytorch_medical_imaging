@@ -52,11 +52,9 @@ def loc_text_hist(subject: Subject,
         include=include,
         exclude=exclude,
     )
-
     results = []
     for key, image in images.items():
         image_type = image[TYPE]
-
         function_arg = image.data
         result = _img_to_histogram(function_arg.squeeze(), bins=nbins)
         if not isinstance(result, torch.Tensor):
@@ -94,18 +92,17 @@ def _img_to_histogram(image: torch.Tensor, bins=256) -> torch.Tensor:
     with torch.no_grad():
         # time.sleep(np.random.rand()) # Give it a random pause to avoid deadlocks
         # only deal with 2D images
-        image = torch.clone(image).squeeze()
+        image = image.squeeze()
         if image.ndim != 2:
             raise ArithmeticError("Function is designed for only 2D inputs")
-
-        texture_lndp= torch.tensor(lndp(image.data.squeeze().numpy(), 1)).view_as(image).type_as(image)
-        texture_lbp = torch.tensor(lbp(image.data.squeeze().numpy(), 1)).view_as(image).type_as(image)
+        texture_lbp = torch.from_numpy(lbp(image.squeeze().numpy(), 1)).view_as(image).type_as(image)
+        texture_lndp= torch.from_numpy(lndp(image.squeeze().numpy(), 1)).view_as(image).type_as(image)
         hist_lbp = np.histogram(texture_lbp, bins=bins, range=(0, 255.), density=True)
         hist_lndp = np.histogram(texture_lndp, bins=bins, range=(0, 255.), density=True)
         hist_lbp = hist_lbp[0]
         hist_lndp = hist_lndp[0]
-        feats = torch.cat([torch.tensor(hist_lbp).float(),
-                           torch.tensor(hist_lndp).float()])
+        feats = torch.cat([torch.from_numpy(hist_lbp).float(),
+                           torch.from_numpy(hist_lndp).float()])
         del texture_lbp, texture_lndp, hist_lbp, hist_lndp
         gc.collect()
     return feats

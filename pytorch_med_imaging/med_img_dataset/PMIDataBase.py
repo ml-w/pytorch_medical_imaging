@@ -1,18 +1,18 @@
-from pytorch_med_imaging.logger import Logger
+from mnts.mnts_logger import MNTSLogger
 from torch.utils.data import Dataset
 from abc import *
 
 class PMIDataBase(Dataset):
     def __init__(self, *args, **kwargs):
-        self._logger = Logger[self.__class__.__name__]
-        self._logger._verbose = Logger.global_logger._verbose
+        self._logger = MNTSLogger[self.__class__.__name__]
+        self._logger._verbose = MNTSLogger.global_logger._verbose
 
         super(PMIDataBase, self).__init__()
 
-    def log_print_tqdm(self, msg, level=Logger.INFO):
+    def log_print_tqdm(self, msg, level=MNTSLogger.INFO):
         self._logger.log_print_tqdm(msg, level)
 
-    def log_print(self, msg, level=Logger.INFO):
+    def log_print(self, msg, level=MNTSLogger.INFO):
         self._logger.log_print(msg, level)
 
 

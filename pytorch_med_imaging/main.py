@@ -23,9 +23,9 @@ from .networks.specialized import *
 # from pytorch_med_imaging.networks import third_party_nets
 from .tb_plotter import TB_plotter
 
-from .logger import Logger
 from .solvers import *
 from .inferencers import *
+from mnts.mnts_logger import MNTSLogger
 
 from tensorboardX import SummaryWriter
 import torch.autograd as autograd
@@ -459,7 +459,7 @@ def console_entry(raw_args=None):
 
     print(f"Log designated to {log_dir}")
     print(f"Fullpath: {os.path.abspath(log_dir)}")
-    logger = Logger(log_dir, logger_name='main', verbose=a.verbose)
+    logger = MNTSLogger(log_dir, logger_name='main', verbose=a.verbose)
     logger.info("Global logger: {}".format(logger))
 
     for msg in pre_log_message:

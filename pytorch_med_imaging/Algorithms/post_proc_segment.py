@@ -1,17 +1,19 @@
 import SimpleITK as sitk
 import numpy as np
 import os
-from pytorch_med_imaging.logger import Logger
 from pytorch_med_imaging.Algorithms.utils import get_fnames_by_IDs
+from mnts.mnts_logger import MNTSLogger
+from typing import Union, Optional
 import argparse
 import sys
 import fnmatch
 
 __all__ = ['keep_n_largest_connected_body', 'edge_smoothing', 'main']
 
-def keep_n_largest_connected_body(in_im: sitk.Image or str, n: int = 1):
+def keep_n_largest_connected_body(in_im: Union[sitk.Image,str],
+                                  n: Optional[int] = 1):
     r"""
-    This function cast the input into binary label, extract the largest connected component and return the
+    This function cast the input into UInt8 label, extract the largest connected component and return the
     results.
 
     Args:
@@ -54,18 +56,52 @@ def keep_n_largest_connected_body(in_im: sitk.Image or str, n: int = 1):
         out_im = out_im != 0
     return out_im
 
-
-def edge_smoothing(in_im: sitk.Image or str, radius):
+def remove_small_island_2d(in_im: Union[sitk.Image, str],
+                           vol_thres: float,
+                           thickness_thres: float):
     r"""
-    This function smooth the edge of the binary label using closing and opening operation.
-
+    This function cast the input into UInt8 label,
     Args:
         in_im:
+        vol_thres:
 
     Returns:
 
     """
-        # check if input is str, if so, load data
+    size = in_im.GetSize()
+    spacing = in_im.GetSpacing()
+    voxel_vol = np.cumprod(spacing)[-1]
+
+    out_im = sitk.Cast(in_im, sitk.sitkUInt8)
+    # Scan the whole volume slice by slice
+    for i in range(size[-1]):
+        # extract largest connected body
+        filter = sitk.ConnectedComponentImageFilter()
+        conn_im = filter.Execute(out_im[i])
+        n_objs = filter.GetObjectCount() - 1  # 0 also counted
+
+        shape_stats = sitk.LabelShapeStatisticsImageFilter()
+        shape_stats.Execute(conn_im)
+        sizes = [shape_stats.GetPhysicalSize(i) for i in range(1, filter.GetObjectCount() + 1)]
+        sizes_rank = np.argsort(sizes)[::-1] # descending order
+        keep_labels = sizes_rank[:n] + 1
+
+
+
+def edge_smoothing(in_im: Union[sitk.Image, str],
+                   radius: float):
+    r"""
+    This function smooth the edge of the binary label using closing and opening operation.
+
+    Args:
+        in_im (sitk.Image or str):
+            Input segmentation
+        radius
+
+    Returns:
+
+    """
+    # check if input is str, if so, load data
     if isinstance(in_im, str):
         assert os.path.isfile(in_im), "Cannot open supplied input."
         in_im = sitk.ReadImage(in_im)
@@ -96,6 +132,7 @@ def edge_smoothing(in_im: sitk.Image or str, radius):
     return out_im
 
 
+
 def main(raw_args=None):
     parser = argparse.ArgumentParser()
     parser.add_argument('-i', '--input', action='store', dest='input',
@@ -118,16 +155,15 @@ def main(raw_args=None):
         os.makedirs(args.output, exist_ok=True)
 
     print("Creating logger...")
-    if Logger.global_logger is None:
-        logger = Logger(logger_name='post-processing', log_dir=os.path.join(args.output, 'post-processing.log'),
-                        verbose=args.verbose)
+    if MNTSLogger.global_logger is None:
+        logger1 = MNTSLogger(logger_name='post-processing', log_dir=os.path.join(args.output, 'post-processing.log'),
+                         verbose=args.verbose)
+        logger = logger1
     else:
-        logger = Logger['post-processing']
+        logger = MNTSLogger['post-processing']
 
     # Hook execptions
-    sys.excepthook = logger.exception_hook
-
-    logger.info("=" * 20 + " Post-processing " + "=" * 20)
+    logger.info("{:=^120}".format(" Post-processing "))
 
     # get all .nii.gz files
     if args.recursive:

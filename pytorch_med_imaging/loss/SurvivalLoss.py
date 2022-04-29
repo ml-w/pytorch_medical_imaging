@@ -1,6 +1,6 @@
 import torch
 import torch.nn as nn
-from ..logger import Logger
+from mnts.mnts_logger import MNTSLogger
 
 __all__ = ['CoxNLL', 'PyCoxLoss', 'WeightedCoxBCE', 'TimeDependentCoxNLL']
 
@@ -78,8 +78,8 @@ class CoxNLL(nn.Module):
         cox = - log_l.sum() / N
 
         if torch.isnan(cox):
-            Logger['CoxLoss'].warning("Got nan")
-            Logger['CoxLoss'].error(f"{pred}\n"
+            MNTSLogger['CoxLoss'].warning("Got nan")
+            MNTSLogger['CoxLoss'].error(f"{pred}\n"
                                     f"{gamma.flatten()}\n{cumsum_exp_pred.flatten()}\n{sum_log_exp.flatten()}"
                                     f"\n{log_l.flatten()}\n{N}")
         return cox
@@ -178,8 +178,8 @@ class WeightedCoxBCE(nn.Module):
         cox = self.w_cox * cox
 
         if torch.isnan(cox):
-            Logger['CoxLoss'].warning("Got nan")
-            Logger['CoxLoss'].error(f"{pred}\n"
+            MNTSLogger['CoxLoss'].warning("Got nan")
+            MNTSLogger['CoxLoss'].error(f"{pred}\n"
                                     f"{gamma.flatten()}\n{cumsum_exp_pred.flatten()}\n{sum_log_exp.flatten()}"
                                     f"\n{log_l.flatten()}\n{N}")
 
@@ -268,8 +268,8 @@ class TimeDependentCoxNLL(nn.Module):
         N = censoring_vect.bool().float().sum()
         cox = - log_l.sum() / N
         if torch.isnan(cox):
-            Logger['CoxLoss'].warning("Got nan")
-            Logger['CoxLoss'].error(f"{pred}\n{vec_pred.flatten()}\n"
+            MNTSLogger['CoxLoss'].warning("Got nan")
+            MNTSLogger['CoxLoss'].error(f"{pred}\n{vec_pred.flatten()}\n"
                                     f"{gamma.flatten()}\n{cumsum_exp_pred.flatten()}\n{sum_log_exp.flatten()}"
                                     f"\n{log_l.flatten()}\n{N}")
 

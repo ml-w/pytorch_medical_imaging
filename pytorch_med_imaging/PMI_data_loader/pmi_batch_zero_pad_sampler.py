@@ -3,7 +3,7 @@ from torch.utils.data import DataLoader
 from torch.utils.data._utils.collate import default_collate
 import torch
 
-from ..logger import Logger
+from mnts.mnts_logger import MNTSLogger
 
 __all__ = ['PMIBatchZeroPadSampler']
 
@@ -26,7 +26,7 @@ class PMIBatchZeroPadSampler(DataLoader):
 
         self.pad_element = pad_element if isinstance(pad_element, list) else [pad_element]
         self.pad_axis = pad_axis
-        self._logger = Logger[__class__.__name__]
+        self._logger = MNTSLogger[__class__.__name__]
         self._return_ori_len = return_ori_len
 
         if not isinstance(self.pad_element, list) or not isinstance(self.pad_axis, int):

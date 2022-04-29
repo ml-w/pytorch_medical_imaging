@@ -1,6 +1,6 @@
 import torch
 import torch.nn as nn
-from pytorch_med_imaging.logger import Logger
+from mnts.mnts_logger import MNTSLogger
 
 __all__ = ['TverskyDiceLoss']
 
@@ -15,7 +15,7 @@ class TverskyDiceLoss(nn.Module):
         self._reduction = reduction
         self._weight = torch.tensor(weight)
         self._with_sigmoid = with_sigmoid
-        self._logger = Logger[self.__class__.__name__]
+        self._logger = MNTSLogger[self.__class__.__name__]
         self._logger.debug("Set up loss with gamma: {}".format(self._gamma))
 
         self.register_buffer('weight', self._weight)

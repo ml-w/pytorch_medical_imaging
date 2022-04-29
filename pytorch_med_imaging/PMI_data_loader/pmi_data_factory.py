@@ -1,6 +1,6 @@
 from .pmi_img_feat_pair_dataloader import PMIImageFeaturePair
 from .pmi_image_dataloader import PMIImageDataLoader
-from pytorch_med_imaging.logger import Logger
+from mnts.mnts_logger import MNTSLogger
 import traceback as tr
 
 __all__ = ['PMIDataFactory']
@@ -12,7 +12,7 @@ class PMIDataFactory(object):
             'PMIImageFeaturePair': PMIImageFeaturePair,
         }
 
-        self._logger = Logger[__class__.__name__]
+        self._logger = MNTSLogger[__class__.__name__]
 
 
     def produce_object(self, config):

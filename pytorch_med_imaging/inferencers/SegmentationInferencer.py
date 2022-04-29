@@ -111,14 +111,16 @@ class SegmentationInferencer(InferencerBase):
                     if isinstance(self._inference_sampler, tio.GridSampler):
                         self._inference_sampler.set_subject(subject)
                     elif isinstance(self._inference_sampler, tio.WeightedSampler):
+                        self._logger.info(f"Setting the number of patches to sample to: {self.inf_samples_per_vol}")
                         self._inference_sampler.set_subject(subject, self.inf_samples_per_vol)
+                        self._loader_queue.samples_per_volume = self.inf_samples_per_vol
 
                     # Replace subjects in queue and reset the queue
                     self._loader_queue._subjects_iterable = None
-                    self._loader_queue.subjects_dataset = [subject]
+                    self._loader_queue.sampler = self._inference_sampler
 
                     dataloader = DataLoader(self._loader_queue, batch_size=self.batch_size, num_workers=0)
-                    aggregator = tio.GridAggregator(self._inference_sampler, 'max')
+                    aggregator = tio.GridAggregator(self._inference_sampler, 'average')
 
                     ndim = subject.get_first_image()[tio.DATA].dim()  # Assume channel dim always exist even if only has 1 channel
                     for i, mb in enumerate(tqdm(dataloader, desc="Patch", position=1)):

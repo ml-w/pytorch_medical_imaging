@@ -5,7 +5,7 @@ from abc import *
 from pathlib import Path
 
 from .augmenter_factory import create_transform_compose
-from ..logger import Logger
+from mnts.mnts_logger import MNTSLogger
 
 class PMIDataLoaderBase(object):
     """
@@ -44,7 +44,7 @@ class PMIDataLoaderBase(object):
     """
     def __init__(self, prop_dict, run_mode='training', debug=False, verbose=True, logger=None, **kwargs):
         self._prop_dict = prop_dict
-        self._logger = logger if not logger is  None else Logger[self.__class__.__name__]
+        self._logger = logger if not logger is  None else MNTSLogger[self.__class__.__name__]
         self._verbose = verbose
         self._debug = debug
         self._run_mode = run_mode
@@ -135,9 +135,9 @@ class PMIDataLoaderBase(object):
         else:
             return self._load_data_set_inference()
 
-    def write_log(self, msg, level=Logger.INFO):
+    def write_log(self, msg, level=MNTSLogger.INFO):
         """Write log to logger if there's one"""
-        if not self._logger is None and isinstance(self._logger, Logger):
+        if not self._logger is None and isinstance(self._logger, MNTSLogger):
             self._logger.log(self.__class__.__name__ + ": " + msg, level)
         if self._verbose:
             print(msg)

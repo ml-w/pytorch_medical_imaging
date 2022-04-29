@@ -1,5 +1,5 @@
 import re, os
-from pytorch_med_imaging.logger import Logger
+from mnts.mnts_logger import MNTSLogger
 
 __all__ = ['get_unique_IDs', 'get_fnames_by_globber', 'get_fnames_by_IDs', 'load_supervised_pair_by_IDs']
 
@@ -20,7 +20,7 @@ def get_unique_IDs(fnames, globber=None):
     return idlist
 
 def get_fnames_by_IDs(fnames, idlist, globber=None):
-    _logger = Logger['algorithm.utils']
+    _logger = MNTSLogger['algorithm.utils']
     if globber is None:
         globber = "([0-9]{3,5})"
 
@@ -55,7 +55,7 @@ def get_fnames_by_globber(fnames, globber):
 def load_supervised_pair_by_IDs(source_dir, target_dir, idlist, globber=None):
     source_list = get_fnames_by_globber(os.listdir(source_dir), globber) \
         if not globber is None else os.listdir(source_dir)
-    _logger = Logger['algorithm.utils']
+    _logger = MNTSLogger['algorithm.utils']
 
     source_list = get_fnames_by_IDs(source_list, idlist)
     source_keys = source_list.keys()

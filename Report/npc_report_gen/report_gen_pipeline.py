@@ -5,10 +5,11 @@ import time
 
 from typing import Union, Sequence
 from pytorch_med_imaging.main import console_entry as pmi_main
-from pytorch_med_imaging.scripts.dicom2nii import console_entry as dicom2nii
 from pytorch_med_imaging.Algorithms.post_proc_segment import main as seg_post_main
 from mnts.scripts.normalization import run_graph_inference
+# from pytorch_med_imaging.scripts.dicom2nii import console_entry as dicom2nii
 from mnts.mnts_logger import MNTSLogger
+from mnts.scripts.dicom2nii import console_entry as dicom2nii
 
 from pathlib import Path
 import argparse
@@ -39,12 +40,14 @@ def main(raw_args=None):
                         help="Verbosity.")
     parser.add_argument('--keep-log', action='store_true',
                         help='If specified the log file will be kept as pipeline.log')
+    parser.add_argument('--keep-data', action='store_true',
+                        help="If specified the segmentations and other images generated will be kept")
     parser.add_argument('--debug', action='store_true',
                         help="For debug.")
     a = parser.parse_args(raw_args)
 
     # set up logger
-    with MNTSLogger('./pipline.log', 'main', keep_file=a.keep_log, verbose=a.verbose) as logger:
+    with MNTSLogger('./pipline.log', 'main_report', keep_file=a.keep_log, verbose=a.verbose, log_level="debug") as logger:
         # Prepare directories
         temp_dir = tempfile.TemporaryDirectory()
         temp_dirname = Path(temp_dir.name)
@@ -127,7 +130,14 @@ def main(raw_args=None):
         # Segmentation post-processing
         command = f"-i {str(segment_output)} -o {str(segment_output)} -v".split()
         seg_post_main(command)
-        # shutil.copytree(str(segment_output), str(output_dir.joinpath(segment_output.name))) # Copy result to output dir
+        if a.keep_data:
+            logger.info(f"Writing data to: {str(output_dir.joinpath(segment_output.name))}")
+            try:
+                # Copy result to output dir
+                shutil.copytree(str(segment_output), str(output_dir.joinpath(segment_output.name)))
+            except Exception as e:
+                logger.warning("Failed to save output!")
+                logger.exception(e)
 
 
         #==============
@@ -146,6 +156,7 @@ def main(raw_args=None):
         override_string = ';'.join(['='.join([k, v]) for k, v in override_tags.items()])
         command = f"--config=./asset/pmi_config/BM_nyul_v2.ini " \
                   f"--override={override_string} --inference".split()
+        logger.info(f"Command for deep learning analysis: {command}")
         pmi_main(command)
         # shutil.copytree(str(dl_output_dir), str(output_dir.joinpath(dl_output_dir.name)))
 
@@ -252,6 +263,7 @@ def np_specific_postproc(in_im: Union[sitk.Image, str]):
     Returns:
         sitk.Image
     """
+
 
 
 

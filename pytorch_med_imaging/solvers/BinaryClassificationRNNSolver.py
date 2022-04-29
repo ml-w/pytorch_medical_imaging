@@ -1,6 +1,6 @@
 from . import BinaryClassificationSolver
 from ..PMI_data_loader import PMIBatchZeroPadSampler
-from ..logger import Logger
+from mnts.mnts_logger import MNTSLogger
 
 from torch import optim
 from torch.utils.data import DataLoader, TensorDataset

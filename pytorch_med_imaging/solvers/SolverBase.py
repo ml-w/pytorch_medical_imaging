@@ -10,7 +10,7 @@ from abc import abstractmethod
 import numpy as np
 import gc
 import ast
-from ..logger import Logger
+from mnts.mnts_logger import MNTSLogger
 
 class SolverBase(object):
     """
@@ -56,7 +56,7 @@ class SolverBase(object):
         # optional
         self._logger            = solver_configs.get('logger', None)
         if self._logger is None:
-            self._logger        = Logger[self.__class__.__name__]
+            self._logger        = MNTSLogger[self.__class__.__name__]
 
         # Optimizer attributies
         self._called_time       = 0
@@ -340,7 +340,8 @@ class SolverBase(object):
                 if tensor.type() == self._net_weight_type:
                     return tensor
         except:
-            self._logger.warning("Can't determine if type is already followed.")
+            self._logger.warning(f"Can't determine if type is already followed. Input type is {type(tensor)}")
+            self._logger.exception(f"Get error {e}")
 
         # We also expect list input too.
         if isinstance(tensor, list) or isinstance(tensor, tuple):
@@ -416,6 +417,8 @@ class SolverBase(object):
     def _unpack_minibatch(self, minibatch, unpacking_keys):
         r"""Unpack mini-batch drawn by torchio.Queue or torchio.SubjectsDataset.
         TODO: allow custom modification after unpacking, e.g. concatentation
+        !!! If you chnage this you need to also change InferenceBase._unpacking_keys, I know its not ideal but I dont
+        plan to open aonther class for just this function
         """
         out = []
         for key in unpacking_keys:
@@ -443,7 +446,7 @@ class SolverEarlyStopScheduler(object):
     def __init__(self, configs):
         super(SolverEarlyStopScheduler, self).__init__()
         self._configs = configs
-        self._logger = Logger[__class__.__name__]
+        self._logger = MNTSLogger[__class__.__name__]
         self._last_loss = 1E-32
         self._watch = 0
 

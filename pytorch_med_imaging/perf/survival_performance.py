@@ -1,5 +1,5 @@
 import numpy as np
-from ..logger import Logger
+from mnts.mnts_logger import MNTSLogger
 
 __all__ = ['concordance']
 
@@ -32,7 +32,7 @@ def concordance(risk, event_time, censor_vect):
 
     c_index = top/float(bot)
     if np.isnan(c_index):
-        Logger['concordance'].warning("Got nan when computing concordance. Replace by 0.")
+        MNTSLogger['concordance'].warning("Got nan when computing concordance. Replace by 0.")
         c_index = 0
 
     return np.clip(c_index, 0, 1)

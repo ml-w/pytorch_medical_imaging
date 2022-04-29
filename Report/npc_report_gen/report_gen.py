@@ -17,7 +17,7 @@ pdfmetrics.registerFont(TTFont('Courier', './asset/Courier.ttf'))
 
 from pathlib import Path
 from pytorch_med_imaging.utils.visualization import draw_grid_contour
-from pytorch_med_imaging.logger import Logger
+from mnts.mnts_logger import MNTSLogger
 from torchvision.utils import make_grid
 from typing import Union, Callable, Optional, Iterable
 import imageio
@@ -167,7 +167,7 @@ class ReportGen_NPC_Screening(Canvas):
         self.diagnosis_overall = None
 
         # Set up logger
-        self._logger = Logger['ReportGen']
+        self._logger = MNTSLogger['ReportGen']
 
 
     def build_frames(self):
@@ -239,7 +239,7 @@ class ReportGen_NPC_Screening(Canvas):
         # update the json
         self._dicom_tags = {k: v for k, v in self._dicom_tags.items() if v is not None}
         items_display.update(self._dicom_tags)
-        print(self._dicom_tags, items_display)
+        self._logger.info(f"{self._dicom_tags}, {items_display}")
 
         # msg = '<br/>'.join([f"{key}: \t<u>{value}</u>" for key, value in items_display.items()])
         pretag, posttag = "<para spaceBefore=2 fontSize=8>", "</para>"
@@ -550,7 +550,6 @@ class ReportGen_NPC_Screening(Canvas):
 
                                                     ))
 
-        print(data[0][0])
         table_style = TableStyle(
             [('LINEABOVE', (0, 1), (-1, 1), 1, "#000000"),
              ('LINEABOVE', (0, 2), (-1, 2), 0.5, "#000000"),
@@ -750,7 +749,6 @@ class ReportGen_NPC_Screening(Canvas):
         - [2]   Benign hyperplasia
         - [-1]   Doubtful
         """
-        print(dl_score, dl_thres_func(dl_score), volume)
         if dl_thres_func(dl_score) and float(volume) >= 0.5:
             return 1 # NPC
         elif not dl_thres_func(dl_score) and float(volume) >= 3:

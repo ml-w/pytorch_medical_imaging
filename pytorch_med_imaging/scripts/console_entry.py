@@ -1,6 +1,6 @@
 import argparse
 import os
-from ..logger import Logger
+from mnts.mnts_logger import MNTSLogger
 
 class PMI_ConsoleEntry(argparse.ArgumentParser):
     def __init__(self, addargs: str = ''):
@@ -21,7 +21,7 @@ class PMI_ConsoleEntry(argparse.ArgumentParser):
             self.add_argument(*args, **kwargs)
 
         # For convinient, but not very logical to put this here
-        self.logger = Logger('pmi_script',  verbose=False, keep_file=False)
+        self.logger = MNTSLogger('pmi_script', verbose=False, keep_file=False)
 
     @staticmethod
     def make_console_entry_io():

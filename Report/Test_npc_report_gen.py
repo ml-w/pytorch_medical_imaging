@@ -5,7 +5,7 @@ import tempfile
 import shutil
 from pytorch_med_imaging.Algorithms.post_proc_segment import main as seg_post_main
 from pytorch_med_imaging.main import console_entry as pmi_main
-from npc_report_gen.report_gen_pipeline import get_t2w_series_files, main, process_output
+from npc_report_gen.report_gen_pipeline import get_t2w_series_files, main, generate_report
 from pathlib import Path
 
 class Test_pipeline(unittest.TestCase):
@@ -16,13 +16,22 @@ class Test_pipeline(unittest.TestCase):
 
     def test_main(self):
         # p = Path("example_data/npc_case/ALL_DICOM")
-        p = Path("/media/storage/Source/Repos/NPC_Segmentation/NPC_Segmentation/00.RAW/extra_20210426/P341")
+        # p = Path("/media/storage/Source/Repos/NPC_Segmentation/NPC_Segmentation/00.RAW/extra_20210426/T1rhoNPC020")
+        # p = Path("/mnt/ftp_shared/NPC_New_case/2005-2021_not into T1rho studies/1719")
+        p = Path("/mnt/ftp_shared/NPC_Screening_3_plain/Images/P350")
         # p = Path("/home/lwong/FTP/2.Projects/8.NPC_Segmentation/00.RAW/NPC_new_dx_cases/1249/")
         # p = Path("example_data/npc_case/1183-T2_FS_TRA+301.nii.gz")
         po = Path("/media/storage/Source/Repos/NPC_Segmentation/NPC_Segmentation/00.RAW/HKU/")
-        with tempfile.TemporaryDirectory() as temp_dir:
-            args = f"-i {str(p)} -o {str(po)} -n 16 --verbose"
-            main(args.split())
+        main(['-i',
+              str(p),
+              '-o',
+              str(po),
+              '-n',
+              '16',
+              '--verbose',
+              # '--keep-data',
+              # '--keep-log',
+              ])
 
     def test_post_proc_main(self):
         import time
@@ -82,7 +91,7 @@ class Test_pipeline(unittest.TestCase):
 
     def test_process_output(self):
         p = Path('/media/storage/Source/Repos/NPC_Segmentation/NPC_Segmentation/00.RAW/HKU/report/data_dir')
-        process_output(p, p)
+        generate_report(p, p)
 
 
 if __name__ == '__main__':

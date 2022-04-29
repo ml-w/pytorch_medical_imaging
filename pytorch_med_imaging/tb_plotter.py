@@ -1,6 +1,6 @@
 import torch
 import gc
-from .logger import Logger
+from mnts.mnts_logger import MNTSLogger
 from tensorboardX import SummaryWriter
 from torchvision.utils import make_grid
 from pytorch_med_imaging.Algorithms.visualization import draw_grid
@@ -18,7 +18,7 @@ class TB_plotter(object):
         super(TB_plotter, self).__init__()
         assert isinstance(tb_writer, SummaryWriter), "Writter error"
         self._writer = tb_writer
-        self._logger = logger if not logger is None else Logger[__class__.__name__]
+        self._logger = logger if not logger is None else MNTSLogger[__class__.__name__]
         self._last_writer_index = 0
         self._registered_module_config = {}
         self._write_n_iteration = 1000

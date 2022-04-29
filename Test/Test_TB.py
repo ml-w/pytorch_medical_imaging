@@ -3,13 +3,12 @@ import torch
 import torch.nn as nn
 from torchvision.utils import make_grid
 from torch.utils.data import TensorDataset, DataLoader
-
 from pytorch_med_imaging.PMI_data_loader import pmi_img_feat_pair_multichan_dataloader, PMIDataFactory
 from pytorch_med_imaging.tb_plotter import TB_plotter
-from pytorch_med_imaging.logger import Logger
 from pytorch_med_imaging.networks.layers import *
 from pytorch_med_imaging.networks import CNNGRU
 from pytorch_med_imaging.networks.specialized import *
+from mnts.mnts_logger import MNTSLogger
 from tensorboardX import SummaryWriter
 from pathlib import Path
 import configparser as cf
@@ -17,7 +16,7 @@ import configparser as cf
 os.chdir('../')
 
 def main():
-    main_logger = Logger('./Test_TB.log', logger_name='main', verbose=True, log_level='debug')
+    main_logger = MNTSLogger('./Test_TB.log', logger_name='main', verbose=True, log_level='debug')
 
     ini_file = Path('./Configs/BM_LargerStudy/BM_test_nyul.ini')
     if not ini_file.is_file():

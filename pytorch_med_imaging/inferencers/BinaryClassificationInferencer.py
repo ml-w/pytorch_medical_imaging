@@ -54,7 +54,7 @@ class BinaryClassificationInferencer(ClassificationInferencer):
                 del out, s
 
             out_tensor = torch.cat(out_tensor, dim=0) #(NxC)
-            gt_tensor = torch.cat(gt, dim=0).reshape_as(out_tensor)
+            gt_tensor = torch.cat(gt, dim=0).reshape_as(out_tensor) if len(gt) > 0 else None
             dl = self._writter(out_tensor, uids, gt_tensor)
             self._logger.debug('\n' + dl._data_table.to_string())
 

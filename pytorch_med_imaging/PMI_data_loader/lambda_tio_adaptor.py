@@ -14,7 +14,7 @@ from torchio import Queue
 
 from tqdm.auto import tqdm
 import torch.multiprocessing as mpi
-from ..logger import Logger
+from mnts.mnts_logger import MNTSLogger
 
 __all__ = ['LambdaAdaptor', 'CallbackQueue']
 
@@ -110,7 +110,7 @@ class CallbackQueue(Queue):
         super(CallbackQueue, self).__init__(*args, **kwargs)
         self.callback = patch_sampling_callback
         self.create_new_attribute = create_new_attribute
-        self._logger = Logger[__class__.__name__]
+        self._logger = MNTSLogger[__class__.__name__]
 
     def _fill(self):
         super(CallbackQueue, self)._fill()
@@ -127,6 +127,9 @@ class CallbackQueue(Queue):
             # Things tried:
             #   * use torch.mpi, seems helpful but not fully resolve
             #   * rerun super._fill(), lead to the dataloader thread incorrectly hangs
+            #   * seems like the program runs correctly with pool.terminate() + pool.join() trap
+            #   * If patch-size is too large, this still goes into deadlock even when number of sample per volume is small
+            #   * Turns out the function torch.tensor(something) to turn a numpy array to a pytorch tensor is causing some problem
 
             #  Create thread pool
             while len(res) == 0:

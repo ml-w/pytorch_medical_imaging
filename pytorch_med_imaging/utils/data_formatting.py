@@ -10,7 +10,7 @@ from functools import partial
 from pathlib import Path
 sitk.ProcessObject_GlobalWarningDisplayOff()
 
-from pytorch_med_imaging.logger import Logger
+from mnts.mnts_logger import MNTSLogger
 
 from .preprocessing import recursive_list_dir
 
@@ -34,7 +34,7 @@ def dicom2nii(folder: str,
     """
 
     workerid = mpi.current_process().name
-    logger = Logger['utils.dicom2nii-%s'%workerid]
+    logger = MNTSLogger['utils.dicom2nii-%s' % workerid]
     logger.info(f"Handling: {folder}")
 
 
@@ -182,7 +182,7 @@ def batch_dicom2nii(folderlist, out_dir,
         func:`dicom2nii`
     """
     import multiprocessing as mpi
-    logger = Logger['mpi_dicom2nii']
+    logger = MNTSLogger['mpi_dicom2nii']
 
     if workers > 1:
         pool = mpi.Pool(workers)

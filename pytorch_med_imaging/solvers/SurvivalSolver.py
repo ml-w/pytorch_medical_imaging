@@ -1,5 +1,5 @@
 from .SolverBase import SolverBase
-from ..logger import Logger
+from mnts.mnts_logger import MNTSLogger
 import torch
 import torch.nn as nn
 import numpy as np
@@ -24,16 +24,16 @@ class SurvivalSolver(SolverBase):
         only a designated amount of steps are forward with gradient computation. This can be specified by `grad_iter`.
         """
 
-        assert isinstance(logger, Logger) or logger is None, "Logger incorrect settings!"
+        assert isinstance(logger, MNTSLogger) or logger is None, "Logger incorrect settings!"
 
         if logger is None:
-            logger = Logger[self.__class__.__name__]
+            logger = MNTSLogger[self.__class__.__name__]
 
         self._decay_init_weight = param_initWeight if not param_initWeight is None else 0
         self._grad_iter = grad_iter
         self._censor_value = censor_value
         self._config = config
-        self._logger = Logger[__class__.__name__]
+        self._logger = MNTSLogger[__class__.__name__]
 
         if not self._config is None:
             self._censor_value = self._get_params_from_solver_config('censor_value', 5, True)
@@ -292,7 +292,7 @@ class SurvivalSolver(SolverBase):
 
         c_index = top/float(bot)
         if np.isnan(c_index):
-            Logger[__class__.__name__].warning("Got nan when computing concordance. Replace by 0.")
+            MNTSLogger[__class__.__name__].warning("Got nan when computing concordance. Replace by 0.")
             c_index = 0
 
         return np.clip(c_index, 0, 1)

@@ -1,6 +1,6 @@
 import os
 from abc import abstractmethod
-from ..logger import Logger
+from mnts.mnts_logger import MNTSLogger
 from ..networks import *
 
 import torch
@@ -38,7 +38,7 @@ class InferencerBase(object):
 
         self._logger = inferencer_configs.get('Logger', None)
         if self._logger is None:
-            self._logger = Logger[self.__class__.__name__]
+            self._logger = MNTSLogger[self.__class__.__name__]
 
         if any([default_attr[k] is None for k in required_att]):
             self._logger.error("Some required attributes are not specified.")
@@ -54,7 +54,7 @@ class InferencerBase(object):
         self._load_default_attr(default_attr)
 
 
-        assert isinstance(self._logger, Logger) or self._logger is None, "Incorrect logger."
+        assert isinstance(self._logger, MNTSLogger) or self._logger is None, "Incorrect logger."
 
         if 'target_data' in inferencer_configs:
             self._target_dataset = inferencer_configs['target_data']

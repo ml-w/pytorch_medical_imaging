@@ -5,7 +5,7 @@ import numpy as np
 import sys, os
 import re
 from utils import *
-from pytorch_med_imaging.logger import Logger
+from mnts.mnts_logger import MNTSLogger
 
 global _logger
 
@@ -361,7 +361,7 @@ if __name__ == '__main__':
          '../../NPC_Segmentation/50.NPC_SurvivalAnalysis/CE-T1W_TRA/Images_Upright_segonly')
     ]
 
-    _logger = Logger('./survival_analysis_normalization.log', logger_name='Survival Normalization', verbose=True)
+    _logger = MNTSLogger('./survival_analysis_normalization.log', logger_name='Survival Normalization', verbose=True)
     try:
         _logger.info("{:=^100}".format(" Survival Analysis Normalization - Initialize "))
         main(so_pair,

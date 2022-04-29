@@ -9,8 +9,8 @@ from torch.autograd import Variable
 from torch.utils.data import TensorDataset, DataLoader
 
 from .SolverBase import SolverBase
-from ..logger import Logger
 from ..med_img_dataset import ImageDataSet, ImageDataMultiChannel, PMIDataBase
+from mnts.mnts_logger import MNTSLogger
 
 import tqdm.auto as auto
 import torchio as tio
@@ -40,10 +40,10 @@ class SegmentationSolver(SolverBase):
             logger:
             config:
         """
-        assert isinstance(logger, Logger) or logger is None, "Logger incorrect settings!"
+        assert isinstance(logger, MNTSLogger) or logger is None, "Logger incorrect settings!"
 
         if logger is None:
-            self._logger = Logger[self.__class__.__name__]
+            self._logger = MNTSLogger[self.__class__.__name__]
         self._decay_init_weight = param_initWeight if not param_initWeight is None else 0
         self._config = config
 

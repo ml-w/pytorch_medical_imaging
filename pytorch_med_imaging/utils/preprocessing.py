@@ -8,7 +8,7 @@ import random
 import argparse
 import pandas as pd
 sitk.ProcessObject_GlobalWarningDisplayOff()
-from pytorch_med_imaging.logger import Logger, LogExceptions
+from mnts.mnts_logger import MNTSLogger, LogExceptions
 from typing import Optional, Union
 import multiprocessing as mpi
 
@@ -68,7 +68,7 @@ def make_mask(inimage,
             For MPI purpose, don't use.
     """
     workerid = mpi.current_process().name
-    logger = Logger['utils.preprocessing-%s'%workerid]
+    logger = MNTSLogger['utils.preprocessing-%s' % workerid]
 
     if isinstance(inimage, str):
         logger.info(f"Handling: {inimage}")

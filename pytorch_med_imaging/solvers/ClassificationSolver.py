@@ -1,5 +1,5 @@
 from .SolverBase import SolverBase
-from pytorch_med_imaging.logger import Logger
+from mnts.mnts_logger import MNTSLogger
 
 
 from torch import optim
@@ -43,10 +43,10 @@ class ClassificationSolver(SolverBase):
         Returns:
             :class:`ClassificaitonSolver` object
         """
-        assert isinstance(logger, Logger) or logger is None, "Logger incorrect settings!"
+        assert isinstance(logger, MNTSLogger) or logger is None, "Logger incorrect settings!"
 
         if logger is None:
-            self._logger = Logger[self.__class__.__name__]
+            self._logger = MNTSLogger[self.__class__.__name__]
 
         self._config = config
         self._decay_init_weight = param_initWeight
