@@ -2,10 +2,14 @@ import os, re
 import pprint
 import shutil
 import time
+import datetime
 
 from typing import Union, Sequence
+
+import numpy as np
+
 from pytorch_med_imaging.main import console_entry as pmi_main
-from pytorch_med_imaging.Algorithms.post_proc_segment import main as seg_post_main
+from pytorch_med_imaging.Algorithms.post_proc_segment import keep_n_largest_connected_body, edge_smoothing, remove_small_island_2d
 from mnts.scripts.normalization import run_graph_inference
 # from pytorch_med_imaging.scripts.dicom2nii import console_entry as dicom2nii
 from mnts.mnts_logger import MNTSLogger
@@ -19,11 +23,12 @@ from .report_gen import *
 import SimpleITK as sitk
 import pandas as pd
 
+__all__ = ['seg_post_main']
+
 setting = {
     'asset_dir': Path('../asset').resolve(),
     'temp_dir': Path('./temp_dir').resolve()
 }
-
 
 def main(raw_args=None):
     parser = argparse.ArgumentParser()
@@ -128,17 +133,21 @@ def main(raw_args=None):
         [shutil.copy2(str(t), str(normalized_image_dir)) for t in temp_dirname.glob('*.json')]
 
         # Segmentation post-processing
-        command = f"-i {str(segment_output)} -o {str(segment_output)} -v".split()
-        seg_post_main(command)
+        # command = f"-i {str(segment_output)} -o {str(segment_output)} -v".split()
         if a.keep_data:
-            logger.info(f"Writing data to: {str(output_dir.joinpath(segment_output.name))}")
+            # create a folder based on time at outputdir
+            data_out_dir = Path(output_dir.joinpath("Saved_output"))
+            shutil.rmtree(str(data_out_dir), True)
+            data_out_dir.mkdir()
+            logger.info(f"Writing data to: {str(data_out_dir)}")
             try:
                 # Copy result to output dir
-                shutil.copytree(str(segment_output), str(output_dir.joinpath(segment_output.name)))
+                shutil.copytree(str(segment_output), str(data_out_dir.joinpath(segment_output.name)))
+                shutil.copytree(normalized_image_dir, str(data_out_dir.joinpath(normalized_image_dir.name)))
             except Exception as e:
                 logger.warning("Failed to save output!")
                 logger.exception(e)
-
+        seg_post_main(segment_output, segment_output)
 
         #==============
         # Run radiomics
@@ -166,6 +175,28 @@ def main(raw_args=None):
         generate_report(temp_dirname, report_dir)
 
         temp_dir.cleanup()
+
+def seg_post_main(in_dir: Path,
+                  out_dir: Path):
+    r"""Post processing segmentation"""
+    with MNTSLogger('pipeline.log', 'seg_post_main') as logger:
+        logger.info("{:=^120}".format(" Post processing segmentation "))
+        in_dir = Path(in_dir)
+        out_dir = Path(out_dir)
+        source = list(Path(in_dir).glob("*.nii.gz")) + list(Path(in_dir).glob("*.nii"))
+
+        logger.debug(f"source file list: \n{pprint.pformat([str(x) for x in source])}")
+
+        for s in source:
+            logger.info(f"processing: {str(s)}")
+            in_im = sitk.Cast(sitk.ReadImage(str(s)), sitk.sitkUInt8)
+            out_im = edge_smoothing(in_im, 1)
+            out_im = keep_n_largest_connected_body(out_im, 1)
+            out_im = remove_small_island_2d(out_im, 10)
+            out_im = np_specific_postproc(out_im)
+            out_fname = out_dir.joinpath(s.name)
+            logger.info(f"writing to: {str(out_fname)}")
+            sitk.WriteImage(out_im, str(out_fname))
 
 def get_t2w_series_files(in_dir):
     r"""Check and see if there are T2w-fs files, if there are more than one, prompt users
@@ -223,7 +254,8 @@ def get_t2w_series_files(in_dir):
             logger._verbose = True
             logger.warning(f"More than one target sequence found, please choose from below the desired sequence...")
             logger.info('\n' + '\n\n'.join([f"[{i}]: \n {pprint.pformat(_f[0], indent=4)}" for i, _f in enumerate(_file_list)]))
-            _choice = input(f"Choose sequence [0 to {len(_file_list) - 1}]: ")
+            # _choice = input(f"Choose sequence [0 to {len(_file_list) - 1}]: ")
+            _choice = 1
             logger.debug(f"Chosen sequence: {_choice}")
             file_list = _file_list[int(_choice)][1]
             # resume
@@ -251,7 +283,7 @@ def grow_segmentation(input_segment: Union[Path, str]) -> None:
             sitk.WriteImage(seg_out, str(f))
 
 
-def np_specific_postproc(in_im: Union[sitk.Image, str]):
+def np_specific_postproc(in_im: sitk.Image):
     r"""This post-processing protocol was designed to compensate the over sensitiveness of the CNN, mainly the focus
     was given to the top two and bottom tow slices. Criteria used to remove the noise segmented by the CNN.
 
@@ -263,7 +295,39 @@ def np_specific_postproc(in_im: Union[sitk.Image, str]):
     Returns:
         sitk.Image
     """
+    thickness_thres = 1.5 # mm
+    # From bottom up, opening followed by size threshold until something was left
+    shape = in_im.GetSize()
+    spacing = in_im.GetSpacing()
+    vxel_vol = np.cumprod(spacing)[-1]
 
+    kernel_size = (np.ones(shape=2) * thickness_thres) / np.asarray(spacing)[:2]
+    kernel_size = np.ceil(kernel_size).astype('int')
+
+    # create out image
+    out_im = sitk.Cast(in_im, sitk.sitkUInt8)
+    for i in range(shape[-1]):
+        slice_im = out_im[:,:,i]
+
+        # skip if sum is 0
+        if np.isclose(sitk.GetArrayFromImage(slice_im).sum(), 0):
+            continue
+
+        # Remove very thin segments
+        out_slice = sitk.BinaryOpeningByReconstruction(slice_im, kernel_size.tolist())
+        out_slice = sitk.JoinSeries(out_slice)
+        out_im = sitk.Paste(out_im, out_slice, out_slice.GetSize(), destinationIndex=[0, 0, i])
+
+        # if after processing, the slice is empty continue to work on the next slice
+        if np.isclose(sitk.GetArrayFromImage(out_slice).sum(), 0):
+            continue
+        else:
+            break
+
+    # From top down
+
+    out_im.CopyInformation(in_im)
+    return out_im
 
 
 
