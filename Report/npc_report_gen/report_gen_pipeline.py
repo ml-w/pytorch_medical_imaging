@@ -295,7 +295,7 @@ def np_specific_postproc(in_im: sitk.Image):
     Returns:
         sitk.Image
     """
-    thickness_thres = 1.5 # mm
+    thickness_thres = 2 # mm
     # From bottom up, opening followed by size threshold until something was left
     shape = in_im.GetSize()
     spacing = in_im.GetSpacing()
@@ -313,8 +313,25 @@ def np_specific_postproc(in_im: sitk.Image):
         if np.isclose(sitk.GetArrayFromImage(slice_im).sum(), 0):
             continue
 
+        # suppose there will only be one connected component
+        filter = sitk.ConnectedComponentImageFilter()
+        conn_im = filter.Execute(slice_im)
+        n_objs = filter.GetObjectCount() - 1
+        shape_stats = sitk.LabelShapeStatisticsImageFilter()
+        shape_stats.Execute(conn_im)
+        sizes = np.asarray([shape_stats.GetPhysicalSize(i) for i in range(1, filter.GetObjectCount() + 1)])
+        keep_labels = np.argwhere(sizes >= 15) + 1 # keep only islands with area > 20mm^2
+
+        out_slice = sitk.Image(slice_im)
+        for j in range(n_objs + 1): # objects label value starts from 1
+            if (j + 1) in keep_labels:
+                continue
+            else:
+                # remove from original input if label is not kept.
+                out_slice = out_slice - sitk.Mask(slice_im, conn_im == (j + 1))
+
         # Remove very thin segments
-        out_slice = sitk.BinaryOpeningByReconstruction(slice_im, kernel_size.tolist())
+        out_slice = sitk.BinaryOpeningByReconstruction(out_slice, kernel_size.tolist())
         out_slice = sitk.JoinSeries(out_slice)
         out_im = sitk.Paste(out_im, out_slice, out_slice.GetSize(), destinationIndex=[0, 0, i])
 
@@ -325,6 +342,36 @@ def np_specific_postproc(in_im: sitk.Image):
             break
 
     # From top down
+    for i in list(range(shape[-1]))[::-1]:
+        slice_im = out_im[:,:,i]
+
+        # skip if sum is 0
+        if np.isclose(sitk.GetArrayFromImage(slice_im).sum(), 0):
+            continue
+
+        # suppose there will only be one connected component
+        filter = sitk.ConnectedComponentImageFilter()
+        conn_im = filter.Execute(slice_im)
+        n_objs = filter.GetObjectCount() - 1
+        shape_stats = sitk.LabelShapeStatisticsImageFilter()
+        shape_stats.Execute(conn_im)
+        sizes = np.asarray([shape_stats.GetPhysicalSize(i) for i in range(1, filter.GetObjectCount() + 1)])
+        keep_labels = np.argwhere(sizes >= 100) + 1 # keep only when area > 100mm^2, note that no slice thickness here
+
+        out_slice = sitk.Image(slice_im)
+        for j in range(n_objs + 1): # objects label value starts from 1
+            if (j + 1) in keep_labels:
+                continue
+            else:
+                # remove from original input if label is not kept.
+                out_slice = out_slice - sitk.Mask(slice_im, conn_im == (j + 1))
+
+        out_im = sitk.Paste(out_im, out_slice, out_slice.GetSize(), destinationIndex=[0, 0, i])
+        # if after processing, the slice is empty continue to work on the next slice
+        if np.isclose(sitk.GetArrayFromImage(out_slice).sum(), 0):
+            continue
+        else:
+            break
 
     out_im.CopyInformation(in_im)
     return out_im
