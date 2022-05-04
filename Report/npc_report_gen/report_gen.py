@@ -474,6 +474,7 @@ class ReportGen_NPC_Screening(Canvas):
         return msg
 
     def draw_grading_table(self):
+        r"""Grading criteria table"""
         # data = [['<b>Grade</b>', '<b>Walls</b>', '<b>Adenoid</b>'],
         #         ['1: normal', '- Thin wall (1-3mm)', '- Absent/vestigial tags/nubbin'],
         #         ['2: probably benign hyperplasia',
@@ -617,8 +618,8 @@ class ReportGen_NPC_Screening(Canvas):
     def draw_image(self, img, seg, mode=None, return_num_seg=False):
         r"""
         Draw based of mode. mode: 0 => Display center slices, 1 => Display with segmentation, 2 => Display max 20 slices
-        with segementation.
-
+        with segementation. Mode 0 & 1 is for enriching the three slice image, and Mode 2 & 3 was for drawing the image
+        for the second page.
         """
         if isinstance(img, (str, Path)):
             img = sitk.ReadImage(img)
@@ -630,6 +631,7 @@ class ReportGen_NPC_Screening(Canvas):
         if mode is None:
             mode = int(not self.diagnosis_overall  == 0)
 
+        self._logger.info(f"Drawing grid, mode: {mode}")
         if mode == 0:
             tissue_mask = sitk.HuangThreshold(img, 0, 1, 200)
             f = sitk.LabelShapeStatisticsImageFilter()
@@ -705,7 +707,7 @@ class ReportGen_NPC_Screening(Canvas):
             if mode == 2:
                 f.Execute(seg >= 1)
             elif mode == 3:
-                f.Execute(sitk.HuangThreshold(img, 0, 1, 200) != 0)
+                f.Execute(sitk.HuangThreshold(img, 0, 1, 200) != 0) # Use tissue mask
             bbox = f.GetBoundingBox(1)
             cent = f.GetCentroid(1)
             cent = seg.TransformPhysicalPointToIndex(cent) # use seg instead of img because its faster
@@ -715,6 +717,10 @@ class ReportGen_NPC_Screening(Canvas):
             h = bbox[4]
             display_slide_u = min([bbox[2] + bbox[5] + 1, ori_size[-1] - 1])
             display_slide_d = max([bbox[2] - 1, 0])
+            if (display_slide_u - display_slide_d) > 20:
+                _diff = (display_slide_u - display_slide_d) - 20
+                display_slide_d += _diff // 2
+                display_slide_u -= _diff - _diff // 2
             l = max([w, h])
             l = max([w, h]) + self.image_setting['padding_size']      # fit to the size of the segmentation bounding box
             l = min([self.image_setting['max_slice_size'], l])        # but no larger than 400 x 400
@@ -731,6 +737,8 @@ class ReportGen_NPC_Screening(Canvas):
                 nrow = self.image_setting['nrow']
             img, seg = (torch.as_tensor(sitk.GetArrayFromImage(x).astype('float')) for x in [img, seg])
             img, seg = img[display_slide_d:display_slide_u], seg[display_slide_d:display_slide_u]
+            if mode == 3:
+                seg = None
             self.image = draw_grid_contour(img, [seg], color=[(255, 100, 55)],
                                            nrow=nrow, padding=2, thickness=1, crop=crop, alpha=0.8)
 
@@ -751,9 +759,9 @@ class ReportGen_NPC_Screening(Canvas):
         """
         if dl_thres_func(dl_score) and float(volume) >= 0.5:
             return 1 # NPC
-        elif not dl_thres_func(dl_score) and float(volume) >= 3:
+        elif not dl_thres_func(dl_score) and float(volume) >= 1:
             return 2 # benign hyperplasia
-        elif not dl_thres_func(dl_score) and float(volume) < 0.5:
+        elif not dl_thres_func(dl_score) and float(volume) < 1:
             return 0 # normal
         else:
             return -1 # doubtful
