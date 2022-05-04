@@ -377,6 +377,10 @@ def draw_grid_contour(im_grid, seg, crop=None, nrow=None, offset=0, background=0
 
     a_contours = []
     for ss in seg:
+        # Skip if none
+        if ss is None:
+            continue
+
         if isinstance(ss, np.ndarray):
             ss = ss.astype('uint8')
 
