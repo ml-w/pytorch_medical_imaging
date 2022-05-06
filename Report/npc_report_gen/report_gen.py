@@ -1,6 +1,7 @@
 import datetime
 import tempfile
 
+import pandas as pd
 import reportlab.pdfgen.canvas
 from reportlab.pdfgen.canvas import Canvas
 from reportlab.lib.pagesizes import A4
@@ -120,6 +121,23 @@ class ReportGen_NPC_Screening(Canvas):
     Args:
         path (str or path):
             PDF file path.
+    
+    Attributes:
+        dicom_tag (dict):
+            A dictinoary enrich after calling set_data_display.
+    
+    Examples:
+    >>> report_path = report_dir.joinpath(f'npc_report_{id}.pdf')
+    >>> c = ReportGen_NPC_Screening(str(report_path), dump_diagnosis=dump_diagnosis)
+    >>>
+    >>> write_out_data['dicom_tags'] = str(f_tag)
+    >>> write_out_data['lesion_vol'] = f'{volume / 1000.:.02f}' # convert from mm3 to cm3
+    >>> write_out_data['diagnosis_dl'] = f"{dl_res:.03f}"
+    >>> write_out_data['image_nii'] = str(f_im)
+    >>> write_out_data['segment_nii'] = str(f_seg)
+    >>>
+    >>> c.set_data_display(write_out_data)
+    >>> c.draw()
     """ #
     def __init__(self, *args, **kwargs):
         super(ReportGen_NPC_Screening, self).__init__(*args, **kwargs)
@@ -169,6 +187,12 @@ class ReportGen_NPC_Screening(Canvas):
         # Set up logger
         self._logger = MNTSLogger['ReportGen']
 
+    @property
+    def dump_diagnosis(self):
+        return getattr(self, '_dump_diagnosis', None)
+
+    def set_dump_diagnosis(self, val):
+        self._dump_diagnosis = val
 
     def build_frames(self):
         # load images
@@ -283,8 +307,14 @@ class ReportGen_NPC_Screening(Canvas):
                                                        lambda x: x >= data_display['ref_radiomics'])
         self.diagnosis_overall = diagnosis_overall
         # draw & save image
-        im, sn = self.draw_image(data_display['image_nii'], data_display['segment_nii'], return_num_seg=True)
+        try:
+            im, sn = self.draw_image(data_display['image_nii'], data_display['segment_nii'], return_num_seg=True)
+        except:
+            # If somethings went wrong draw all slices
+            im = self.draw_image(data_display['image_nii'], data_display['segment_nii'], mode=0)
+            sn = [None, None]
         im_file_ = tempfile.NamedTemporaryFile(mode='wb', suffix='.png')
+        self._logger.debug(f"Writing 3 frame image to {im_file_}")
         imageio.imsave(im_file_, im, format='png')
         data_display['image_dir'] = im_file_.name
 
@@ -310,7 +340,7 @@ class ReportGen_NPC_Screening(Canvas):
                   f"displayed)"
             color = "#a32e2c"
         elif diagnosis_overall == -1:
-            _d = "!!Conflicted conclusion!!"
+            _d = "Ambiguous"
             recommend = f"{_d}; recommend manual inspection"
             msg = f"Abnormally detected (Three or less slices [{sn[0]} in {sn[1]} segmented] with largest volume " \
                   f"displayed)"
@@ -326,6 +356,7 @@ class ReportGen_NPC_Screening(Canvas):
             color = "#32a852"
 
         # If doubtful case, display segmentation with red warning sign
+        self._logger.info("Enriching image frame...")
         style = getSampleStyleSheet()['Heading3']
         sect_title = Paragraph(f"<para face=times color={color}><b>" + msg + "</b></para>", style=style)
         story.extend([sect_title, im])
@@ -339,6 +370,7 @@ class ReportGen_NPC_Screening(Canvas):
         story.append(desc_title)
 
         # lesion properties
+        self._logger.info("Drawing lesion properties...")
         prop = []
         for val in ['lesion_vol']:
             # msg = f"<para face=courier fontSize=11 spaceAfter=10>>{column_map[val]} -- <u>{data_display[val]}</u>(cm^3)</para>"
@@ -357,6 +389,7 @@ class ReportGen_NPC_Screening(Canvas):
         story.extend(desc)
 
         # recommendation
+        self._logger.info(f"Drawing recommendations...")
         msg = self.generate_key_value_msg("Overall diagnosis", recommend, value_tags=f"color={color}",
                                           underline_value=True, bold_value=True)
         story.append(Paragraph(msg))
@@ -369,6 +402,7 @@ class ReportGen_NPC_Screening(Canvas):
         story.append(desc_title)
 
         # For user grading
+        self._logger.debug("Drawing operator checklist and interaction boxes...")
         msg = f"<para face=courier fontSize=11 spaceAfter=0 rightIndent={right_indent}>>{column_map['user_grade']}:</para>"
         story.append(Paragraph(msg))
         grade_table = Table([[InteractiveCheckBox(text=f"{i}", fontsize=10) for i in list(range(1, 6)) + ['5b', '5c']]],
@@ -414,11 +448,16 @@ class ReportGen_NPC_Screening(Canvas):
 
         # New page displaying all segmented slides, max num of slide displayed without messing layout is 20,
         # if there are no segmentation, display only the center 20 slides.
+        self._logger.info("Drawing the second page...")
         self.showPage()
         if self.diagnosis_overall:
-            im = self.draw_image(data_display['image_nii'], data_display['segment_nii'], return_num_seg=True, mode=2)
+            try:
+                im = self.draw_image(data_display['image_nii'], data_display['segment_nii'], return_num_seg=False, mode=2)
+            except:
+                self._logger.error("Something went wwrong when drawing the second page.")
+                im = self.draw_image(data_display['image_nii'], data_display['segment_nii'], return_num_seg=False, mode=3)
         else:
-            im = self.draw_image(data_display['image_nii'], data_display['segment_nii'], return_num_seg=True, mode=3)
+            im = self.draw_image(data_display['image_nii'], data_display['segment_nii'], return_num_seg=False, mode=3)
         im_file_ = tempfile.NamedTemporaryFile(mode='wb', suffix='.png')
         imageio.imsave(im_file_, im, format='png')
         data_display['image_dir'] = im_file_.name
@@ -577,12 +616,15 @@ class ReportGen_NPC_Screening(Canvas):
         self.showPage()
         self.save()
         self._logger.info(f"Write PDF to: {self._filename}")
+        if self.dump_diagnosis is not None:
+            self._logger.info("Writing result to csv...")
+            self.dump_diagnosis_to_csv(self.dump_diagnosis)
 
     def _read_details_from_dicom(self, dicom_dir, sequence_id=None):
         pass
 
     def _read_details_from_dicom_json(self, json_file):
-        dicom_data = json.load(open(str(json_file), 'r'))
+        r"""Directly read from the DICOM Json. This Json can be extracted using pydicom package."""
         dicom_data_tags = {
             'Name': '0010|0010',
             'Chinese Name': None,
@@ -594,7 +636,12 @@ class ReportGen_NPC_Screening(Canvas):
             'Protocol': '0018|1030',
             'Report gen. date': datetime.datetime.now().strftime("%Y-%m-%d %H:%M")
         }
-        out = {v: dicom_data.get(dicom_key, None) for v, dicom_key in dicom_data_tags.items()}
+        try:
+            dicom_data = json.load(open(str(json_file), 'r'))
+            out = {v: dicom_data.get(dicom_key, None) for v, dicom_key in dicom_data_tags.items()}
+        except:
+            # if anything goes wrong treat this as if everything are anonymized
+            out = {v: "Anonymized" for v in dicom_data_tags.keys()}
         return out
 
     @property
@@ -607,7 +654,7 @@ class ReportGen_NPC_Screening(Canvas):
             d = self._read_details_from_dicom_json(val)
         self._dicom_tags = d
 
-    def read_data_display(self, data_display: dict):
+    def set_data_display(self, data_display: dict):
         r"""
         Wrapper function.
         Now the image is hard-coded to be "npc_report.png" under `self._data_root_path`
@@ -731,7 +778,7 @@ class ReportGen_NPC_Screening(Canvas):
                 'size': [l, l]
             }
 
-            if bbox[5] > 12: # If there are more than 12 slid, set nrow to 4 for better view
+            if (display_slide_u - display_slide_d) >= 12: # If there are more than 12 slices, set nrow to 4 for better view
                 nrow = self.image_setting['nrow'] + 1
             else:
                 nrow = self.image_setting['nrow']
@@ -742,7 +789,27 @@ class ReportGen_NPC_Screening(Canvas):
             self.image = draw_grid_contour(img, [seg], color=[(255, 100, 55)],
                                            nrow=nrow, padding=2, thickness=1, crop=crop, alpha=0.8)
 
-            return self.image
+            if return_num_seg:
+                return self.image, (0, ori_size[-1])
+            else:
+                return self.image
+
+    def dump_diagnosis_to_csv(self, out_dir: Union[Path, str]):
+        out_dir = Path(out_dir).with_suffix('.csv')
+        try:
+            out_row = {
+                'Patient ID': self.dicom_tags['Patient ID'],
+                'diag_dl': self.data_display['diagnosis_dl']
+            }
+            pd_row = pd.Series(out_row).to_frame().T
+
+            self._logger.info(f"Dumping diagnosis to {str(out_dir)}")
+            pd_row.to_csv(out_dir, mode='a', header=not out_dir.is_file(), index=False)
+        except AttributeError as e:
+            self._logger.error(f"Got error: {e}")
+            self._logger.error("Diagnosis was not prepared, please run set it using `set_data_display` first.")
+        except Exception as e:
+            self._logger.exception(f"Unknown error during diagnosis dump: {e}")
 
     @staticmethod
     def get_overall_diagnosis(volume,   # Unit is cm^3
@@ -759,7 +826,7 @@ class ReportGen_NPC_Screening(Canvas):
         """
         if dl_thres_func(dl_score) and float(volume) >= 0.5:
             return 1 # NPC
-        elif not dl_thres_func(dl_score) and float(volume) >= 1:
+        elif not dl_thres_func(dl_score) and float(volume) >= 1 and float(volume) <= 25:
             return 2 # benign hyperplasia
         elif not dl_thres_func(dl_score) and float(volume) < 1:
             return 0 # normal

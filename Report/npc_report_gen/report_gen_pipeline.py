@@ -41,6 +41,9 @@ def main(raw_args=None):
     parser.add_argument('-n', '--num-worker', action='store', type=int, default=-1,
                         help="Number of workers, if 0 or 1, some steps are ran in the main thread. If negative, all"
                              "CPUs will be utilized.")
+    parser.add_argument('-f', '--dump-diagnosis', action='store', type=str, default=None,
+                        help="If specified, the resultant meta-data will be dumped to a text file. If the file exist, "
+                             "it will be appended to the bottom of the file.")
     parser.add_argument('--verbose', action='store_true',
                         help="Verbosity.")
     parser.add_argument('--keep-log', action='store_true',
@@ -66,16 +69,29 @@ def main(raw_args=None):
 
         input = Path(a.input)
         if input.is_dir():
-            # Get dicom files and copy to a temp directory
-            _dicom_files = get_t2w_series_files(a.input)
-            _temp_dicom_dir = tempfile.TemporaryDirectory()
-            [shutil.copy2(d, _temp_dicom_dir.name) for d in _dicom_files]
-            dicom2nii(f"-i {_temp_dicom_dir.name} -o {str(temp_dirname)} -n {a.num_worker} -g '.*' "
-                      f"--dump-dicom-tags --use-patient-id".split())
+            # if any nii files were in the dir, treat the directory as nii directory
+            if len(list(input.glob("*nii*"))) == 0:
+                # Get dicom files and copy to a temp directory
+                _dicom_files = get_t2w_series_files(a.input)
+                _temp_dicom_dir = tempfile.TemporaryDirectory()
+                [shutil.copy2(d, _temp_dicom_dir.name) for d in _dicom_files]
+                dicom2nii(f"-i {_temp_dicom_dir.name} -o {str(temp_dirname)} -n {a.num_worker} -g '.*' "
+                          f"--dump-dicom-tags --use-patient-id".split())
+            else:
+                #!! This is not functional yet
+                _nii_files = list(input.glob('*nii*'))
+                for f in _nii_files:
+                    shutil.copy2(str(f), str(temp_dirname))
 
         elif input.is_file() and input.suffix in ('.nii', '.gz'):
             # copy that to the temp dir
             shutil.copy(str(input), str(temp_dirname))
+            # write json file
+            json_name = str(input.name).replace('.nii' if input.suffix == '.nii' else '.nii.gz', '.json')
+            json.dump({'0010|0010': str(input.name),
+                       '0010|0020': str(input.name)},
+                      Path(temp_dirname).joinpath(json_name).open('w')
+                      )
         else:
             raise IOError(f"Input specified is incorrect, expect a directory or an nii file, got '{a.input}' instead.")
 
@@ -159,7 +175,7 @@ def main(raw_args=None):
         dl_output_dir = temp_dirname.joinpath('dl_diag')
         override_tags = {
             '(Data,input_dir)': str(normalized_dir.joinpath('NyulNormalizer')),
-            '(Data,mask_dir)': str(segment_output),
+            '(Data,mask_dir)': str(segment_output), # This is for transformation "v1_swran_transform.yaml"
             '(Data,output_dir)': str(dl_output_dir)
         }
         override_string = ';'.join(['='.join([k, v]) for k, v in override_tags.items()])
@@ -172,7 +188,7 @@ def main(raw_args=None):
         # Convert DL outputs to report gen data and run gen report
         report_dir = output_dir.joinpath('report')
         report_dir.mkdir(exist_ok=True)
-        generate_report(temp_dirname, report_dir)
+        generate_report(temp_dirname, report_dir, dump_diagnosis=a.dump_diagnosis)
 
         temp_dir.cleanup()
 
@@ -192,7 +208,7 @@ def seg_post_main(in_dir: Path,
             in_im = sitk.Cast(sitk.ReadImage(str(s)), sitk.sitkUInt8)
             out_im = edge_smoothing(in_im, 1)
             out_im = keep_n_largest_connected_body(out_im, 1)
-            out_im = remove_small_island_2d(out_im, 10)
+            out_im = remove_small_island_2d(out_im, 15) # the vol_thres won't count thickness
             out_im = np_specific_postproc(out_im)
             out_fname = out_dir.joinpath(s.name)
             logger.info(f"writing to: {str(out_fname)}")
@@ -320,7 +336,7 @@ def np_specific_postproc(in_im: sitk.Image):
         shape_stats = sitk.LabelShapeStatisticsImageFilter()
         shape_stats.Execute(conn_im)
         sizes = np.asarray([shape_stats.GetPhysicalSize(i) for i in range(1, filter.GetObjectCount() + 1)])
-        keep_labels = np.argwhere(sizes >= 15) + 1 # keep only islands with area > 20mm^2
+        keep_labels = np.argwhere(sizes >= 25) + 1 # keep only islands with area > 20mm^2
 
         out_slice = sitk.Image(slice_im)
         for j in range(n_objs + 1): # objects label value starts from 1
@@ -378,7 +394,9 @@ def np_specific_postproc(in_im: sitk.Image):
 
 
 
-def generate_report(root_dir: Union[Path, str], out_dir: Union[Path, str]) -> None:
+def generate_report(root_dir: Union[Path, str],
+                    out_dir: Union[Path, str],
+                    dump_diagnosis: Union[Path, str] = None) -> None:
     with MNTSLogger('pipeline.log', 'generate_report') as logger:
         root_dir = Path(root_dir)
         out_dir = Path(out_dir)
@@ -402,7 +420,10 @@ def generate_report(root_dir: Union[Path, str], out_dir: Union[Path, str]) -> No
             seg = sitk.ReadImage(str(f_seg))
             stat_fil = sitk.LabelShapeStatisticsImageFilter()
             stat_fil.Execute(seg)
-            volume = stat_fil.GetPhysicalSize(1)
+            try:
+                volume = stat_fil.GetPhysicalSize(1)
+            except:
+                volume = 0
             dl_res = res_csv.iloc[i]['Prob_Class_0']
             id = res_csv.iloc[i]['IDs']
             if np.isreal(id):
@@ -410,6 +431,7 @@ def generate_report(root_dir: Union[Path, str], out_dir: Union[Path, str]) -> No
 
             report_path = report_dir.joinpath(f'npc_report_{id}.pdf')
             c = ReportGen_NPC_Screening(str(report_path))
+            c.set_dump_diagnosis(dump_diagnosis)
 
             write_out_data['dicom_tags'] = str(f_tag)
             write_out_data['lesion_vol'] = f'{volume / 1000.:.02f}' # convert from mm3 to cm3
@@ -417,7 +439,7 @@ def generate_report(root_dir: Union[Path, str], out_dir: Union[Path, str]) -> No
             write_out_data['image_nii'] = str(f_im)
             write_out_data['segment_nii'] = str(f_seg)
 
-            c.read_data_display(write_out_data)
+            c.set_data_display(write_out_data)
             c.draw()
 
 
