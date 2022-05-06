@@ -1,4 +1,4 @@
-SimpleITK
+SimpleITK >= 2.1.1
 configparser>=3.7.3
 cython=0.29.13
 imgaug>=0.2.7
@@ -14,7 +14,7 @@ scipy>=1.7.1
 setuptools
 tensorboard>=2.2.2
 tensorboardx>=1.8
-torch>=1.1
 torch>=1.6.0
-tqdm
+tqdm >= 4.64.0
 yaml >= 5.3.1
+torchio >= 0.18.37
