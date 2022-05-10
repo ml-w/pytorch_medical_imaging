@@ -130,10 +130,7 @@ class BinaryClassificationSolver(ClassificationSolver):
                 self._logger.debug("_val_step_loss: {}".format(loss.data.item()))
                 del _pairs, _df
                 # Decision were made by checking whether value is > 0.5 after sigmoid
-                dic = torch.zeros_like(res)
-                pos = torch.where(torch.sigmoid(res) > 0.5)
-                dic[pos] = 1
-
+                dic = self.get_decision(res)
                 dics.append(dic.cpu())
                 gts.append(g.cpu())
 
@@ -177,6 +174,12 @@ class BinaryClassificationSolver(ClassificationSolver):
             self.plotter_dict['scalars']['Performance/%s'%param] = val
 
         return validation_loss, acc
+
+    def get_decision(self, model_output):
+        dic = torch.zeros_like(model_output)
+        pos = torch.where(torch.sigmoid(res) > 0.5)
+        dic[pos] = 1
+        return dic
 
     def step(self, *args):
         s, g = args
