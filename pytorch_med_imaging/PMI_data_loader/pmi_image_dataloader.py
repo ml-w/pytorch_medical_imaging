@@ -7,6 +7,7 @@ from .lambda_tio_adaptor import CallbackQueue
 from pathlib import Path
 from functools import partial
 import torchio as tio
+import multiprocessing as mpi
 
 __all__ = ['PMIImageDataLoader']
 
@@ -120,7 +121,10 @@ class PMIImageDataLoader(PMIDataLoaderBase):
             'verbose': True,
         }
         default_queue_kwargs.update(self.queue_kwargs)  # self.queue_kwargs is loaded by _load_default_attr
+        if default_queue_kwargs['num_workers'] > mpi.cpu_count():
+            default_queue_kwargs['num_workers'] = mpi.cpu_count()
         self.queue_kwargs = default_queue_kwargs
+
         if (self.sampler == 'weighted') & (self._probmap_dir is not None):
             self.sampler = tio.WeightedSampler(patch_size=self.patch_size, probability_map='probmap')
         elif self.patch_size != None:
