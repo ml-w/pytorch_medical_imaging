@@ -13,11 +13,7 @@ class rAIdiologist(nn.Module):
         self._record = record
 
         # Create inception for 2D prediction
-        self.effnetb0 = EfficientNet.from_name('efficientnet-b0', in_channels=1, num_classes=1)
-        self.effnetb0._dropout.register_forward_hook(self.get_intermediate_output())
-
-        # Use to temporarily store the last layer before the linear output
-        self._intermediate_out = None
+        self.effnetb0 = EfficientNet.from_name('efficientnet-b0', in_channels=1, num_classes=1, include_top=False)
 
         # LSTM for
         self.lstm_rater = LSTM_rater(1280, record=record, iter_limit=iter_limit)
@@ -37,11 +33,10 @@ class rAIdiologist(nn.Module):
             _x = []
             # Zero sum slices are probably due to padding, its useless anyways
             for i in torch.nonzero(sum_is_zero != 0, as_tuple=False).flatten():
-                self.effnetb0(xx[..., i].unsqueeze(0))
-                _x.append(self._intermediate_out)
+                _xx = self.effnetb0(xx[..., i].unsqueeze(0))
+                _x.append(_xx.view(1, -1))
             _x = torch.stack(_x, dim=-1) # Shape -> (1 x C x S)
             tmp_list.append(_x)
-
         # Loop batch
         o = torch.cat([self.lstm_rater(xx) for xx in tmp_list])
         return o
@@ -57,6 +52,7 @@ class LSTM_rater(nn.Module):
         self.iter_limit = iter_limit
 
     def forward(self, x: torch.Tensor):
+        assert x.shape[0] == 1, f"This rater can only handle one sample at a time, got input of dimension {x.shape}."
         # required input size: (1 x C x S)
         num_slice = x.shape[-1]
         mid_index = num_slice // 2
@@ -87,8 +83,6 @@ class LSTM_rater(nn.Module):
             # restrict number of runs else mem will run out quick.
             if iter_num >= self.iter_limit or sig_o[..., 1] > 0.5:
                 BREAK_FLAG = True
-
-
 
         # output size: (1 x 2)
         return o.squeeze()[:2].view(1, -1) # no need to deal with up or down afterwards
