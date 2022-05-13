@@ -116,9 +116,7 @@ class BinaryClassificationSolver(ClassificationSolver):
                 # align dimensions
                 while res.dim() < 2:
                     res = res.unsqueeze(0)
-                self._logger.debug(f"Before align: res_size = {res.shape}; g_size {g.shape}")
-                g = g.view_as(res)
-                self._logger.debug(f"After align: res_size = {res.shape}; g_size = {g.shape}")
+                g = self._align_g_res_size(g, res)
 
                 # Suppose loss is BCEWithLogitsLoss, so no sigmoid function
                 loss = self._loss_eval(res, s, g)
@@ -174,6 +172,14 @@ class BinaryClassificationSolver(ClassificationSolver):
             self.plotter_dict['scalars']['Performance/%s'%param] = val
 
         return validation_loss, acc
+
+    def _align_g_res_size(self, g, _):
+        r"""Work arround, normally we don't need this if we can shape ground-truth correctly. For classification
+        this should always be (B x C) where C is number of classes. Assume for binary classification, C = 1"""
+        self._logger.debug(f"Before align: res_size = {res.shape}; g_size {g.shape}")
+        g = g.view_(-1, 1)
+        self._logger.debug(f"After align: res_size = {res.shape}; g_size = {g.shape}")
+        return g
 
     def get_decision(self, model_output):
         dic = torch.zeros_like(model_output)
