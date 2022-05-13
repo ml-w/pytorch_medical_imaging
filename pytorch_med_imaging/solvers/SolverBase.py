@@ -165,15 +165,16 @@ class SolverBase(object):
             self._logger.info("Multi-GPU detected, using nn.DataParallel for distributing workload.")
             self.net = nn.DataParallel(self.net)
 
-    def set_loss_function(self, func: callable):
+    def set_loss_function(self, func: torch.nn.Module):
         self._logger.debug("loss functioning override.")
-        # Check if its cuda mode
-        is_cuda = self.lossfunction.is_cuda
+        if self.iscuda:
+            try:
+                func = func.cuda()
+            except:
+                self._logger.warning("Failed to move loss function to GPU")
+                pass
         del self.lossfunction
-        if is_cuda:
-            self.lossfunction = func.cuda()
-        else:
-            self.lossfunction = func
+        self.lossfunction = func
 
     def create_lossfunction(self, *args, **kwargs):
         r"""
