@@ -92,13 +92,12 @@ class BinaryClassificationSolver(ClassificationSolver):
         with torch.no_grad():
             self.net = self.net.eval()
 
-            decisions = None # (B x N)
             validation_loss = []
-
             dics = []
             gts = []
 
             for mb in auto.tqdm(self._data_loader_val, desc="Validation", position=2):
+                # s: (B x num_class), g: (B x 1)
                 s, g = self._unpack_minibatch(mb, self.unpack_keys_forward)
                 s = self._match_type_with_network(s)
                 g = self._match_type_with_network(g)
@@ -117,8 +116,9 @@ class BinaryClassificationSolver(ClassificationSolver):
                 while res.dim() < 2:
                     res = res.unsqueeze(0)
                 g = self._align_g_res_size(g, res)
+                self._logger.debug(f"After call g_size = {g.shape}, res_size = {res.shape}")
 
-                # Suppose loss is BCEWithLogitsLoss, so no sigmoid function
+                # No sigmoid function
                 loss = self._loss_eval(res, s, g)
                 _pairs = zip(res.flatten().data.cpu().numpy(),
                              g.flatten().data.cpu().numpy(),
@@ -132,20 +132,15 @@ class BinaryClassificationSolver(ClassificationSolver):
                 dics.append(dic.cpu())
                 gts.append(g.cpu())
 
-                if decisions is None:
-                    decisions = dic.cpu() == g.cpu()
-                    self._logger.debug("Creating dicision list with size {}.".format(decisions.size()))
-                else:
-                    self._logger.debug("New result size {}.".format((dic.cpu() == g.cpu()).shape))
-                    decisions = torch.cat([decisions, dic.cpu() == g.cpu()], dim=0)
                 validation_loss.append(loss.item())
 
                 # tqdm.write(str(torch.stack([torch.stack([a, b, c]) for a, b, c, in zip(dic, torch.sigmoid(res), g)])))
-                del dic, pos, s, g
+                del dic, s, g
 
         # Compute accuracies
-        dics = torch.cat(dics).bool()
-        gts = torch.cat(gts).bool()
+        # Stack the decisions per batch first
+        dics = torch.cat(dics, dim=0).bool()
+        gts = torch.cat(gts, dim=0).bool()
 
         tp = (dics * gts).sum(axis=0)
         tn = (~dics * ~gts).sum(axis=0)
@@ -161,7 +156,7 @@ class BinaryClassificationSolver(ClassificationSolver):
         restable = pd.concat([accuracy, sens, spec, ppv, npv], axis=1)
         per_mean = restable.mean()
 
-        acc = float(torch.sum(decisions > 0).item()) / float(len(decisions.flatten()))
+        acc = accuracy.mean()
         validation_loss = np.mean(np.array(validation_loss).flatten())
         self._logger.debug("_val_perfs: \n%s"%restable.T.to_string())
         self._logger.info("Validation Result - ACC: %.05f, VAL: %.05f"%(acc, validation_loss))
@@ -173,17 +168,18 @@ class BinaryClassificationSolver(ClassificationSolver):
 
         return validation_loss, acc
 
-    def _align_g_res_size(self, g, _):
+    def _align_g_res_size(self, g, res):
         r"""Work arround, normally we don't need this if we can shape ground-truth correctly. For classification
         this should always be (B x C) where C is number of classes. Assume for binary classification, C = 1"""
         self._logger.debug(f"Before align: res_size = {res.shape}; g_size {g.shape}")
-        g = g.view_(-1, 1)
+        g = g.view(-1, 1)
         self._logger.debug(f"After align: res_size = {res.shape}; g_size = {g.shape}")
         return g
 
     def get_decision(self, model_output):
+        # model_output: (B x num_class)
         dic = torch.zeros_like(model_output)
-        pos = torch.where(torch.sigmoid(res) > 0.5)
+        pos = torch.where(torch.sigmoid(model_output) > 0.5)
         dic[pos] = 1
         return dic
 
