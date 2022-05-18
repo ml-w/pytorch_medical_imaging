@@ -79,56 +79,56 @@ def parse_ini_filelist(filelist, mode):
         return fparser['FileList'].get('training').split(',')
 
 class backward_compatibility(object):
-        def __init__(self, train, input, lsuffix, loadbyfilelist):
-            super(backward_compatibility, self).__init__()
-            self.train = train
-            self.input = input
-            self.lsuffix = lsuffix
-            self.loadbyfilelist = loadbyfilelist
+    def __init__(self, train, input, lsuffix, loadbyfilelist):
+        super(backward_compatibility, self).__init__()
+        self.train = train
+        self.input = input
+        self.lsuffix = lsuffix
+        self.loadbyfilelist = loadbyfilelist
 
 def main(a, config, logger):
     logger.info("Recieve arguments: %s"%dict(({section: dict(config[section]) for section in config.sections()})))
     ##############################
     # Parse config
     #-----------------
-    bool_plot = config['General'].getboolean('plot_tb', False)
+    bool_plot    = config['General'].getboolean('plot_tb'  , False)
     bool_usecuda = config['General'].getboolean('use_cuda')
-    run_mode = config['General'].get('run_mode', 'training')
-    run_type = config['General'].get('run_type', 'segmentation')
-    write_mode = config['General'].get('write_mode', None)
-    mode = run_mode == 'test' or run_mode == 'testing'
+    run_mode     = config['General'].get('run_mode'        , 'training')
+    run_type     = config['General'].get('run_type'        , 'segmentation')
+    write_mode   = config['General'].get('write_mode'      , None)
+    mode         = run_mode == 'test' or run_mode == 'testing'
 
-    param_lr = float(config['RunParams'].get('learning_rate', 1E-4))
-    param_momentum = float(config['RunParams'].get('momentum', 0.9))
-    param_initWeight = int(config['RunParams'].get('initial_weight', None))
-    param_epoch = int(config['RunParams'].get('num_of_epochs'))
-    param_decay = float(config['RunParams'].get('decay_rate_LR'))
-    param_batchsize = int(config['RunParams'].get('batch_size'))
-    param_decay_on_plateau = config['RunParams'].getboolean('decay_on_plateau', False)
-    param_lr_scheduler_dict = config['RunParams'].get('lr_scheduler_dict', '{}')
-    param_early_stop = config['RunParams'].get('early_stop', '{}')
+    param_lr                = float(config['RunParams'].get('learning_rate'    , 1E-4))
+    param_momentum          = float(config['RunParams'].get('momentum'         , 0.9))
+    param_initWeight        = int(config['RunParams'].get('initial_weight'     , None))
+    param_epoch             = int(config['RunParams'].get('num_of_epochs'))
+    param_decay             = float(config['RunParams'].get('decay_rate_LR'))
+    param_batchsize         = int(config['RunParams'].get('batch_size'))
+    param_decay_on_plateau  = config['RunParams'].getboolean('decay_on_plateau', False)
+    param_lr_scheduler_dict = config['RunParams'].get('lr_scheduler_dict'      , '{}')
+    param_early_stop        = config['RunParams'].get('early_stop'             , '{}')
 
-    checkpoint_load = config['Checkpoint'].get('cp_load_dir', "")
-    checkpoint_save = config['Checkpoint'].get('cp_save_dir', "")
+    checkpoint_load         = config['Checkpoint'].get('cp_load_dir', "")
+    checkpoint_save         = config['Checkpoint'].get('cp_save_dir', "")
 
-    net_nettype = config['Network'].get('network_type')
-    net_init = config['Network'].get('initialization', None)
+    net_nettype                = config['Network'].get('network_type')
+    net_init                   = config['Network'].get('initialization'        , None)
 
-    dir_input = config['Data'].get('input_dir')
-    dir_target = config['Data'].get('target_dir')
-    dir_output = config['Data'].get('output_dir')
-    dir_validation_input = config['Data'].get('validation_input_dir', dir_input)
-    dir_validation_target = config['Data'].get('validation_gt_dir', dir_target)
+    dir_input                  = config['Data'].get('input_dir')
+    dir_target                 = config['Data'].get('target_dir')
+    dir_output                 = config['Data'].get('output_dir')
+    dir_validation_input       = config['Data'].get('validation_input_dir'     , dir_input)
+    dir_validation_target      = config['Data'].get('validation_gt_dir'        , dir_target)
 
-    filters_lsuffix = config['Filters'].get('re_suffix', None)
-    filters_idlist = config['Filters'].get('id_list', None)
-    filters_validation_lsuffix = config['Filters'].get('validation_re_suffix', filters_lsuffix)
-    filters_validation_id = config['Filters'].get('validation_id_list', None)
+    filters_lsuffix            = config['Filters'].get('re_suffix'             , None)
+    filters_idlist             = config['Filters'].get('id_list'               , None)
+    filters_validation_lsuffix = config['Filters'].get('validation_re_suffix'  , filters_lsuffix)
+    filters_validation_id      = config['Filters'].get('validation_id_list'    , None)
 
     # [LoaderParams] section is not useful to load here except this (for naming).
-    data_pmi_data_type = config['LoaderParams']['PMI_datatype_name']
-    data_pmi_loader_type = config['LoaderParams'].get('PMI_loader_name', None)
-    data_pmi_loader_kwargs = config['LoaderParams'].get('PMI_loader_kwargs', None)
+    data_pmi_data_type         = config['LoaderParams']['PMI_datatype_name']
+    data_pmi_loader_type       = config['LoaderParams'].get('PMI_loader_name'  , None)
+    data_pmi_loader_kwargs     = config['LoaderParams'].get('PMI_loader_kwargs', None)
 
     # Config override
     #-----------------
@@ -148,9 +148,10 @@ def main(a, config, logger):
     if a.lr:
         config['RunParams']['learning_rate'] = str(a.lr)
         param_lr = float(a.lr)
+    if a.debug_validation:
+        a.debug = True
     if a.debug:
         config['General']['debug'] = str(a.debug)
-
 
     # Try to make outputdir first if it exist
     if dir_output.endswith('.csv'):
@@ -224,8 +225,8 @@ def main(a, config, logger):
 
         # Prepare dataset
         # numcpu = int(os.environ.get('SLURM_CPUS_ON_NODE', default=torch.multiprocessing.cpu_count()))
-        numcpu = 0
         if data_pmi_loader_type is None:
+            # num_workers is required to be zero by torchio
             loader = DataLoader(trainingSubjects, batch_size=param_batchsize, shuffle=True, num_workers=0,
                                 drop_last=True, pin_memory=False)
             loader_val = DataLoader(validationSubjects, batch_size=param_batchsize, shuffle=False, num_workers=0,
@@ -246,6 +247,8 @@ def main(a, config, logger):
             solver_class = BinaryClassificationSolver
         elif run_type == 'BinaryClassificationRNN':
             solver_class = BinaryClassificationRNNSolver
+        elif run_type == 'rAIdiologist':
+            solver_class = rAIdiologistSolver
         elif run_type == 'Survival':
             solver_class = SurvivalSolver
         else:
@@ -282,8 +285,15 @@ def main(a, config, logger):
         solver.get_net().train()
         if os.path.isfile(checkpoint_load):
             # assert os.path.isfile(checkpoint_load)
-            logger.log_print_tqdm("Loading checkpoint " + checkpoint_load)
-            solver.get_net().load_state_dict(torch.load(checkpoint_load), strict=False)
+            try:
+                logger.log_print_tqdm("Loading checkpoint " + checkpoint_load)
+                solver.get_net().load_state_dict(torch.load(checkpoint_load), strict=False)
+            except Exception as e:
+                if not a.debug:
+                    logger.error(f"Cannot load checkpoint from: {checkpoint_load}")
+                    raise e
+                else:
+                    logger.warning(f"Cannot load checkpoitn from {checkpoint_load}")
         else:
             logger.log_print_tqdm("Checkpoint doesn't exist!")
 
@@ -292,10 +302,19 @@ def main(a, config, logger):
         lastloss = 1e32
         logger.log_print_tqdm("Start training...")
         for i in range(param_epoch):
-            solver.solve_epoch(i)
+            # Skip if --debug-validation flag is true
+            if not a.debug_validation:
+                solver.solve_epoch(i)
+            else:
+                solver.plotter_dict['scalars'] = {
+                    'Loss/Loss'           : None,
+                    'Loss/Validation Loss': None
+                }
+                solver.validation()
 
-            epoch_loss = solver.plotter_dict['scalars']['Loss/Loss']
-            val_loss = solver.plotter_dict['scalars'].get('Loss/Validation Loss', None)
+            # Prepare values for epoch callback plots
+            epoch_loss = solver.plotter_dict['scalars'].get('Loss/Loss'           , None)
+            val_loss   = solver.plotter_dict['scalars'].get('Loss/Validation Loss', None)
 
             # use validation loss as epoch loss if it exist
             measure_loss = val_loss if val_loss is not None else epoch_loss
@@ -305,6 +324,8 @@ def main(a, config, logger):
                 logger.info("New loss ({:.03f}) is smaller than previous loss ({:.03f})".format(measure_loss, lastloss))
                 logger.info("Saving new checkpoint to: {}".format(backuppath))
                 logger.info("Iteration number is: {}".format(i))
+                if not Path(backuppath).parent.is_dir():
+                    Path(backuppath).parent.mkdir(parents=True)
                 torch.save(solver.get_net().state_dict(), backuppath)
                 lastloss = measure_loss
                 logger.info("Update benchmark loss.")
@@ -322,7 +343,10 @@ def main(a, config, logger):
                 current_lr = next(solver.get_optimizer().param_groups)['lr']
             except:
                 current_lr = solver.get_optimizer().param_groups[0]['lr']
-            logger.log_print_tqdm("[Epoch %04d] EpochLoss: %.010f LR: %.010f"%(i, epoch_loss, current_lr))
+            logger.log_print_tqdm("[Epoch %04d] EpochLoss: %s LR: %s}"
+                                  %(i,
+                                    f'{epoch_loss:.010f}' if epoch_loss is not None else 'None',
+                                    f'{current_lr:.010f}' if current_lr is not None else 'None',))
 
             # Plot network weight into histograms
             # if bool_plot:
@@ -396,7 +420,7 @@ def main(a, config, logger):
 
 def console_entry(raw_args=None):
     parser = argparse.ArgumentParser(description="Training reconstruction from less projections.")
-    parser.add_argument("--config", metavar='config', action='store',
+    parser.add_argument("--config", metavar='config', action='store', required=True,
                         help="Config .ini file.", type=str)
     parser.add_argument("-t", "--train", dest='train', action='store_true', default=False,
                         help="Set this to force training mode. (Implementing)")
@@ -412,8 +436,12 @@ def console_entry(raw_args=None):
                         help="Set this to inference all checkpoints.")
     parser.add_argument("--log-level", dest='log_level', type=str, choices=('debug', 'info', 'warning','error'),
                         default='info', help="Set log-level of the logger.")
+    parser.add_argument("--keep-log", action='store_true',
+                        help="If specified, save the log file to the `log_dir` specified in the config.")
     parser.add_argument('--debug', dest='debug', action='store_true', default=None,
                         help="Set this to initiate the config with debug setting.")
+    parser.add_argument('--debug-validation', action='store_true',
+                        help="Set this to true to run validation direction. This also sets --debug to true.")
     parser.add_argument('--verbose', dest='verbose', action='store_true', default=False,
                         help="Print message to stdout.")
     parser.add_argument('--override', dest='override', action='store', type=str, default='',
@@ -450,7 +478,9 @@ def console_entry(raw_args=None):
 
     # Parameters check
     log_dir = config['General'].get('log_dir', './Backup/Log/')
-    if os.path.isfile(log_dir):
+    keep_log = config['General'].getboolean('keep_log', False)
+    if not Path(log_dir).parent.is_dir():
+        Path(log_dir).parent.mkdir(parents=True, exist_ok=True)
         pass
     if os.path.isdir(log_dir):
         print(f"Log file not designated, creating under {log_dir}")
@@ -459,20 +489,21 @@ def console_entry(raw_args=None):
 
     print(f"Log designated to {log_dir}")
     print(f"Fullpath: {os.path.abspath(log_dir)}")
-    logger = MNTSLogger(log_dir, logger_name='main', verbose=a.verbose)
-    logger.info("Global logger: {}".format(logger))
+    with MNTSLogger(log_dir, logger_name='pmi-main', verbose=a.verbose, keep_file=keep_log,
+                    log_level='debug' if a.debug else 'debug') as logger:
+        logger.info("Global logger: {}".format(logger))
 
-    for msg in pre_log_message:
-        logger.info(msg)
+        for msg in pre_log_message:
+            logger.info(msg)
 
-    logger.info(">" * 40 + " Start Main " + "<" * 40)
-    try:
-        main(a, config, logger)
-    except Exception as e:
-        logger.error("Uncaught exception!")
-        logger.exception(e)
-        raise BrokenPipeError("Unexpected error in main().")
-    logger.info("=" * 40 + " Done " + "="* 40)
+        logger.info(">" * 40 + " Start Main " + "<" * 40)
+        try:
+            main(a, config, logger)
+        except Exception as e:
+            logger.error("Uncaught exception!")
+            logger.exception(e)
+            raise BrokenPipeError("Unexpected error in main().")
+        logger.info("=" * 40 + " Done " + "="* 40)
 
 if __name__ == '__main__':
     console_entry()

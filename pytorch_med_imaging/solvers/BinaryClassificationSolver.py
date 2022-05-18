@@ -120,22 +120,17 @@ class BinaryClassificationSolver(ClassificationSolver):
 
                 # No sigmoid function
                 loss = self._loss_eval(res, s, g)
-                _pairs = zip(res.flatten().data.cpu().numpy(),
-                             g.flatten().data.cpu().numpy(),
-                             torch.sigmoid(res).flatten().data.cpu().numpy())
-                _df = pd.DataFrame(_pairs, columns=['res', 'g', 'sig_res'])
+                _df, dic = self._build_validation_df(g, res)
                 self._logger.debug("_val_res:\n" + _df.to_string())
                 self._logger.debug("_val_step_loss: {}".format(loss.data.item()))
-                del _pairs, _df
                 # Decision were made by checking whether value is > 0.5 after sigmoid
-                dic = self.get_decision(res)
                 dics.append(dic.cpu())
                 gts.append(g.cpu())
 
                 validation_loss.append(loss.item())
 
                 # tqdm.write(str(torch.stack([torch.stack([a, b, c]) for a, b, c, in zip(dic, torch.sigmoid(res), g)])))
-                del dic, s, g
+                del dic, s, g, _df
 
         # Compute accuracies
         # Stack the decisions per batch first
@@ -148,10 +143,10 @@ class BinaryClassificationSolver(ClassificationSolver):
         fn = (~dics * gts ).sum(axis=0)
 
         accuracy = pd.Series((tp + tn) / (tp + tn + fp + fn).float(), name='Accuracy')
-        sens = pd.Series(tp / (tp + fn).float(), name='Sensitivity')
-        spec = pd.Series(tn / (tn + fp).float(), name ='Specificity')
-        ppv = pd.Series(tp / (tp + fp).float(), name='PPV')
-        npv = pd.Series(tn / (tn + fn).float(), name='NPV')
+        sens = pd.Series(tp / (1E-32 + (tp + fn).float()), name = 'Sensitivity')
+        spec = pd.Series(tn / (1E-32 + (tn + fp).float()), name = 'Specificity')
+        ppv  = pd.Series(tp / (1E-32 + (tp + fp).float()), name = 'PPV')
+        npv  = pd.Series(tn / (1E-32 + (tn + fn).float()), name = 'NPV')
 
         restable = pd.concat([accuracy, sens, spec, ppv, npv], axis=1)
         per_mean = restable.mean()
@@ -168,6 +163,18 @@ class BinaryClassificationSolver(ClassificationSolver):
 
         return validation_loss, acc
 
+    def _build_validation_df(self, g, res):
+        _pairs = zip(res.flatten().data.cpu().numpy(),
+                     g.flatten().data.cpu().numpy(),
+                     torch.sigmoid(res).flatten().data.cpu().numpy())
+        _df = pd.DataFrame(_pairs, columns=['res', 'g', 'sig_res'])
+
+        # model_output: (B x num_class)
+        dic = torch.zeros_like(model_output)
+        pos = torch.where(torch.sigmoid(model_output) > 0.5)
+        dic[pos] = 1
+        return _df, dic
+
     def _align_g_res_size(self, g, res):
         r"""Work arround, normally we don't need this if we can shape ground-truth correctly. For classification
         this should always be (B x C) where C is number of classes. Assume for binary classification, C = 1"""
@@ -176,12 +183,6 @@ class BinaryClassificationSolver(ClassificationSolver):
         self._logger.debug(f"After align: res_size = {res.shape}; g_size = {g.shape}")
         return g
 
-    def get_decision(self, model_output):
-        # model_output: (B x num_class)
-        dic = torch.zeros_like(model_output)
-        pos = torch.where(torch.sigmoid(model_output) > 0.5)
-        dic[pos] = 1
-        return dic
 
     def step(self, *args):
         s, g = args
