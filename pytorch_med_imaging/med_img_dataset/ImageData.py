@@ -260,7 +260,7 @@ class ImageDataSet(PMIDataBase):
             if np.issubdtype(self.dtype, np.unsignedinteger):
                 im = tio.LabelMap(f)
             else:
-                im = tio.ScalarImage(f)
+                im = tio.ScalarImage(f, check_nans=True)
             self.data_source_path.append(f)
             self.data.append(im)
 
