@@ -18,15 +18,13 @@ class rAIdiologistSolver(BinaryClassificationSolver):
             self._logger.warning(f"Env variable CUBLAS_WORKSPACE_CONFIG was not set properly, which may invalidate"
                                  f" deterministic behavior of LSTM.")
 
-    def _get_decision(self, model_output):
+    # TODO: Add scheduler to schedule the loss fucntion factor
+
+    def _build_validation_df(self, g, res):
         r"""Tailored for rAIdiologist, model output were of shape (B x 3), where the first element is
         the prediction, the second element is the confidence and the third is irrelevant and only used
         by the network."""
 
-        return
-
-
-    def _build_validation_df(self, g, res):
         # res: (B x C), g: (B x 1)
         _data =np.concatenate([res.squeeze().data.cpu().numpy(), g.data.cpu().numpy()], axis=-1)
         _df = pd.DataFrame(data=_data, columns=['res_%i'%i for i in range(res.shape[-1])] + ['g'])

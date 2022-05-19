@@ -170,8 +170,8 @@ class BinaryClassificationSolver(ClassificationSolver):
         _df = pd.DataFrame(_pairs, columns=['res', 'g', 'sig_res'])
 
         # model_output: (B x num_class)
-        dic = torch.zeros_like(model_output)
-        pos = torch.where(torch.sigmoid(model_output) > 0.5)
+        dic = torch.zeros_like(res)
+        pos = torch.where(torch.sigmoid(res) > 0.5)
         dic[pos] = 1
         return _df, dic
 
