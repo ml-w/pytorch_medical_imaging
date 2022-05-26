@@ -262,6 +262,7 @@ class SolverBase(object):
         """
         Run this per epoch.
         """
+        self._epoch_prehook()
         E = []
         # Reset dict each epoch
         self.net.train()
@@ -371,6 +372,10 @@ class SolverBase(object):
     @abstractmethod
     def _step_callback(self, s, g, out, loss, step_idx=None):
         return
+
+    @abstractmethod
+    def _epoch_prehook(self, *args, **kwargs):
+        pass
 
     def _epoch_callback(self, *args, **kwargs):
         """
