@@ -11,6 +11,17 @@ __all__ = ['rAIdiologistSolver']
 class rAIdiologistSolver(BinaryClassificationSolver):
     def __init__(self, *args, **kwargs):
         super(rAIdiologistSolver, self).__init__(*args, **kwargs)
+
+        rAIdiologist_kwargs = {
+            'rAI_fixed_mode': None,
+            'rAI_conf_weight': 0.2,
+            'rAI_conf_weight_scheduler': 'default'
+        }
+        config = kwargs['config']
+        self._total_num_epoch = int(config['RunParams'].get('num_of_epochs'))
+        self._rAIdiologist_kwargs = self._load_default_attr(rAIdiologist_kwargs)
+        self._current_mode = self.rAI_fixed_mode
+
         #TODO: port conf_factor parameter here
         self.set_loss_function(ConfidenceBCELoss())
 
@@ -18,7 +29,7 @@ class rAIdiologistSolver(BinaryClassificationSolver):
             self._logger.warning(f"Env variable CUBLAS_WORKSPACE_CONFIG was not set properly, which may invalidate"
                                  f" deterministic behavior of LSTM.")
 
-    # TODO: Add scheduler to schedule the loss fucntion factor
+    # TODO: Add scheduler to schedule the loss function factor
 
     def _build_validation_df(self, g, res):
         r"""Tailored for rAIdiologist, model output were of shape (B x 3), where the first element is
@@ -39,3 +50,39 @@ class rAIdiologistSolver(BinaryClassificationSolver):
         # g: (B x 1), res is not important here
         g = g.squeeze()
         return g.view(-1, 1)
+
+    def _epoch_prehook(self, *args, **kwargs):
+        r"""Update mode of network"""
+        super(rAIdiologistSolver, self)._epoch_prehook(*args, **kwargs)
+        current_epoch = self.plotter_dict.get('epoch_num', 0)
+        total_epoch = self._total_num_epoch
+
+        if self.rAI_fixed_mode is None:
+            # mode is scheduled to occupy 25% of all epochs
+            epoch_progress = current_epoch / float(total_epoch)
+            current_mode = min(int(epoch_progress * 4) + 1, 4)
+        else:
+            current_mode = int(self.rAI_fixed_mode)
+        if not current_mode == self._current_mode:
+            self._logger.info(f"Setting rAIdiologist mode to {current_mode}")
+            self._current_mode = current_mode
+            if isinstance(self.net, torch.nn.DataParallel):
+                self.net.get_submodule('module').set_mode(self._current_mode)
+            else:
+                self.net.set_mode(self._current_mode)
+
+    def _epoch_callback(self, *args, **kwargs):
+        super(rAIdiologistSolver, self)._epoch_callback(*args, **kwargs)
+        current_epoch = self.plotter_dict.get('epoch_num', None)
+        total_epoch = self._total_num_epoch
+
+        if current_mode in (3, 4):
+            # step conf loss function scheduler
+            if isinstance(self.lossfunction, ConfidenceBCELoss):
+                if self.rAI_conf_weight_scheduler == 'default':
+                    if self.lossfunction.conf_factor == 0: # generally in mode 1 & 2, confidence is ignored
+                        self.lossfunction.conf_factor = 0.1
+                    self.lossfunction.conf_factor = max(self.lossfunction.conf_factor * 1.01, 0.5)
+
+
+

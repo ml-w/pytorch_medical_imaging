@@ -15,7 +15,7 @@ __all__ = ['BinaryClassificationSolver']
 
 class BinaryClassificationSolver(ClassificationSolver):
     def __init__(self, net, param_optim, param_iscuda,
-                 param_initWeight=None, logger=None, config=None, **kwargs):
+                 param_initWeight=None, **kwargs):
         """
         Solver for classification tasks.
 
@@ -45,12 +45,14 @@ class BinaryClassificationSolver(ClassificationSolver):
         """
         assert isinstance(logger, MNTSLogger) or logger is None, "Logger incorrect settings!"
 
-        if logger is None:
+        if kwargs.get('logger', None) is None:
             logger = MNTSLogger[self.__class__.__name__]
 
         # Recalculate number of one_hot slots and rebuild the lab
-        self._config = config
-        self._logger = logger
+        self._config = kwargs.get('config', None)
+        self._logger = kwargs.get('logger', None)
+        if self._logger is None:
+            self._logger = MNTSLogger[self.__class__.__name__]
         self._logger.info("Rebuilding classification solver to binary classification.")
 
         # Default attributes

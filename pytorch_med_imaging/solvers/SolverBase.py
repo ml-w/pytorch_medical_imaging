@@ -63,7 +63,8 @@ class SolverBase(object):
         self._decayed_time      = 0
 
         # Added config not used in base class
-        self._config            = kwargs.get('config', None)
+        if not hasattr(self, '_config'): # prevent unwanted override
+            self._config = kwargs.get('config', None)
 
         # internal_attributes
         self._net_weight_type   = None
@@ -326,7 +327,8 @@ class SolverBase(object):
             except AttributeError:
                 continue
             except Exception as e:
-                self._logger.log_print_tqdm("Unexpected error in type convertion of solver")
+                self._logger.error("Unexpected error in type convertion of solver")
+                self._logger.exception(e)
 
         if self._net_weight_type is None:
             # In-case type not found
@@ -406,12 +408,13 @@ class SolverBase(object):
                     return ast.literal_eval(out) if isinstance(out,str) else out
             else:
                 return self._config[section].get(key, default)
-        except AttributeError:
+        except AttributeError as e:
             self._logger.warning(f"Key absent in config: ({section},{key})")
-            self._logger.exception('Exception: ')
+            self._logger.exception(e)
             return default
-        except:
-            self._logger.exception(f"Unexpected error when reading params with key: ({section}, {key})")
+        except Exception as e:
+            self._logger.error(f"Unexpected error when reading params with key: ({section}, {key})")
+            self._logger.exception(e)
             return default
 
     def _get_params_from_solver_config(self, key, default=None, with_eval=False):
