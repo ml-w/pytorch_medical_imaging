@@ -43,10 +43,10 @@ class BinaryClassificationSolver(ClassificationSolver):
         Returns:
            :class:`ClassificaitonSolver` object
         """
-        assert isinstance(logger, MNTSLogger) or logger is None, "Logger incorrect settings!"
-
         if kwargs.get('logger', None) is None:
             logger = MNTSLogger[self.__class__.__name__]
+        else:
+            assert isinstance(logger, MNTSLogger) or logger is None, "Logger incorrect settings!"
 
         # Recalculate number of one_hot slots and rebuild the lab
         self._config = kwargs.get('config', None)
