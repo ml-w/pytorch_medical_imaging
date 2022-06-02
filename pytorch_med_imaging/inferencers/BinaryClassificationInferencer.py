@@ -37,9 +37,9 @@ class BinaryClassificationInferencer(ClassificationInferencer):
 
                 # Squeezing output directly cause problem if the output has only one output channel.
                 if isinstance(s, list):
-                    out = self.net.forward(*s)
+                    out = self.net(*s)
                 else:
-                    out = self.net.forward(s)
+                    out = self.net(s)
                 if out.shape[-1] > 1:
                     out = out.squeeze()
 
