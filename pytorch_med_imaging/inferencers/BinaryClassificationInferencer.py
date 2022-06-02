@@ -2,6 +2,8 @@ from .ClassificationInferencer import ClassificationInferencer
 from ..med_img_dataset import DataLabel
 from torch.utils.data import DataLoader
 from tqdm import *
+from sklearn.metrics import confusion_matrix
+from typing import Union, Optional, Iterable
 import os
 import torch
 import pandas as pd
@@ -22,7 +24,7 @@ class BinaryClassificationInferencer(ClassificationInferencer):
 
     def write_out(self):
         uids = []
-        gt = []
+        gt_tensor = []
         out_tensor = []
         last_batch_dim = 0
         with torch.no_grad():
@@ -48,21 +50,58 @@ class BinaryClassificationInferencer(ClassificationInferencer):
                 out_tensor.append(out.data.cpu())
                 uids.extend(mb['uid'])
                 if 'gt' in mb:
-                    gt.append(mb['gt'])
+                    gt_tensor.append(mb['gt'])
 
                 last_batch_dim = out.dim()
                 del out, s
 
-            out_tensor = torch.cat(out_tensor, dim=0) #(NxC)
-            gt_tensor = torch.cat(gt, dim=0).reshape_as(out_tensor) if len(gt) > 0 else None
+            out_tensor, gt_tensor = self._reshape_tensors(out_tensor, gt_tensor)
             dl = self._writter(out_tensor, uids, gt_tensor)
             self._logger.debug('\n' + dl._data_table.to_string())
 
 
-    def _writter(self, out_tensor, uids, gt = None):
+    def _reshape_tensors(self,
+                         out_list: Iterable[torch.FloatTensor],
+                         gt_list: Iterable[torch.FloatTensor]):
+        r"""Align shape before putting them into _writter
+
+        Args:
+            out_list:
+                List of tensors with dimension (1 x C)
+            gt_list:
+                List of tensors with either dimensino (1 x 1) or (1)
+
+        Returns:
+            out_tensor: (B x C)
+            gt_list: (B x 1)
+        """
+        out_tensor = torch.cat(out_list, dim=0) #(NxC)
+        gt_tensor = torch.cat(gt, dim=0).reshape_as(out_tensor) if len(gt) > 0 else None
+        return out_tensor, gt_tensor
+
+    def _writter(self,
+                 out_tensor: torch.IntTensor,
+                 uids: Iterable[Union[str, int]],
+                 gt: Optional[torch.IntTensor] = None,
+                 sig_out=True):
+        r"""Convert the output into a table
+
+        Args:
+            out_tensor (torch.IntTensor):
+                Tensor with dimension (B x C) where C is the number of classes.
+            uids (iterable):
+                Iterable with the same length as `out_tensor`.
+            gt (Optional, torch.IntTensor):
+                Tensor with dimension (B x 1).
+            sig_out (Optional, bool):
+                If the output is required to go through the sigmoid function.
+
+        Returns:
+            out: DataLabel
+        """
         out_decisions = {}
-        sig_out = torch.sigmoid(out_tensor)
-        out_decision = (sig_out > .5).int()
+        out_tensor = torch.sigmoid(out_tensor) if sig_out else out_tensor
+        out_decision = (out_tensor > .5).int()
         self._num_out_out_class = int(out_tensor.shape[1])
         if os.path.isdir(self.outdir):
             self.outdir = os.path.join(self.outdir, 'class_inf.csv')
@@ -76,7 +115,7 @@ class BinaryClassificationInferencer(ClassificationInferencer):
         # Write decision
         out_decisions['IDs'] = uids
         for i in range(out_tensor.shape[1]):
-            out_decisions[f'Prob_Class_{i}'] = sig_out[:, i].data.cpu().tolist()
+            out_decisions[f'Prob_Class_{i}'] = out_tensor[:, i].data.cpu().tolist()
             out_decisions[f'Decision_{i}'] = out_decision[:, i].tolist()
             if gt is not None:
                 out_decisions[f'Truth_{i}'] = gt[:, i].tolist()
@@ -95,27 +134,7 @@ class BinaryClassificationInferencer(ClassificationInferencer):
         Display the sensitivity, specificity, NPV, PPV and accuracy of the classification.
         """
         import pandas as pd
-        def _get_perf(s):
-            predict, truth = s
-            if truth:
-                if predict == truth:
-                    return 'TP'
-                else:
-                    return 'FN'
-            else:
-                if predict == truth:
-                    return 'TN'
-                else:
-                    return 'FP'
 
-        def _get_sum_perf(perf_counts):
-            TP, FP, TN, FN = [float(a) for a in perf_counts]
-            sens    = TP / (TP + FN + 1E-8)
-            spec    = TN / (TN + FP + 1E-8)
-            npv     = TN / (TN + FN + 1E-8)
-            ppv     = TP / (TP + FP + 1E-8)
-            acc     = (TP + TN) / (TP + TN + FP + FN)
-            return {'Sensitivity': sens, 'Specificity': spec, 'NPV': npv, 'PPV': ppv, 'ACC': acc}
 
         if not hasattr(self, '_dl'):
             self._logger.log_print_tqdm("Cannot find data. Have you called _writter() yet?", 30)
@@ -128,7 +147,7 @@ class BinaryClassificationInferencer(ClassificationInferencer):
         subdf = self._dl._data_table.copy()
         for i in range(self._num_out_out_class):
             _subdf = subdf[['%s_%s'%(a, i) for a in ['Prob_Class', 'Decision', 'Truth']]]
-            subdf['perf_%s'%i] = _subdf[[f'Decision_{i}', f'Truth_{i}']].apply(_get_perf, axis=1)
+            subdf['perf_%s'%i] = _subdf[[f'Decision_{i}', f'Truth_{i}']].apply(BinaryClassificationInferencer._get_perf, axis=1)
 
         # compute sensitivity, specificity ...etc
         perf = pd.DataFrame()
@@ -143,10 +162,10 @@ class BinaryClassificationInferencer(ClassificationInferencer):
             TN += _TN
             FP += _FP
             FN += _FN
-            _row = pd.Series(_get_sum_perf([_TP, _FP, _TN, _FN]),
-                             name=self._dl._data_table.columns[i])
+            _row = pd.Series(BinaryClassificationInferencer._get_sum_perf([_TP, _FP, _TN, _FN]),
+                             name=f"Class {i}")
             perf = perf.append(_row)
-        row = pd.Series(_get_sum_perf([TP, FP, TN, FN]), name='Overall')
+        row = pd.Series(BinaryClassificationInferencer._get_sum_perf([TP, FP, TN, FN]), name='Overall')
         perf = perf.append(row)
 
         self._logger.info('\n' + perf.to_string())
@@ -154,3 +173,27 @@ class BinaryClassificationInferencer(ClassificationInferencer):
             perf.loc['Overall']['Sensitivity'], perf.loc['Overall']['Specificity'],
             perf.loc['Overall']['NPV'], perf.loc['Overall']['PPV'], perf.loc['Overall']['ACC']
         ))
+
+    @staticmethod
+    def _get_perf(s):
+        predict, truth = s
+        if truth:
+            if predict == truth:
+                return 'TP'
+            else:
+                return 'FN'
+        else:
+            if predict == truth:
+                return 'TN'
+            else:
+                return 'FP'
+
+    @staticmethod
+    def _get_sum_perf(perf_counts):
+        TP, FP, TN, FN = [float(a) for a in perf_counts]
+        sens    = TP / (TP + FN + 1E-16)
+        spec    = TN / (TN + FP + 1E-16)
+        npv     = TN / (TN + FN + 1E-16)
+        ppv     = TP / (TP + FP + 1E-16)
+        acc     = (TP + TN) / (TP + TN + FP + FN)
+        return {'Sensitivity': sens, 'Specificity': spec, 'NPV': npv, 'PPV': ppv, 'ACC': acc}
