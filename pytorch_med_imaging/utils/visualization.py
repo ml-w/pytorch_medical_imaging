@@ -1,6 +1,7 @@
 from torchvision.utils import make_grid
 import torch
 import torch.nn.functional as F
+import torchio as tio
 import cv2
 import numpy as np
 import os
@@ -275,7 +276,8 @@ def contour_grid_by_dir(im_dir, seg_dir, output_dir, gt_dir=None, write_png=Fals
             gt = None
         idx = segs.get_unique_IDs()[i]
         fname = os.path.join(output_dir, str(idx) + suffix)
-        grid = draw_grid(im.squeeze(), seg.squeeze(), ground_truth=gt, only_with_seg=True)
+        grid = draw_grid(im[tio.DATA].squeeze().unsqueeze(1).float(),
+                         seg[tio.DATA].squeeze().unsqueeze(1).int(), ground_truth=gt, only_with_seg=True)
         cv2.imwrite(fname, grid)
 
 def contour_grid_by_image(img, seg, output_dir, ground_truth=None, write_png=False, **kwargs):
