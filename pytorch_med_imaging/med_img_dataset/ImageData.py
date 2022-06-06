@@ -545,7 +545,6 @@ class ImageDataSet(PMIDataBase):
         return out
 
     def __str__(self):
-        from pandas import DataFrame as df
         s = "==========================================================================================\n" \
             "Datatype: %s \n" \
             "Root Path: %s \n" \
@@ -563,6 +562,7 @@ class ImageDataSet(PMIDataBase):
         r"""
         Populate self.metadata_table
         """
+        from pandas import DataFrame as df
         printable = {'ID': [], 'File Name': [], 'Size': [], 'Spacing': [], 'Origin': [], 'Orientation': []}
         for i in range(len(self.data_source_path)):
             id_mo = re.search(self._id_globber, os.path.basename(self.data_source_path[i]))
