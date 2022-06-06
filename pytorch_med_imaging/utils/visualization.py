@@ -143,7 +143,7 @@ def draw_grid(image, segmentation, ground_truth=None,
             contours, _ = res
 
         # Draw contour on image grid
-        contour_color = np.array(plt.get_cmap('Set2').colors[c]) * 255. if color is None else color
+        contour_color = np.array(plt.get_cmap('Set2').colors[c % 8]) * 255. if color is None else color
         try:
             cv2.drawContours(im_grid, contours, -1, contour_color, thickness=thickness)
         except:
