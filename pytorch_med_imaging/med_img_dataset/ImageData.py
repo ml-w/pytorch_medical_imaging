@@ -167,6 +167,7 @@ class ImageDataSet(PMIDataBase):
         self.data_source_path   = []
         self.data               = []
         self.metadata           = []
+        self.metadata_table     = None
         self.length             = 0
         self.verbose            = verbose
         self.dtype              = dtype
