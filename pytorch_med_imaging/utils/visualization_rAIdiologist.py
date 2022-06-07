@@ -6,11 +6,12 @@ import torchio as tio
 import multiprocessing as mpi
 import itertools
 import imageio
-from ..med_img_dataset import ImageDataSet
-
+from pytorch_med_imaging.med_img_dataset import ImageDataSet
+from functools import partial
 from pathlib import Path
 from typing import Union, Optional, Iterable
 from mnts.mnts_logger import MNTSLogger
+from threading import Semaphore
 
 def make_marked_slice(image: np.ndarray,
                       prediction: Union[np.ndarray, Iterable[float]],
@@ -51,6 +52,12 @@ def make_marked_slice(image: np.ndarray,
     ax[0].set_axis_off()
     ax[0].imshow(image.T, **default_imshow_kwargs)
     ax[0].set_position([0., 0., 1., 1.])
+
+    if any([a > b for a, b in zip(slice_indices, slice_indices[1:])]):
+        mask = slice_indices > np.roll(slice_indices, 1)
+        mask[0] = False
+        mask[-1] = False
+        prediction = np.ma.masked_where(~mask, prediction)
 
     ax_pred_linewidth=0.3
     ax_pred = ax[1]
@@ -110,7 +117,7 @@ def mark_image_stacks(image_3d: Union[torch.Tensor, np.ndarray],
     return out_stack
 
 def marked_stack_2_gif(marked_stack: Union[torch.Tensor, np.ndarray],
-                       out_dir: Union[Path, str],
+                       out_dir: Union[Path, str] = None,
                        fps: Optional[int] = 3):
     r"""This write the images marked with prediction into a gif file.
 
@@ -125,6 +132,7 @@ def marked_stack_2_gif(marked_stack: Union[torch.Tensor, np.ndarray],
     Returns:
         None
     """
+    assert out_dir is not None, "out_dir is not optional."
     out_dir = Path(out_dir).with_suffix('.gif')
     if not out_dir.parent.is_dir():
         out_dir.parent.mkdir(exist_ok=True)
@@ -136,7 +144,8 @@ def label_images_in_dir(img_src: Union[Path, str],
                         json_file: Union[Path, str, dict],
                         out_dir: Union[Path, str],
                         num_worker: Optional[int] = 0,
-                        idGlobber: Optional[str] = "[0-9]+"):
+                        idGlobber: Optional[str] = "[0-9]+",
+                        **kwargs):
     r"""This function read the json file and tries to write gif for all of the existing keys found in the json file. This
     will look for the image from the img_src using regex idGlobber to match the json key with a unique image.
 
@@ -170,16 +179,25 @@ def label_images_in_dir(img_src: Union[Path, str],
     g = {}
     pool = mpi.Pool(num_worker)
     for k in json_dat.keys():
-        im   = img_src.get_data_by_ID(k).squeeze()
+        logger.info(f"Processing {k}")
         pred = np.asarray(json_dat[k])[..., 0].ravel()
         indi = np.asarray(json_dat[k])[..., -1].ravel()
-        p[k] = pool.apply_async(mark_image_stacks, args=[im, pred, indi])
+        _out_dir = out_dir.joinpath(f'{k}.gif')
+        _im_dir = img_src.get_data_source(img_src.get_unique_IDs().index(k))
+        p[k] = pool.apply_async(_wrap_mpi_mark_image_stacks, args=[_im_dir, pred, indi, _out_dir, kwargs])
+        # _wrap_mpi_mark_image_stacks(k, img_src, pred, indi, _out_dir)
 
     for k in p:
-        logger.info(f"Processing {k}")
-        g[k] = p[k].get()
-        _out_dir = out_dir.joinpath(f'{k}.gif')
-        pool.apply_async(marked_stack_2_gif, [p[k].get(), str(_out_dir)])
+        p[k].get()
+        logger.info(f"{k} done.")
 
     pool.close()
     pool.join()
+
+def _wrap_mpi_mark_image_stacks(im_dir, pred, indi, outdir, kwargs):
+    r"""Need this wrapper to keep memory usage reasonable"""
+    im = tio.ScalarImage(im_dir)[tio.DATA].squeeze()
+    stack = mark_image_stacks(im, pred, indi, **kwargs)
+    marked_stack_2_gif(stack, outdir)
+
+
