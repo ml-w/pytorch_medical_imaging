@@ -81,6 +81,8 @@ class rAIdiologist(nn.Module):
                 p.requires_grad = True
             for p in self.lstm_prelayernorm.parameters():
                 p.requires_grad = True
+        elif mode == -1: # inference
+            mode = 4
         else:
             raise ValueError(f"Wrong mode input: {mode}, can only be one of [1|2|3|4].")
         self._mode.fill_(mode)
