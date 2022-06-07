@@ -32,7 +32,7 @@ class TestTorchIO(unittest.TestCase):
             f.flush()
             self.augment = create_transform_compose(f.name)
 
-        self.sample = tio.Subject(image=tio.ScalarImage('./sample_data/sample_1.nii.gz'))
+        self.sample = tio.Subject(image=tio.ScalarImage('./sample_data/img/sample_1.nii.gz'))
         pass
 
     def test_transform(self):
