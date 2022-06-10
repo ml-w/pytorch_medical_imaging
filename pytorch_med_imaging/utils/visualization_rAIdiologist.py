@@ -12,6 +12,13 @@ from pathlib import Path
 from typing import Union, Optional, Iterable
 from mnts.mnts_logger import MNTSLogger
 from threading import Semaphore
+import matplotlib
+matplotlib.use('Agg')
+import matplotlib.pyplot as plt
+
+
+global semaphore
+semaphore = Semaphore(mpi.cpu_count())
 
 def make_marked_slice(image: np.ndarray,
                       prediction: Union[np.ndarray, Iterable[float]],
@@ -38,8 +45,6 @@ def make_marked_slice(image: np.ndarray,
         np.ndarray: A 2D uint8 im array with the same size as `image` input.
     """
     assert image.ndim == 2, f"Input image must be 2D, got: {image.ndim}D"
-
-    import matplotlib.pyplot as plt
 
     default_imshow_kwargs = {
         'cmap': 'gray'
@@ -76,7 +81,13 @@ def make_marked_slice(image: np.ndarray,
     img_arr = np.reshape(np.frombuffer(im_buf.getvalue(), dtype=np.uint8),
                          newshape=(image.shape[1], image.shape[0], -1))
     im_buf.close()
+    fig.clear()
+    fig.clf()
+    ax[0].cla()
+    ax[1].cla()
     plt.close()
+    plt.clf()
+    plt.cla()
     return img_arr
 
 def mark_image_stacks(image_3d: Union[torch.Tensor, np.ndarray],
@@ -174,6 +185,7 @@ def label_images_in_dir(img_src: Union[Path, str],
     idlist   = list(json_dat.keys())
     img_src  = ImageDataSet(str(img_src), filtermode='idlist', idlist = idlist, verbose = False, idGlobber=idGlobber)
 
+    uids = img_src.get_unique_IDs()
     num_worker = mpi.cpu_count() if num_worker <= 0 else min(num_worker, mpi.cpu_count())
     p = {}
     g = {}
@@ -183,9 +195,10 @@ def label_images_in_dir(img_src: Union[Path, str],
         pred = np.asarray(json_dat[k])[..., 0].ravel()
         indi = np.asarray(json_dat[k])[..., -1].ravel()
         _out_dir = out_dir.joinpath(f'{k}.gif')
-        _im_dir = img_src.get_data_source(img_src.get_unique_IDs().index(k))
+        _im_dir = img_src.get_data_source(uids.index(k))
         p[k] = pool.apply_async(_wrap_mpi_mark_image_stacks, args=[_im_dir, pred, indi, _out_dir, kwargs])
-        # _wrap_mpi_mark_image_stacks(k, img_src, pred, indi, _out_dir)
+        # _wrap_mpi_mark_image_stacks(_im_dir, pred, indi, _out_dir, kwargs)
+        del pred, indi
 
     for k in p:
         p[k].get()
@@ -196,8 +209,13 @@ def label_images_in_dir(img_src: Union[Path, str],
 
 def _wrap_mpi_mark_image_stacks(im_dir, pred, indi, outdir, kwargs):
     r"""Need this wrapper to keep memory usage reasonable"""
-    im = tio.ScalarImage(im_dir)[tio.DATA].squeeze()
-    stack = mark_image_stacks(im, pred, indi, **kwargs)
+    global semaphore
+    semaphore.acquire()
+    im = tio.ScalarImage(im_dir)
+    stack = mark_image_stacks(im[tio.DATA].squeeze(), pred, indi, **kwargs)
     marked_stack_2_gif(stack, outdir)
+    im.clear()
+    semaphore.release()
+    del im, stack
 
 
