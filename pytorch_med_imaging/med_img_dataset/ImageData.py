@@ -284,8 +284,14 @@ class ImageDataSet(PMIDataBase):
         if self._filtermode == 'idlist' or self._filtermode == 'both':
             self._logger.info("Globbing ID with globber: " + self._id_globber + " ...")
             file_basenames = [os.path.basename(f) for f in file_dirs]
-            file_ids = [re.search(self._id_globber, f) for f in file_basenames]
-            file_ids = [v.group() for v in file_ids if v is not None]
+            file_ids = {f: re.search(self._id_globber, f) for f in file_basenames}
+            file_ids = {f: v.group() for f, v in file_ids.items() if v is not None}
+            if len(file_ids) != len(file_basenames):
+                self._logger.warning("Not all files were assigned an ID.")
+                no_ids = set(file_basenames) - set(list(file_ids.keys()))
+                self._logger.debug(f"{no_ids}")
+                self._logger.debug(f"{file_ids}")
+
 
             if isinstance(self._filterargs['idlist'], str) and not self._filterargs['idlist'] == "":
                 # If its a file directory
@@ -307,6 +313,8 @@ class ImageDataSet(PMIDataBase):
             tmp_file_dirs = np.array(file_dirs)
             keep = [id in self._idlist for id in file_ids]  # error near this could be because nothing is grabed
 
+            if len(file_dirs) != len(keep):
+                raise IndexError("Number of files is different from number of globbed IDs!")
             file_dirs = tmp_file_dirs[keep].tolist()
             filtered_away.extend(tmp_file_dirs[np.invert(keep)])
             self._logger.debug(f"Filtering away: {filtered_away}")
