@@ -372,6 +372,8 @@ def main(a, config, logger):
             infer_class = BinaryClassificationRNNInferencer
         elif run_type == 'Survival':
             infer_class = SurvivalInferencer
+        elif run_type == 'rAIdiologist':
+            infer_class = rAIdiologistInferencer
         else:
             logger.error('Wrong run_type setting!')
             raise NotImplementedError("Not implemented inference type: {}".format(run_type))
