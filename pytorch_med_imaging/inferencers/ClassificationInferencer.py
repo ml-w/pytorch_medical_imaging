@@ -46,7 +46,7 @@ class ClassificationInferencer(InferencerBase):
         return 0
 
     def attention_write_out(self, attention_list):
-        attention_outdir = os.path.dirname(self._outdir)
+        attention_outdir = os.path.dirname(self.outdir)
         id_lists = self._in_dataset.get_unique_IDs()
         temp_atten_list = [t for t in zip(*attention_list)]
         assert len(id_lists) == len(temp_atten_list), \
@@ -113,7 +113,7 @@ class ClassificationInferencer(InferencerBase):
 
 
         ids = self._in_dataset.get_unique_IDs()
-        outdir = os.path.dirname(self._outdir)
+        outdir = os.path.dirname(self.outdir)
         for i in tqdm(range(len(self._in_dataset))):
             t, c = self._in_dataset[i], cam_tensor[i].squeeze()
 
@@ -178,13 +178,13 @@ class ClassificationInferencer(InferencerBase):
             # self.attention_write_out(out_attention)
             pass
         if os.path.isdir(self._outdir):
-            self._outdir = os.path.join(self._outdir, 'class_inf.csv')
-        if not self._outdir.endswith('.csv'):
-            self._outdir += '.csv'
-        if os.path.isfile(self._outdir):
-            self._logger.log_print_tqdm("Overwriting file %s!"%self._outdir, 30)
-        if not os.path.isdir(os.path.dirname(self._outdir)):
-            os.makedirs(os.path.dirname(self._outdir), exist_ok=True)
+            self.outdir = os.path.join(self._outdir, 'class_inf.csv')
+        if not self.outdir.endswith('.csv'):
+            self.outdir += '.csv'
+        if os.path.isfile(self.outdir):
+            self._logger.log_print_tqdm("Overwriting file %s!" % self.outdir, 30)
+        if not os.path.isdir(os.path.dirname(self.outdir)):
+            os.makedirs(os.path.dirname(self.outdir), exist_ok=True)
 
         # Write decision
         out_decisions['IDs'] = self._in_dataset.get_unique_IDs()
@@ -196,7 +196,7 @@ class ClassificationInferencer(InferencerBase):
 
         out_decisions['Decision'] = out_decision.tolist()
         dl = DataLabel.from_dict(out_decisions)
-        dl.write(self._outdir)
+        dl.write(self.outdir)
         return dl
 
     def set_dataloader(self, loader):
