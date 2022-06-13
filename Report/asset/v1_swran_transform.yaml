@@ -1,12 +1,12 @@
 ToCanonical:
   {}
-RandomAffine:
-  scales: [0.9, 1.1]
-  degrees: 10
-RandomFlip:
-  - 'lr'
-RandomNoise:
-  std: [0, 8]
+#RandomAffine:
+#  scales: [0.9, 1.1]
+#  degrees: 10
+#RandomFlip:
+#  - 'lr'
+#RandomNoise:
+#  std: [0, 8]
 CropOrPad:
   - [300, 300, 25]
   - mask_name: mask
