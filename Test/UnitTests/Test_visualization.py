@@ -78,4 +78,5 @@ class Test_visualization_rAIdiologist(unittest.TestCase):
         temp_dir = tempfile.TemporaryDirectory()
         label_images_in_dir(self.img_dir, self.json, temp_dir.name, idGlobber="MRI_[0-9]+")
         print(list(Path(temp_dir.name).iterdir()))
+        self.assertEqual(3, len(list(Path(temp_dir.name).iterdir())))
         temp_dir.cleanup()
