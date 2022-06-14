@@ -1,237 +1,180 @@
-train:
-    description: Train a model.
-    main: pytorch_med_imaging.main
-    flags:
-        config: "Configs/Survival/Test.ini"
-        epoch: 50
-        batch-size: 4
-        lr: 1E-4
-        debug: no
-        override: ""
-    output-scalars:
-        loss/loss: 'EpochLoss: (\value)'
-        accuracy: 'ACC: (\value)'
-        loss/validation_loss: 'VAL: (\value)'
-        step: 'Epoch (\step)'
-        step_lr: 'LR: (\value)'
-    sourcecode:
-        root: ../
-        select: 
-            - exclude:
-                dir: 'NPC_Segmentation'
-            - exclude:
-                dir: 'Backup'
-            - exclude:
-                dir: '__pycache__'
-            - exclude: 
-                dir: "Guildai"
-            - '*.py'
-            - '*.pyx'
-            - '*.txt'
-            - '*.so'
-    requires:
-        - file: '../Configs'
-        - file: '../NPC_Segmentation'
-        - file: '../Sinus'
-        - file: '../Backup/Log'
+- config: default-flags
+  flags:
+    config: ""
+    epoch: 50
+    batch-size: 4
+    lr: 1E-4
+    debug: no
+    override: ""
 
-train_segment:
-    description: Train a model.
-    main: pytorch_med_imaging.main
-    flags:
-        config: "Configs/Survival/Test.ini"
-        epoch: 50
-        batch-size: 4
-        lr: 1E-4
-        debug: no
-        override: ""
-    output-scalars:
-        loss/loss: 'EpochLoss: (\value)'
-        perf/accuracy: 'ACC: (\value)'
-        perf/dsc: 'DSC: (\value)'
-        loss/validation_loss: 'VAL: (\value)'
-        step: 'Epoch (\step)'
-        step_lr: 'LR: (\value)'
-    sourcecode:
-        root: ../
-        select:
-            - exclude:
-                  dir: 'NPC_Segmentation'
-            - exclude:
-                  dir: 'Backup'
-            - exclude:
-                  dir: '__pycache__'
-            - exclude:
-                  dir: "Guildai"
-            - '*.py'
-            - '*.pyx'
-            - '*.txt'
-            - '*.so'
-    requires:
-        - file: '../Configs'
-        - file: '../NPC_Segmentation'
-        - file: '../Sinus'
-        - file: '../Backup/Log'
+- config: val-flags
+  flags:
+    batch-size: 4
+    config: ""
+    override: ""
 
-train_survival:
-    description: Train a model.
-    main: pytorch_med_imaging.main
-    flags:
-        config: "Configs/Survival/Test.ini"
-        epoch: 50
-        batch-size: 4
-        lr: 1E-4
-        debug: no
-        override: ""
-    output-scalars:
-        loss/loss: 'EpochLoss: (\value)'
-        loss/validation_loss: 'VAL: (\value)'
-        step: 'Epoch (\step)'
-        step_lr: 'LR: (\value)'
-        perf/validation_c-index: 'VAL C-index: (\value)'
-        perf/training_c-index: 'Training C-index: (\value)'
-    sourcecode:
-        root: ../
-        select:
-            - exclude:
-                dir: 'NPC_Segmentation'
-            - exclude:
-                dir: 'Backup'
-            - exclude:
-                dir: '__pycache__'
-            - exclude:
-                dir: "Guildai"
-            - '*.py'
-            - '*.pyx'
-            - '*.txt'
-            - '*.so'
-    requires:
-        - file: '../Configs'
-        - file: '../NPC_Segmentation'
-        - file: '../Backup/Log'
+- model: pmi
+  params:
+    default-lr: 1E-5
+    default-config: "Configs/Survival/Test.ini"
+  operations:
+    train:
+      description: Train a model.
+      main: pytorch_med_imaging.main
+      flags:
+        $include: default-flags
+      sourcecode:
+        - exclude:
+            dir: 'Backup'
+      output-scalars:
+        - classification
+      requires:
+        - default
 
-validation:
-    decription: Validate the trained model. Should be used in pipeline, otherwise it won't find the checkpoint.
-    main: pytorch_med_imaging.main --inference
-    flags:
-        batch-size: 4
-        config: "Configs/Survival/Test.ini"
-        override: ""
-    sourcecode:
-        root: ../
-        select:
-            - exclude:
-                dir: 'NPC_Segmentation'
-            - exclude:
-                dir: '__pycache__'
-            - exclude:
-                dir: "Guildai"
-            - '*.py'
-            - '*.pyx'
-            - '*.txt'
-            - '*.so'
-    requires:
-        - file: '../Configs'
-        - file: '../NPC_Segmentation'
-        - file: '../Sinus'
+    train_looped:
+      description: Train a model in a looped fashion. Suitable when the model needs a recipe of hyperparameters.
+      main: pytorch_med_imaging.main
+      flags:
+        $include: default-flags
+      sourcecode:
+        - exclude:
+            dir: 'Backup'
+      output-scalars:
+        - classification
+      requires:
+        - default
         - operation: train
           select: 'Backup'
-    output-scalars:
-        sensitivity: 'Sensitivity: (\value)'
-        specificity: 'Specificity: (\value)'
-        PPV: 'PPV: (\value)'
-        NPV: 'NPV: (\value)'
-        ACC: 'OverallACC: (\value)'
+          fail-if-empty: no
 
-validation_segment:
-    decription: Validate the trained model. Should be used in pipeline, otherwise it won't find the checkpoint.
-    main: pytorch_med_imaging.main --inference
-    flags:
-        batch-size: 4
-        config: "Configs/Survival/Test.ini"
-        override: ""
-    sourcecode:
-        root: ../
-        select:
-            - exclude:
-                  dir: 'NPC_Segmentation'
-            - exclude:
-                  dir: '__pycache__'
-            - exclude:
-                  dir: "Guildai"
-            - '*.py'
-            - '*.pyx'
-            - '*.txt'
-            - '*.so'
-    requires:
-        - file: '../Configs'
-        - file: '../NPC_Segmentation'
-        - file: '../Sinus'
+    train_segment:
+      description: Train a model for segmentation.
+      main: pytorch_med_imaging.main
+      flags:
+        $include: default-flags
+      output-scalars:
+        perf/dsc: 'DSC: (\value)'
+      sourcecode:
+          - exclude:
+              dir: 'Backup'
+      requires:
+        - default
+
+    train_survival:
+      description: Train a model.
+      main: pytorch_med_imaging.main
+      flags:
+        $include: default-flags
+      output-scalars:
+        perf/validation_c-index: 'VAL C-index: (\value)'
+        perf/training_c-index: 'Training C-index: (\value)'
+      sourcecode:
+        - exclude:
+            dir: 'Backup'
+      requires:
+        - default
+
+    validation:
+      decription: Validate the trained model. Should be used in pipeline, otherwise it won't find the checkpoint.
+      main: pytorch_med_imaging.main --inference
+      flags:
+        $include: val-flags
+      requires:
+        - default
+        - operation: train
+          select: 'Backup'
+      output-scalars: classification-infer
+
+    validation_segment:
+      decription: Validate the trained model. Should be used in pipeline, otherwise it won't find the checkpoint.
+      main: pytorch_med_imaging.main --inference
+      flags:
+        $include: val-flags
+      requires:
+        - default
         - operation: train_segment
           select: 'Backup'
-    output-scalars:
+      output-scalars:
         DSC: 'Avg_DICE: (\value)'
         med_DSC: 'Med_DICE: (\value)'
 
-
-validation_survival:
-    decription: Validate the trained model. Should be used in pipeline, otherwise it won't find the checkpoint.
-    main: pytorch_med_imaging.main --inference
-    flags:
-        batch-size: 4
-        config: "Configs/Survival/Test.ini"
-        override: ""
-    sourcecode:
-        root: ../
-        select:
-            - exclude:
-                  dir: 'NPC_Segmentation'
-            - exclude:
-                  dir: '__pycache__'
-            - exclude:
-                  dir: "Guildai"
-            - '*.py'
-            - '*.pyx'
-            - '*.txt'
-            - '*.so'
-    requires:
-        - file: '../Configs'
-        - file: '../NPC_Segmentation'
+    validation_survival:
+      decription: Validate the trained model. Should be used in pipeline, otherwise it won't find the checkpoint.
+      main: pytorch_med_imaging.main --inference
+      flags:
+        $include: val-flags
+      requires:
+        - default
         - operation: train_survival
           select: 'Backup'
-    output-scalars:
+      output-scalars:
         C-index: 'C-index: (\value)'
 
-
-pipeline:
-    flags:
+    recipe_rAIdiologist:
+      flags:
         config: "Configs/Survival/Test.ini"
-        epoch: 50
-        batch-size: 4
-        lr: 1E-4
-        override: ""
-    steps:
+        fold_code: "B00"
+        bs_cnn: 4
+        bs_rnn: 24
+      steps:
+        - train        config=${config} epoch=200 batch-size=${bs_cnn} lr=2E-5 override="(SolverParams,rAI_fixed_mode)=1;(General,fold_code)=${fold_code}"
+        - train_looped config=${config} epoch=50 batch-size=${bs_rnn} lr=5E-5 override="(SolverParams,rAI_fixed_mode)=2;(General,fold_code)=${fold_code}"
+        - train_looped config=${config} epoch=50 batch-size=${bs_cnn} lr=3E-5 override="(SolverParams,rAI_fixed_mode)=3;(General,fold_code)=${fold_code}"
+        - train_looped config=${config} epoch=50 batch-size=${bs_rnn} lr=3E-5 override="(SolverParams,rAI_fixed_mode)=4;(General,fold_code)=${fold_code}"
+        - train_looped config=${config} epoch=100 batch-size=${bs_cnn} lr=1E-5 override="(SolverParams,rAI_fixed_mode)=5;(General,fold_code)=${fold_code}"
+
+    pipeline:
+      flags: default-flags
+      steps:
         - train config=${config} epoch=${epoch} batch-size=${batch-size} lr=${lr} override=${override}
         - validation config=${config} batch-size=${batch-size} override=${override}
 
-pipeline_segment:
-    flags:
-        config: "Configs/Survival/Test.ini"
-        epoch: 50
-        batch-size: 4
-        lr: 1E-4
-        override: ""
-    steps:
+    pipeline_segment:
+      flags: default-flags
+      steps:
         - train_segment config=${config} epoch=${epoch} batch-size=${batch-size} lr=${lr} override=${override}
         - validation_segment config=${config} batch-size=${batch-size} override="${override};(LoaderParams,random_patches)=75"
 
-pipeline_survival:
-    flags:
-        config: "Configs/Survival/Test.ini"
-        epoch: 50
-        batch-size: 4
-        lr: 1E-4
-        override: ""
-    steps:
+    pipeline_survival:
+      flags: default-flags
+      steps:
         - train_survival config=${config} epoch=${epoch} batch-size=${batch-size} lr=${lr} override=${override}
         - validation_survival config=${config} batch-size=${batch-size} override=${override}
+
+  output-scalars:
+    classification:
+      loss/loss: 'EpochLoss: (\value)'
+      accuracy: 'ACC: (\value)'
+      loss/validation_loss: 'VAL: (\value)'
+      step: 'Epoch (\step)'
+      step_lr: 'LR: (\value)'
+
+    classification-infer:
+      sensitivity: 'Sensitivity: (\value)'
+      specificity: 'Specificity: (\value)'
+      PPV: 'PPV: (\value)'
+      NPV: 'NPV: (\value)'
+      ACC: 'OverallACC: (\value)'
+
+  sourcecode:
+    root: ../
+    select:
+      - exclude:
+          dir: 'NPC_Segmentation'
+      - exclude:
+          dir: '__pycache__'
+      - exclude:
+          dir: "Guildai"
+      - '*.py'
+      - '*.pyx'
+      - '*.txt'
+      - '*.so'
+  resources:
+    default:
+      - file: '../Configs'
+      - file: '../NPC_Segmentation'
+      - file: '../Sinus'
+      - file: '../Backup/Log'
+    checkpoint-space:
+      target-path: Backup
+      target-type: link
