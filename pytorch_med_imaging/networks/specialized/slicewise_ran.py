@@ -24,6 +24,8 @@ class SlicewiseAttentionRAN(nn.Module):
             Default to `False`.
         save_weight (bool, Optional):
             If `True`, the slice attention would be saved for use (CPU memory). Default to `False`.
+        exclude_fc (bool, Optional):
+            If `True`, the output FC layer would be excluded.
 
     """
     def __init__(self,
@@ -31,11 +33,13 @@ class SlicewiseAttentionRAN(nn.Module):
                  out_ch: int,
                  first_conv_ch: Optional[int] = 64,
                  save_mask: Optional[bool] = False,
-                 save_weight: Optional[bool] = False):
+                 save_weight: Optional[bool] = False,
+                 exclude_fc: Optional[bool] = False):
         super(SlicewiseAttentionRAN, self).__init__()
 
         self.save_weight=save_weight
         self.in_conv1 = Conv3d(in_ch, first_conv_ch, kern_size=[3, 3, 1], stride=[1, 1, 1], padding=[1, 1, 0])
+        self.exclude_top = exclude_fc
 
         # Slicewise attention layer
         self.in_sw = nn.Sequential(
@@ -98,14 +102,15 @@ class SlicewiseAttentionRAN(nn.Module):
         if x.dim() < 3:
             x = x.unsqueeze(0)
 
-        # Get best prediction across the slices
-        x = x.max(dim=-1).values
+        if not self.exclude_top:
+            # Get best prediction across the slices
+            x = x.max(dim=-1).values
 
-        x = self.out_fc1(x)
-        while x.dim() < 2:
-            x = x.unsqueeze(0)
-        if x.shape[-1] >= 2:
-            x = torch.sigmoid(x)
+            x = self.out_fc1(x)
+            while x.dim() < 2:
+                x = x.unsqueeze(0)
+            if x.shape[-1] >= 2:
+                x = torch.sigmoid(x)
         return x
 
 
