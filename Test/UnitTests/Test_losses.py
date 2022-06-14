@@ -31,11 +31,17 @@ class TestLoss(unittest.TestCase):
                                           [0.1, 0.1, 1],
                                           [0.1, 0.1, 1],
                                           [0.9, 0.1, 1]]).view(5, -1) # Low confidence right
+        test_input_5 = torch.FloatTensor([0.9,
+                                          0.1,
+                                          0.1,
+                                          0.9,
+                                          0.9]).view(5, -1)
 
         test_inputs = [test_input_1,
                        test_input_2,
                        test_input_3,
-                       test_input_4]
+                       test_input_4,
+                       test_input_5]
         test_target = autograd.Variable(test_target, requires_grad=True)
         for i, t in enumerate(test_inputs):
             test_inputs[i] = autograd.Variable(t, requires_grad=True)
@@ -46,6 +52,10 @@ class TestLoss(unittest.TestCase):
             for i, t in enumerate(test_inputs):
                 test_inputs[i] = t.cuda()
 
-        losses = [loss_func(t, test_target) for t in test_inputs]
-        print(torch.stack(losses))
+        for t in test_inputs:
+            try:
+                loss_func(t, test_target)
+            except:
+                msg = f"Loss function failed when handling input with shape ({t.shape}): {t} "
+                self.fail(msg)
 

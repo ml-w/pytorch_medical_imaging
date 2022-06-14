@@ -16,15 +16,10 @@ class Test3DNetworks(unittest.TestCase):
     def test_rAIdiologist(self):
         net = rAIdiologist(1).cuda()
         with torch.no_grad():
-            net.set_mode(1)
-            print(net._mode)
-            out = net(self.sample_input)
-            net.set_mode(2)
-            print(net._mode)
-            out = net(self.sample_input)
-            net.set_mode(3)
-            print(net._mode)
-            out = net(self.sample_input)
-            net.set_mode(4)
-            print(net._mode)
-            out = net(self.sample_input)
+            for i in range(6):
+                try:
+                    net.set_mode(i)
+                    self.assertTrue(net._mode == i)
+                    out = net(self.sample_input)
+                except:
+                    self.fail(f"Mode {i} error.")
