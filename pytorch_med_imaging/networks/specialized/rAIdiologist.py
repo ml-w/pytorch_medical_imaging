@@ -19,10 +19,10 @@ class rAIdiologist(nn.Module):
         self.play_back = []
         # Create inception for 2D prediction
         self.cnn = SlicewiseAttentionRAN(1, 1, exclude_fc=True)
-        self.cnn.load_state_dict(torch.load("/home/lwong/Source/Repos/NPC_Segmentation/Report/asset/trained_states/"
-                                            "deeplearning/NPC_BM-vv2.0-sv3.pt"), strict=False)
-        for p in self.cnn.parameters():
-            p.requires_grad = False
+        # self.cnn.load_state_dict(torch.load("/home/lwong/Source/Repos/NPC_Segmentation/Report/asset/trained_states/"
+        #                                     "deeplearning/NPC_BM-vv2.0-sv3.pt"), strict=False)
+        # for p in self.cnn.parameters():
+        #     p.requires_grad = False
         self.dropout = nn.Dropout(p=0.2)
 
         # LSTM for
@@ -47,7 +47,12 @@ class rAIdiologist(nn.Module):
         return self.play_back
 
     def set_mode(self, mode: int):
-        if mode == 1:
+        if mode == 0:
+            for p in self.parameters():
+                p.requires_grad = False
+            for p in self.cnn.parameters():
+                p.requires_grad = True
+        elif mode in (1, 3):
             # pre-trained SRAN, train stage 1 RNN
             for p in self.cnn.parameters():
                 p.requires_grad = False
@@ -55,24 +60,8 @@ class rAIdiologist(nn.Module):
                 p.requires_grad = True
             for p in self.lstm_prelayernorm.parameters():
                 p.requires_grad = True
-        elif mode == 2:
+        elif mode in (2, 4):
             # fix RNN train SRAN
-            for p in self.cnn.parameters():
-                p.requires_grad = True
-            for p in self.lstm_rater.parameters():
-                p.requires_grad = False
-            for p in self.lstm_prelayernorm.parameters():
-                p.requires_grad = True
-        elif mode == 3:
-            # Fix SRAN train stage 2 RNN
-            for p in self.cnn.parameters():
-                p.requires_grad = False
-            for p in self.lstm_rater.parameters():
-                p.requires_grad = True
-            for p in self.lstm_prelayernorm.parameters():
-                p.requires_grad = True
-        elif mode == 4:
-            # Fix RNN train SRAN + output layer
             for p in self.cnn.parameters():
                 p.requires_grad = True
             for p in self.lstm_rater.parameters():
@@ -81,10 +70,16 @@ class rAIdiologist(nn.Module):
                 p.requires_grad = True
             for p in self.lstm_prelayernorm.parameters():
                 p.requires_grad = True
+        elif mode == 5:
+            # Everything is on
+            for p in self.parameters():
+                p.requires_grad = True
         elif mode == -1: # inference
             mode = 4
         else:
-            raise ValueError(f"Wrong mode input: {mode}, can only be one of [1|2|3|4].")
+            raise ValueError(f"Wrong mode input: {mode}, can only be one of [0|1|2|3|4|5].")
+
+        self.cnn.exclude_top = mode != 0
         self._mode.fill_(mode)
         self.lstm_rater._mode.fill_(mode)
 
@@ -104,7 +99,7 @@ class rAIdiologist(nn.Module):
             pass
         return hook
 
-    def forward(self, x):
+    def forward_(self, x):
         # input is (B x 1 x H x W x S)
         while x.dim() < 5:
             x = x.unsqueeze(0)
@@ -125,7 +120,7 @@ class rAIdiologist(nn.Module):
             o = self.lstm_rater(self.lstm_prelayernorm(x.permute(0, 2, 1).contiguous()).permute(0, 2, 1)).contiguous() # o: (B x S x 2)
             o = F.adaptive_max_pool1d(o.permute(0, 2, 1), 1).view(-1, 2)
             # o = torch.stack([o[i,j] for i, j in zero_slices.items()], dim=0)
-        elif self._mode == 3 or self._mode == 4:
+        elif self._mode == 3 or self._mode == 4 or self._mode == 5:
             # Loop batch
             tmp_list = []
             for i, xx in enumerate(x):
@@ -150,6 +145,14 @@ class rAIdiologist(nn.Module):
         o = torch.sigmoid(o)
         return o
 
+    def forward_swran(self, *args):
+        return self.cnn.forward(*args)
+
+    def forward(self, x):
+        if self._mode == 0:
+            return self.forward_swran(x)
+        else:
+            return self.forward_(x)
 
 class LSTM_rater(nn.Module):
     r"""This LSTM rater receives inputs as a sequence of deep features extracted from each slice. This module has two
@@ -165,11 +168,11 @@ class LSTM_rater(nn.Module):
          ...]
 
     """
-    def __init__(self, in_ch, record=False, iter_limit=100):
+    def __init__(self, in_ch, record=False, iter_limit=5):
         super(LSTM_rater, self).__init__()
         # Batch size should be 1
         self.lstm_reviewer = nn.LSTM(in_ch, 100, batch_first=True, bias=True)
-        self.out_fc = nn.Linear(100, 3)
+        self.out_fc = nn.Linear(100, 2)
         self.play_back = []
         self.iter_limit = iter_limit
         self.RECORD_ON = record
@@ -191,7 +194,7 @@ class LSTM_rater(nn.Module):
     def forward(self, *args):
         if self._mode == 1 or self._mode == 2:
             return self.forward_stage_1(*args)
-        elif self._mode == 3 or self._mode == 4:
+        elif self._mode == 3 or self._mode == 4 or self._mode == 5:
             return self.forward_stage_2(*args)
         else:
             raise ValueError("There are only stage `1` or `2`, when mode = [1|2], this runs in stage 1, when "
@@ -205,54 +208,39 @@ class LSTM_rater(nn.Module):
         num_slice = x.shape[-1]
         mid_index = num_slice // 2
 
-        # Force lstm to read everything once
-        _, (h, c) = self.lstm_reviewer(x.permute(0, 2, 1))
-        if self.RECORD_ON:
-            # _: (1 x S x C), _: (1 x S x 3)
-            play_back = []
-            o = self.out_fc(_)
-            row = torch.cat([o.detach().cpu(), torch.Tensor(range(num_slice)).view(1, -1, 1)], dim=-1) # concat chans
-            play_back.append(row)
-
         # Now start again from the middle
+        play_back = []
+        hidden = None
         iter_num = 0
         consec_conf = 0
         next_slice = mid_index
         BREAK_FLAG = False
         while not BREAK_FLAG:
-            o, (h, c) = self.lstm_reviewer(x[:, :, next_slice].view(1, 1, -1), (h, c))
-            o = self.out_fc(o)
-            # record to playback
+            o, hidden = self.lstm_reviewer(x.permute(0, 2, 1), hidden)
             if self.RECORD_ON:
-                # o: (1 x 1 x 3)
-                row = torch.cat([o.detach().cpu(), torch.Tensor([next_slice]).view(1, 1, 1)], dim=-1)
+                # _: (1 x S x C), _: (1 x S x 3)
+                with torch.no_grad():
+                    _o = self.out_fc(o)
+                row = torch.cat([_o.detach().cpu(), torch.Tensor(range(num_slice)).view(1, -1, 1)], dim=-1) # concat chans
                 play_back.append(row)
-
-            # Compute config for next iteration, range of o is unbound after out_fc, but will be sigmoid-ed, so use 0
-            # as a threshold seems to be logical
-            if o[..., -1].detach().item() > 0:
-                next_slice += 1
-            else:
-                next_slice -= 1
-            next_slice = next_slice % num_slice
-            iter_num += 1
+            h = self.out_fc(hidden[0])
 
             # restrict number of runs else mem will run out quick.
             if iter_num >= self.iter_limit:
                 BREAK_FLAG = True
-            if o[..., 1] > 0:
+            if h[..., 1] > 0:
                 consec_conf += 1
-                if consec_conf > 3:
+                if consec_conf > 2:
                     BREAK_FLAG = True
             else:
                 consec_conf = 0
-            pass
+            iter_num += 1
 
         # output size: (1 x 2)
         if self.RECORD_ON:
             # concat along the slice dim
             self.play_back.append(torch.cat(play_back, dim=1))
-        return o.squeeze()[:2].view(1, -1) # no need to deal with up or down afterwards
+        return h.squeeze()[:2].view(1, -1) # no need to deal with up or down afterwards
 
     def forward_stage_1(self, x: torch.Tensor):
         r"""In this stage, just read every slices"""

@@ -109,8 +109,7 @@ class SlicewiseAttentionRAN(nn.Module):
             x = self.out_fc1(x)
             while x.dim() < 2:
                 x = x.unsqueeze(0)
-            if x.shape[-1] >= 2:
-                x = torch.sigmoid(x)
+            x = torch.sigmoid(x)
         return x
 
 

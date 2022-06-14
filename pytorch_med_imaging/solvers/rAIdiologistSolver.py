@@ -20,10 +20,11 @@ class rAIdiologistSolver(BinaryClassificationSolver):
         config = kwargs['config']
         self._total_num_epoch = int(config['RunParams'].get('num_of_epochs'))
         self._rAIdiologist_kwargs = self._load_default_attr(rAIdiologist_kwargs)
-        self._current_mode = self.rAI_fixed_mode
+        self._current_mode = None # initially, the mode is unsetted
 
         #TODO: port conf_factor parameter here
         self.set_loss_function(ConfidenceBCELoss())
+        self.lossfunction.conf_weight = self.rAI_conf_weight
 
         if os.getenv('CUBLAS_WORKSPACE_CONFIG') not in [":16:8", ":4096:2"]:
             self._logger.warning(f"Env variable CUBLAS_WORKSPACE_CONFIG was not set properly, which may invalidate"
@@ -39,6 +40,10 @@ class rAIdiologistSolver(BinaryClassificationSolver):
         # res: (B x C), g: (B x 1)
         _data =np.concatenate([res.squeeze().data.cpu().numpy(), g.data.cpu().numpy()], axis=-1)
         _df = pd.DataFrame(data=_data, columns=['res_%i'%i for i in range(res.shape[-1])] + ['g'])
+        _df['Verify_wo_conf'] = (_df['res_0'] >= 0.5) == (_df['g'] > 0)
+        _df['Verify_wo_conf'].replace({True: "Correct", False: "Wrong"}, inplace=True)
+        _df['Verify_w_conf'] = ((_df['res_0'] >= 0.5) == (_df['g'] > 0)) == (_df['res_1'] >= 0.5)
+        _df['Verify_w_conf'].replace({True: "Correct", False: "Wrong"}, inplace=True)
 
         # model_output: (B x num_class + 1)
         dic = torch.zeros_like(res[..., :-1])
@@ -57,6 +62,7 @@ class rAIdiologistSolver(BinaryClassificationSolver):
         current_epoch = self.plotter_dict.get('epoch_num', 0)
         total_epoch = self._total_num_epoch
 
+        # Schedule mode of the network
         if self.rAI_fixed_mode is None:
             # mode is scheduled to occupy 25% of all epochs
             epoch_progress = current_epoch / float(total_epoch)
@@ -76,13 +82,18 @@ class rAIdiologistSolver(BinaryClassificationSolver):
         current_epoch = self.plotter_dict.get('epoch_num', None)
         total_epoch = self._total_num_epoch
 
-        if current_mode in (3, 4):
+        if self._current_mode in (3, 4):
             # step conf loss function scheduler
             if isinstance(self.lossfunction, ConfidenceBCELoss):
+                self._logger.info(f"Stepping conf loss using mode: {self.rAI_conf_weight_scheduler}")
                 if self.rAI_conf_weight_scheduler == 'default':
                     if self.lossfunction.conf_factor == 0: # generally in mode 1 & 2, confidence is ignored
                         self.lossfunction.conf_factor = 0.1
-                    self.lossfunction.conf_factor = max(self.lossfunction.conf_factor * 1.01, 0.5)
+                    self.lossfunction.conf_factor = min(self.lossfunction.conf_factor * 1.05, 0.8)
+                if self.rAI_conf_weight_scheduler == 'constant':
+                    self._logger.debug("Nothing was done.")
+                    return
+                self._logger.info(f"Updated conf loss: {self.lossfunction.conf_factor}")
 
-
-
+    def _schedular(self):
+        pass
