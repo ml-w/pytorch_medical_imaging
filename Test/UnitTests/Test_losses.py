@@ -56,8 +56,7 @@ class TestLoss(unittest.TestCase):
         for t in self.test_inputs:
             msg = f"Loss function failed when handling input with shape ({t.shape}): \n{t}"
             loss = loss_func(t, self.test_target)
-            self.assertEqual(1, loss.dim(), msg=msg)
-            self.assertEqual(1, loss.shape[0], msg=msg)
+            self.assertIn(loss.dim(), (0, 1), msg=msg + " Loss must be a single number!")
             try:
                 loss.backward()
             except Exception as e:
