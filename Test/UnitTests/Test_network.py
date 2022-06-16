@@ -21,5 +21,6 @@ class Test3DNetworks(unittest.TestCase):
                     net.set_mode(i)
                     self.assertTrue(net._mode == i)
                     out = net(self.sample_input)
+                    print(f"Mode {i} passed.")
                 except:
                     self.fail(f"Mode {i} error.")
