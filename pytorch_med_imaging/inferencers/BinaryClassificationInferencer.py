@@ -76,7 +76,7 @@ class BinaryClassificationInferencer(ClassificationInferencer):
             gt_list: (B x 1)
         """
         out_tensor = torch.cat(out_list, dim=0) #(NxC)
-        gt_tensor = torch.cat(gt, dim=0).reshape_as(out_tensor) if len(gt) > 0 else None
+        gt_tensor = torch.cat(gt_list, dim=0).reshape_as(out_tensor) if len(gt) > 0 else None
         return out_tensor, gt_tensor
 
     def _writter(self,
