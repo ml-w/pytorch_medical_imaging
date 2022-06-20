@@ -14,6 +14,9 @@
     override: ""
 
 - model: pmi
+  params:
+    rAI_config: "./Configs/BM_LargerStudy/BM_rAIdiologist_nyul_v2.ini"
+    swran_config: "./Configs/BM_LargerStudy/BM_rAIdiologist_stage0_v2.ini"
   operations:
     train:
       description: Train a model.
@@ -108,17 +111,22 @@
         C-index: 'C-index: (\value)'
 
     recipe_rAIdiologist:
+      description:
+        "This recipe requires two config files, one trains the SWRAN and the other train rAIdiologist."
       flags:
-        config: ""
+        config: "{{rAI_config}}"
+        config_stage0: '{{swran_config}}'
         fold_code: "B00"
+        bs_swran: 8
         bs_cnn: 4
         bs_rnn: 24
+        debug: no
       steps:
-        - train        config=${config} epoch=200 batch-size=${bs_cnn} lr=2E-5 override="(SolverParams,rAI_fixed_mode)=2;(General,fold_code)=${fold_code};(RunParams,decay_on_plateau)=No;(RunParams,decay_rate_LR)=0.95"
-        - train_looped config=${config} epoch=50  batch-size=${bs_rnn} lr=5E-5 override="(SolverParams,rAI_fixed_mode)=1;(General,fold_code)=${fold_code}"
-        - train_looped config=${config} epoch=50  batch-size=${bs_cnn} lr=3E-5 override="(SolverParams,rAI_fixed_mode)=2;(General,fold_code)=${fold_code}"
-        - train_looped config=${config} epoch=50  batch-size=${bs_rnn} lr=3E-5 override="(SolverParams,rAI_fixed_mode)=3;(General,fold_code)=${fold_code}"
-        - train_looped config=${config} epoch=100 batch-size=${bs_cnn} lr=1E-5 override="(SolverParams,rAI_fixed_mode)=4;(General,fold_code)=${fold_code}"
+        - train        config=${config_stage0} epoch=200 debug=${debug} batch-size=${bs_swran} lr=2E-5 override="(General,fold_code)=${fold_code}"
+        - train_looped config=${config}        epoch=50  debug=${debug} batch-size=${bs_rnn}   lr=5E-5 override="(SolverParams,rAI_fixed_mode)=1;(General,fold_code)=${fold_code}"
+        - train_looped config=${config}        epoch=50  debug=${debug} batch-size=${bs_cnn}   lr=3E-5 override="(SolverParams,rAI_fixed_mode)=2;(General,fold_code)=${fold_code}"
+        - train_looped config=${config}        epoch=50  debug=${debug} batch-size=${bs_rnn}   lr=3E-5 override="(SolverParams,rAI_fixed_mode)=3;(General,fold_code)=${fold_code}"
+        - train_looped config=${config}        epoch=100 debug=${debug} batch-size=${bs_cnn}   lr=1E-5 override="(SolverParams,rAI_fixed_mode)=4;(General,fold_code)=${fold_code}"
 
     pipeline:
       flags:
