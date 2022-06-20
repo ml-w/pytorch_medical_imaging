@@ -89,13 +89,13 @@ class BinaryClassificationRNNInferencer(ClassificationInferencer):
         out_decision = (sig_out > .5).int()
         self._num_out_out_class = int(out_tensor.shape[1]) - 1 # Because RNN add an extra stopping character.
         if os.path.isdir(self._outdir):
-            self._outdir = os.path.join(self._outdir, 'class_inf.csv')
-        if not self._outdir.endswith('.csv'):
-            self._outdir += '.csv'
-        if os.path.isfile(self._outdir):
-            self._logger.log_print_tqdm("Overwriting file %s!"%self._outdir, 30)
-        if not os.path.isdir(os.path.dirname(self._outdir)):
-            os.makedirs(os.path.dirname(self._outdir), exist_ok=True)
+            self.outdir = os.path.join(self._outdir, 'class_inf.csv')
+        if not self.outdir.endswith('.csv'):
+            self.outdir += '.csv'
+        if os.path.isfile(self.outdir):
+            self._logger.log_print_tqdm("Overwriting file %s!" % self.outdir, 30)
+        if not os.path.isdir(os.path.dirname(self.outdir)):
+            os.makedirs(os.path.dirname(self.outdir), exist_ok=True)
 
         # Write decision
         out_decisions['IDs'] = self._in_dataset.get_unique_IDs()
@@ -109,7 +109,7 @@ class BinaryClassificationRNNInferencer(ClassificationInferencer):
 
 
         dl = DataLabel.from_dict(out_decisions)
-        dl.write(self._outdir)
+        dl.write(self.outdir)
         self._dl = dl
         return dl
 
