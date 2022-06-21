@@ -14,8 +14,7 @@ __all__ = ['BinaryClassificationSolver']
 
 
 class BinaryClassificationSolver(ClassificationSolver):
-    def __init__(self, net, param_optim, param_iscuda,
-                 param_initWeight=None, **kwargs):
+    def __init__(self, net, hyperparam_dict, use_cuda):
         """
         Solver for classification tasks.
 
@@ -43,48 +42,16 @@ class BinaryClassificationSolver(ClassificationSolver):
         Returns:
            :class:`ClassificaitonSolver` object
         """
-        if kwargs.get('logger', None) is None:
-            logger = MNTSLogger[self.__class__.__name__]
-        else:
-            assert isinstance(logger, MNTSLogger) or logger is None, "Logger incorrect settings!"
+        super(ClassificationSolver, self).__init__(net, hyperparam_dict, use_cuda)
 
-        # Recalculate number of one_hot slots and rebuild the lab
-        self._config = kwargs.get('config', None)
-        self._logger = kwargs.get('logger', None)
-        if self._logger is None:
-            self._logger = MNTSLogger[self.__class__.__name__]
-        self._logger.info("Rebuilding classification solver to binary classification.")
-
-        # Default attributes
-        default_attr = {
-            'unpack_keys_forward': ['input', 'gt'], # used to unpack torchio drawn minibatches
-            'gt_keys':             ['gt'],
-            'sigmoid_params':      {'delay': 15, 'stretch': 2, 'cap': 0.3},
-            'class_weights':       None,
-            'optimizer_type':      'Adam'             # ['Adam'|'SGD']
-        }
-        self._load_default_attr(default_attr)
-
-        optimizer = self.create_optimizer(net.parameters(), param_optim)
-
-        lossfunction = nn.BCEWithLogitsLoss(reduction='mean', pos_weight=self.class_weights) # Combined with sigmoid.
-
-        iscuda = param_iscuda
-        if param_iscuda:
-            self._logger.info("Moving lossfunction and network to GPU.")
-            lossfunction = lossfunction.cuda()
-            net = net.cuda()
-
-        solver_configs = {}
-        solver_configs['optimizer'] = optimizer
-        solver_configs['lossfunction'] = lossfunction
-        solver_configs['net'] = net
-        solver_configs['iscuda'] = iscuda
-        solver_configs['logger'] = logger
-
-        # Call the creater in SolverBase instead.
-        super(ClassificationSolver, self).__init__(solver_configs, **kwargs)
-
+    def create_lossfunction(self):
+        super(BinaryClassificationSolver, self).create_lossfunction()
+        # Simple error check
+        if not isinstance(self.solverparams_class_weights, float):
+            msg = f"Class weight for binary classifier must be a single float number. Got " \
+                  f"{self.solverparams_class_weights} instead."
+            raise AttributeError(msg)
+        self.lossfunction = nn.BCEWithLogitsLoss(reduction='mean', pos_weight=self.lossfunction.weight) # Combined with sigmoid.
 
     def validation(self):
         if self._data_loader_val is None:
@@ -100,7 +67,7 @@ class BinaryClassificationSolver(ClassificationSolver):
 
             for mb in auto.tqdm(self._data_loader_val, desc="Validation", position=2):
                 # s: (B x num_class), g: (B x 1)
-                s, g = self._unpack_minibatch(mb, self.unpack_keys_forward)
+                s, g = self._unpack_minibatch(mb, self.solverparams_unpack_keys_forward)
                 s = self._match_type_with_network(s)
                 g = self._match_type_with_network(g)
 

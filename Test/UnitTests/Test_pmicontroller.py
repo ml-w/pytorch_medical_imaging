@@ -220,3 +220,10 @@ class TestClassificaitonSolver(TestSolvers):
             *args,
             sample_config = "./sample_data/config/sample_config_class.ini",
             **kwargs)
+
+class TestBinaryClassificaitonSolver(TestSolvers):
+    def __init__(self, *args, **kwargs):
+        super(TestBinaryClassificaitonSolver, self).__init__(
+            *args,
+            sample_config = "./sample_data/config/sample_config_binaryclass.ini",
+            **kwargs)
