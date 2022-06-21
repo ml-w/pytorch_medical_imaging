@@ -188,7 +188,7 @@ class SolverBase(object):
                 else:
                     self._logger.warning(f"Cannot load checkpoitn from {checkpoint_dir}")
         else:
-            self.logger.warning("Checkpoint specified but doesn't exist!")
+            self._logger.warning("Checkpoint specified but doesn't exist!")
 
     def create_lossfunction(self, *args, **kwargs):
         r"""
