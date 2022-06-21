@@ -291,6 +291,8 @@ class ImageDataSet(PMIDataBase):
                 no_ids = set(file_basenames) - set(list(file_ids.keys()))
                 self._logger.debug(f"{no_ids}")
                 self._logger.debug(f"{file_ids}")
+            file_ids = list(file_ids.values())
+            file_ids.sort()
 
 
             if isinstance(self._filterargs['idlist'], str) and not self._filterargs['idlist'] == "":
@@ -302,7 +304,7 @@ class ImageDataSet(PMIDataBase):
             elif self._filterargs['idlist'] in (None, ""):
                 # If None specified, glob ids from filenames instead
                 self._logger.warning('Idlist input is None!')
-                self._idlist = list(file_ids.values())
+                self._idlist = file_ids
             else:
                 raise TypeError(f"ID list is not correclty spefified. Expect str, list or None, got "
                                 f"{self._filterargs['idlsit']} instead")
