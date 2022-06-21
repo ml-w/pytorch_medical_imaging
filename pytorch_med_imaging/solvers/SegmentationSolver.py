@@ -198,6 +198,7 @@ class SegmentationSolver(SolverBase):
         """
         super().decay_optimizer(*args)
 
+        # Decay the class weight using a sigmoid curve.
         s = self.solverparams_sigmoid_params['stretch']
         d = self.solverparams_sigmoid_params['delay']
         cap = self.solverparams_sigmoid_params['cap']
