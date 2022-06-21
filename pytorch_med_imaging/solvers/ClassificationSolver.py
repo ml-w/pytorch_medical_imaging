@@ -32,12 +32,16 @@ class ClassificationSolver(SolverBase):
 
     def create_lossfunction(self):
         # set class weights to 0 to disable class weight for loss function
-        if not self.solverparams_class_weights == 0:
-            weights = torch.as_tensor(self.solverparams_class_weights)
-            loss_init_weights = weights.cpu().float()
-            self._logger.info("Initial weight factor: " + str(weights))
-        else:
-            self._logger.info("Skipping class weights.")
+        try:
+            if not self.solverparams_class_weights == 0:
+                weights = torch.as_tensor(self.solverparams_class_weights)
+                loss_init_weights = weights.cpu().float()
+                self._logger.info("Initial weight factor: " + str(weights))
+            else:
+                self._logger.info("Skipping class weights.")
+                loss_init_weights = None
+        except Exception as e:
+            self._logger.warning("Weight convertion to tensor fails. Falling back!")
             loss_init_weights = None
         self.lossfunction = nn.CrossEntropyLoss(weight=loss_init_weights) #TODO: Allow custom loss function
 

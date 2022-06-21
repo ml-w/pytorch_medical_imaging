@@ -26,7 +26,7 @@ class BinaryClassificationSolver(ClassificationSolver):
     def create_lossfunction(self):
         super(BinaryClassificationSolver, self).create_lossfunction()
         # Simple error check
-        if not isinstance(self.solverparams_class_weights, float):
+        if not isinstance(self.solverparams_class_weights, float) and self.solverparams_class_weights is not None:
             msg = f"Class weight for binary classifier must be a single float number. Got " \
                   f"{self.solverparams_class_weights} instead."
             raise AttributeError(msg)
