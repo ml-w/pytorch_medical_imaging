@@ -4,6 +4,7 @@ import os
 import re
 import tempfile
 import unittest
+import torch
 from pathlib import Path
 
 from mnts.mnts_logger import MNTSLogger
@@ -180,8 +181,20 @@ class TestSolvers(TestController):
                         True)
         self.assertTrue(len(list(self.temp_output_path.glob("*pt"))) != 0)
 
-    def test_debug(self):
-        pass
+    def test_fit(self):
+        self.solver._last_epoch_loss = 10
+        self.solver._last_val_loss = 15
+        self.solver.solverparams_num_of_epochs = 2
+        loader, loader_val = self.controller.prepare_loaders()
+        self.solver.set_dataloader(loader, loader_val)
+        self.solver.set_lr_scheduler('LinearLR', *[], **{'start_factor': 0.5,'end_factor': 1})
+        self.solver.fit(str(self.temp_output_path.joinpath("test.pt")),
+                        False)
+        self.assertTrue(len(list(self.temp_output_path.glob("*pt"))) != 0)
+
+    def test_match_type_with_network(self):
+        out = self.solver._match_type_with_network(torch.IntTensor([1, 2, 3, 4, 5]))
+        self.assertEqual(out.type(), self.solver._net_weight_type)
 
     def test_decay_optimizer(self):
         self.solver.set_lr_scheduler('LinearLR', *[], **{'start_factor': 0.5,'end_factor': 1})
