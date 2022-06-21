@@ -227,3 +227,10 @@ class TestBinaryClassificaitonSolver(TestSolvers):
             *args,
             sample_config = "./sample_data/config/sample_config_binaryclass.ini",
             **kwargs)
+
+class TestrAIdiologistSolver(TestSolvers):
+    def __init__(self, *args, **kwargs):
+        super(TestrAIdiologistSolver, self).__init__(
+            *args,
+            sample_config = "./sample_data/config/sample_config_rAIdiologist.ini",
+            **kwargs)

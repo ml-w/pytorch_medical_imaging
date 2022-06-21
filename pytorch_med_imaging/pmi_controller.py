@@ -109,8 +109,8 @@ class PMIController(object):
             val_config.read_dict(self.config)
             val_config.set('Filters', 're_suffix', self.filters_validation_re_suffix)
             val_config.set('Filters', 'id_list', self.filters_validation_id_list)
-            val_config['Data']['input_dir']  = self.data_validation_input_dir
-            val_config['Data']['target_dir'] = self.data_validation_gt_dir
+            val_config['Data']['input_dir']  = str(self.data_validation_input_dir)
+            val_config['Data']['target_dir'] = str(self.data_validation_gt_dir)
             self.pmi_data_val = self.pmi_factory.produce_object(val_config)
             self.validation_FLAG=True
 

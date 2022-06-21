@@ -19,14 +19,16 @@ class ClassificationSolver(SolverBase):
         """
         super(ClassificationSolver, self).__init__(net, hyperparam_dict, use_cuda)
 
-    def _load_default_attr(self, _):
+    def _load_default_attr(self, default_attr):
         r"""Inherit this to get more default hyperparameters"""
-        default_attr = {
+        _default_attr = {
             'solverparams_sigmoid_params'   : {'delay': 15, 'stretch': 2, 'cap': 0.3},
             'solverparams_class_weights'    : None,
             'solverparams_decay_init_weight': 0
         }
-        super(ClassificationSolver, self)._load_default_attr(default_attr)
+        if isinstance(default_attr, dict):
+            _default_attr.update(default_attr)
+        super(ClassificationSolver, self)._load_default_attr(_default_attr)
 
     def create_lossfunction(self):
         # set class weights to 0 to disable class weight for loss function

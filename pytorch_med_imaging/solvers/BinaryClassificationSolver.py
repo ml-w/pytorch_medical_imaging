@@ -9,38 +9,17 @@ import torch.nn as nn
 import numpy as np
 import pandas as pd
 import tqdm.auto as auto
+from typing import Union, Iterable, Any, Tuple
 
 __all__ = ['BinaryClassificationSolver']
 
 
 class BinaryClassificationSolver(ClassificationSolver):
-    def __init__(self, net, hyperparam_dict, use_cuda):
-        """
-        Solver for classification tasks.
-
-        Args:
-           in_data (torch.Tensor):
-               Tensor of input data.
-           gt_data (torch.Tensor):
-               Tensor of output data.
-           net (class or nn.Module):
-               Network modules or the already-created-network.
-           param_optim (dict):
-               Dictionary of the optimizer parameters. Should include key 'lr'.
-           param_iscuda (bool):
-               Settings to use CUDA or not.
-           param_initWeight (int, Optional):
-               Initial weight for loss function.
-           logger (Logger, Optional):
-               Logger. If no logger provide, log will be output to './temp.log'
-           **kwargs:
-               Additional dictionary item pass to base class.
-
-        Kwargs:
-           For details to kwargs, see :class:`SolverBase`.
-
-        Returns:
-           :class:`ClassificaitonSolver` object
+    def __init__(self,
+                 net: torch.nn.modules,
+                 hyperparam_dict: dict,
+                 use_cuda: bool):
+        """Solver for binary classification tasks. For details to kwargs, see :class:`SolverBase`.
         """
         super(ClassificationSolver, self).__init__(net, hyperparam_dict, use_cuda)
 
@@ -102,28 +81,9 @@ class BinaryClassificationSolver(ClassificationSolver):
                 # tqdm.write(str(torch.stack([torch.stack([a, b, c]) for a, b, c, in zip(dic, torch.sigmoid(res), g)])))
                 del dic, s, g, _df
 
-        # Compute accuracies
-        # Stack the decisions per batch first
-        dics = torch.cat(dics, dim=0).bool()
-        gts = torch.cat(gts, dim=0).bool()
-
-        tp = (dics * gts).sum(axis=0)
-        tn = (~dics * ~gts).sum(axis=0)
-        fp = (dics * ~gts).sum(axis=0)
-        fn = (~dics * gts ).sum(axis=0)
-
-        accuracy = pd.Series((tp + tn) / (tp + tn + fp + fn).float(), name='Accuracy')
-        sens = pd.Series(tp / (1E-32 + (tp + fn).float()), name = 'Sensitivity')
-        spec = pd.Series(tn / (1E-32 + (tn + fp).float()), name = 'Specificity')
-        ppv  = pd.Series(tp / (1E-32 + (tp + fp).float()), name = 'PPV')
-        npv  = pd.Series(tn / (1E-32 + (tn + fn).float()), name = 'NPV')
-
-        restable = pd.concat([accuracy, sens, spec, ppv, npv], axis=1)
-        per_mean = restable.mean()
-
-        acc = accuracy.mean()
+        acc, per_mean, res_table = self._compute_performance(dics, gts)
         validation_loss = np.mean(np.array(validation_loss).flatten())
-        self._logger.debug("_val_perfs: \n%s"%restable.T.to_string())
+        self._logger.debug("_val_perfs: \n%s"%res_table.T.to_string())
         self._logger.info("Validation Result - ACC: %.05f, VAL: %.05f"%(acc, validation_loss))
         self.net = self.net.train()
         self.plotter_dict['scalars']['Loss/Validation Loss'] = validation_loss
@@ -132,6 +92,44 @@ class BinaryClassificationSolver(ClassificationSolver):
             self.plotter_dict['scalars']['Performance/%s'%param] = val
 
         return validation_loss, acc
+
+    @staticmethod
+    def _compute_performance(dics: Iterable[torch.IntTensor],
+                             gts: Iterable[torch.IntTensor]) -> Tuple[float, pd.Series, pd.DataFrame]:
+        r"""Compute the performance as a table in terms of accuracy, sensitivity, specificity,
+        positive and negative predictive values.
+
+        Args:
+            dics (torch.IntTensor or list):
+                This should be a list of decisions computed from the network output.
+            gt (torch.IntTensor or list):
+                This should be the ground-truths.
+
+        Returns:
+            acc (pd.float):
+                Accuracy value.
+            per_mean (pd.DataFrame or pd.Series):
+                The mean performance.
+            res_table (pd.DataFrame):
+                The summary of the performance.
+        """
+        # Compute accuracies
+        # Stack the decisions per batch first
+        dics = torch.cat(dics, dim=0).bool()
+        gts = torch.cat(gts, dim=0).bool()
+        tp = (dics * gts).sum(axis=0)
+        tn = (~dics * ~gts).sum(axis=0)
+        fp = (dics * ~gts).sum(axis=0)
+        fn = (~dics * gts).sum(axis=0)
+        accuracy = pd.Series((tp + tn) / (tp + tn + fp + fn).float(), name='Accuracy')
+        sens = pd.Series(tp / (1E-32 + (tp + fn).float()), name='Sensitivity')
+        spec = pd.Series(tn / (1E-32 + (tn + fp).float()), name='Specificity')
+        ppv = pd.Series(tp / (1E-32 + (tp + fp).float()), name='PPV')
+        npv = pd.Series(tn / (1E-32 + (tn + fn).float()), name='NPV')
+        res_table = pd.concat([accuracy, sens, spec, ppv, npv], axis=1)
+        per_mean = res_table.mean()
+        acc = accuracy.mean()
+        return acc, per_mean, res_table
 
     def _build_validation_df(self, g, res):
         _pairs = zip(res.flatten().data.cpu().numpy(),
