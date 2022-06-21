@@ -123,6 +123,7 @@ class BinaryClassificationSolver(ClassificationSolver):
                 # No sigmoid function
                 loss = self._loss_eval(res, s, g)
                 _df, dic = self._build_validation_df(g, res)
+                self._logger.debug(f"_loss: {loss}")
                 self._logger.debug("_val_res:\n" + _df.to_string())
                 self._logger.debug("_val_step_loss: {}".format(loss.data.item()))
                 # Decision were made by checking whether value is > 0.5 after sigmoid

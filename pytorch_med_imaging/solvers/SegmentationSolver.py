@@ -19,89 +19,51 @@ __all__ = ['SegmentationSolver']
 
 class SegmentationSolver(SolverBase):
     def __init__(self,
-                 net, param_optim, param_iscuda,
-                 param_initWeight=None, logger=None, config=None):
-        r"""
+                 net, hyperparameters, use_cuda):
+        r"""This solver trains segmentation networks. The following items n
 
         Attributes:
-            unpack_keys_forward (list):
-                Keys to unpack the torchio subjects into data array for forward function.
-            sigmoid_params (dict):
+            solverparams_sigmoid_params (dict):
                 Default to {'delay': 15, 'stretch': 2, 'cap': 0.3}.
-            class_weights (float):
-                Weight of each class used in lossfunction.
-            optmizer
-
-        Args:
-            net:
-            param_optim:
-            param_iscuda:
-            param_initWeight:
-            logger:
-            config:
+            solverparams_init_weight (int):
+                Default to 0.
+            solverparams_class_weights (float):
+                Weight of each class used in lossfunction. Default to None.
+            solverparams_decay_init_weight (float):
+                If the training is not started at epoch 0, set this to continue the curve designed using
+                the :func:`sigmoid_plus`.
         """
-        assert isinstance(logger, MNTSLogger) or logger is None, "Logger incorrect settings!"
+        super(SegmentationSolver, self).__init__(net, hyperparameters, use_cuda)
 
-        if logger is None:
-            self._logger = MNTSLogger[self.__class__.__name__]
-        self._decay_init_weight = param_initWeight if not param_initWeight is None else 0
-        self._config = config
-
-        solver_configs = {}
-
-        # Default attributes
+    def _load_default_attr(self, _):
+        r"""Inherit this to get more default hyperparameters"""
         default_attr = {
-            'unpack_keys_forward': ['input', 'gt'], # used to unpack torchio drawn minibatches
-            'gt_keys':             ['gt'],
-            'sigmoid_params':      {'delay': 15, 'stretch': 2, 'cap': 0.3},
-            'class_weights':       None,
-            'optimizer_type':      'Adam'             # ['Adam'|'SGD']
+            'solverparams_sigmoid_params'   : {'delay': 15, 'stretch': 2, 'cap': 0.3},
+            'solverparams_class_weights'    : None,
+            'solverparams_decay_init_weight': 0
         }
-        self._load_default_attr(default_attr)
+        super(SegmentationSolver, self)._load_default_attr(default_attr)
 
-
-        # Prepare data
-        #-------------
-        if self.class_weights is None:
+    def create_lossfunction(self):
+        if self.solverparams_class_weights is None:
             self._logger.warning("Automatic computing weigths are not supported now!")
             raise DeprecationWarning("Automatic computing weigths are not supported now!")
-            # self._logger.info("Computing weights.")
-            # self.auto_compute_class_weights(gt_data, param_initWeight)
 
-        if not self.class_weights == 0:
-            weights = torch.as_tensor(self.class_weights)
-            self.loss_init_weights = weights.cpu().float()
+        # set class weights to 0 to disable class weight for loss function
+        if not self.solverparams_class_weights == 0:
+            weights = torch.as_tensor(self.solverparams_class_weights)
+            loss_init_weights = weights.cpu().float()
             self._logger.log_print_tqdm("Initial weight factor: " + str(weights))
         else:
             self._logger.info("Skipping class weights.")
-            self.loss_init_weights = None
-
-
-        # Create network
-        if not hasattr(net, 'forward'):
-            raise AttributeError('Input net has no forward() method.')
-
-        # Create optimizer and loss function
-        lossfunction = nn.CrossEntropyLoss(weight=self.loss_init_weights) #TODO: Allow custom loss function
-        optimizer = self.create_optimizer(net.parameters(), param_optim)
-
-        iscuda = param_iscuda
-        if param_iscuda:
-            self._logger.info("Moving lossfunction and network to GPU.")
-            lossfunction = lossfunction.cuda()
-            net = net.cuda()
-
-        solver_configs['optimizer'] = optimizer
-        solver_configs['lossfunction'] = lossfunction
-        solver_configs['net'] = net
-        solver_configs['iscuda'] = iscuda
-
-        super(SegmentationSolver, self).__init__(solver_configs)
+            loss_init_weights = None
+        self.lossfunction = nn.CrossEntropyLoss(weight=loss_init_weights) #TODO: Allow custom loss function
 
     def auto_compute_class_weights(self, gt_data, param_initWeight):
         r"""Compute the counts of each class in the ground-truth data. Use for class weights in optimizer."""
-        # check unique class in gt
-        self._logger.log_print_tqdm("Detecting number of classes...")
+        raise NotImplementedError
+
+        self._logger.info("Detecting number of classes...")
         valcountpair = gt_data.get_unique_values_n_counts()
         classes = list(valcountpair.keys())
         numOfClasses = len(classes)
@@ -114,16 +76,16 @@ class SegmentationSolver(SolverBase):
             r.append(factor)
         r = np.array(r)
         r = r / r.max()
-        self.class_weights = r
+        self.solverparams_initial_weight = r
         del valcountpair  # free RAM
 
         # calculate init-factor for sigmoid weight scheduling
         if not param_initWeight is None:
-            self.class_weights = self.sigmoid_plus(param_initWeight + 1, self.class_weights, self.sigmoid_params['stretch'],
-                                                   self.sigmoid_params['delay'], self.sigmoid_params['cap'])
+            self.solverparams_initial_weight = self.sigmoid_plus(param_initWeight + 1, self.solverparams_initial_weight, self.sigmoid_params['stretch'],
+                                                                 self.sigmoid_params['delay'], self.sigmoid_params['cap'])
 
         # null class can't be too low
-        self.class_weights[0] = self.class_weights[0] * 10
+        self.solverparams_initial_weight[0] = self.solverparams_initial_weight[0] * 10
         return
 
     def validation(self) -> list:
@@ -136,7 +98,7 @@ class SegmentationSolver(SolverBase):
             perfs = []
             self.net.eval()
             for mb in auto.tqdm(self._data_loader_val, desc="Validation", position=2):
-                s, g = self._unpack_minibatch(mb, self.unpack_keys_forward)
+                s, g = self._unpack_minibatch(mb, self.solverparams_unpack_keys_forward)
                 s = self._match_type_with_network(s)
                 g = self._match_type_with_network(g) # no assumption but should be long in segmentation only.
 
@@ -236,14 +198,14 @@ class SegmentationSolver(SolverBase):
         """
         super().decay_optimizer(*args)
 
-        s = self.sigmoid_params['stretch']
-        d = self.sigmoid_params['delay']
-        cap = self.sigmoid_params['cap']
+        s = self.solverparams_sigmoid_params['stretch']
+        d = self.solverparams_sigmoid_params['delay']
+        cap = self.solverparams_sigmoid_params['cap']
         if isinstance(self.lossfunction, nn.CrossEntropyLoss):
             self._logger.log_print_tqdm('Current weight: ' + str(self.lossfunction.weight), 20)
-            offset = self._decayed_time + self._decay_init_weight
-            new_weight = torch.as_tensor([self.sigmoid_plus(offset, self.class_weights[i], s, d, cap) for i in range(len(
-                self.class_weights))])
+            offset = self._decayed_time + self.solverparams_decay_init_weight # init_weight is t_0
+            new_weight = torch.as_tensor([self.sigmoid_plus(offset, self.solverparams_class_weights[i], s, d, cap) for i in range(len(
+                self.solverparams_class_weights))])
             self.lossfunction.weight.copy_(new_weight)
             self._logger.log_print_tqdm('New weight: ' + str(self.lossfunction.weight), 20)
 

@@ -70,7 +70,8 @@ class CNNGRU(nn.Module):
         +--------------------+------------------------+---------------+---------------+
 
     References:
-    (TODO: Add reference to CNNGRU)
+    TODO: Add reference to CNNGRU
+    TODO: Dimension for slice is not shifted to the last axis, need to fix this
 
     """
     def __init__(self,
@@ -471,5 +472,4 @@ class BadhanauAttention(nn.Module):
         # print(context_vect.shape)
         context_vect = context_vect.sum(dim=self._reduce_dim)
         return context_vect, attention_weights
-
 

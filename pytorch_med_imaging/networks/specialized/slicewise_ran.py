@@ -34,12 +34,14 @@ class SlicewiseAttentionRAN(nn.Module):
                  first_conv_ch: Optional[int] = 64,
                  save_mask: Optional[bool] = False,
                  save_weight: Optional[bool] = False,
-                 exclude_fc: Optional[bool] = False):
+                 exclude_fc: Optional[bool] = False,
+                 sigmoid_out: Optional[bool] = False):
         super(SlicewiseAttentionRAN, self).__init__()
 
         self.save_weight=save_weight
         self.in_conv1 = Conv3d(in_ch, first_conv_ch, kern_size=[3, 3, 1], stride=[1, 1, 1], padding=[1, 1, 0])
-        self.exclude_top = exclude_fc
+        self.exclude_top = exclude_fc # Normally you don't have to use this.
+        self.sigmoid_out = sigmoid_out
 
         # Slicewise attention layer
         self.in_sw = nn.Sequential(
@@ -109,7 +111,8 @@ class SlicewiseAttentionRAN(nn.Module):
             x = self.out_fc1(x)
             while x.dim() < 2:
                 x = x.unsqueeze(0)
-            x = torch.sigmoid(x)
+            if self.sigmoid_out:
+                x = torch.sigmoid(x)
         return x
 
 

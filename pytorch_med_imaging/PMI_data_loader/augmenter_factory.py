@@ -88,8 +88,10 @@ def create_transform_compose(yaml_file: Path,
             # For list, there could be both args and kwargs.
             if isinstance(_content, list):
                 _args = [i for i in _content if not isinstance(i, dict)]
-                _kwargs = [i for i in _content if isinstance(i, dict)]
-                _kwargs = {} if len(_kwargs) == 0 else _kwargs[0]
+                kv_pairs = [i for i in _content if isinstance(i, dict)]
+                _kwargs = {}
+                for kv in kv_pairs:
+                    _kwargs.update(kv)
                 steps.append(_transform_cls(*_args, **_kwargs))
 
             # If its just a dict, its kwargs

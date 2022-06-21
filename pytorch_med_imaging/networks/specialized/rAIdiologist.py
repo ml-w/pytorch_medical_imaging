@@ -3,6 +3,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 import torchio as tio
 import os
+from pathlib import Path
 
 from ..third_party_nets import *
 from . import SlicewiseAttentionRAN
@@ -11,14 +12,16 @@ __all__ = ['rAIdiologist']
 
 class rAIdiologist(nn.Module):
     r"""
-    Remember to set CUBLAS_WORKSPACE_CONFIG=:4096:8
+    This network is a CNN-RNN that combines the SWRAN with a simple LSTM network. The purpose was to imporve the
+    interpretability as the SWRAN was already pretty good reaching accuracy of 95%. This network also has a benefit
+    of not limiting the number of slices viewed such that scans with a larger field of view can also fit in.
     """
     def __init__(self, record=False, iter_limit=100):
         super(rAIdiologist, self).__init__()
         self.RECORD_ON = record
         self.play_back = []
         # Create inception for 2D prediction
-        self.cnn = SlicewiseAttentionRAN(1, 1, exclude_fc=True)
+        self.cnn = SlicewiseAttentionRAN(1, 1, exclude_fc=True, sigmoid_out=True)
         # self.cnn.load_state_dict(torch.load("/home/lwong/Source/Repos/NPC_Segmentation/Report/asset/trained_states/"
         #                                     "deeplearning/NPC_BM-vv2.0-sv3.pt"), strict=False)
         # for p in self.cnn.parameters():
@@ -36,6 +39,9 @@ class rAIdiologist(nn.Module):
 
         # initialization
         self.innit()
+
+    def load_pretrained_swran(self, directory: str):
+        self.cnn.load_state_dict(torch.load(directory), strict=False)
 
     def clean_playback(self):
         r"""Call this after each forward run to clean the playback. Otherwise, you need to keep track of the order
@@ -93,12 +99,6 @@ class rAIdiologist(nn.Module):
             elif isinstance(m, nn.Linear):
                 nn.init.kaiming_normal_(m.weight)
 
-    def get_intermediate_output(self):
-        def hook(model, input, output):
-            self._intermediate_out = output
-            pass
-        return hook
-
     def forward_(self, x):
         # input is (B x 1 x H x W x S)
         while x.dim() < 5:
@@ -135,6 +135,7 @@ class rAIdiologist(nn.Module):
                     self.play_back.extend(self.lstm_rater.get_playback())
                     self.lstm_rater.clean_playback()
             o = torch.cat(o)
+            del tmp_list
         else:
             raise AttributeError(f"Got wrong mode: {self._mode}, can only be one of [1|2|3|4].")
 
@@ -250,7 +251,7 @@ class LSTM_rater(nn.Module):
         return o[...,:2]
 
     def clean_playback(self):
-        self.play_back = []
+        self.play_back.clear()
 
     def get_playback(self):
         return self.play_back

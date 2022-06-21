@@ -87,11 +87,11 @@ def directory_sorter(dir, sort_dict=None, pre_filter=None):
 
     if sort_dict is None:
         sort_dict = {'T1rho':   "(?i)(?=.*T1rho.*)",
-                     'T2WFS':   "(?i)(?=.*T2.*)(?=.*(fs|stir|spir).*)",
-                     'T2W':     "(?i)(?=.*T2.*)(?!.*(fs|stir|spir).*)",
-                     'CE-T1WFS':"(?i)(?=.*T1.*)(?=.*\+[cC].*)(?=.*(fs|stir|spir).*)",
-                     'CE-T1W':  "(?i)(?=.*T1.*)(?=.*\+[cC].*)(?!.*(fs|stir|spir).*)",
-                     'T1W':     "(?i)(?=.*T1.*)(?!.*\+[cC].*)(?!.*(fs|stir|spir).*)",
+                     'T2WFS':   "(?i)(?=.*T2.*)(?=.*(fs|stir|spir|spair).*)",
+                     'T2W':     "(?i)(?=.*T2.*)(?!.*(fs|stir|spir|spair).*)",
+                     'CE-T1WFS':"(?i)(?=.*T1.*)(?=.*\+[cC].*)(?=.*(fs|stir|spir|spair).*)",
+                     'CE-T1W':  "(?i)(?=.*T1.*)(?=.*\+[cC].*)(?!.*(fs|stir|spir|spair).*)",
+                     'T1W':     "(?i)(?=.*T1.*)(?!.*\+[cC].*)(?!.*(fs|stir|spir|spair).*)",
                      'E-Thrive':"(?i)(?=.*e-thrive.*)",
                  }
 
@@ -196,11 +196,11 @@ def directory_index(dir, out_csv, id_globber="(^[a-zA-Z0-9]+)"):
 
 
 if __name__ == '__main__':
-    # directory_sorter('/media/storage/Data/NPC_Segmentation/0A.NIFTI_ALL/All')
+    directory_sorter('/media/storage/Data/NPC_Segmentation/0A.NIFTI_ALL/HKU/temp')
     # directory_index('../NPC_Segmentation/0A.NIFTI_ALL/Malignant', '/home/lwong/FTP/temp/images.csv')
-    directory_index('/media/storage/Data/NPC_Segmentation/0A.NIFTI_ALL/All',
-                    '/media/storage/Data/NPC_Segmentation/0A.NIFTI_ALL/All/images.csv',
-                    id_globber="^(P|T|NPC|RHO|K)?[0-9]+")
+    # directory_index('/media/storage/Data/NPC_Segmentation/0A.NIFTI_ALL/HKU/temp',
+    #                 '/media/storage/Data/NPC_Segmentation/0A.NIFTI_ALL/HKU/index.csv',
+                    # id_globber="^(P|T|NPC|RHO|K)?[0-9]+")
 
 
 

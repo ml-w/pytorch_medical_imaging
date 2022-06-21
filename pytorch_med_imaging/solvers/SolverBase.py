@@ -1,16 +1,21 @@
-import torch
-import torch.nn as nn
-import torchio as tio
-
-from ..loss import *
-
-from tqdm import *
+import ast
+import inspect
+import re
 from abc import abstractmethod
 
-import numpy as np
 import gc
-import ast
-from mnts.mnts_logger import MNTSLogger
+import numpy as np
+import torch
+import torch.nn as nn
+from torch.optim import lr_scheduler
+from tqdm import *
+from typing import Union, Iterable, Any
+from pathlib import Path
+
+import torchio as tio
+from ..loss import *
+
+available_lr_scheduler = list(name for name, obj in inspect.getmembers(lr_scheduler) if inspect.isclass(obj))
 
 class SolverBase(object):
     """
@@ -30,41 +35,35 @@ class SolverBase(object):
             This dict could be used by the child class to perform plotting after validation or in each step.
 
     """
-    def __init__(self, solver_configs: dict, **kwargs):
+    def __init__(self, net: torch.nn.Module, hyperparam_dict: dict, use_cuda: bool, **kwargs):
         super(SolverBase, self).__init__()
 
         # these attributes requires evaluation and cannot be get directly from the ini file.
-        default_attr = {
-            'optimizer':        None,   # required
-            'lossfunction':     None,   # required
-            'net':              None,   # required
-            'iscuda':           None,   # required
-            'lr_decay':         None,
-            'mom_decay':        None,
-            'lr_decay_func':    lambda epoch: np.exp(-self.lr_decay * epoch),
-            'mom_decay_func':   lambda mom: np.max(0.2, mom * np.exp(-self.mom_decay)),
-            'lr_schedular':     None
-        }
-        default_attr.update((k, solver_configs[k]) for k in default_attr.keys() & solver_configs.keys())
-        required_att = ('optimizer', 'lossfunction', 'net', 'iscuda')
+        self.net = net
+        self.iscuda = use_cuda
+        self.hyperparam_dict = hyperparam_dict
+        self.__dict__.update(hyperparam_dict)
 
-        if any([default_attr[k] is None for k in required_att]):
-            self._logger.error("Some required attributes are not specified.")
-            raise AttributeError(f"Must specify these attributes: {','.join(required_att)}")
-        self.__dict__.update(default_attr)
+        # check for error
+        self.required_att = ['solverparams_num_of_epochs']
+
+        # default_attr.update((k, solver_configs[k]) for k in default_attr.keys() & solver_configs.keys())
+        # required_att = ('optimizer', 'lossfunction', 'net', 'iscuda')
+        #
+        # if any([default_attr[k] is None for k in required_att]):
+        #     self._logger.error("Some required attributes are not specified.")
+        #     raise AttributeError(f"Must specify these attributes: {','.join(required_att)}")
 
         # optional
-        self._logger            = solver_configs.get('logger', None)
-        if self._logger is None:
-            self._logger        = MNTSLogger[self.__class__.__name__]
+        self._logger        = MNTSLogger[self.__class__.__name__]
 
         # Optimizer attributies
         self._called_time       = 0
         self._decayed_time      = 0
 
         # Added config not used in base class
-        if not hasattr(self, '_config'): # prevent unwanted override
-            self._config = kwargs.get('config', None)
+        # if not hasattr(self, '_config'): # prevent unwanted override
+        #     self._config = kwargs.get('config', None)
 
         # internal_attributes
         self._net_weight_type   = None
@@ -78,30 +77,34 @@ class SolverBase(object):
         self.plotter_dict      = {}
 
         # create loss function if not specified
-        if self.lossfunction is None:
-            self._logger.info("Trying to create loss function.")
-            self.create_lossfunction()
+        self._load_default_attr(None)   # inherit in child to default other attributes
+        self.create_lossfunction()
+        self.create_optimizer(self.net.parameters())
 
-        self._logger.info("Solver were configured with options: {}".format(solver_configs))
+        self._logger.info("Solver were configured with options: {}".format(self.hyperparam_dict))
         if  len(kwargs):
             self._logger.warning("Some solver configs were not used: {}".format(kwargs))
 
-    def _load_default_attr(self, default_dict):
-        r"""
-        Load default dictionary as attr from ini config, [SolverParams] section.
-        """
-        final_dict = {}
-        for key in default_dict:
-            val = default_dict[key]
-            if isinstance(val, bool):
-                final_dict[key] = self._get_params_from_solver_config_with_boolean(key, default_dict[key])
-            elif isinstance(val, str):
-                final_dict[key] = self._get_params_from_solver_config(key, default_dict[key])
-            else:
-                final_dict[key] = self._get_params_from_solver_config(key, default_dict[key], with_eval=True)
+        if self.iscuda:
+            self._logger.info("Moving lossfunction and network to GPU.")
+            self.lossfunction = self.lossfunction.cuda()
+            self.net = self.net.cuda()
 
-        self._logger.debug(f"final_dict: {final_dict}")
-        self.__dict__.update(final_dict)
+    def _load_default_attr(self, default_dict = None):
+        r"""If the default_dict items are not specified in the hyperparameter_dict, this will
+        load the hyperparameters into __dict__ and self.hyperparameter_dict
+        """
+        if default_dict is None:
+            return
+
+        update_dict = {}
+        for key in default_dict:
+            if not key in self.__dict__:
+                self._logger.debug(f"Loading default value for: {key}")
+                update_dict[key] = default_dict[key]
+        self.__dict__.update(update_dict)
+        self.hyperparam_dict.update(update_dict)
+
 
     def get_net(self):
         if torch.cuda.device_count() > 1:
@@ -116,16 +119,16 @@ class SolverBase(object):
         return self.optimizer
 
     def set_lr_decay(self, decay):
-        self.lr_decay = decay
+        self.solverparams_decay_rate_lr = decay
 
     def set_lr_decay_exp(self, decay):
-        self.lr_decay = decay
-        self.lr_schedular = torch.optim.lr_scheduler.ExponentialLR(self.optimizer, self.lr_decay)
+        self.solverparams_decay_rate_lr = decay
+        self.lr_scheduler = torch.optim.lr_scheduler.ExponentialLR(self.optimizer, self.solverparams_decay_rate_lr)
 
     def set_lr_decay_func(self, func):
         assert callable(func), "Insert function not callable!"
         self.lr_decay_func = func
-        self.lr_schedular = torch.optim.lr_scheduler.LambdaLR(self.optimizer, self.lr_decay_func)
+        self.lr_scheduler = torch.optim.lr_scheduler.LambdaLR(self.optimizer, self.lr_decay_func)
 
     def set_dataloader(self, dataloader, data_loader_val=None):
         self._data_loader = dataloader
@@ -146,17 +149,19 @@ class SolverBase(object):
             self._logger.warning("Extraction of parameters failed. Retreating to use default.")
 
         self._logger.debug("Set lr_scheduler to decay on plateau with params: {}.".format(_default_kwargs))
-        self.lr_schedular = torch.optim.lr_scheduler.ReduceLROnPlateau(
+        self.lr_scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
             self.optimizer,
             **_default_kwargs
         )
 
-    def set_momentum_decay(self, decay):
-        self.mom_decay = decay
+    def set_lr_scheduler(self, name, *args, **kwargs):
+        msg = f"Incorrect lr_scheduler ({name}) specified! Available schedulers are: [{'|'.join(available_lr_scheduler)}]"
+        assert name in available_lr_scheduler, msg
 
-    def set_momentum_decay_func(self, func):
-        assert callable(func), "Insert function not callable!"
-        self._mom_dcay_func = func
+        if re.search("^[\W]+", name) is not None:
+            raise ArithmeticError(f"Your lr_scheduler setting ({name}) contains illegal characters!")
+        sche_class = eval('lr_scheduler.' + name)
+        self.lr_scheduler = sche_class(self.optimizer, *args, **kwargs)
 
     def set_plotter(self, plotter):
         self._tb_plotter = plotter
@@ -176,6 +181,21 @@ class SolverBase(object):
                 pass
         del self.lossfunction
         self.lossfunction = func
+
+    def load_checkpoint(self, checkpoint_dir: str):
+        if os.path.isfile(self.checkpoint_load):
+            # assert os.path.isfile(checkpoint_load)
+            try:
+                self._logger.info("Loading checkpoint " + checkpoint_load)
+                self.get_net().load_state_dict(torch.load(checkpoint_load), strict=False)
+            except Exception as e:
+                if not self.debug:
+                    self._logger.error(f"Cannot load checkpoint from: {checkpoint_load}")
+                    raise e
+                else:
+                    self._logger.warning(f"Cannot load checkpoitn from {checkpoint_load}")
+        else:
+            self.logger.warning("Checkpoint specified but doesn't exist!")
 
     def create_lossfunction(self, *args, **kwargs):
         r"""
@@ -222,8 +242,8 @@ class SolverBase(object):
         return out, loss.cpu().data
 
     def create_optimizer(self,
-                         net_params,
-                         param_optim) -> torch.optim:
+                         net_params
+                         ) -> torch.optim:
         r"""
         Create optimizer based on provided specifications
         Args:
@@ -233,26 +253,51 @@ class SolverBase(object):
         Returns:
 
         """
-        if self.optimizer_type == 'Adam':
-            optimizer = torch.optim.Adam(net_params, lr=param_optim['lr'])
-        elif self.optimizer_type == 'SGD':
-            optimizer = torch.optim.SGD(net_params, lr=param_optim['lr'],
-                                  momentum=param_optim['momentum'])
+        if self.solverparams_optimizer_type == 'Adam':
+            self.optimizer = torch.optim.Adam(net_params, lr=self.solverparams_decay_rate_lr)
+        elif self.solverparams_optimizer_type == 'SGD':
+            self.optimizer = torch.optim.SGD(net_params, lr=self.solverparams_decay_rate_lr,
+                                             momentum=self.solverparams_decay_rate_mom)
         else:
             raise AttributeError(f"Expecting optimzer to be one of ['Adam'|'SGD']")
-        return optimizer
+        return self.optimizer
 
     def decay_optimizer(self, *args):
-        if not self.lr_schedular is None:
-            try:
-                self.lr_schedular.step(*args)
-            except:
-                self.lr_schedular.step()
-        if not self.mom_decay is None:
-            for pg in self.optimizer.param_groups:
-                pg['momentum'] = self.mom_decay_func(pg['momemtum'])
+        if not self.lr_scheduler is None:
+            if isinstance(self.lr_scheduler, (lr_scheduler.ReduceLROnPlateau)):
+                self.lr_scheduler.step(*args)
+            else:
+                self.lr_scheduler.step()
         self._decayed_time += 1
-        self._log_print("Decayed optimizer...")
+
+        # ReduceLROnPlateau has no get_last_lr attribute
+        lass_lr = self.get_last_lr()
+        self._logger.debug(f"Decayed optimizer, new LR: {lass_lr}")
+
+    def get_last_lr(self):
+        try:
+            lass_lr = self.lr_scheduler.get_last_lr()[0]
+        except AttributeError:
+            if isinstance(self.get_optimizer().param_groups, (tuple, list)):
+                lass_lr = self.get_optimizer().param_groups[0]['lr']
+            else:
+                lass_lr = next(self.get_optimizer().param_groups)['lr']
+        except:
+            self._logger.warning("Cannot get learning rate!")
+            lass_lr = "Error"
+        return lass_lr
+
+    def get_last_epoch_loss(self):
+        try:
+            return self._last_epoch_loss
+        except AttributeError:
+            return None
+
+    def get_last_val_loss(self):
+        try:
+            return self._last_val_loss
+        except AttributeError:
+            return None
 
     def inference(self, *args):
         with torch.no_grad():
@@ -284,11 +329,66 @@ class SolverBase(object):
 
         epoch_loss = np.array(E).mean()
         self.plotter_dict['scalars']['Loss/Loss'] = epoch_loss
+        self._last_epoch_loss = epoch_loss
 
         self._logger.info("Initiating validation.")
         self.validation()
         self._epoch_callback()
         self.decay_optimizer(epoch_loss)
+
+    def fit(self, checkpoint_path, debug_validation = False):
+        # Error check
+
+
+        # configure checkpoints
+        self.net_to_parallel()
+        lastloss = 1e32
+        self._logger.info("Start training...")
+        for i in range(self.solverparams_num_of_epochs):
+            # Skip if --debug-validation flag is true
+            if not debug_validation:
+                self.solve_epoch(i)
+            else:
+                self._logger.info("Skip solve_epoch() and directly doing validation.")
+                self.plotter_dict['scalars'] = {
+                    'Loss/Loss'           : None,
+                    'Loss/Validation Loss': None
+                }
+                self.validation()
+
+            # Prepare values for epoch callback plots
+            epoch_loss = self.get_last_epoch_loss()
+            val_loss   = self.get_last_val_loss()
+
+            # use validation loss as epoch loss if it exist
+            measure_loss = val_loss if val_loss is not None else epoch_loss
+            if measure_loss <= lastloss:
+                self._logger.info("New loss ({:.03f}) is smaller than previous loss ({:.03f})".format(measure_loss, lastloss))
+                self._logger.info("Saving new checkpoint to: {}".format(checkpoint_path))
+                self._logger.info("Iteration number is: {}".format(i))
+                if not Path(checkpoint_path).parent.is_dir():
+                    Path(checkpoint_path).parent.mkdir(parents=True)
+                torch.save(self.get_net().state_dict(), checkpoint_path)
+                lastloss = measure_loss
+                self._logger.info("Update benchmark loss.")
+            else:
+                torch.save(self.get_net().state_dict(), checkpoint_path.replace('.pt', '_temp.pt'))
+
+            # Save network every 5 epochs
+            if i % 5 == 0:
+                torch.save(self.get_net().state_dict(), checkpoint_path.replace('.pt', '_{:03d}.pt'.format(i)))
+
+            # TODO: early stopping if criteria true
+            # early_stop = earlystopper.step(loss)
+
+            try:
+                current_lr = next(self.get_optimizer().param_groups)['lr']
+            except:
+                current_lr = self.get_optimizer().param_groups[0]['lr']
+            self._logger.info("[Epoch %04d] EpochLoss: %s LR: %s}"
+                              %(i,
+                                f'{epoch_loss:.010f}' if epoch_loss is not None else 'None',
+                                f'{current_lr:.010f}' if current_lr is not None else 'None',))
 
     @abstractmethod
     def validation(self, *args, **kwargs):
@@ -296,14 +396,6 @@ class SolverBase(object):
         This is called after each epoch.
         """
         raise NotImplementedError("Validation is not implemented in this solver.")
-
-    def _log_print(self, msg, level=20):
-        if not self._logger is None:
-            try:
-                self._logger.log(level, msg)
-                tqdm.write(msg)
-            except:
-                tqdm.write(msg)
 
     def _match_type_with_network(self, tensor):
         """
@@ -484,7 +576,6 @@ class SolverEarlyStopScheduler(object):
 
             self._warmup = warmup
             self._patience = patience
-
 
     def step(self,
              loss: float,

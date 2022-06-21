@@ -68,7 +68,7 @@ def make_marked_slice(image: np.ndarray,
     ax_pred = ax[1]
     ax_pred.set_axis_off()
     ax_pred.plot(slice_indices, prediction, linewidth=ax_pred_linewidth, color='yellow')
-    ax_pred.axhline(0, 0, image.shape[-1], color='red', linewidth=ax_pred_linewidth)
+    ax_pred.axhline(0.5, 0, image.shape[-1], color='red', linewidth=ax_pred_linewidth)        # plot a line at 0 or 0.5
     if not vert_line is None:
         assert 0 <= vert_line < image.shape[-1], f"Wrong vert_line provided, got {vert_line}"
         ax_pred.axvline(x=vert_line, color='#0F0', linewidth=ax_pred_linewidth)

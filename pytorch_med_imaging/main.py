@@ -177,6 +177,8 @@ def main(a, config, logger):
                 return
     # Check network type
     try:
+        if re.search("[\W]+", net_nettype.translate(str.maketrans('', '', "(), "))) is not None:
+            raise AttributeError(f"You net_nettype specified ({net_nettype}) contains illegal characters!")
         net = eval(net_nettype)
         so = re.search('.+?(?=\()', net_nettype)
         if not so is None:
@@ -339,14 +341,12 @@ def main(a, config, logger):
             # TODO: early stopping if criteria true
             # early_stop = earlystopper.step(loss)
 
-            try:
-                current_lr = next(solver.get_optimizer().param_groups)['lr']
-            except:
-                current_lr = solver.get_optimizer().param_groups[0]['lr']
+            # ReduceLROnPlateau has no get_last_lr attribute
+            lass_lr = solver.get_last_lr()
             logger.log_print_tqdm("[Epoch %04d] EpochLoss: %s LR: %s}"
                                   %(i,
                                     f'{epoch_loss:.010f}' if epoch_loss is not None else 'None',
-                                    f'{current_lr:.010f}' if current_lr is not None else 'None',))
+                                    f'{lass_lr:.010f}'    if lass_lr is not None else 'None',))
 
             # Plot network weight into histograms
             # if bool_plot:

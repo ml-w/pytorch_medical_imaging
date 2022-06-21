@@ -8,7 +8,7 @@ import argparse
 import sys
 import fnmatch
 
-__all__ = ['keep_n_largest_connected_body', 'edge_smoothing', 'main']
+__all__ = ['keep_n_largest_connected_body', 'edge_smoothing', 'main', 'remove_small_island_2d']
 
 def keep_n_largest_connected_body(in_im: Union[sitk.Image,str],
                                   n: Optional[int] = 1):
@@ -44,7 +44,7 @@ def keep_n_largest_connected_body(in_im: Union[sitk.Image,str],
 
     # copy image information
     out_im = sitk.Image(in_im)
-    for i in range(n_objs):
+    for i in range(n_objs + 1): # objects label value starts from 1
         if (i + 1) in keep_labels:
             continue
         else:
@@ -57,35 +57,59 @@ def keep_n_largest_connected_body(in_im: Union[sitk.Image,str],
     return out_im
 
 def remove_small_island_2d(in_im: Union[sitk.Image, str],
-                           vol_thres: float,
-                           thickness_thres: float):
+                           area_thres: float
+                           ):
     r"""
     This function cast the input into UInt8 label,
     Args:
-        in_im:
-        vol_thres:
+        in_im (sitk.Image):
+            Input segmentation. This should be of type sitkUint8.
+        area_thres (float):
+            Area threshold of which island with a smaller area than this will be removed from the slice.
 
     Returns:
 
     """
-    size = in_im.GetSize()
+    shape = in_im.GetSize()
     spacing = in_im.GetSpacing()
-    voxel_vol = np.cumprod(spacing)[-1]
 
-    out_im = sitk.Cast(in_im, sitk.sitkUInt8)
+    # kernel_size = (np.ones(shape=2) * thickness_thres) / np.asarray(spacing)[:2]
+    # kernel_size = np.ceil(kernel_size).astype('int')
+
+    out_im = sitk.Image(*([in_im.GetSize()] + [sitk.sitkUInt8]))
     # Scan the whole volume slice by slice
-    for i in range(size[-1]):
+    for i in range(shape[-1]):
+        slice_im = in_im[:,:,i]
+
+        # skip if sum is 0
+        if np.isclose(sitk.GetArrayFromImage(slice_im).sum(), 0):
+            continue
+
         # extract largest connected body
         filter = sitk.ConnectedComponentImageFilter()
-        conn_im = filter.Execute(out_im[i])
+        conn_im = filter.Execute(slice_im)
         n_objs = filter.GetObjectCount() - 1  # 0 also counted
 
-        shape_stats = sitk.LabelShapeStatisticsImageFilter()
-        shape_stats.Execute(conn_im)
-        sizes = [shape_stats.GetPhysicalSize(i) for i in range(1, filter.GetObjectCount() + 1)]
-        sizes_rank = np.argsort(sizes)[::-1] # descending order
-        keep_labels = sizes_rank[:n] + 1
+        # copy image information
+        out_slice = sitk.Image(slice_im)
+        if n_objs > 0:
+            shape_stats = sitk.LabelShapeStatisticsImageFilter()
+            shape_stats.Execute(conn_im)
+            sizes = np.asarray([shape_stats.GetPhysicalSize(i) for i in range(1, filter.GetObjectCount() + 1)])
+            keep_labels = np.argwhere(sizes >= area_thres) + 1
 
+            for j in range(n_objs + 1): # objects label value starts from 1
+                if (j + 1) in keep_labels:
+                    continue
+                else:
+                    # remove from original input if label is not kept.
+                    out_slice = out_slice - sitk.Mask(slice_im, conn_im == (j + 1))
+
+        # out_slice = sitk.BinaryMorphologicalOpening(out_slice, kernel_size.tolist())
+        out_slice = sitk.JoinSeries(out_slice)
+        out_im = sitk.Paste(out_im, out_slice, out_slice.GetSize(), destinationIndex=[0, 0, i])
+    out_im.CopyInformation(in_im)
+    return out_im
 
 
 def edge_smoothing(in_im: Union[sitk.Image, str],
@@ -143,8 +167,10 @@ def main(raw_args=None):
                         help="Recursively load all .nii.gz files under the directory.")
     parser.add_argument('-v', '--verbose', action='store_true', dest='verbose',
                         help="Print verbose progress.")
-    parser.add_argument('-s', '--smoothing', action='store', default=1, dest='smooth', type=int,
+    parser.add_argument('-s', '--smoothing', action='store', default=None, dest='smooth', type=int, required=True,
                         help="Smoothing parameter.")
+    parser.add_argument('-n', '--connected-components', action='store', default=None, type=int, required=True,
+                        help="How many largest components to keep")
     parser.add_argument('--idlist', action='store', default=None, dest='idlist',
                         help='Read id from a txt file.')
     args = parser.parse_args(raw_args)
@@ -189,8 +215,8 @@ def main(raw_args=None):
         logger.info(f"Processing {f}")
 
         try:
-            out_im = keep_n_largest_connected_body(f, 1)
-            out_im = edge_smoothing(out_im, args.smooth)
+            out_im = edge_smoothing(sitk.Cast(sitk.ReadImage(f), sitk.sitkUInt8), args.smooth)
+            out_im = keep_n_largest_connected_body(out_im, a.connected_components)
         except Exception:
             logger.exception(f"Error occured for {f}")
 

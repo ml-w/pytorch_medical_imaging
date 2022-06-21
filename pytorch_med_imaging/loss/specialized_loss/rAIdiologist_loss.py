@@ -17,7 +17,7 @@ class ConfidenceBCELoss(nn.Module):
                 target: torch.DoubleTensor):
         # Typical classification loss for first dimension
         loss_classification = self.base_loss.forward(input[...,0].flatten(), target.flatten())
-        # loss_classification = torch.clamp(loss_classification, 0, 10).mean()
+        loss_classification = torch.clamp(loss_classification, 0, 10).mean()
 
 
         # can the confidence score "predict right/wrong prediction"
@@ -33,5 +33,5 @@ class ConfidenceBCELoss(nn.Module):
 
             return (loss_classification + loss_conf * self.conf_factor) / (1 + self.conf_factor)
         else:
-            return loss_classification.mean()
+            return loss_classification
 
