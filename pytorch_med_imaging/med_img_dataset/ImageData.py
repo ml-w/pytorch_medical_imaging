@@ -302,10 +302,11 @@ class ImageDataSet(PMIDataBase):
             elif self._filterargs['idlist'] in (None, ""):
                 # If None specified, glob ids from filenames instead
                 self._logger.warning('Idlist input is None!')
-                self._idlist = file_ids
+                self._idlist = list(file_ids.values())
             else:
                 raise TypeError(f"ID list is not correclty spefified. Expect str, list or None, got "
                                 f"{self._filterargs['idlsit']} instead")
+            self._idlist.sort()
 
             self._logger.debug(f'Target IDs: {self._idlist}')
             self._logger.debug(f'All IDs: {file_ids}')
