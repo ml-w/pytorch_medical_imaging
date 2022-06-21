@@ -1,6 +1,6 @@
 - config: default-flags
   flags:
-    config: ""
+    config: "./Configs/Test.ini"
     epoch: 50
     batch-size: 4
     lr: 1E-4
@@ -10,7 +10,7 @@
 - config: val-flags
   flags:
     batch-size: 4
-    config: ""
+    config: "./Configs/Test.ini"
     override: ""
 
 - model: pmi
