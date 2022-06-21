@@ -18,19 +18,22 @@ from ..loss import *
 available_lr_scheduler = list(name for name, obj in inspect.getmembers(lr_scheduler) if inspect.isclass(obj))
 
 class SolverBase(object):
-    """
+    """Base class for all solvers. This class must be inherited before it can work properly. The child
+    classes should inherit the abstract methods.
+
     Args:
-        solver_configs (dict):
-            Child class should prepare the configuration. Some keys are compulsory.
-        **kwargs
+        net (torch.nn.Module):
+            The network.
+        hyperparam_dict (dict):
+            This is created by the controller from all options under the section `SolverParams`.
+        use_cuda (bool):
+            Whether this solver will move the items to cuda for computation.
 
     Attributes:
         optimizer (nn.Module):
             Optimizer for training.
         lossfunction (nn.Module):
             Loss function.
-        net (str or nn.Module):
-
         plotter_dict (dict):
             This dict could be used by the child class to perform plotting after validation or in each step.
 
@@ -38,21 +41,10 @@ class SolverBase(object):
     def __init__(self, net: torch.nn.Module, hyperparam_dict: dict, use_cuda: bool, **kwargs):
         super(SolverBase, self).__init__()
 
-        # these attributes requires evaluation and cannot be get directly from the ini file.
         self.net = net
         self.iscuda = use_cuda
         self.hyperparam_dict = hyperparam_dict
         self.__dict__.update(hyperparam_dict)
-
-        # check for error
-        self.required_att = ['solverparams_num_of_epochs']
-
-        # default_attr.update((k, solver_configs[k]) for k in default_attr.keys() & solver_configs.keys())
-        # required_att = ('optimizer', 'lossfunction', 'net', 'iscuda')
-        #
-        # if any([default_attr[k] is None for k in required_att]):
-        #     self._logger.error("Some required attributes are not specified.")
-        #     raise AttributeError(f"Must specify these attributes: {','.join(required_att)}")
 
         # optional
         self._logger        = MNTSLogger[self.__class__.__name__]
@@ -104,7 +96,6 @@ class SolverBase(object):
                 update_dict[key] = default_dict[key]
         self.__dict__.update(update_dict)
         self.hyperparam_dict.update(update_dict)
-
 
     def get_net(self):
         if torch.cuda.device_count() > 1:
@@ -314,7 +305,7 @@ class SolverBase(object):
         self.net.train()
         self.plotter_dict = {'scalars': {}, 'epoch_num': epoch_number}
         for step_idx, mb in enumerate(self._data_loader):
-            s, g = self._unpack_minibatch(mb, self.unpack_keys_forward)
+            s, g = self._unpack_minibatch(mb, self.solverparams_unpack_keys_forward)
 
             # initiate one train step. Things should be plotted in decorator of step if needed.
             out, loss = self.step(s, g)
@@ -473,7 +464,7 @@ class SolverBase(object):
 
     def _epoch_callback(self, *args, **kwargs):
         """
-        Default callback
+        Default callback after `solver_epoch` is done.
         """
         scalars = self.plotter_dict.get('scalars', None)
         writer_index = self.plotter_dict.get('epoch_num', None)
