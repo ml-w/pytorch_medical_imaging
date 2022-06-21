@@ -444,11 +444,25 @@ class SolverBase(object):
 
     @staticmethod
     def _force_cuda(arg):
+        r"""Deprecated"""
         return [a.float().cuda() for a in arg] if isinstance(arg, list) else arg.cuda()
 
     @abstractmethod
     def _feed_forward(self, *args):
-        raise NotImplementedError
+        r"""This function would dictate how each mini-batch is fed into the network during both
+        training and inference. This must be inherited"""
+        s, g = args
+        try:
+            s = self._match_type_with_network(s)
+        except Exception as e:
+            self._logger.exception("Failed to match input to network type. Falling back.")
+            raise RuntimeError("Feed forward failure") from e
+
+        if isinstance(s, list):
+            out = self.net.forward(*s)
+        else:
+            out = self.net.forward(s)
+        return out
 
     @abstractmethod
     def _loss_eval(self, *args):
