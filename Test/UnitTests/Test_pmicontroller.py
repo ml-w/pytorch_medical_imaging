@@ -15,8 +15,8 @@ from pytorch_med_imaging.pmi_controller import PMIController
 
 
 class TestController(unittest.TestCase):
-    def __init__(self, *args, **kwargs):
-        self.sample_config_seg = Path("./sample_data/config/sample_config_seg.ini")
+    def __init__(self, *args, sample_config = "./sample_data/config/sample_config_seg.ini", **kwargs):
+        self.sample_config = Path(sample_config)
         super(TestController, self).__init__(*args, **kwargs)
 
     def setUp(self):
@@ -31,7 +31,7 @@ class TestController(unittest.TestCase):
                                  logger_name='unittest', verbose=True, keep_file=False, log_level='debug')
 
         # create the controller
-        self.temp_config.writelines(self.sample_config_seg.open('r').readlines())
+        self.temp_config.writelines(self.sample_config.open('r').readlines())
         self.temp_config.flush()
         config_obj = configparser.ConfigParser(interpolation=configparser.ExtendedInterpolation())
         config_obj.read(self.temp_config.name)
@@ -171,6 +171,12 @@ class TestSolvers(TestController):
                 self.fail(f"Fail when creating lr_scheduler {key}")
         pass
 
+    def test_create_lossfunction(self):
+        self.solver.create_lossfunction()
+
+    def test_create_optimizer(self):
+        self.solver.create_optimizer(self.solver.net.parameters())
+
     def test_validation(self):
         self.solver._last_epoch_loss = 10
         self.solver._last_val_loss = 15
@@ -202,3 +208,15 @@ class TestSolvers(TestController):
         self.solver.decay_optimizer()
         after = self.solver.get_last_lr()
         self.assertLess(before, after)
+
+
+class TestSegmentationSolver(TestSolvers):
+    def __init__(self, *args, **kwargs):
+        super(TestSegmentationSolver, self).__init__(*args, **kwargs)
+
+class TestClassificaitonSolver(TestSolvers):
+    def __init__(self, *args, **kwargs):
+        super(TestClassificaitonSolver, self).__init__(
+            *args,
+            sample_config = "./sample_data/config/sample_config_class.ini",
+            **kwargs)

@@ -14,77 +14,30 @@ import pandas as pd
 __all__ = ['ClassificationSolver']
 
 class ClassificationSolver(SolverBase):
-    def __init__(self, net, param_optim, param_iscuda,
-                 param_initWeight=None, logger=None, config=None, **kwargs):
+    def __init__(self, net, hyperparam_dict, use_cuda):
+        r"""Solver for classification tasks. For details to kwargs, see :class:`SolverBase`.
         """
-        Solver for classification tasks.
+        super(ClassificationSolver, self).__init__(net, hyperparam_dict, use_cuda)
 
-        Args:
-            in_data (PMIDataBase):
-                Tensor of input data.
-            gt_data (PMIDataBase):
-                Tensor of output data.
-            net (class):
-                Network modules.
-            param_optim (dict):
-                Dictionary of the optimizer parameters. Should include key 'lr'.
-            param_iscuda (bool):
-                Settings to use CUDA or not.
-            param_initWeight (int, Optional):
-                Initial weight for loss function.
-            logger (Logger, Optional):
-                Logger. If no logger provide, log will be output to './temp.log'
-            **kwargs:
-                Additional dictionary item pass to base class.
-
-        Kwargs:
-            For details to kwargs, see :class:`SolverBase`.
-
-        Returns:
-            :class:`ClassificaitonSolver` object
-        """
-        assert isinstance(logger, MNTSLogger) or logger is None, "Logger incorrect settings!"
-
-        if logger is None:
-            self._logger = MNTSLogger[self.__class__.__name__]
-
-        self._config = config
-        self._decay_init_weight = param_initWeight
-
-        solver_configs = {}
-
-        # Default attributes
+    def _load_default_attr(self, _):
+        r"""Inherit this to get more default hyperparameters"""
         default_attr = {
-            'unpack_keys_forward': ['input', 'gt'], # used to unpack torchio drawn minibatches
-            'gt_keys':             ['gt'],
-            'sigmoid_params':      {'delay': 15, 'stretch': 2, 'cap': 0.3},
-            'class_weights':       None,
-            'optimizer_type':      'Adam'             # ['Adam'|'SGD']
+            'solverparams_sigmoid_params'   : {'delay': 15, 'stretch': 2, 'cap': 0.3},
+            'solverparams_class_weights'    : None,
+            'solverparams_decay_init_weight': 0
         }
-        self._load_default_attr(default_attr)
+        super(ClassificationSolver, self)._load_default_attr(default_attr)
 
-        # check unique class in gt
-        #-------------------------
-        if self.class_weights is None:
-            self._logger.warning("Automatic computing weigths are not supported now!")
-
-        # Create optimizer and loss function
-        lossfunction = nn.CrossEntropyLoss()
-        # optimizer = optim.Adam(net.parameters(), lr=param_optim['lr'], momentum=param_optim['momentum'])
-        optimizer = self.create_optimizer(net.parameters(), param_optim)
-
-        iscuda = param_iscuda
-        if param_iscuda:
-            lossfunction = lossfunction.cuda()
-            net = net.cuda()
-
-        solver_configs['optimizer'] = optimizer
-        solver_configs['lossfunction'] = lossfunction
-        solver_configs['net'] = net
-        solver_configs['iscuda'] = iscuda
-
-        super(ClassificationSolver, self).__init__(solver_configs, **kwargs)
-
+    def create_lossfunction(self):
+        # set class weights to 0 to disable class weight for loss function
+        if not self.solverparams_class_weights == 0:
+            weights = torch.as_tensor(self.solverparams_class_weights)
+            loss_init_weights = weights.cpu().float()
+            self._logger.info("Initial weight factor: " + str(weights))
+        else:
+            self._logger.info("Skipping class weights.")
+            loss_init_weights = None
+        self.lossfunction = nn.CrossEntropyLoss(weight=loss_init_weights) #TODO: Allow custom loss function
 
     def _feed_forward(self, *args):
         s, g = args
@@ -131,7 +84,7 @@ class ClassificationSolver(SolverBase):
             decisions = []
             validation_loss = []
             for mb in tqdm(self._data_loader_val, desc="Validation", position=2):
-                s, g = self._unpack_minibatch(mb, self.unpack_keys_forward)
+                s, g = self._unpack_minibatch(mb, self.solverparams_unpack_keys_forward)
                 s = self._match_type_with_network(s)
                 g = self._match_type_with_network(g)
 
