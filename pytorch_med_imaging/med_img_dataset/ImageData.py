@@ -291,8 +291,8 @@ class ImageDataSet(PMIDataBase):
                 no_ids = set(file_basenames) - set(list(file_ids.keys()))
                 self._logger.debug(f"{no_ids}")
                 self._logger.debug(f"{file_ids}")
+            # Don't sort otherwise the order of file_ids and file_dirs will become different.
             file_ids = list(file_ids.values())
-            file_ids.sort()
 
 
             if isinstance(self._filterargs['idlist'], str) and not self._filterargs['idlist'] == "":
@@ -308,7 +308,6 @@ class ImageDataSet(PMIDataBase):
             else:
                 raise TypeError(f"ID list is not correclty spefified. Expect str, list or None, got "
                                 f"{self._filterargs['idlsit']} instead")
-            self._idlist.sort()
 
             self._logger.debug(f'Target IDs: {self._idlist}')
             self._logger.debug(f'All IDs: {file_ids}')
