@@ -39,7 +39,7 @@ class TestController(unittest.TestCase):
         self.config['Data']['output_dir'] = str(self.temp_output_path)
         self.config['Checkpoint']['cp_save_dir'] = str(self.temp_output_path.joinpath("temp_cp.pt"))
 
-        self.controller = PMIController(self.temp_config.name, self.logger)
+        self.controller = PMIController(self.temp_config.name, a=None)
 
     def tearDown(self):
         self.temp_output_dir.cleanup()

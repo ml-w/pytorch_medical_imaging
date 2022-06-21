@@ -1,6 +1,7 @@
 import ast
 import inspect
 import re
+import os
 from abc import abstractmethod
 
 import gc
@@ -38,12 +39,13 @@ class SolverBase(object):
             This dict could be used by the child class to perform plotting after validation or in each step.
 
     """
-    def __init__(self, net: torch.nn.Module, hyperparam_dict: dict, use_cuda: bool, **kwargs):
+    def __init__(self, net: torch.nn.Module, hyperparam_dict: dict, use_cuda: bool, debug:bool = False, **kwargs):
         super(SolverBase, self).__init__()
 
         self.net = net
         self.iscuda = use_cuda
         self.hyperparam_dict = hyperparam_dict
+        self.debug = debug
         self.__dict__.update(hyperparam_dict)
 
         # optional
@@ -174,17 +176,17 @@ class SolverBase(object):
         self.lossfunction = func
 
     def load_checkpoint(self, checkpoint_dir: str):
-        if os.path.isfile(self.checkpoint_load):
+        if os.path.isfile(checkpoint_dir):
             # assert os.path.isfile(checkpoint_load)
             try:
-                self._logger.info("Loading checkpoint " + checkpoint_load)
-                self.get_net().load_state_dict(torch.load(checkpoint_load), strict=False)
+                self._logger.info("Loading checkpoint " + checkpoint_dir)
+                self.get_net().load_state_dict(torch.load(checkpoint_dir), strict=False)
             except Exception as e:
                 if not self.debug:
-                    self._logger.error(f"Cannot load checkpoint from: {checkpoint_load}")
+                    self._logger.error(f"Cannot load checkpoint from: {checkpoint_dir}")
                     raise e
                 else:
-                    self._logger.warning(f"Cannot load checkpoitn from {checkpoint_load}")
+                    self._logger.warning(f"Cannot load checkpoitn from {checkpoint_dir}")
         else:
             self.logger.warning("Checkpoint specified but doesn't exist!")
 

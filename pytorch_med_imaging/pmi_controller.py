@@ -64,11 +64,13 @@ class backward_compatibility(object):
 
 
 class PMIController(object):
-    def __init__(self, config: Any, logger: MNTSLogger):
-        self.logger = logger
+    def __init__(self, config: Any, a: argparse.Namespace):
+        self.logger = MNTSLogger[self.__class__.__name__]
 
         # populate attributes
         self._unpack_config(config)
+        if not a is None:
+            self.override_config(a)
         self.logger.info("Recieve arguments: %s"%dict(({section: dict(self.config[section]) for section in self.config.sections()})))
 
 
@@ -144,7 +146,7 @@ class PMIController(object):
     def training(self) -> None:
         #-------------------------------
         # Create training solver and net
-        solver = self.create_solver(self, self.general_run_type)
+        solver = self.create_solver(self.general_run_type)
         loader, loader_val = self.prepare_loaders()
 
         # Set learning rate scheduler, TODO: move this to solver
@@ -157,7 +159,7 @@ class PMIController(object):
             self.logger.debug("Got lr_schedular_dict: {}.".format(self.solverparams_lr_scheduler_dict))
             solver.set_lr_decay_to_reduceOnPlateau(3, param_decay, **_lr_scheduler_dict)
         else:
-            solver.set_lr_decay_exp(self.solverparams_decay_rate_LR)
+            solver.set_lr_decay_exp(self.solverparams_decay_rate_lr)
 
         # Push dataloader to solver
         solver.set_dataloader(loader, loader_val)
@@ -175,8 +177,8 @@ class PMIController(object):
         solver.get_net().train()
         solver.load_checkpoint(self.checkpoint_cp_load_dir)
 
-        self.solver.fit(self.checkpoint_cp_save_dir, self.solverparams_num_of_epochs,
-                        debug_validation=self.a.debug_validation) # TODO: move checkpoint_save argument to else where
+        solver.fit(self.checkpoint_cp_save_dir,
+                   debug_validation=self.a.debug_validation) # TODO: move checkpoint_save argument to else where
         self.solver = solver
 
     def prepare_tensorboard_writter(self) -> None:
@@ -347,10 +349,10 @@ class PMIController(object):
         if a.lr:
             self.config['RunParams']['learning_rate'] = str(a.lr)
         if a.debug_validation:
-            self.config['General']['debug']            = str(a.debug)
-            self.config['General']['debug_validation'] = str(a.debug_validation)
+            self.config['General']['debug']            = "yes"
+            self.config['General']['debug_validation'] = "yes"
         if a.debug:
-            self.config['General']['debug'] = str(a.debug)
+            self.config['General']['debug'] = "yes"
         if not a.override == '':
             for substring in a.override.split(';'):
                 substring = substring.replace(' ', '')
@@ -425,27 +427,14 @@ class PMIController(object):
                 if dict_key in {k: v for k, v in CASTING_KEYS if v == bool}:
                     val = config[sections].getboolean(keys, False)
                 else:
-                    val = config[sections].get(keys, None)
+                    val = config[sections].get(keys)
 
                 # type case if it is specified
                 if dict_key in CASTING_KEYS:
-                    if val is None: # load default value if its not specified in the ini file
-                        if CASTING_KEYS[dict_key] == dict:
-                            val = {}
-                        elif CASTING_KEYS[dict_key] == bool:
-                            val = False
-                        elif dict_key in DEFAULT_DICT:
-                            # If its a tuple, trace the source key
-                            if isinstance(DEFAULT_DICT[dict_key], tuple):
-                                _src_sec, _src_key = DEFAULT_DICT[dict_key]
-                                val = config[_src_sec][_src_key]
-                            else:
-                                val = DEFAULT_DICT[dict_key]
+                    if CASTING_KEYS[dict_key] == dict:
+                        val = ast.literal_eval(val)
                     else:
-                        if CASTING_KEYS[dict_key] == dict:
-                            val = ast.literal_eval(val)
-                        else:
-                            val = CASTING_KEYS[dict_key](val)
+                        val = CASTING_KEYS[dict_key](val)
 
                 # if it starts with "{' automatically make this a dictionary
                 if isinstance(val, str):
@@ -454,6 +443,21 @@ class PMIController(object):
                     except:
                         pass
                 att_dict[att_key.lower()] = val
+
+        # read default if they don't exist
+        for dict_key in DEFAULT_DICT:
+            att_key = "_".join(dict_key).lower()
+            if att_key not in att_dict: # load default value if its not specified in the ini file
+                # If its a tuple, trace the source key
+                if isinstance(DEFAULT_DICT[dict_key], tuple):
+                    _src_sec, _src_key = DEFAULT_DICT[dict_key]
+                    val = config[_src_sec][_src_key]
+                else:
+                    val = DEFAULT_DICT[dict_key]
+                att_dict[att_key] = val
+                config[dict_key[0]][dict_key[1]] = str(val)
+            else:
+                continue
 
         self.__dict__.update({'_'.join(k).lower(): v for k, v in DEFAULT_DICT.items()})
         self.__dict__.update(att_dict)
@@ -490,6 +494,13 @@ class PMIController(object):
                 if section in (s.lower() for s in self.config.sections()):
                     section = self.config.sections()[[l.lower() for l in self.config.sections()].index(section)]
                 return self.config[section].get(ro.groupdict()['key'], None)
+
+    def run(self):
+        r"""Kick start based on the setting from the INI file"""
+        if self.mode:
+            self.inference()
+        else:
+            self.training()
 
 
 def console_entry(raw_args=None):
@@ -554,8 +565,8 @@ def console_entry(raw_args=None):
 
         logger.info(">" * 40 + " Start Main " + "<" * 40)
         try:
-            main = PMIController(config, logger)
-            main.override_config(a)
+            main = PMIController(config, a)
+            main.run()
         except Exception as e:
             logger.error("Uncaught exception!")
             logger.exception(e)
