@@ -136,21 +136,16 @@ class SegmentationSolver(SolverBase):
 
     def _feed_forward(self, *args):
         s, g = args
-
-         # Handle list elements
-        if (isinstance(s, list) or isinstance(s, tuple)) and len(s) > 1:
-            s = [Variable(ss).float() for ss in s]
-        else:
-            s = Variable(s).float()
-
-        if self.iscuda:
-            s = self._force_cuda(s)
+        try:
+            s = self._match_type_with_network(s)
+        except Exception as e:
+            self._logger.exception("Failed to match input to network type. Falling back.")
+            raise RuntimeError("Feed forward failure") from e
 
         if isinstance(s, list):
             out = self.net.forward(*s)
         else:
             out = self.net.forward(s)
-
         return out
 
     def _loss_eval(self, *args):
