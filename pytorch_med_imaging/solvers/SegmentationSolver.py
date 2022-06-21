@@ -53,7 +53,7 @@ class SegmentationSolver(SolverBase):
         if not self.solverparams_class_weights == 0:
             weights = torch.as_tensor(self.solverparams_class_weights)
             loss_init_weights = weights.cpu().float()
-            self._logger.log_print_tqdm("Initial weight factor: " + str(weights))
+            self._logger.info("Initial weight factor: " + str(weights))
         else:
             self._logger.info("Skipping class weights.")
             loss_init_weights = None
@@ -67,7 +67,7 @@ class SegmentationSolver(SolverBase):
         valcountpair = gt_data.get_unique_values_n_counts()
         classes = list(valcountpair.keys())
         numOfClasses = len(classes)
-        self._logger.log_print_tqdm("Find %i classes: %s" % (numOfClasses, classes))
+        self._logger.info("Find %i classes: %s" % (numOfClasses, classes))
 
         # calculate empty label ratio for updating loss function weight
         r = []
@@ -203,12 +203,12 @@ class SegmentationSolver(SolverBase):
         d = self.solverparams_sigmoid_params['delay']
         cap = self.solverparams_sigmoid_params['cap']
         if isinstance(self.lossfunction, nn.CrossEntropyLoss):
-            self._logger.log_print_tqdm('Current weight: ' + str(self.lossfunction.weight), 20)
+            self._logger.debug('Current weight: ' + str(self.lossfunction.weight))
             offset = self._decayed_time + self.solverparams_decay_init_weight # init_weight is t_0
             new_weight = torch.as_tensor([self.sigmoid_plus(offset, self.solverparams_class_weights[i], s, d, cap) for i in range(len(
                 self.solverparams_class_weights))])
             self.lossfunction.weight.copy_(new_weight)
-            self._logger.log_print_tqdm('New weight: ' + str(self.lossfunction.weight), 20)
+            self._logger.debug('New weight: ' + str(self.lossfunction.weight))
 
 
     @staticmethod
