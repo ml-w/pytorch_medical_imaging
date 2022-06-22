@@ -79,13 +79,13 @@ class PMIController(object):
             Similar to solver, but it is created during :func:`inference()` instead.
     """
     def __init__(self, config: Any, a: argparse.Namespace):
-        self.logger = MNTSLogger[self.__class__.__name__]
+        self._logger = MNTSLogger[self.__class__.__name__]
 
         # populate attributes
         self._unpack_config(config)
         if not a is None:
             self.override_config(a)
-        self.logger.info("Recieve arguments: %s"%dict(({section: dict(self.config[section]) for section in self.config.sections()})))
+        self._logger.info("Recieve arguments: %s" % dict(({section: dict(self.config[section]) for section in self.config.sections()})))
 
 
         # Try to make outputdir first if it exist
@@ -114,13 +114,13 @@ class PMIController(object):
             self.pmi_factory = PMIDataFactory()
             self.pmi_data = self.pmi_factory.produce_object(self.config)
         except Exception as e:
-            self.logger.exception("Error creating target object!", logging.FATAL)
-            self.logger.error("Original error: {}".format(e))
+            self._logger.exception("Error creating target object!", logging.FATAL)
+            self._logger.error("Original error: {}".format(e))
             return
 
         self.validation_FLAG=False
         if not self.filters_validation_id_list is None and self.general_plot_tb:
-            self.logger.log_print_tqdm("Recieved validation parameters.")
+            self._logger.log_print_tqdm("Recieved validation parameters.")
             val_config = configparser.ConfigParser()
             val_config.read_dict(self.config)
             val_config.set('Filters', 're_suffix', self.filters_validation_re_suffix)
@@ -140,10 +140,11 @@ class PMIController(object):
             SolverBase
         """
         # check run_type is safe from attacks
+        run_type = run_type.replace("Solver", "") # more flexible
         if re.search("[\W]+", run_type) is not None:
             raise ArithmeticError(f"Your run_type ({run_type}) contains illegal characters!")
         solver_class = eval(f'{run_type}Solver')
-        self.logger.info("Creating solver: {}".format(solver_class.__name__))
+        self._logger.info("Creating solver: {}".format(solver_class.__name__))
         solver = solver_class(self.net, # created in __init__
                               self._pack_config('SolverParams'),
                               self.general_use_cuda
@@ -155,7 +156,7 @@ class PMIController(object):
         if re.search("[\W]+", run_type) is not None:
             raise ArithmeticError(f"Your run_type ({run_type}) contains illegal characters!")
         infer_class = eval(f'{run_type}Inferencer')
-        self.logger.info("Creating solver: {}".format(infer_class.__name__))
+        self._logger.info("Creating solver: {}".format(infer_class.__name__))
         infer = infer_class(self.runparams_batch_size,
                             self.net,
                             self.checkpoint_cp_load_dir,
@@ -168,19 +169,33 @@ class PMIController(object):
     def training(self) -> None:
         #-------------------------------
         # Create training solver and net
+        self._logger.info(f"Creating solver: {self.general_run_type}")
         solver = self.create_solver(self.general_run_type)
         loader, loader_val = self.prepare_loaders()
 
         # Set learning rate scheduler, TODO: move this to solver
-        if self.solverparams_decay_on_plateau:
-            self.logger.log_print_tqdm("Optimizer decay on plateau.")
-            _lr_scheduler_dict = eval(self.solverparams_lr_scheduler_dict)
-            if not isinstance(_lr_scheduler_dict, dict):
-                self.logger.error("lr_scheduler_dict must eval to a dictionary! Got {} instead.".format(_lr_scheduler_dict))
-                return
-            self.logger.debug("Got lr_schedular_dict: {}.".format(self.solverparams_lr_scheduler_dict))
-            solver.set_lr_decay_to_reduceOnPlateau(3, param_decay, **_lr_scheduler_dict)
+        # if self.solverparams_decay_on_plateau:
+        #     self.logger.log_print_tqdm("Optimizer decay on plateau.")
+        #     _lr_scheduler_dict = eval(self.solverparams_lr_scheduler_dict)
+        #     if not isinstance(_lr_scheduler_dict, dict):
+        #         self.logger.error("lr_scheduler_dict must eval to a dictionary! "
+        #                           "Got {} instead.".format(_lr_scheduler_dict))
+        #         return
+        #     self.logger.debug("Got lr_schedular_dict: {}.".format(self.solverparams_lr_scheduler_dict))
+        #     solver.set_lr_decay_to_reduceOnPlateau(3, param_decay, **_lr_scheduler_dict)
+        # else:
+        #     solver.set_lr_decay_exp(self.solverparams_decay_rate_lr)
+
+        if self.solverparams_lr_scheduler is not None:
+            self._logger.info(f"Creating lr_scheduler: {self.solverparams_lr_scheduler}.")
+            if isinstance(self.solverparams_lr_scheduler_args, (float, int, str)):
+                self.solverparams_lr_scheduler_args = [self.solverparams_lr_scheduler_args]
+            self.solver.set_lr_scheduler(self.solverparams_lr_scheduler,
+                                         *self.solverparams_lr_scheduler_args,
+                                         **self.solverparams_lr_scheduler_kwargs)
+
         else:
+            self._logger.info("LR scheduler not specified, using default exponential.")
             solver.set_lr_decay_exp(self.solverparams_decay_rate_lr)
 
         # Push dataloader to solver
@@ -211,19 +226,19 @@ class PMIController(object):
             try:
                 tensorboard_rootdir =  Path(os.environ.get('TENSORBOARD_LOGDIR', '/media/storage/PytorchRuns'))
                 if not tensorboard_rootdir.is_dir():
-                    self.logger.warning("Cannot read from TENORBOARD_LOGDIR, retreating to default path...")
+                    self._logger.warning("Cannot read from TENORBOARD_LOGDIR, retreating to default path...")
                     tensorboard_rootdir = Path("/media/storage/PytorchRuns")
 
                 # Strip the parenthesis and comma from the net name to avoid conflicts with system
                 net_name = self.network_network_type.translate(str.maketrans('(),','[]-'," "))
-                self.logger.info("Creating TB writer, writing to directory: {}".format(tensorboard_rootdir))
+                self._logger.info("Creating TB writer, writing to directory: {}".format(tensorboard_rootdir))
                 writer = SummaryWriter(tensorboard_rootdir.joinpath(
                     "%s-%s" % (net_name,datetime.datetime.now().strftime("%Y%m%d-%H%M%S"))).__str__()
                 )
                 self.writer = TB_plotter(writer)
             except Exception as e:
-                self.logger.warning("Tensorboard writter creation encounters failure, falling back to no writer.")
-                self.logger.exception(e)
+                self._logger.warning("Tensorboard writter creation encounters failure, falling back to no writer.")
+                self._logger.exception(e)
                 self.writer = None
                 self.general_plot_tb = False
         else:
@@ -231,7 +246,7 @@ class PMIController(object):
             self.general_plot_tb = False
 
     def inference(self):
-        self.logger.log_print_tqdm("Starting evaluation...")
+        self._logger.log_print_tqdm("Starting evaluation...")
         loader, loader_val = self.prepare_loaders()
 
         #------------------------
@@ -249,7 +264,7 @@ class PMIController(object):
         elif run_type == 'rAIdiologist':
             infer_class = rAIdiologistInferencer
         else:
-            self.logger.error('Wrong run_type setting!')
+            self._logger.error('Wrong run_type setting!')
             raise NotImplementedError("Not implemented inference type: {}".format(run_type))
 
         inferencer = infer_class(param_batchsize,
@@ -293,7 +308,7 @@ class PMIController(object):
 
     def prepare_loaders(self) -> Iterable[PMIDataLoaderBase]:
         r"""This creates the loader, i.e. torchio iterables for the DataLoader"""
-        self.logger.log_print_tqdm("Start training...")
+        self._logger.log_print_tqdm("Start training...")
         trainingSubjects = self.pmi_data.load_dataset()
         validationSubjects = self.pmi_data_val.load_dataset() if self.validation_FLAG else (None, None)
         # Prepare dataset
@@ -313,7 +328,7 @@ class PMIController(object):
                                     drop_last   = False,
                                     pin_memory  = False) if self.validation_FLAG else None
         else:
-            self.logger.info("Loading custom dataloader.")
+            self._logger.info("Loading custom dataloader.")
             loader_factory = PMIBatchSamplerFactory()
             loader = loader_factory.produce_object(trainingSet, self.config)
             loader_val = loader_factory.produce_object(valSet, self.config,
@@ -332,13 +347,13 @@ class PMIController(object):
 
                 # Only warn instead of terminate for some path if in inference mode
                 if self.mode == 1 & (key.find('target') or key.find('gt')):
-                    self.logger.warning("Cannot locate %s: %s" % (key, d))
+                    self._logger.warning("Cannot locate %s: %s" % (key, d))
                 else:
                     msg = "Cannot locate %s: %s" % (key, d)
                     raise IOError(msg)
         assert Path(self.data_input_dir).is_dir(), "Input data directory not exist!"
         if (self.data_target_dir is None) & self.mode == 0:
-            self.logger.warning("No target dir set but specified training mode. Are you sure you are doing "
+            self._logger.warning("No target dir set but specified training mode. Are you sure you are doing "
                                 "unsupervised learning?")
             # self.mode = 1 # Eval mode
 
@@ -380,11 +395,11 @@ class PMIController(object):
                 substring = substring.replace(' ', '')
                 mo = re.match("\((?P<section>.+),(?P<key>.+)\)\=(?P<value>.+)",substring)
                 if mo is None:
-                    self.logger.warning("Overriding failed for substring {}".format(substring))
+                    self._logger.warning("Overriding failed for substring {}".format(substring))
                 else:
                     mo_dict = mo.groupdict()
                     _section, _key, _val = [mo_dict[k] for k in ['section', 'key', 'value']]
-                    self.logger.info(f"Overrided: ({_section},{_key})={_val}")
+                    self._logger.info(f"Overrided: ({_section},{_key})={_val}")
                     if not _section in self.config:
                         self.config.add_section(_section)
                     self.config.set(_section, _key, _val)
@@ -410,18 +425,19 @@ class PMIController(object):
             config = config_obj
 
         CASTING_KEYS = {
-            ('SolverParams', 'learning_rate')    : float,
-            ('SolverParams', 'momentum')         : float,
-            ('SolverParams', 'num_of_epochs')    : int,
-            ('SolverParams', 'decay_rate_lr')    : float,
-            ('SolverParams', 'lr_scheduler_dict'): dict,
-            ('SolverParams', 'early_stop')       : dict,
-            ('RunParams'   , 'batch_size')       : int,
-            ('General'     , 'plot_tb')          : bool,
-            ('General'     , 'use_cuda')         : bool,
-            ('General'     , 'debug')            : bool,
-            ('General'     , 'debug_validation') : bool,
-            ('RunParams'   , 'decay_on_plateau') : bool
+            ('SolverParams', 'learning_rate')      : float,
+            ('SolverParams', 'momentum')           : float,
+            ('SolverParams', 'num_of_epochs')      : int,
+            ('SolverParams', 'decay_rate_lr')      : float,
+            ('SolverParams', 'lr_scheduler_dict')  : dict,
+            ('SolverParams', 'lr_scheduler_kwargs'): dict,
+            ('SolverParams', 'early_stop')         : dict,
+            ('RunParams'   , 'batch_size')         : int,
+            ('General'     , 'plot_tb')            : bool,
+            ('General'     , 'use_cuda')           : bool,
+            ('General'     , 'debug')              : bool,
+            ('General'     , 'debug_validation')   : bool,
+            ('RunParams'   , 'decay_on_plateau')   : bool
         }
         DEFAULT_DICT = {
             ('General'     , 'run_mode')            : 'training',
@@ -438,6 +454,8 @@ class PMIController(object):
             ('Filters'     , 'validation_id_list')  : None,
             ('LoaderParams', 'PMI_loader_name')     : None,
             ('LoaderParams', 'PMI_loader_kwargs')   : None,
+            ('SolverParams', 'lr_scheduler')        : None,
+            ('SolverParams', 'lr_scheduler_args')   : ('SolverParams', 'decay_rate_lr'),
         }
 
         # read_dict from
