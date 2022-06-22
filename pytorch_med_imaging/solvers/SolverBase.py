@@ -14,9 +14,11 @@ from typing import Union, Iterable, Any
 from pathlib import Path
 
 import torchio as tio
+import pytorch_med_imaging.lr_scheduler as pmi_lr_scheduler
 from ..loss import *
 
 available_lr_scheduler = list(name for name, obj in inspect.getmembers(lr_scheduler) if inspect.isclass(obj))
+available_lr_scheduler += list(name for name, obj in inspect.getmembers(pmi_lr_scheduler) if inspect.isclass(obj))
 
 class SolverBase(object):
     """Base class for all solvers. This class must be inherited before it can work properly. The child
@@ -153,7 +155,10 @@ class SolverBase(object):
 
         if re.search("^[\W]+", name) is not None:
             raise ArithmeticError(f"Your lr_scheduler setting ({name}) contains illegal characters!")
-        sche_class = eval('lr_scheduler.' + name)
+        try:
+            sche_class = eval('lr_scheduler.' + name)
+        except AttributeError:
+            sche_class = eval('pmi_lr_scheduler.' + name)
         self.lr_scheduler = sche_class(self.optimizer, *args, **kwargs)
 
     def set_plotter(self, plotter):
