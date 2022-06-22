@@ -64,6 +64,20 @@ class backward_compatibility(object):
 
 
 class PMIController(object):
+    r"""This controller is the backbone of the package. To initiate training or inference, you will need to
+    first create an INI config file, using which an instance of PMIController can be created. Then simply call
+    either :func:`training()` or :func:`inference()` to run the code.
+
+    The INI file is first parsed using :func:`_unpack_config`. The definitions of data type and default values
+    are hard-coded there.
+
+    Attributes:
+        solver (SolverBase):
+            If the running mode is set to "training", the PMIController will create a :class:`SolverBase` instance
+            duing :func:`training()` according to the option `('General', 'run_type')`
+        inferencer (InferencerBase):
+            Similar to solver, but it is created during :func:`inference()` instead.
+    """
     def __init__(self, config: Any, a: argparse.Namespace):
         self.logger = MNTSLogger[self.__class__.__name__]
 
@@ -117,6 +131,14 @@ class PMIController(object):
             self.validation_FLAG=True
 
     def create_solver(self, run_type: str) -> SolverBase:
+        r"""This is a pseudo factory that produces a solver instance based on the name specified.
+
+        Args:
+            run_type (str):
+                The name of the solver, no need to include the term "Solver".
+        Returns:
+            SolverBase
+        """
         # check run_type is safe from attacks
         if re.search("[\W]+", run_type) is not None:
             raise ArithmeticError(f"Your run_type ({run_type}) contains illegal characters!")
