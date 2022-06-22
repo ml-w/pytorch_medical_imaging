@@ -176,6 +176,7 @@ class TestSolvers(TestController):
 
     def test_create_optimizer(self):
         self.solver.create_optimizer(self.solver.net.parameters())
+        self.assertEqual(self.solver.solverparams_learning_rate,  self.solver.get_last_lr())
 
     def test_validation(self):
         self.solver._last_epoch_loss = 10

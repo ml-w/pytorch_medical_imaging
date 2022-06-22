@@ -247,10 +247,10 @@ class SolverBase(object):
 
         """
         if self.solverparams_optimizer_type == 'Adam':
-            self.optimizer = torch.optim.Adam(net_params, lr=self.solverparams_decay_rate_lr)
+            self.optimizer = torch.optim.Adam(net_params, lr=self.solverparams_learning_rate)
         elif self.solverparams_optimizer_type == 'SGD':
-            self.optimizer = torch.optim.SGD(net_params, lr=self.solverparams_decay_rate_lr,
-                                             momentum=self.solverparams_decay_rate_mom)
+            self.optimizer = torch.optim.SGD(net_params, lr=self.solverparams_learning_rate,
+                                             momentum=self.solverparams_momentum)
         else:
             raise AttributeError(f"Expecting optimzer to be one of ['Adam'|'SGD']")
         return self.optimizer
