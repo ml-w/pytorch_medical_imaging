@@ -12,7 +12,7 @@ from torch.optim import lr_scheduler
 from torch.utils.data import DataLoader
 
 from pytorch_med_imaging.pmi_controller import PMIController
-
+from pytorch_med_imaging.lr_scheduler import *
 
 class TestController(unittest.TestCase):
     def __init__(self, *args, sample_config = "./sample_data/config/sample_config_seg.ini", **kwargs):
@@ -159,17 +159,73 @@ class TestSolvers(TestController):
                 {'T_mult': 2,
                  'eta_min': 1E-6
                  }
+            ],
+            'DecayCAWR': [
+                [0.95, 10], # exp, T0
+                {'T_mult': 1,
+                 'eta_min': 1E-6}
             ]
         }
+        self.logger.info("Testing creating of learning rate schedulers.")
         for key, val in scheduler_args.items():
             _args = val[0]
             _kwargs = val[1] if len(val) > 1 else {}
             try:
                 self.solver.set_lr_scheduler(key, *_args, **_kwargs)
-                self.logger.info(f"Passed for {key}")
+                self.logger.info(f"Passed for {key}.")
             except Exception as e:
                 self.fail(f"Fail when creating lr_scheduler {key}")
-        pass
+
+
+    def test_create_lr_schedulers_from_config(self):
+        scheduler_args = {
+            # Lambda is unavailble duel to the nature of ast.literal_eval
+            # 'LambdaLR': [
+            #     "[lambda epoch: 0.95 ** epoch]",
+            #     "{}"
+            # ],
+            'StepLR': [
+                "[0.1]", # step size
+                "{}"
+            ],
+            'ConstantLR': [
+                "[]", # if no args, needs to put an empty list here
+                "{'total_iters': 5,'factor': 0.5}"
+            ],
+            'LinearLR': [
+                "[]",
+                "{'start_factor': 0.5,'end_factor': 1}"
+            ],
+            'ExponentialLR': [
+                "[0.99]", # gamma,
+                "{}" # if no kwargs, put empty dict here
+            ],
+            'CosineAnnealingWarmRestarts': [
+                "[50]",
+                "{'T_mult': 2,'eta_min': 1E-6}"
+            ],
+            'DecayCAWR': [
+                "[0.95, 10]", # exp, T0
+                "{'T_mult': 1,'eta_min': 1E-6}"
+            ]
+        }
+        # Test create from config
+        self.logger.info("Testing creating of learning scheduler using config file.")
+        for key, val in scheduler_args.items():
+            self.config['SolverParams']['lr_scheduler'] = key
+            self.config['SolverParams']['lr_scheduler_args'] = val[0]
+            self.config['SolverParams']['lr_scheduler_kwargs'] = val[1]
+            try:
+                self.controller._unpack_config(self.config)
+                if isinstance(self.controller.solverparams_lr_scheduler_args, (float, int, str)):
+                    self.controller.solverparams_lr_scheduler_args = [self.controller.solverparams_lr_scheduler_args]
+                self.solver.set_lr_scheduler(self.controller.solverparams_lr_scheduler,
+                                             *self.controller.solverparams_lr_scheduler_args,
+                                             **self.controller.solverparams_lr_scheduler_kwargs)
+                self.logger.info(f"Passed for {key}.")
+            except:
+                self.fail(f"Fail when creating lr_schedule {key} from config.")
+
 
     def test_create_lossfunction(self):
         self.solver.create_lossfunction()
@@ -235,3 +291,5 @@ class TestrAIdiologistSolver(TestSolvers):
             *args,
             sample_config = "./sample_data/config/sample_config_rAIdiologist.ini",
             **kwargs)
+
+

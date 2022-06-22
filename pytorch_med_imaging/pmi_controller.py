@@ -476,11 +476,11 @@ class PMIController(object):
                     else:
                         val = CASTING_KEYS[dict_key](val)
 
-                # if it starts with "{' automatically make this a dictionary
+                # try to eval any string
                 if isinstance(val, str):
                     try:
                         val = ast.literal_eval(val)
-                    except:
+                    except Exception as e:
                         pass
                 att_dict[att_key.lower()] = val
 
