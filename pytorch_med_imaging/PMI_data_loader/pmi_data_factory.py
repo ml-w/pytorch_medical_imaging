@@ -37,6 +37,9 @@ class PMIDataFactory(object):
         self._logger.log_print_tqdm("Creating object: {}".format(requested_datatype))
 
         try:
+            if re.search("[\W]+", requested_datatype.translate(str.maketrans('', '', "(), "))) is not None:
+                raise AttributeError(f"You requested_datatype specified ({requested_datatype}) "
+                                     f"contains illegal characters!")
             product = eval(requested_datatype)(config,
                                                run_mode,
                                                debug=debug,
