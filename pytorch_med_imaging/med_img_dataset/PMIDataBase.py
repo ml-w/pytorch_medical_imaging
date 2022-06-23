@@ -1,3 +1,4 @@
+import torch
 from mnts.mnts_logger import MNTSLogger
 from torch.utils.data import Dataset
 from abc import *
@@ -22,7 +23,9 @@ class PMIDataBase(Dataset):
 
 
     @abstractmethod
-    def __getitem__(self, item):
+    def __getitem__(self, item) -> torch.Tensor:
+        """All classes that inherit this should have this function implemented to return a
+        torch.Tensor instance."""
         raise NotImplementedError("Unfinished class implementation.")
 
     @abstractmethod

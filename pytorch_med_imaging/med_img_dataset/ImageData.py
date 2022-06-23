@@ -276,7 +276,6 @@ class ImageDataSet(PMIDataBase):
         self.length = len(self.data_source_path)
         self._logger.info("Finished loading. Loaded {} files.".format(self.length))
 
-
     def _filter_filelist(self, file_dirs, filtered_away, removed_fnames):
         r"""Filter the `file_dirs` using the specified attributions. Used in `parse_root_dir`."""
         # Filter by filelist

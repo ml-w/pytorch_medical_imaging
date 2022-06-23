@@ -99,8 +99,11 @@ class DataLabel(PMIDataBase):
     def to_numpy(self):
         return self._data_table.to_numpy()
 
-    def get_unique_IDs(self):
+    def get_unique_IDs(self, *args):
         return list(self._data_table.index)
+
+    def get_data_by_ID(self, id):
+        return self.__getitem__(id)
 
     def __len__(self):
         return len(self._data_table)
@@ -111,8 +114,6 @@ class DataLabel(PMIDataBase):
 
         if isinstance(item, int):
             out = self._get_table.iloc[item]
-        elif isinstance(item, str):
-            out = self._get_table.loc[item]
         else:
             out = self._get_table.loc[item]
 
