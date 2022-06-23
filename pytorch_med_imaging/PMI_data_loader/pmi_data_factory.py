@@ -2,6 +2,7 @@ from .pmi_img_feat_pair_dataloader import PMIImageFeaturePair
 from .pmi_image_dataloader import PMIImageDataLoader
 from mnts.mnts_logger import MNTSLogger
 import traceback as tr
+import re
 
 __all__ = ['PMIDataFactory']
 
