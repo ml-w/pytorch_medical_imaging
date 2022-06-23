@@ -174,17 +174,8 @@ class PMIController(object):
         loader, loader_val = self.prepare_loaders()
 
         # Set learning rate scheduler, TODO: move this to solver
-        # if self.solverparams_decay_on_plateau:
-        #     self.logger.log_print_tqdm("Optimizer decay on plateau.")
-        #     _lr_scheduler_dict = eval(self.solverparams_lr_scheduler_dict)
-        #     if not isinstance(_lr_scheduler_dict, dict):
-        #         self.logger.error("lr_scheduler_dict must eval to a dictionary! "
-        #                           "Got {} instead.".format(_lr_scheduler_dict))
-        #         return
-        #     self.logger.debug("Got lr_schedular_dict: {}.".format(self.solverparams_lr_scheduler_dict))
-        #     solver.set_lr_decay_to_reduceOnPlateau(3, param_decay, **_lr_scheduler_dict)
-        # else:
-        #     solver.set_lr_decay_exp(self.solverparams_decay_rate_lr)
+        if self.solverparams_decay_on_plateau:
+            self._logger.warning("Decay on plateau option is deprecated.")
 
         if self.solverparams_lr_scheduler is not None:
             self._logger.info(f"Creating lr_scheduler: {self.solverparams_lr_scheduler}.")
@@ -433,11 +424,11 @@ class PMIController(object):
             ('SolverParams', 'lr_scheduler_kwargs'): dict,
             ('SolverParams', 'early_stop')         : dict,
             ('RunParams'   , 'batch_size')         : int,
+            ('SolverParams', 'decay_on_plateau')   : bool,  # Deprecated
             ('General'     , 'plot_tb')            : bool,
             ('General'     , 'use_cuda')           : bool,
             ('General'     , 'debug')              : bool,
-            ('General'     , 'debug_validation')   : bool,
-            ('RunParams'   , 'decay_on_plateau')   : bool
+            ('General'     , 'debug_validation')   : bool
         }
         DEFAULT_DICT = {
             ('General'     , 'run_mode')            : 'training',
@@ -445,9 +436,9 @@ class PMIController(object):
             ('Checkpoint'  , 'cp_load_dir')         : "",
             ('Checkpoint'  , 'cp_save_dir')         : "",
             ('Filters'     , 're_suffix')           : "(.*)",
-            ('Data'        , 'validation_input_dir'): ('Data'       , 'input_dir'),
-            ('Data'        , 'validation_gt_dir')   : ('Data'       , 'target_dir'),
-            ('Filters'     , 'validation_re_suffix'): ('Filters'    , 're_suffix'),
+            ('Data'        , 'validation_input_dir'): ('Data'        , 'input_dir'),
+            ('Data'        , 'validation_gt_dir')   : ('Data'        , 'target_dir'),
+            ('Filters'     , 'validation_re_suffix'): ('Filters'     , 're_suffix'),
             ('RunParams'   , 'initial_weight')      : None,
             ('Network'     , 'initialization')      : None,
             ('Filters'     , 'id_list')             : None,
@@ -455,6 +446,11 @@ class PMIController(object):
             ('LoaderParams', 'PMI_loader_name')     : None,
             ('LoaderParams', 'PMI_loader_kwargs')   : None,
             ('SolverParams', 'lr_scheduler')        : None,
+            ('SolverParams', 'decay_on_plateau')    : False,
+            ('General'     , 'plot_tb')             : False,
+            ('General'     , 'use_cuda')            : False,
+            ('General'     , 'debug')               : False,
+            ('General'     , 'debug_validation')    : False,
             ('SolverParams', 'lr_scheduler_args')   : ('SolverParams', 'decay_rate_lr'),
         }
 
