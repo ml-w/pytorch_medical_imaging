@@ -1,5 +1,6 @@
 import torch
 import pandas as pd
+from pathlib import Path
 from .PMIDataBase import PMIDataBase
 
 class DataLabel(PMIDataBase):
@@ -8,6 +9,8 @@ class DataLabel(PMIDataBase):
         Datasheet should b arrange with rows of values
         """
         super(DataLabel, self).__init__()
+        if isinstance(data_table, (str, Path)):
+            data_table = pd.read_csv(str(data_table), index_col=0)
         assert isinstance(data_table, pd.DataFrame)
 
 
