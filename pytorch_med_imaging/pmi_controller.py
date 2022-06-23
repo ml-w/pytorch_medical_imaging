@@ -373,9 +373,9 @@ class PMIController(object):
         if a.batch_size:
             self.config['RunParams']['batch_size'] = str(a.batch_size)
         if a.epoch:
-            self.config['RunParams']['num_of_epochs'] = str(a.epoch)
+            self.config['SolverParams']['num_of_epochs'] = str(a.epoch)
         if a.lr:
-            self.config['RunParams']['learning_rate'] = str(a.lr)
+            self.config['SolverParams']['learning_rate'] = str(a.lr)
         if a.debug_validation:
             self.config['General']['debug']            = "yes"
             self.config['General']['debug_validation'] = "yes"
