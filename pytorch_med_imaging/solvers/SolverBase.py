@@ -330,7 +330,7 @@ class SolverBase(object):
         self._last_epoch_loss = epoch_loss
 
         self._logger.info("Initiating validation.")
-        self.validation()
+        self._last_val_loss = self.validation()
         self._epoch_callback()
         self.decay_optimizer(epoch_loss)
 

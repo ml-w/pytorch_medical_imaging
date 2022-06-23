@@ -91,7 +91,7 @@ class SegmentationSolver(SolverBase):
     def validation(self) -> list:
         if self._data_loader_val is None:
             self._logger.warning("Validation skipped because no loader is available.")
-            return []
+            return None
 
         with torch.no_grad():
             validation_loss = []
@@ -132,7 +132,7 @@ class SegmentationSolver(SolverBase):
 
         self.plotter_dict['scalars']['Loss/Validation Loss'] = mean_val_loss
         self.plotter_dict['scalars']['Perf/Validation DSC'] = dsc
-        return [mean_val_loss]
+        return mean_val_loss
 
     def _feed_forward(self, *args):
         s, g = args

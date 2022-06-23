@@ -35,7 +35,7 @@ class BinaryClassificationSolver(ClassificationSolver):
     def validation(self):
         if self._data_loader_val is None:
             self._logger.warning("Validation skipped because no loader is available.")
-            return []
+            return None
 
         with torch.no_grad():
             self.net = self.net.eval()
@@ -91,7 +91,7 @@ class BinaryClassificationSolver(ClassificationSolver):
         for param, val in per_mean.iteritems():
             self.plotter_dict['scalars']['Performance/%s'%param] = val
 
-        return validation_loss, acc
+        return validation_loss
 
     @staticmethod
     def _compute_performance(dics: Iterable[torch.IntTensor],

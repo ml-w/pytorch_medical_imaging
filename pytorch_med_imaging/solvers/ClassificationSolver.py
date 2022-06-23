@@ -83,7 +83,7 @@ class ClassificationSolver(SolverBase):
     def validation(self):
         if self._data_loader_val is None:
             self._logger.warning("Validation skipped because no loader is available.")
-            return []
+            return None
         with torch.no_grad():
             self.net.eval()
 
@@ -113,5 +113,5 @@ class ClassificationSolver(SolverBase):
 
         self.plotter_dict['scalars']['Loss/Validation Loss'] = validation_loss
         self.plotter_dict['scalars']['Performance/ACC'] = acc
-        return validation_loss, acc
+        return validation_loss
 
