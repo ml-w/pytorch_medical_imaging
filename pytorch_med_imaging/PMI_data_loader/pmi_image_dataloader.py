@@ -291,6 +291,10 @@ class PMIImageDataLoader(PMIDataLoaderBase):
         # Create queue
         # If option to use post-sampling processing was provided, use CallbackQueue instead
         if  self.patch_sampling_callback != "":
+            # check if there's illegal characters in the patch_sampling_callback
+            if re.search("[\W]+", self.patch_sampling_callback.translate(str.maketrans('', '', "(), "))) is not None:
+                raise AttributeError(f"You patch_sampling_callback specified ({self.patch_sampling_callback}) "
+                                     f"contains illegal characters!")
             _callback_func = eval(self.patch_sampling_callback)
             _callback_func = partial(_callback_func, **self.patch_sampling_callback_kwargs)
             queue = CallbackQueue(subjects, *self.queue_args,
