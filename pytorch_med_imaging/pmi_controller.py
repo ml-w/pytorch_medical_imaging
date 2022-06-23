@@ -190,9 +190,9 @@ class PMIController(object):
             self._logger.info(f"Creating lr_scheduler: {self.solverparams_lr_scheduler}.")
             if isinstance(self.solverparams_lr_scheduler_args, (float, int, str)):
                 self.solverparams_lr_scheduler_args = [self.solverparams_lr_scheduler_args]
-            self.solver.set_lr_scheduler(self.solverparams_lr_scheduler,
-                                         *self.solverparams_lr_scheduler_args,
-                                         **self.solverparams_lr_scheduler_kwargs)
+            solver.set_lr_scheduler(self.solverparams_lr_scheduler,
+                                    *self.solverparams_lr_scheduler_args,
+                                    **self.solverparams_lr_scheduler_kwargs)
 
         else:
             self._logger.info("LR scheduler not specified, using default exponential.")
