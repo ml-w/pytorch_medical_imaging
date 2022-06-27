@@ -16,19 +16,22 @@ class PMIDataFactory(object):
         self._logger = MNTSLogger[__class__.__name__]
 
 
-    def produce_object(self, config):
+    def produce_object(self, config, run_mode=None):
         """
         Use this to produce a dataset loader.
 
         Args:
             config (configparser.ConfigParser):
                 This is the same as the config file you loaded in the main thread.
+            run_mode (str):
+                'train' or 'inference'.
 
         Returns:
             product (PMIDataLoaderBase)
         """
         requested_datatype = config['LoaderParams']['PMI_datatype_name']
-        run_mode = config['General'].get('run_mode', 'training')
+        if run_mode is None:
+            run_mode = config['General'].get('run_mode', 'training')
         # Force loading training data
         force_train_data = config['General'].getboolean('force_train_data', False)
         if force_train_data:
@@ -41,6 +44,12 @@ class PMIDataFactory(object):
             if re.search("[\W]+", requested_datatype.translate(str.maketrans('', '', "(), "))) is not None:
                 raise AttributeError(f"You requested_datatype specified ({requested_datatype}) "
                                      f"contains illegal characters!")
+            if requested_datatype not in self._possible_products:
+                msg += f"Expect requested_datatype to be one of the followings: " \
+                       f"[{'|'.join(self._possible_products.keys())}], " \
+                       f"but got {requested_datatype}."
+                raise AttributeError(msg)
+
             product = eval(requested_datatype)(config,
                                                run_mode,
                                                debug=debug,
