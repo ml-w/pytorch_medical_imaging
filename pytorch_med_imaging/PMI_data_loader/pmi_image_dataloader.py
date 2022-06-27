@@ -107,7 +107,8 @@ class PMIImageDataLoader(PMIDataLoaderBase):
             'augmentation': '',
             'create_new_attribute': "",
             'patch_sampling_callback': "",
-            'patch_sampling_callback_kwargs': {}
+            'patch_sampling_callback_kwargs': {},
+            'inf_samples_per_vol': None
         }
         self._load_default_attr(default_attr)
         self._logger.info(f"Read local attributes: {[self.__getattribute__(i) for i in default_attr]}")
@@ -181,17 +182,20 @@ class PMIImageDataLoader(PMIDataLoaderBase):
 
         self.data = self._prepare_data(gt_out, img_out, mask_out, prob_out)
         # Create transform
-        self._create_transform(exclude_augment=exclude_augment)
+        trasnform = self._create_transform(exclude_augment=exclude_augment)
 
         # Create subjects & queue
-        data_exclude_none = {k: v for k, v in self.data.items() if v is not None}
-        subjects = [tio.Subject(**{k:v for k, v in zip(data_exclude_none.keys(), row)})
-                    for row in zip(*data_exclude_none.values())]
-        subjects = tio.SubjectsDataset(subjects=subjects, transform=self.transform)
+        subjects = self._pack_data_into_subjects(self.data)
 
         # Return the queue
         return self._create_queue(exclude_augment, subjects)
 
+    def _pack_data_into_subjects(self, data: dict):
+        data_exclude_none = {k: v for k, v in data.itmes() if v is not None}
+        subjects = [tio.Subject(**{k: v for k, v in zip(data_exclude_none.keys(), row)})
+                    for row in zip(*data_exclude_none.values())]
+        subjects = tio.SubjectsDataset(subjects=subjects, transform=transform)
+        return subjects
 
     def _load_data_set_inference(self) -> [tio.Queue, tio.GridSampler] or [tio.SubjectsDataset, None]:
         """Same as :func:`_load_data_set_training` in this class, except the ground-truth is
@@ -211,18 +215,16 @@ class PMIImageDataLoader(PMIDataLoaderBase):
 
         self.data = self._prepare_data(gt_out, img_out, None, prob_out)
         # Creat transform
-        self._create_transform(exclude_augment = True)
+        transform = self._create_transform(exclude_augment = True)
 
         # Create subjects & queue
-        data_exclude_none = {k: v for k, v in self.data.items() if v is not None}
-        subjects = [tio.Subject(**{k:v for k, v in zip(data_exclude_none.keys(), row)})
-                    for row in zip(*data_exclude_none.values())]
-        subjects = tio.SubjectsDataset(subjects=subjects, transform=self.transform)
+        subjects = self._pack_data_into_subjects(self.data)
 
+        # override the number of patches drawn in this special case
+        if self.inf_samples_per_vol is not None:
+            self.queue_kwargs['samples_per_volume'] = int(self.inf_samples_per_vol)
         # No transform for subjects
-        r = [subjects]
-        r.extend(list(self._create_queue(True, subjects, return_sampler=True)))
-        return r
+        return self._create_queue(True, subjects, return_sampler=False)
 
     def _prepare_data(self, gt_out, img_out, mask_out, prob_out):
         """
@@ -324,3 +326,5 @@ class PMIImageDataLoader(PMIDataLoaderBase):
         else:
             return queue
 
+    def get_sampler(self):
+        return self.sampler
