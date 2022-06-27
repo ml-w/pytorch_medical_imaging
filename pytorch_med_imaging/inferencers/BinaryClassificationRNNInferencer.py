@@ -103,6 +103,7 @@ class BinaryClassificationRNNInferencer(ClassificationInferencer):
         for i in range(self._num_out_out_class):
             out_decisions[f'Prob_Class_{i}'] = sig_out[:, i].data.cpu().tolist()
             out_decisions[f'Decision_{i}'] = out_decision[:, i].tolist()
+            # This TARGET_DATASET_EXIST_FLAG used to be specified during inferencer creation, but is deprecated.
             if self._TARGET_DATASET_EXIST_FLAG:
                 self._logger.debug(f"Truth of {i}")
                 out_decisions[f'Truth_{i}'] = self._target_dataset._data_table.iloc[:,i].tolist()
