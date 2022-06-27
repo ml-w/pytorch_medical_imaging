@@ -4,6 +4,7 @@ from .computations import *
 from .augmenter_factory import create_transform_compose
 from .lambda_tio_adaptor import CallbackQueue
 
+from typing import *
 from pathlib import Path
 from functools import partial
 import torchio as tio
@@ -166,9 +167,9 @@ class PMIImageDataLoader(PMIDataLoaderBase):
         return img_data
 
     def _load_data_set_training(self,
-                                exclude_augment: bool = False):
+                                exclude_augment: bool = False) -> tio.Queue:
         """
-        Load ImageDataSet for input and segmentation.
+        Load ImageDataSet for input and segmentation. For more see :func:`create_transform()`.
         """
         if self._target_dir is None:
             raise IOError(f"Cannot load from {self._target_dir}")
@@ -193,7 +194,8 @@ class PMIImageDataLoader(PMIDataLoaderBase):
 
 
     def _load_data_set_inference(self) -> [tio.Queue, tio.GridSampler] or [tio.SubjectsDataset, None]:
-        """Same as :func:`_load_data_set_training` in this class."""
+        """Same as :func:`_load_data_set_training` in this class, except the ground-truth is
+        not loaded."""
         img_out = self._read_image(self._input_dir, dtype=self.data_types[0])
         prob_out = self._prepare_probmap()
 
@@ -254,6 +256,8 @@ class PMIImageDataLoader(PMIDataLoaderBase):
         return prob_out
 
     def _determine_patch_size(self, im_ref):
+        r"""If `load_by_slice` of :class:`ImageDataSet` is setted, this method will calculate the patch-size
+        automatically for the queue sampler."""
         if self.patch_size is not None:
             return
         else:
@@ -264,7 +268,15 @@ class PMIImageDataLoader(PMIDataLoaderBase):
             else:
                 self.patch_size = ref_im_shape
 
-    def _create_queue(self, exclude_augment, subjects, return_sampler=False):
+    def _create_queue(self,
+                      exclude_augment: bool,
+                      subjects: tio.SubjectsDataset,
+                      return_sampler: Optional[bool] =False) -> [tio.Queue, tio.GridSampler] or \
+                                                                [tio.SubjectsDataset, None]:
+        r"""This method build the queue from the input subjects. If the queue involves a :class:`tio.GridSampler`,
+        it is generally needed by the inferencer to reconstruct it back into its original dimension. Thus, an
+        optional to also return the sampler is given.
+        """
         # Return the queue
         if not self.patch_size is None:
             overlap = [ps // 2 for ps in self.patch_size]
