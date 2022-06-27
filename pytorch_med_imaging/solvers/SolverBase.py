@@ -43,6 +43,13 @@ class SolverBase(object):
     """
     def __init__(self, net: torch.nn.Module, hyperparam_dict: dict, use_cuda: bool, debug:bool = False, **kwargs):
         super(SolverBase, self).__init__()
+        # error check
+        if not isinstance(net, torch.nn.Module):
+            msg += f"Expect input net is an instance of nn.Module, but got type {type(net)} input."
+            raise TypeError(msg)
+        if not isinstance(hyperparam_dict, dict):
+            msg += f"Expect hyperparam_dict to be a dictionary, but got type {type(hyperparam_dict)} input."
+            raise TypeError(msg)
 
         self.net = net
         self.iscuda = use_cuda
