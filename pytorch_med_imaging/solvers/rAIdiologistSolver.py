@@ -15,9 +15,12 @@ class rAIdiologistSolver(BinaryClassificationSolver):
         super(rAIdiologistSolver, self).__init__(*args, **kwargs)
 
         self._current_mode = None # initially, the mode is unsetted
-        if Path(self.solverparams_rAI_pretrained_swran).is_file():
-            self._logger.info(f"Loading pretrained network from: {self.solverparams_rAI_pretrained_swran}")
-            self.net.load_pretrained_swran(self.solverparams_rAI_pretrained_swran)
+        if Path(self.solverparams_rai_pretrained_swran).is_file():
+            self._logger.info(f"Loading pretrained network from: {self.solverparams_rai_pretrained_swran}")
+            self.net.load_pretrained_swran(self.solverparams_rai_pretrained_swran)
+        else:
+            self._logger.warning(f"Pretrained network specified ({self.solverparams_rai_pretrained_swran}) "
+                                 f"but not loaded.")
 
         if os.getenv('CUBLAS_WORKSPACE_CONFIG') not in [":16:8", ":4096:2"]:
             self._logger.warning(f"Env variable CUBLAS_WORKSPACE_CONFIG was not set properly, which may invalidate"
@@ -25,14 +28,14 @@ class rAIdiologistSolver(BinaryClassificationSolver):
 
     def create_lossfunction(self):
         self.lossfunction = ConfidenceBCELoss()
-        self.lossfunction.conf_weight = self.solverparams_rAI_conf_weight
+        self.lossfunction.conf_weight = self.solverparams_rai_conf_weight
 
     def _load_default_attr(self, default_attr):
         _default_attr = {
-            'solverparams_rAI_fixed_mode': None,
-            'solverparams_rAI_conf_weight': 0.2,
-            'solverparams_rAI_conf_weight_scheduler': 'default',
-            'solverparams_rAI_pretrained_swran': ""
+            'solverparams_rai_fixed_mode': None,
+            'solverparams_rai_conf_weight': 0.2,
+            'solverparams_rai_conf_weight_scheduler': 'default',
+            'solverparams_rai_pretrained_swran': ""
         }
         if isinstance(default_attr, dict):
             _default_attr.update(default_attr)
@@ -75,12 +78,12 @@ class rAIdiologistSolver(BinaryClassificationSolver):
         total_epoch = self.solverparams_num_of_epochs
 
         # Schedule mode of the network and findout if new mode is needed
-        if self.solverparams_rAI_fixed_mode is None:
+        if self.solverparams_rai_fixed_mode is None:
             # mode is scheduled to occupy 25% of all epochs
             epoch_progress = current_epoch / float(total_epoch)
             current_mode = min(int(epoch_progress * 4) + 1, 4)
         else:
-            current_mode = int(self.solverparams_rAI_fixed_mode)
+            current_mode = int(self.solverparams_rai_fixed_mode)
 
         # If new mode is needed, change mode
         if not current_mode == self._current_mode:
@@ -99,12 +102,12 @@ class rAIdiologistSolver(BinaryClassificationSolver):
         if self._current_mode in (3, 4):
             # step conf loss function scheduler
             if isinstance(self.lossfunction, ConfidenceBCELoss):
-                self._logger.info(f"Stepping conf loss using mode: {self.solverparams_rAI_conf_weight_scheduler}")
-                if self.solverparams_rAI_conf_weight_scheduler == 'default':
+                self._logger.info(f"Stepping conf loss using mode: {self.solverparams_rai_conf_weight_scheduler}")
+                if self.solverparams_rai_conf_weight_scheduler == 'default':
                     if self.lossfunction.conf_factor == 0: # generally in mode 1 & 2, confidence is ignored
                         self.lossfunction.conf_factor = 0.1
                     self.lossfunction.conf_factor = min(self.lossfunction.conf_factor * 1.05, 0.8)
-                if self.solverparams_rAI_conf_weight_scheduler == 'constant':
+                if self.solverparams_rai_conf_weight_scheduler == 'constant':
                     self._logger.debug("Nothing was done.")
                     return
                 self._logger.info(f"Updated conf loss: {self.lossfunction.conf_factor}")
