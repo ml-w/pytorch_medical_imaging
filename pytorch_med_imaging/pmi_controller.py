@@ -98,7 +98,7 @@ class PMIController(object):
 
         # Create net
         try:
-            if re.search("[\W]+", self.network_network_type.translate(str.maketrans('', '', "(), "))) is not None:
+            if re.search("[\W]+", self.network_network_type.translate(str.maketrans('', '', "(), ="))) is not None:
                 raise AttributeError(f"You net_nettype specified ({self.network_network_type}) contains illegal characters!")
             self.net = eval(self.network_network_type)
             so = re.search('.+?(?=\()', self.network_network_type)
@@ -169,6 +169,7 @@ class PMIController(object):
     def training(self) -> None:
         #-------------------------------
         # Create training solver and net
+        self._logger.info("Start training...")
         self._logger.info(f"Creating solver: {self.general_run_type}")
         solver = self.create_solver(self.general_run_type)
         loader, loader_val = self.prepare_loaders()
@@ -239,55 +240,24 @@ class PMIController(object):
     def inference(self):
         self._logger.log_print_tqdm("Starting evaluation...")
         loader, loader_val = self.prepare_loaders()
+        inferencer = self.create_inferencer()
+        inferencer.set_dataloader(loader, loader_val)
+        inferencer.override_data_loader(self.pmi_data)
 
-        #------------------------
-        # Create testing inferencer
-        if run_type == 'Segmentation':
-            infer_class = SegmentationInferencer
-        elif run_type == 'Classification':
-            infer_class = ClassificationInferencer
-        elif run_type == 'BinaryClassification':
-            infer_class = BinaryClassificationInferencer
-        elif run_type == 'BinaryClassificationRNN':
-            infer_class = BinaryClassificationRNNInferencer
-        elif run_type == 'Survival':
-            infer_class = SurvivalInferencer
-        elif run_type == 'rAIdiologist':
-            infer_class = rAIdiologistInferencer
-        else:
-            self._logger.error('Wrong run_type setting!')
-            raise NotImplementedError("Not implemented inference type: {}".format(run_type))
+        # if self.solverparams_write_mode == 'GradCAM':
+        #     #TODO: custom grad cam layers
+        #     raise NotImplementedError("GradCAM is not implemented")
+        #     inferencer.grad_cam_write_out(['att2'])
 
-        inferencer = infer_class(param_batchsize,
-                                 net,
-                                 checkpoint_load,
-                                 dir_output,
-                                 bool_usecuda,
-                                 pmi_data,
-                                 config)
-
-
-        # Pass PMI to inferencer if its specified
-        if not data_pmi_loader_kwargs is None:
-            logger.info("Overriding loader, setting to: {}".format(data_pmi_loader_kwargs))
-            loader_factory = PMIBatchSamplerFactory()
-            loader = loader_factory.produce_object(inputDataset, config)
-            inferencer.set_dataloader(loader)
-            logger.info("New loader type: {}".format(loader.__class__.__name__))
-
-        if write_mode == 'GradCAM':
-            #TODO: custom grad cam layers
-            inferencer.grad_cam_write_out(['att2'])
-        else:
-            with torch.no_grad():
-                if a.inference_all_checkpoints:
-                    try:
-                        inferencer.write_out_allcps()
-                    except AttributeError:
-                        logger.warning("Falling back to normal inference.")
-                        inferencer.write_out()
-                else:
+        with torch.no_grad():
+            if a.inference_all_checkpoints:
+                try:
+                    inferencer.write_out_allcps()
+                except AttributeError:
+                    logger.warning("Falling back to normal inference.")
                     inferencer.write_out()
+            else:
+                inferencer.write_out()
 
         # Output summary of results if implemented
         if not hasattr(inferencer, 'display_summary'):
@@ -299,7 +269,6 @@ class PMIController(object):
 
     def prepare_loaders(self) -> Iterable[PMIDataLoaderBase]:
         r"""This creates the loader, i.e. torchio iterables for the DataLoader"""
-        self._logger.log_print_tqdm("Start training...")
         trainingSubjects = self.pmi_data.load_dataset()
         validationSubjects = self.pmi_data_val.load_dataset() if self.validation_FLAG else (None, None)
         # Prepare dataset
@@ -333,7 +302,7 @@ class PMIController(object):
         for key in list(self.config['Data']):
             d = Path(self.config['Data'].get(key))
             if not d.is_file() and not d.is_dir() and not d == "":
-                if d.endswith('.csv'):
+                if d.suffix == '.csv':
                     continue
 
                 # Only warn instead of terminate for some path if in inference mode
@@ -436,21 +405,25 @@ class PMIController(object):
             ('Checkpoint'  , 'cp_load_dir')         : "",
             ('Checkpoint'  , 'cp_save_dir')         : "",
             ('Filters'     , 're_suffix')           : "(.*)",
-            ('Data'        , 'validation_input_dir'): ('Data'        , 'input_dir'),
-            ('Data'        , 'validation_gt_dir')   : ('Data'        , 'target_dir'),
-            ('Filters'     , 'validation_re_suffix'): ('Filters'     , 're_suffix'),
+            ('Data'        , 'input_dir')           : "",
+            ('Data'        , 'target_dir')          : None,
+            ('Data'        , 'validation_input_dir'): ('Data'   , 'input_dir'),
+            ('Data'        , 'validation_gt_dir')   : ('Data'   , 'target_dir'),
+            ('Filters'     , 'validation_re_suffix'): ('Filters', 're_suffix'),
             ('RunParams'   , 'initial_weight')      : None,
             ('Network'     , 'initialization')      : None,
             ('Filters'     , 'id_list')             : None,
             ('Filters'     , 'validation_id_list')  : None,
             ('LoaderParams', 'PMI_loader_name')     : None,
             ('LoaderParams', 'PMI_loader_kwargs')   : None,
+            ('LoaderParams', 'PMI_datatype_name')   : None,
             ('SolverParams', 'lr_scheduler')        : None,
             ('SolverParams', 'decay_on_plateau')    : False,
             ('General'     , 'plot_tb')             : False,
             ('General'     , 'use_cuda')            : False,
             ('General'     , 'debug')               : False,
             ('General'     , 'debug_validation')    : False,
+            ('SolverParams', 'decay_rate_lr')       : 0.99,
             ('SolverParams', 'lr_scheduler_args')   : ('SolverParams', 'decay_rate_lr'),
         }
 
@@ -459,7 +432,7 @@ class PMIController(object):
         for sections in config.sections():
             for keys in config[sections]:
                 dict_key = (sections, keys)
-                att_key = "_".join(dict_key).lower()
+                att_key = self._make_dict_key(sections, keys)
                 if dict_key in {k: v for k, v in CASTING_KEYS if v == bool}:
                     val = config[sections].getboolean(keys, False)
                 else:
@@ -478,16 +451,19 @@ class PMIController(object):
                         val = ast.literal_eval(val)
                     except Exception as e:
                         pass
-                att_dict[att_key.lower()] = val
+                att_dict[att_key] = val
 
         # read default if they don't exist
         for dict_key in DEFAULT_DICT:
-            att_key = "_".join(dict_key).lower()
+            att_key = self._make_dict_key(*dict_key)
             if att_key not in att_dict: # load default value if its not specified in the ini file
                 # If its a tuple, trace the source key
                 if isinstance(DEFAULT_DICT[dict_key], tuple):
                     _src_sec, _src_key = DEFAULT_DICT[dict_key]
-                    val = config[_src_sec][_src_key]
+                    try:
+                        val = config[_src_sec][_src_key]
+                    except:
+                        val = None
                 else:
                     val = DEFAULT_DICT[dict_key]
                 att_dict[att_key] = val
@@ -495,11 +471,15 @@ class PMIController(object):
             else:
                 continue
 
-        self.__dict__.update({'_'.join(k).lower(): v for k, v in DEFAULT_DICT.items()})
+        self.__dict__.update({self._make_dict_key(*k): v for k, v in DEFAULT_DICT.items()})
         self.__dict__.update(att_dict)
-        self.mode = self.general_run_mode in ('testing', 'test')
+        self.mode = self.general_run_mode in ('testing', 'test', 'inference')
         self.config = config
         return att_dict
+
+    @staticmethod
+    def _make_dict_key(sections: str, key: str):
+        return sections.lower() + "_" + key.lower()
 
     def _pack_config(self, sections: Union[str, Iterable[str]]) -> dict:
         r"""Pack loaded configs with the same subheader into a dictionary"""
@@ -517,6 +497,7 @@ class PMIController(object):
 
     def _get_from_config(self, item):
         r"""This override allow getting the access of options defined in the INI config"""
+        raise NotImplementedError
         try:
             self.__dict__[item]
         except KeyError as e:
