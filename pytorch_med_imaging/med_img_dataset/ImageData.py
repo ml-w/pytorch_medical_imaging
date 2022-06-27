@@ -1,10 +1,11 @@
-from torch import from_numpy, cat, stack, unique
-from torch.nn.functional import pad
+from typing import Any, Iterable, Optional, Union
 
-import torchio.typing
+import torch
+from torch import cat, unique
+
 from .PMIDataBase import PMIDataBase
-from tqdm import *
-from typing import Union, Optinoal, Any, Iterable
+
+import pandas as pd
 import torchio as tio
 import tqdm.auto as auto
 import fnmatch, re
@@ -384,7 +385,7 @@ class ImageDataSet(PMIDataBase):
         r"""Get shape of all files as a list (ignore load by slice option)."""
         return [self.get_size(i) for i in range(len(self.metadata))]
 
-    def check_shape_identical(self, target_imset: ImageDataSet) -> bool:
+    def check_shape_identical(self, target_imset: Any) -> bool:
         r"""Check if file shape is identical to another ImageDataSet.
         TODO: Add spacing, origin check into this function (Hint: see match_dimension.py)"""
         assert isinstance(target_imset, ImageDataSet), "Target is not image dataset."
