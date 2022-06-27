@@ -6,12 +6,16 @@ import torch
 from mnts.mnts_logger import MNTSLogger
 from pytorch_med_imaging.med_img_dataset import *
 
+
 class Test_PMIData(unittest.TestCase):
     def __init__(self, *args, **kwargs):
         super(Test_PMIData, self).__init__(*args, **kwargs)
         pass
 
     def setUp(self):
+        if self.__class__.__name__ == 'Test_PMIData':
+            raise unittest.SkipTest("Base class")
+
         self.temp_dir = tempfile.TemporaryDirectory()
         self.temp_dir_path = Path(self.temp_dir.name)
 
@@ -35,6 +39,9 @@ class Test_PMIData(unittest.TestCase):
     def test_getDataByIndex(self):
         data = self.data[0]
 
+    @classmethod
+    def get_class_name(cls):
+        return cls.__class__.__name__
 
 class Test_ImageDataSet(Test_PMIData):
     def __init__(self, *args, **kwargs):
