@@ -202,7 +202,7 @@ class SolverBase(object):
                     self._logger.error(f"Cannot load checkpoint from: {checkpoint_dir}")
                     raise e
                 else:
-                    self._logger.warning(f"Cannot load checkpoitn from {checkpoint_dir}")
+                    self._logger.warning(f"Cannot load checkpoint from {checkpoint_dir}")
         else:
             self._logger.warning("Checkpoint specified but doesn't exist!")
 
