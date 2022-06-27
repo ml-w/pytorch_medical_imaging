@@ -1,7 +1,10 @@
 from torch import from_numpy, cat, stack, unique
 from torch.nn.functional import pad
+
+import torchio.typing
 from .PMIDataBase import PMIDataBase
 from tqdm import *
+from typing import Union, Optinoal, Any, Iterable
 import torchio as tio
 import tqdm.auto as auto
 import fnmatch, re
@@ -9,7 +12,6 @@ import os
 import numpy as np
 import SimpleITK as sitk
 import nibabel as nib
-
 
 NIFTI_DICT = {
     "sizeof_hdr": int,
@@ -378,11 +380,11 @@ class ImageDataSet(PMIDataBase):
         self._logger.debug(f"Reading from: {file_dirs}")
         return file_dirs
 
-    def get_raw_data_shape(self):
+    def get_raw_data_shape(self) -> list:
         r"""Get shape of all files as a list (ignore load by slice option)."""
         return [self.get_size(i) for i in range(len(self.metadata))]
 
-    def check_shape_identical(self, target_imset):
+    def check_shape_identical(self, target_imset: ImageDataSet) -> bool:
         r"""Check if file shape is identical to another ImageDataSet.
         TODO: Add spacing, origin check into this function (Hint: see match_dimension.py)"""
         assert isinstance(target_imset, ImageDataSet), "Target is not image dataset."
@@ -408,7 +410,7 @@ class ImageDataSet(PMIDataBase):
 
         return all(truth_list)
 
-    def size(self, i=None):
+    def size(self, i=None) -> Union[int, torch.Size]:
         r"""Required by pytorch."""
         if i is None:
             try:
@@ -418,11 +420,11 @@ class ImageDataSet(PMIDataBase):
         else:
             return self.length
 
-    def type(self):
+    def type(self) -> Any:
         r"""Return datatype of the elements."""
         return self.data[0].type()
 
-    def as_type(self, t):
+    def as_type(self, t) -> None:
         r"""Cast all elements to specified type."""
         try:
             self.data = self.data.type(t)
@@ -431,7 +433,7 @@ class ImageDataSet(PMIDataBase):
             self._logger.error("Error encounted during type cast.")
             self._logger.log_traceback()
 
-    def get_data_source(self, i):
+    def get_data_source(self, i) -> str:
         r"""Get directory of the source of the i-th element."""
         if self._byslices >=0:
             try:
@@ -446,14 +448,15 @@ class ImageDataSet(PMIDataBase):
         else:
             return self.data_source_path[i]
 
-    def get_internal_index(self, i):
-        r"""If load by slice, get the image index instead of the stacked slice index."""
+    def get_internal_index(self, i) -> int:
+        r"""If load by slice, get the index of the image where the slice is extracted from."""
         if self._byslices >= 0:
             return int(np.argmax(self._itemindexes > i)) - 1
         else:
+            self._logger.warning("Seeking internal index when load_by_slice is off.")
             return i
 
-    def get_internal_slice_index(self, i):
+    def get_internal_slice_index(self, i) -> int:
         r"""If load by slice, get the slice number of the i-th 2D element in
         its original image."""
         if self._byslices >= 0:
@@ -461,7 +464,10 @@ class ImageDataSet(PMIDataBase):
         else:
             return i
 
-    def get_data_by_ID(self, id, globber=None, get_all=False):
+    def get_data_by_ID(self,
+                       id: int,
+                       globber: Optional[str] = None,
+                       get_all: Optional[bool] = False) -> Union[str, Iterable[str]]:
         r"""Get data by globbing ID from the basename of files."""
         if globber is None:
             globber = self._id_globber
@@ -477,7 +483,7 @@ class ImageDataSet(PMIDataBase):
                                  f"{[self.get_data_source(i) for i in np.where(np.array(ids)==id)[0]]}")
             return [self.__getitem__(i) for i in np.where(np.array(ids)==id)[0]]
 
-    def get_unique_IDs(self, globber=None):
+    def get_unique_IDs(self, globber: Optional[str] = None) -> Iterable[str]:
         r"""Get all IDs globbed by the specified globber. If its None,
         default globber used. If its not None, the class globber will be
         updated to the specified one.
@@ -496,7 +502,7 @@ class ImageDataSet(PMIDataBase):
                 outlist.append(f[matchobj.start():matchobj.end()])
         return outlist
 
-    def get_size(self, id: int):
+    def get_size(self, id: int) -> Iterable[int]:
         r"""Get the size of the original image. Gives 3D size. If load by slices, it will look for the internal
         index before returning the 3D size.
         """
@@ -507,9 +513,9 @@ class ImageDataSet(PMIDataBase):
             id = id % len(self.metadata)
             return [int(self.metadata[id]['dim'][i+1]) for i in range(3)]
 
-    def get_spacing(self, id):
+    def get_spacing(self, id: int) -> Iterable[float]:
         r"""Get the spacing of the original image. Ignores load by slice and
-        gives 3D spacing."""
+        gives 3D spacing. Note that the output is rounded to 8-th decimal place"""
         id = id % len(self.metadata)
         if self._byslices >= 0:
             raise DeprecationWarning("Load by slice is deprecated.")
@@ -517,20 +523,23 @@ class ImageDataSet(PMIDataBase):
         else:
             return [round(self.metadata[id]['pixdim'][i+1], 8) for i in range(3)]
 
-    def get_origin(self, id):
-        r"""Get the origin of the image."""
+    def get_origin(self, id: int) -> Iterable[float]:
+        r"""Get the origin of the image. Note that the output is rounded to the thrid decimal
+        place"""
         origin = [round(self.metadata[id][k], 3) for k in ['qoffset_x',
                                                           'qoffset_y',
                                                           'qoffset_z']]
         return origin
 
-    def get_direction(self, id):
+    def get_direction(self, id: int) -> Iterable[float]:
+        r"""Get the orientation of the image. Note that the output is rounded to the third
+        decimal place."""
         direction = [round(self.metadata[id][k], 3) for k in ['quatern_b',
                                                              'quatern_c',
                                                              'quatern_d']]
         return direction
 
-    def get_properties(self, id):
+    def get_properties(self, id: int) -> dict:
         r"""Get the properties of the target data inlucing spacing, orientation, origin, dimension...etc"""
         id = id % len(self.metadata)
 
@@ -543,14 +552,14 @@ class ImageDataSet(PMIDataBase):
                 'origin': origin,
                 'direction': direction}
 
-    def __len__(self):
+    def __len__(self) -> int:
         return self.length
 
-    def __iter__(self):
+    def __iter__(self) -> torch.Tensor:
         for r in range(len(self)):
             yield self.data[r]
 
-    def __getitem__(self, item):
+    def __getitem__(self, item) -> torch.Tensor:
         out = self.data[item][tio.DATA]
         return out
 
@@ -568,7 +577,7 @@ class ImageDataSet(PMIDataBase):
         s += self.metadata_table.to_string()
         return s
 
-    def update_metadata_table(self):
+    def update_metadata_table(self) -> pd.DataFrame:
         r"""
         Populate self.metadata_table
         """
@@ -592,7 +601,10 @@ class ImageDataSet(PMIDataBase):
         self.metadata_table = data
         return data
 
-    def write_all(self, tensor_data, outputdirectory, prefix=''):
+    def write_all(self,
+                  tensor_data: torch.Tensor,
+                  outputdirectory: str,
+                  prefix: Optional[str] = '') -> None:
         r"""Write data array to the output directory accordining to the image
         properties of the loaded images.
 
@@ -609,7 +621,11 @@ class ImageDataSet(PMIDataBase):
             source_file = self.data_source_path[i]
             self.write_uid(tensor_data[i].squeeze().numpy(), i, outputdirectory, prefix)
 
-    def write_uid(self, tensor_data, unique_id, outputdirectory, prefix=''):
+    def write_uid(self,
+                  tensor_data: torch.Tensor,
+                  unique_id: str,
+                  outputdirectory: str,
+                  prefix: Optional[str] = '') -> None:
         r"""Write data with reference to the source image with specified unique_id.
 
         Args:
@@ -647,7 +663,7 @@ class ImageDataSet(PMIDataBase):
         self._logger.info(f"Writing {out_name}")
         sitk.WriteImage(out_im, out_name)
 
-    def get_unique_values(self):
+    def get_unique_values(self) -> Any:
         r"""Get the tensor of all unique values in basedata. Only for integer tensors
         """
         assert self[0].is_floating_point() == False, \
@@ -655,7 +671,7 @@ class ImageDataSet(PMIDataBase):
         vals = unique(cat([unique(d) for d in self]))
         return vals
 
-    def get_unique_values_n_counts(self):
+    def get_unique_values_n_counts(self) -> dict:
         """Get a dictionary of unique values as key and its counts as value.
         """
         from torch.utils.data import DataLoader
