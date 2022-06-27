@@ -308,7 +308,9 @@ class SolverBase(object):
         except AttributeError:
             return None
 
-    def inference(self, *args):
+    def test_inference(self, *args):
+        r"""This function is for testing only. """
+        self._logger.warning("You should not use this method unless you know what you are doing.")
         with torch.no_grad():
             out = self.net.forward(*list(args))
         return out
