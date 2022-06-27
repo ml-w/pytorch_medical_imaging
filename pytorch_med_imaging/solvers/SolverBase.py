@@ -155,10 +155,14 @@ class SolverBase(object):
 
         if re.search("^[\W]+", name) is not None:
             raise ArithmeticError(f"Your lr_scheduler setting ({name}) contains illegal characters!")
+
+        # The Pytorch Vanilla lr_schedulers and the customized scheduler I wrote
         try:
             sche_class = eval('lr_scheduler.' + name)
         except AttributeError:
             sche_class = eval('pmi_lr_scheduler.' + name)
+        self._logger.debug(f"Optimizer args: {args}")
+        self._logger.debug(f"Optimizer kwargs: {kwargs}")
         self.lr_scheduler = sche_class(self.optimizer, *args, **kwargs)
 
     def set_plotter(self, plotter):
@@ -352,7 +356,7 @@ class SolverBase(object):
                     'Loss/Loss'           : None,
                     'Loss/Validation Loss': None
                 }
-                self.validation()
+                self._last_val_loss = self.validation()
 
             # Prepare values for epoch callback plots
             epoch_loss = self.get_last_epoch_loss()
