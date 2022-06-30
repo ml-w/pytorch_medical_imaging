@@ -34,15 +34,20 @@ class TestController(unittest.TestCase):
                                  logger_name='unittest', verbose=True, keep_file=False, log_level='debug')
 
         # create the controller
-        self.temp_config.writelines(self.sample_config.open('r').readlines())
-        self.temp_config.flush()
         config_obj = configparser.ConfigParser(interpolation=configparser.ExtendedInterpolation())
-        config_obj.read(self.temp_config.name)
+        config_obj.read(self.sample_config)
         self.config = config_obj
         self.config['Data']['output_dir'] = str(self.temp_output_path)
         self.config['Checkpoint']['cp_save_dir'] = str(self.temp_output_path.joinpath("temp_cp.pt"))
+        self.override_config()
+        self.config.write(self.temp_config)
+        # self.temp_config.writelines(self.sample_config.open('r').readlines())
+        self.temp_config.flush()
 
         self.controller = PMIController(self.temp_config.name, a=None)
+
+    def override_config(self):
+        return
 
     def tearDown(self):
         self.temp_output_dir.cleanup()
@@ -132,6 +137,8 @@ class TestSolvers(TestController):
         super(TestSolvers, self).__init__(*args, **kwargs)
         
     def setUp(self):
+        if self.__class__.__name__ == 'TestSolvers':
+            raise unittest.SkipTest("Base class.")
         super(TestSolvers, self).setUp()
         self.solver = self.controller.create_solver(self.controller.general_run_type)
         
@@ -299,6 +306,22 @@ class TestInferencer(TestController):
         super(TestInferencer, self).__init__(*args, **kwargs)
 
     def setUp(self):
-        raise unittest.SkipTest("temp skip")
+        if self.__class__.__name__ == 'TestInferencer':
+            raise unittest.SkipTest("Base class.")
         super(TestInferencer, self).setUp()
         self.infer = self.controller.create_inferencer(self.controller.general_run_type)
+
+
+class TestSegmentationInferencer(TestInferencer):
+    def __init__(self, *args, **kwargs):
+        super(TestSegmentationInferencer, self).__init__(
+            *args,
+            sample_config = "./sample_data/config/sample_config_seg.ini",
+            **kwargs)
+
+    def override_config(self):
+        override_dict = {
+            ('General', 'run_mode'): 'inference'
+        }
+        for (section, key), value in override_dict.items():
+            self.config[section][key] = str(value)
