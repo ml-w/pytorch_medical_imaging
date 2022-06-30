@@ -50,7 +50,7 @@ class InferencerBase(object):
         self.__dict__.update(hyperparam_dict)
 
         self.required_att = [
-            'solverparams_unpack_keys_inf'
+            'solverparams_unpack_keys_inference'
         ]
         self.check_attr()
         self._input_check()
@@ -62,7 +62,7 @@ class InferencerBase(object):
         r"""Inherit this to add to the list of required_att."""
         if any([hasattr(self, k) is False for k in self.required_att]):
             missing = ', '.join([a for a in self.required_att if hasattr(self, a) is False])
-            msg += f"The following attribute(s) is/are required to be specified in the SolverParams section but " \
+            msg = f"The following attribute(s) is/are required to be specified in the SolverParams section but " \
                    f"is/are missing: {missing}"
             raise AttributeError(msg)
 
