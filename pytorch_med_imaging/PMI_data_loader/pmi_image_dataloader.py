@@ -1,3 +1,5 @@
+import torchio
+import inspect
 from .pmi_dataloader_base import PMIDataLoaderBase
 from .. import med_img_dataset
 from .computations import *
@@ -9,6 +11,7 @@ from pathlib import Path
 from functools import partial
 import torchio as tio
 import multiprocessing as mpi
+import re
 
 __all__ = ['PMIImageDataLoader']
 
@@ -185,13 +188,13 @@ class PMIImageDataLoader(PMIDataLoaderBase):
         trasnform = self._create_transform(exclude_augment=exclude_augment)
 
         # Create subjects & queue
-        subjects = self._pack_data_into_subjects(self.data)
+        subjects = self._pack_data_into_subjects(self.data, transform)
 
         # Return the queue
         return self._create_queue(exclude_augment, subjects)
 
-    def _pack_data_into_subjects(self, data: dict):
-        data_exclude_none = {k: v for k, v in data.itmes() if v is not None}
+    def _pack_data_into_subjects(self, data: dict, transform):
+        data_exclude_none = {k: v for k, v in data.items() if v is not None}
         subjects = [tio.Subject(**{k: v for k, v in zip(data_exclude_none.keys(), row)})
                     for row in zip(*data_exclude_none.values())]
         subjects = tio.SubjectsDataset(subjects=subjects, transform=transform)
@@ -203,7 +206,7 @@ class PMIImageDataLoader(PMIDataLoaderBase):
         img_out = self._read_image(self._input_dir, dtype=self.data_types[0])
         prob_out = self._prepare_probmap()
 
-        if not self._target_dir is None:
+        if not self._target_dir in (None, 'None'):
             try:
                 gt_out = self._read_image(self._target_dir, dtype=self.data_types[1])
             except:
@@ -218,11 +221,14 @@ class PMIImageDataLoader(PMIDataLoaderBase):
         transform = self._create_transform(exclude_augment = True)
 
         # Create subjects & queue
-        subjects = self._pack_data_into_subjects(self.data)
+        subjects = self._pack_data_into_subjects(self.data, transform)
 
         # override the number of patches drawn in this special case
         if self.inf_samples_per_vol is not None:
-            self.queue_kwargs['samples_per_volume'] = int(self.inf_samples_per_vol)
+            self._logger.info(f"Override `samples_per_vol` {self.queue_args[1]} with "
+                              f"`inf_samples_per_vol` {self.inf_samples_per_vol}")
+            self.queue_args[1] = int(self.inf_samples_per_vol)
+
         # No transform for subjects
         return self._create_queue(True, subjects, return_sampler=False)
 
@@ -320,11 +326,40 @@ class PMIImageDataLoader(PMIDataLoaderBase):
             # queue_dict.pop('create_new_attribute')
             queue = tio.Queue(subjects, *self.queue_args, **queue_dict)
         self._logger.debug(f"Created queue: {queue}")
+        self.queue = queue
 
         if return_sampler:
             return queue, sampler
         else:
             return queue
+
+    def create_aggregation_queue(self, subject: torchio.SubjectsDataset, *args, **kwargs):
+        r"""Note that this function should only be invoked during inference. Typically, you don't need the
+        aggregator anywhere else."""
+        required_att = ('sampler', 'data', 'queue')
+        for att in required_att:
+            if not hasattr(self, att):
+                msg += f"Attribute {att} missing. Have you run load_data() already?"
+                raise AttributeError(msg)
+
+        if isinstance(self.sampler, tio.GridSampler):
+            self.sampler.set_subject(subject)
+        elif isinstance(self.sampler, tio.WeightedSampler):
+            _spv = self.inf_samples_per_vol if self.inf_samples_per_vol is not None \
+                else self.queue.samples_per_volume
+            self._logger.info(f"Setting the number of patches to sample to: "
+                              f"{_spv}")
+            self.sampler.set_subject(subject, _spv)
+            self.queue.samples_per_volume = _spv
+        else:
+            msg = f"Currrently only support GridSampler and WeightedSampler, but got {type(self.sampler)}"
+            raise TypeError(msg)
+
+        # Replace subjects in queue and reset the queue
+        self.queue._subjects_iterable = None
+        self.queue.sampler = self.sampler
+        aggregator = tio.GridAggregator(self.sampler, 'average')
+        return self.queue, aggregator
 
     def get_sampler(self):
         return self.sampler

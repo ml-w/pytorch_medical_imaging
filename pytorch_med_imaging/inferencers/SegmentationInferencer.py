@@ -2,6 +2,7 @@ import os
 
 from ..med_img_dataset import ImageDataSet
 from ..PMI_data_loader.pmi_dataloader_base import PMIDataLoaderBase
+from ..PMI_data_loader import PMIImageDataLoader
 from .InferencerBase import InferencerBase
 from torch.utils.data import DataLoader
 import torch
@@ -12,18 +13,18 @@ import numpy as np
 import SimpleITK as sitk
 from tqdm import *
 from configparser import ConfigParser
+from typing import Union, Optional, Any, Iterable
 
 __all__ = ['SegmentationInferencer']
 
 class SegmentationInferencer(InferencerBase):
     def __init__(self,
-                 batch_size: int,
                  net: nn.Module or str,
-                 checkpoint_dir: str,
-                 out_dir: str,
-                 iscuda: bool,
+                 output_dir: str,
+                 hyperparam_dict: dict,
+                 use_cuda: bool,
                  pmi_data_loader: PMIDataLoaderBase,
-                 config: ConfigParser or dict,
+                 debug: Optional[bool] = False,
                  **kwargs):
         r"""
         Use for segmentation inference.
@@ -41,43 +42,43 @@ class SegmentationInferencer(InferencerBase):
                 The network. If str, `ast.literal_eval` will be used to convert it into a network.
             checkpoint_dir (str):
                 Where the torch state dict is located.
-            out_dir (str):
+            output_dir (str):
                 Where the output products are placed
-            iscuda (bool):
+            use_cuda (bool):
                 Whether to use GPU or not.
             pmi_data_loader (PMIDataLoaderBase):
                 Required to load the
             **kwargs:
         """
-        inference_configs = {
-            'batch_size':       batch_size,
-            'net':              net,
-            'net_state_dict':   checkpoint_dir,
-            'outdir':           out_dir,
-            'iscuda':           iscuda,
-            'pmi_data_loader':  pmi_data_loader
-        }
-        self._out_dataset = None # For storing result of inference
-        super(SegmentationInferencer, self).__init__(inference_configs, config=config, **kwargs)
-
+        super(SegmentationInferencer, self).__init__(net,
+                                                     output_dir,
+                                                     hyperparam_dict,
+                                                     use_cuda,
+                                                     pmi_data_loader,
+                                                     debug, **kwargs)
         default_attr = {
-            'inf_samples_per_vol': 25
+            'inf_samples_per_vol': None
         }
         self._load_default_attr(default_attr)
-
+        self.set_pmi_data_loader(pmi_data_loader)
 
     def _input_check(self):
-        assert isinstance(self.pmi_data_loader, PMIDataLoaderBase), "The pmi_data_loader was not configured correctly."
-        if not os.path.isdir(self.outdir):
+        if not os.path.isdir(self.output_dir):
             # Try to make dir first
-            os.makedirs(self.outdir, exist_ok=True)
-            assert os.path.isdir(self.outdir), f"Cannot open output directory: {self.outdir}"
+            os.makedirs(self.output_dir, exist_ok=True)
+            assert os.path.isdir(self.output_dir), f"Cannot open output directory: {self.output_dir}"
         return 0
 
-    def _prepare_data(self):
+    def set_pmi_data_loader(self, pmi_data_loader: PMIImageDataLoader = None):
         r"""Currently torchio only can perform inference using GridSampler."""
-        self._inference_subjects, self._loader_queue,  self._inference_sampler = \
-            self.pmi_data_loader._load_data_set_inference()
+        if not isinstance(pmi_data_loader, PMIImageDataLoader):
+            msg = f"Expected input to be an instance of PMIImageDataLoader, but got {type(pmi_data_loader)}"
+            raise TypeError(msg)
+
+        self.pmi_data_loader = pmi_data_loader
+        # self._loader_queue = pmi_data_loader._load_data_set_inference()
+        # self._inference_subjects = self._loader_queue._get_subjects_iterable()
+        # self._inference_sampler = pmi_data_loader.get_sampler()
 
     def _get_net_out_features(self):
         raise DeprecationWarning("This function is deprecated")
@@ -94,73 +95,60 @@ class SegmentationInferencer(InferencerBase):
             del test_in
         return out
 
-
     def write_out(self):
         last_batch_dim = 0
         # compute size to pass to piece_patches
         in_image_data = self.pmi_data_loader.data['input']
+        self.solverparams_inf_samples_per_vol = None
 
         with torch.no_grad():
             # Do inference subject by subject if sampler is not None`
-            if not self._inference_sampler is None:
-                self.patch_size = self.pmi_data_loader.patch_size
-                self._logger.info(f"Operating in patch-based mode with patch-size: {self.patch_size}")
-                for index, subject in enumerate(tqdm(self._inference_subjects, desc="Steps", position=0)):
-                    # sample and inference
-                    self._logger.info(f"Processing subject: {subject}")
-                    if isinstance(self._inference_sampler, tio.GridSampler):
-                        self._inference_sampler.set_subject(subject)
-                    elif isinstance(self._inference_sampler, tio.WeightedSampler):
-                        self._logger.info(f"Setting the number of patches to sample to: {self.inf_samples_per_vol}")
-                        self._inference_sampler.set_subject(subject, self.inf_samples_per_vol)
-                        self._loader_queue.samples_per_volume = self.inf_samples_per_vol
+            self.patch_size = self.pmi_data_loader.patch_size
+            self._logger.info(f"Operating in patch-based mode with patch-size: {self.patch_size}")
+            for index, subject in enumerate(tqdm(self.pmi_data_loader.queue._get_subjects_iterable(), desc="Steps", position=0)):
+                # sample and inference
+                self._logger.info(f"Processing subject: {subject}")
 
-                    # Replace subjects in queue and reset the queue
-                    self._loader_queue._subjects_iterable = None
-                    self._loader_queue.sampler = self._inference_sampler
+                # create new sampling queue based on inf_sample_per_vol
+                _queue, _aggregator = self.pmi_data_loader.create_aggregation_queue(
+                    subject, self.solverparams_inf_samples_per_vol)
 
-                    dataloader = DataLoader(self._loader_queue, batch_size=self.batch_size, num_workers=0)
-                    aggregator = tio.GridAggregator(self._inference_sampler, 'average')
+                dataloader = DataLoader(_queue, batch_size=self._data_loader.batch_size, num_workers=0)
+                ndim = subject.get_first_image()[tio.DATA].dim()  # Assume channel dim always exist even if only has 1 channel
+                for i, mb in enumerate(tqdm(dataloader, desc="Patch", position=1)):
+                    s = self._unpack_minibatch(mb, self.solverparams_unpack_keys_inf)
+                    s = self._match_type_with_network(s)
 
-                    ndim = subject.get_first_image()[tio.DATA].dim()  # Assume channel dim always exist even if only has 1 channel
-                    for i, mb in enumerate(tqdm(dataloader, desc="Patch", position=1)):
-                        s = self._unpack_minibatch(mb, self.unpack_keys_inf)
-                        s = self._match_type_with_network(s)
+                    if isinstance(s, list):
+                        out = self.net.forward(*s).squeeze()
+                    else:
+                        out = self.net.forward(s).squeeze()
+                    self._logger.debug(f"{out.shape}, {mb[tio.LOCATION].shape}")
+                    # If the original input is 3D, but 2D patches was given out here, expand it back to 3D
+                    if ndim == 4:
+                        while out.dim() < 5: # should be B x C x H x W x Z
+                            out = out.unsqueeze(-1) # last dimension is the slice dimension
+                    _aggregator.add_batch(out, mb[tio.LOCATION])
+                out = _aggregator.get_output_tensor()
 
-                        if isinstance(s, list):
-                            out = self.net.forward(*s).squeeze()
-                        else:
-                            out = self.net.forward(s).squeeze()
-                        self._logger.debug(f"{out.shape}, {mb[tio.LOCATION].shape}")
-                        # If the original input is 3D, but 2D patches was given out here, expand it back to 3D
-                        if ndim == 4:
-                            while out.dim() < 5: # should be B x C x H x W x Z
-                                out = out.unsqueeze(-1) # last dimension is the slice dimension
-                        aggregator.add_batch(out, mb[tio.LOCATION])
-                    out = aggregator.get_output_tensor()
+                out[0] += 1E-7 # Work arround be behavior of torch.argmax(torch.zero(3)) = 2 instead of 0
+                out = torch.argmax(out, dim=0, keepdim=True).int()  # Keep dim for recovering orientation
 
-                    out[0] += 1E-7 # Work arround be behavior of torch.argmax(torch.zero(3)) = 2 instead of 0
-                    out = torch.argmax(out, dim=0, keepdim=True).int()  # Keep dim for recovering orientation
+                # If augmentation was applied, inversely apply it to recover the original image
+                try:
+                    original_orientation = ''.join(subject['orientation'])
+                    self._logger.info(f"Trying to recover orientation to: {original_orientation}")
+                    _sub = tio.Subject(a=tio.LabelMap(tensor=out))
+                    _sub = sitk.DICOMOrient(_sub['a'].as_sitk(), original_orientation)
+                    out = torch.from_numpy(sitk.GetArrayFromImage(_sub)).int()
+                    # out = _sub['gt'][tio.DATA]
+                except Exception as e:
+                    self._logger.exception(f"Recovering orientation failed: {e}")
+                    # torchio convention (H x W x D) to sitk convention (D x W x H)
+                    # * Note: No need if recovery of the orientation was done properly since as_sitk do the job - 6/1/2022
+                    out = out.squeeze().permute(2, 1, 0).int()
 
-                    # If augmentation was applied, inversely apply it to recover the original image
-                    try:
-                        original_orientaiton = ''.join(subject['orientation'])
-                        self._logger.info(f"Trying to recover orientation to: {original_orientaiton}")
-                        _sub = tio.Subject(a=tio.LabelMap(tensor=out))
-                        _sub = sitk.DICOMOrient(_sub['a'].as_sitk(), original_orientaiton)
-                        out = torch.from_numpy(sitk.GetArrayFromImage(_sub)).int()
-                        # out = _sub['gt'][tio.DATA]
-                    except Exception as e:
-                        self._logger.exception(f"Recovering orientation failed: {e}")
-                        # torchio convention (H x W x D) to sitk convention (D x W x H)
-                        # * Note: No need if recovery of the orientation was done properly since as_sitk do the job - 6/1/2022
-                        out = out.squeeze().permute(2, 1, 0).int()
-
-                    in_image_data.write_uid(out, index, self.outdir)
-            else:
-                # Else operate directly on subject dataset
-                self._logger.info(f"Operating on whole image.")
-                raise NotImplementedError("Operating on whole image not suppported yet.")
+                in_image_data.write_uid(out, index, self.output_dir)
 
 
     def display_summary(self):
@@ -178,7 +166,7 @@ class SegmentationInferencer(InferencerBase):
             self._logger.info(f"Ground-truth data specified, trying to compute summary.")
 
         arguments = ['-a',
-                     '--test-data', self.outdir,
+                     '--test-data', self.output_dir,
                      '--gt-data', self.pmi_data_loader.data['gt'].root_dir,
                      '--idlist', str(list(set(self.pmi_data_loader.data['gt'].get_unique_IDs())))
                      ]

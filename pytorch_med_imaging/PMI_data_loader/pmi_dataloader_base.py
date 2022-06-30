@@ -324,4 +324,4 @@ class PMIDataLoaderBase(object):
                     self.augmentation = False
             else:
                 self._logger.warning(f"Transform file provided but could not be located! Got {str(self.augmentation)}")
-
+        return self.transform

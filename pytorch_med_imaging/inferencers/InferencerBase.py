@@ -2,10 +2,13 @@ import os
 from abc import abstractmethod
 from mnts.mnts_logger import MNTSLogger
 from ..networks import *
+from ..PMI_data_loader.pmi_dataloader_base import PMIDataLoaderBase
 
 import torch
 import torchio as tio
 import ast
+from typing import Union, Any, Optional
+from pathlib import Path
 
 class InferencerBase(object):
     """
@@ -16,76 +19,67 @@ class InferencerBase(object):
     Args:
         inferencer_configs (dict):
             Basic configuration that constructs an inferencer.
+        net (torch.nn.Module):
+            The network.
 
     Attributes
         _logger (logger.Logger):
             Use this logger to log anything or print anything.
     """
-    def __init__(self, inferencer_configs, **kwargs):
+    def __init__(self,
+                 net: torch.nn.Module,
+                 output_dir: Union[str, Path],
+                 hyperparam_dict: dict,
+                 use_cuda: bool,
+                 pmi_data_loader: PMIDataLoaderBase,
+                 debug: Optional[bool] = False, **kwargs):
         super(InferencerBase, self).__init__()
+        self._logger = MNTSLogger[self.__class__.__name__]
+        if not isinstance(net, torch.nn.Module):
+            msg += f"Expect input net is an instance of nn.Module, but got type {type(net)} input."
+            raise TypeError(msg)
+        if not isinstance(hyperparam_dict, dict):
+            msg += f"Expect hyperparam_dict to be a dictionary, but got type {type(hyperparam_dict)} input."
+            raise TypeError(msg)
 
-        # these attributes require evaluation and cannot be loaded directly from the ini file.
-        default_attr = {
-            'batch_size':       None,
-            'net':              None,
-            'net_state_dict':   None,
-            'iscuda':           None,
-            'outdir':           None,
-            'pmi_data_loader':  None
-        }
-        default_attr.update((k, inferencer_configs[k]) for k in default_attr.keys() & inferencer_configs.keys())
-        required_att = ('net', 'net_state_dict', 'iscuda', 'outdir', 'pmi_data_loader')
+        self.net = net
+        self.iscuda = use_cuda
+        self.output_dir = output_dir
+        self.hyperparam_dict = hyperparam_dict
+        self.debug = debug
+        self.__dict__.update(hyperparam_dict)
 
-        self._logger = inferencer_configs.get('Logger', None)
-        if self._logger is None:
-            self._logger = MNTSLogger[self.__class__.__name__]
-
-        if any([default_attr[k] is None for k in required_att]):
-            self._logger.error("Some required attributes are not specified.")
-            raise AttributeError(f"Must specify these attributes: {','.join(required_att)}")
-        self.__dict__.update(default_attr)
-
-        self._config = kwargs.get('config', None)
-
-        # optional attributes
-        default_attr = {
-            'unpack_keys_inf': ['input'],
-        }
-        self._load_default_attr(default_attr)
-
-
-        assert isinstance(self._logger, MNTSLogger) or self._logger is None, "Incorrect logger."
-
-        if 'target_data' in inferencer_configs:
-            self._target_dataset = inferencer_configs['target_data']
-            self._TARGET_DATASET_EXIST_FLAG = True
-        else:
-            self._TARGET_DATASET_EXIST_FLAG = False
-
+        self.required_att = [
+            'solverparams_unpack_keys_inf'
+        ]
+        self.check_attr()
         self._input_check()
-        self._create_net()
-        self._prepare_data()
 
         if  len(kwargs):
             self._logger.warning("Some inferencer configs were not used: {}".format(kwargs))
 
-    def _load_default_attr(self, default_dict):
-        r"""
-        Load default dictionary as attr from ini config, [SolverParams] section. Generally called from the
-        children class when you want to add something to self.__dict__ from the ini file conveniently.
-        """
-        final_dict = {}
-        for key in default_dict:
-            val = default_dict[key]
-            if isinstance(val, bool):
-                final_dict[key] = self._get_params_from_solver_config_with_boolean(key, default_dict[key])
-            elif isinstance(val, str):
-                final_dict[key] = self._get_params_from_solver_config(key, default_dict[key])
-            else:
-                final_dict[key] = self._get_params_from_solver_config(key, default_dict[key], with_eval=True)
+    def check_attr(self) -> None:
+        r"""Inherit this to add to the list of required_att."""
+        if any([hasattr(self, k) is False for k in self.required_att]):
+            missing = ', '.join([a for a in self.required_att if hasattr(self, a) is False])
+            msg += f"The following attribute(s) is/are required to be specified in the SolverParams section but " \
+                   f"is/are missing: {missing}"
+            raise AttributeError(msg)
 
-        self._logger.debug(f"final_dict: {final_dict}")
-        self.__dict__.update(final_dict)
+    def _load_default_attr(self, default_dict = None):
+        r"""If the default_dict items are not specified in the hyperparameter_dict, this will
+        load the hyperparameters into __dict__ and self.hyperparameter_dict
+        """
+        if default_dict is None:
+            return
+
+        update_dict = {}
+        for key in default_dict:
+            if not key in self.__dict__:
+                self._logger.debug(f"Loading default value for: {key}")
+                update_dict[key] = default_dict[key]
+        self.__dict__.update(update_dict)
+        self.hyperparam_dict.update(update_dict)
 
     def _match_type_with_network(self, tensor):
         """
@@ -109,7 +103,8 @@ class InferencerBase(object):
             except AttributeError:
                 continue
             except Exception as e:
-                self._logger.log_print_tqdm("Unexpected error in type convertion of solver")
+                self._logger.error("Unexpected error in type convertion of solver")
+                self._logger.exception(e)
 
         if self._net_weight_type is None:
             # In-case type not found
@@ -124,10 +119,9 @@ class InferencerBase(object):
             else:
                 if tensor.type() == self._net_weight_type:
                     return tensor
-        except Exception as e:
+        except:
             self._logger.warning(f"Can't determine if type is already followed. Input type is {type(tensor)}")
             self._logger.exception(f"Get error {e}")
-
 
         # We also expect list input too.
         if isinstance(tensor, list) or isinstance(tensor, tuple):
@@ -141,56 +135,11 @@ class InferencerBase(object):
             out = tensor.type(self._net_weight_type)
         return out
 
-
     def get_net(self):
         return self.net
 
-    def _get_params_from_config(self, section, key, default=None, with_eval=False, with_boolean=False):
-        try:
-            if with_eval:
-                if with_boolean:
-                    out = self._config[section].getboolean(key, default)
-                    return out
-                else:
-                    out = self._config[section].get(key, default)
-                    return ast.literal_eval(out) if isinstance(out,str) else out
-            else:
-                return self._config[section].get(key, default)
-        except AttributeError:
-            self._logger.warning(f"Key absent in config: ({section},{key})")
-            self._logger.exception('Exception: ')
-            return default
-        except:
-            self._logger.exception(f"Unexpected error when reading params with key: ({section}, {key})")
-            return default
-
-    def _get_params_from_solver_config(self, key, default=None, with_eval=False):
-        return self._get_params_from_config('SolverParams', key, default, with_eval)
-
-    def _get_params_from_solver_config_with_boolean(self, key, default=None):
-        return self._get_params_from_config('SolverParams', key, default, True, True)
-
     def _input_check(self):
         assert os.path.isfile(self.net_state_dict), f"Cannot open network checkpoint at {self.net_state_dict}"
-
-    def _create_net(self):
-        r"""Try to create network and load state dict"""
-        if not hasattr(self.net, 'forward'):
-            self._logger.info("Creating network...")
-            self.net = ast.literal_eval(self.net)
-            if not hasattr(self.net, 'forward'):
-                raise AttributeError("Cannot create network properly.")
-
-        # Load state dict
-        if isinstance(self.net, torch.nn.Module):
-            self._logger.info(f"Loading network states from checkpoint: {self.net_state_dict}")
-            self.net.load_state_dict(torch.load(self.net_state_dict))
-
-        self.net = self.net.eval()
-
-        # Move to GPU
-        if self.iscuda:
-            self.net = self.net.cuda()
 
     def load_checkpoint(self, checkpoint_path: Union[str, Path]) -> None:
         r"""Load the checkpoint states"""
@@ -209,6 +158,10 @@ class InferencerBase(object):
     @abstractmethod
     def display_summary(self):
         raise NotImplementedError
+
+    @abstractmethod
+    def write_out(self):
+        raise NotImplementedError("This method must be implemented by the child class")
 
     def _unpack_minibatch(self, minibatch, unpacking_keys):
         r"""Unpack mini-batch drawn by torchio.Queue or torchio.SubjectsDataset.
@@ -234,3 +187,13 @@ class InferencerBase(object):
                 except Exception as e:
                     self._logger.exception(f"Receive unknown exception during minibactch unpacking for: {key}")
         return out
+
+    def set_dataloader(self, dataloader, data_loader_val=None):
+        r"""These data_loaders are pytorch torch.utils.data.DataLoader objects, and they should be
+        differentiated from the `pmi_data_loader`"""
+        self._data_loader = dataloader
+        self._data_loader_val = data_loader_val
+
+    def set_pmi_data_loader(self, pmi_data_loader: PMIDataLoaderBase):
+        # Do nothing, this is an entry point for overriding data loader by the child classes.
+        self.pmi_data_loader = pmi_data_loader
