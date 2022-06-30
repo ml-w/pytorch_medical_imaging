@@ -185,7 +185,7 @@ class PMIImageDataLoader(PMIDataLoaderBase):
 
         self.data = self._prepare_data(gt_out, img_out, mask_out, prob_out)
         # Create transform
-        trasnform = self._create_transform(exclude_augment=exclude_augment)
+        transform = self._create_transform(exclude_augment=exclude_augment)
 
         # Create subjects & queue
         subjects = self._pack_data_into_subjects(self.data, transform)
