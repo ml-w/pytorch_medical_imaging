@@ -125,22 +125,26 @@ class PMIImageFeaturePair(PMIImageDataLoader):
         return self._create_queue(exclude_augment, subjects)
 
     def _load_data_set_inference(self) -> tio.Queue or tio.SubjectsDataset:
-        img_out = self._read_image(self._input_dir)
-        mask_out = self._read_image(self._mask_dir, dtype='uint8')
+        # Try to load ground-truth too
+        try:
+            return self._load_data_set_training(True)
+        except:
+            img_out = self._read_image(self._input_dir)
+            mask_out = self._read_image(self._mask_dir, dtype='uint8')
 
-        # TODO: net_in_dat was assume to be in the same excel file as target_dir, which is not correct assumption
-        self.data = {'input':   img_out,
-                     'mask':    mask_out,
-                     'uid': img_out.get_unique_IDs()
-                     }
+            # TODO: net_in_dat was assume to be in the same excel file as target_dir, which is not correct assumption
+            self.data = {'input':   img_out,
+                         'mask':    mask_out,
+                         'uid': img_out.get_unique_IDs()
+                         }
 
-        # create transform
-        self._create_transform(exclude_augment=True)
+            # create transform
+            self._create_transform(exclude_augment=True)
 
-        # Create subject list
-        data_exclude_none = {k: v for k, v in self.data.items() if v is not None}
-        subjects = [tio.Subject(**{k: v for k, v in zip(data_exclude_none.keys(), row)})
-                    for row in zip(*data_exclude_none.values())]
-        subjects = tio.SubjectsDataset(subjects=subjects, transform=self.transform)
+            # Create subject list
+            data_exclude_none = {k: v for k, v in self.data.items() if v is not None}
+            subjects = [tio.Subject(**{k: v for k, v in zip(data_exclude_none.keys(), row)})
+                        for row in zip(*data_exclude_none.values())]
+            subjects = tio.SubjectsDataset(subjects=subjects, transform=self.transform)
 
-        return self._create_queue(True, subjects)
+            return self._create_queue(True, subjects)

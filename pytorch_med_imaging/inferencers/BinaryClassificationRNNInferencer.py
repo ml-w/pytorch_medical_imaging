@@ -88,8 +88,8 @@ class BinaryClassificationRNNInferencer(ClassificationInferencer):
         sig_out = torch.sigmoid(out_tensor)
         out_decision = (sig_out > .5).int()
         self._num_out_out_class = int(out_tensor.shape[1]) - 1 # Because RNN add an extra stopping character.
-        if os.path.isdir(self._outdir):
-            self.outdir = os.path.join(self._outdir, 'class_inf.csv')
+        if os.path.isdir(self.output_dir):
+            self.outdir = os.path.join(self.output_dir, 'class_inf.csv')
         if not self.outdir.endswith('.csv'):
             self.outdir += '.csv'
         if os.path.isfile(self.outdir):

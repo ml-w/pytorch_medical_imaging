@@ -1,6 +1,6 @@
 import os
 from pathlib import Path
-from typing import Union
+from typing import Union, Optional, Iterable
 
 import numpy as np
 import torch
@@ -29,6 +29,14 @@ class ClassificationInferencer(InferencerBase):
                  **kwargs):
         super(ClassificationInferencer, self).__init__(net, output_dir, hyperparam_dict,
                                                        use_cuda, pmi_data_loader, **kwargs)
+
+    def _load_default_attr(self, default_dict = None):
+        default = {
+            'solverparams_sig_out': True
+        }
+        if not default_dict is None:
+            default.update(default_dict)
+        super(ClassificationInferencer, self)._load_default_attr(default)
 
     def _input_check(self):
         assert isinstance(self.pmi_data_loader, PMIDataLoaderBase), "The pmi_data_loader was not configured correctly."
@@ -125,53 +133,55 @@ class ClassificationInferencer(InferencerBase):
             imsave(outname, hm)
 
     def write_out(self):
+        uids = []
+        gt_tensor = []
         out_tensor = []
-        out_decisions = {}
-        out_attention = []
-        out_slice_attention = []
         last_batch_dim = 0
         with torch.no_grad():
-            for index, mb in enumerate(tqdm(self._inference_subjects, desc="Steps", position=0)):
-                self._logger.info(f"Operating with subject: {mb}")
-                s = self._unpack_minibatch(mb, self.solverparams_unpack_keys_inf)
+            # dataloader = DataLoader(self._inference_subjects, batch_size=self.batch_size, shuffle=False)
+            dataloader = self._data_loader
+            for index, mb in enumerate(tqdm(dataloader, desc="Steps")):
+                s = self._unpack_minibatch(mb, self.solverparams_unpack_keys_inference)
                 s = self._match_type_with_network(s)
 
+                self._logger.debug(f"s size: {s.shape if not isinstance(s, list) else [ss.shape for ss in s]}")
+
+                # Squeezing output directly cause problem if the output has only one output channel.
                 if isinstance(s, list):
-                    out = self.net.forward(*s).squeeze()
+                    out = self.net(*s)
                 else:
-                    out = self.net.forward(s).squeeze()
+                    out = self.net(s)
+                if out.shape[-1] > 1:
+                    out = out.squeeze()
 
                 while ((out.dim() < last_batch_dim) or (out.dim() < 2)) and last_batch_dim != 0:
                     out = out.unsqueeze(0)
                     self._logger.log_print_tqdm('Unsqueezing last batch.' + str(out.shape))
-
+                self._logger.debug(f"out size: {out.shape}")
                 out_tensor.append(out.data.cpu())
-                if self._ATTENTION_FLAG:
-                    # out_attention.append(self.net.get_mask())
-                    out_slice_attention.append(self.net.get_slice_attention())
+                uids.extend(mb['uid'])
+                if 'gt' in mb:
+                    gt_tensor.append(mb['gt'])
 
                 last_batch_dim = out.dim()
                 del out, s
 
-            if self._ATTENTION_FLAG:
-                # out_attention = [a for a in zip(*out_attention)]
-                # out_attention = [torch.cat(a, dim=0) for a in out_attention]
-                out_slice_attention = torch.cat(out_slice_attention)
-                print(out_slice_attention.shape)
+            out_tensor, gt_tensor = self._reshape_tensors(out_tensor, gt_tensor)
+            dl = self._writter(out_tensor, uids, gt_tensor)
+            self._logger.debug('\n' + dl._data_table.to_string())
 
-            out_tensor = torch.cat(out_tensor, dim=0)
-            dl = self._writter(out_tensor, out_attention=out_attention, out_slice_attention=out_slice_attention)
-            self._logger.info(dl._data_table.to_string())
-
-    def _writter(self, out_tensor, out_attention =None, out_slice_attention=None):
+    def _writter(self,
+                 out_tensor: torch.IntTensor,
+                 uids: Iterable[Union[str, int]],
+                 gt: Optional[torch.IntTensor] = None,
+                 sig_out=True):
         out_decisions = {}
         out_decision = torch.argmax(out_tensor, dim=1)
+        out_tensor = torch.sigmoid(out_tensor) if sig_out else out_tensor
         out_tensor = F.softmax(out_tensor, dim=1)
-        if self._ATTENTION_FLAG and not out_attention is None:
-            # self.attention_write_out(out_attention)
-            pass
-        if os.path.isdir(self._outdir):
-            self.output_dir = os.path.join(self._outdir, 'class_inf.csv')
+
+        if os.path.isdir(self.output_dir):
+            self.output_dir = os.path.join(self.output_dir, 'class_inf.csv')
         if not self.output_dir.endswith('.csv'):
             self.output_dir += '.csv'
         if os.path.isfile(self.output_dir):
@@ -180,14 +190,39 @@ class ClassificationInferencer(InferencerBase):
             os.makedirs(os.path.dirname(self.output_dir), exist_ok=True)
 
         # Write decision
-        out_decisions['IDs'] = self._in_dataset.get_unique_IDs()
+        out_decisions['IDs'] = uids
+        # For each channel, write down the probability
         for i in range(out_tensor.shape[1]):
             out_decisions['Prob_Class_%s'%i] = out_tensor[:, i].data.cpu().tolist()
-            if not out_slice_attention is None:
-                for j in range(len(out_slice_attention[0])):
-                    out_decisions['SA %02d'%j] = out_slice_attention[:,j]
 
+        if gt is not None:
+            out_decisions[f'Truth_{i}'] = gt.flatten().tolist()
+            self._TARGET_DATASET_EXIST_FLAG = True
+        else:
+            self._TARGET_DATASET_EXIST_FLAG = False
         out_decisions['Decision'] = out_decision.tolist()
         dl = DataLabel.from_dict(out_decisions)
         dl.write(self.output_dir)
         return dl
+
+    def display_summary(self):
+        return
+
+    def _reshape_tensors(self,
+                         out_list: Iterable[torch.FloatTensor],
+                         gt_list: Iterable[torch.FloatTensor]):
+        r"""Align shape before putting them into _writter
+
+        Args:
+            out_list:
+                List of tensors with dimension (1 x C)
+            gt_list:
+                List of tensors with either dimensino (1 x C) or (C)
+
+        Returns:
+            out_tensor: (B x C)
+            gt_list: (B x 1)
+        """
+        out_tensor = torch.cat(out_list, dim=0) #(NxC)
+        gt_tensor = torch.cat(gt_list, dim=0) if len(gt_list) > 0 else None
+        return out_tensor, gt_tensor
