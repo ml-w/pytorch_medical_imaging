@@ -56,6 +56,10 @@ class InferencerBase(object):
         self.check_attr()
         self._input_check()
 
+        if self.iscuda:
+            self._logger.info("Moving network to GPU.")
+            self.net = self.net.cuda()
+
         if  len(kwargs):
             self._logger.warning("Some inferencer configs were not used: {}".format(kwargs))
 
@@ -64,7 +68,7 @@ class InferencerBase(object):
         if any([hasattr(self, k) is False for k in self.required_att]):
             missing = ', '.join([a for a in self.required_att if hasattr(self, a) is False])
             msg = f"The following attribute(s) is/are required to be specified in the SolverParams section but " \
-                   f"is/are missing: {missing}"
+                  f"is/are missing: {missing}"
             raise AttributeError(msg)
 
     def _load_default_attr(self, default_dict = None):
@@ -85,7 +89,7 @@ class InferencerBase(object):
     def _match_type_with_network(self, tensor):
         """
         Return a tensor with the same type as the first weight of `self._net`. This function seems to cause CUDA
-        error in pytorch 1.3.0
+        error in pytorch 1.3.0. This will automatically move tensors to CUDA if self.net is already in GPU.
 
         Args:
             tensor (torch.Tensor or list): Input `torch.Tensor` or list of `torch.Tensor`
