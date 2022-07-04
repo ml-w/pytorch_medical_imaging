@@ -28,9 +28,10 @@ class BinaryClassificationInferencer(ClassificationInferencer):
         out_tensor = []
         last_batch_dim = 0
         with torch.no_grad():
-            dataloader = DataLoader(self._inference_subjects, batch_size=self.batch_size, shuffle=False)
+            # dataloader = DataLoader(self._inference_subjects, batch_size=self.batch_size, shuffle=False)
+            dataloader = self._data_loader
             for index, mb in enumerate(tqdm(dataloader, desc="Steps")):
-                s = self._unpack_minibatch(mb, self.unpack_keys_inf)
+                s = self._unpack_minibatch(mb, self.solverparams_unpack_keys_inference)
                 s = self._match_type_with_network(s)
 
                 self._logger.debug(f"s size: {s.shape if not isinstance(s, list) else [ss.shape for ss in s]}")
@@ -76,7 +77,7 @@ class BinaryClassificationInferencer(ClassificationInferencer):
             gt_list: (B x 1)
         """
         out_tensor = torch.cat(out_list, dim=0) #(NxC)
-        gt_tensor = torch.cat(gt_list, dim=0).reshape_as(out_tensor) if len(gt) > 0 else None
+        gt_tensor = torch.cat(gt_list, dim=0).reshape_as(out_tensor) if len(gt_list) > 0 else None
         return out_tensor, gt_tensor
 
     def _writter(self,
@@ -103,8 +104,8 @@ class BinaryClassificationInferencer(ClassificationInferencer):
         out_tensor = torch.sigmoid(out_tensor) if sig_out else out_tensor
         out_decision = (out_tensor > .5).int()
         self._num_out_out_class = int(out_tensor.shape[1])
-        if os.path.isdir(self.outdir):
-            self.outdir = os.path.join(self.outdir, 'class_inf.csv')
+        if os.path.isdir(self.output_dir):
+            self.outdir = os.path.join(self.output_dir, 'class_inf.csv')
         if not self.outdir.endswith('.csv'):
             self.outdir += '.csv'
         if os.path.isfile(self.outdir):
@@ -120,6 +121,8 @@ class BinaryClassificationInferencer(ClassificationInferencer):
             if gt is not None:
                 out_decisions[f'Truth_{i}'] = gt[:, i].tolist()
                 self._TARGET_DATASET_EXIST_FLAG = True
+            else:
+                self._TARGET_DATASET_EXIST_FLAG = False
 
         import pprint
         self._logger.debug(f"out_decision: {pprint.pformat(out_decisions)}")

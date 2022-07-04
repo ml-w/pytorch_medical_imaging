@@ -157,13 +157,12 @@ class PMIController(object):
             raise ArithmeticError(f"Your run_type ({run_type}) contains illegal characters!")
         infer_class = eval(f'{run_type}Inferencer')
         self._logger.info("Creating solver: {}".format(infer_class.__name__))
-        infer = infer_class(self.runparams_batch_size,
-                            self.net,
-                            self.checkpoint_cp_load_dir,
+        infer = infer_class(self.net,
                             self.data_output_dir,
+                            self._pack_config('SolverParams'),
                             self.general_use_cuda,
                             self.pmi_data,
-                            self.config)
+                            debug=self.general_debug)
         return infer
 
     def training(self) -> None:
@@ -239,10 +238,9 @@ class PMIController(object):
 
     def inference(self):
         self._logger.log_print_tqdm("Starting evaluation...")
-        loader, loader_val = self.prepare_loaders()
-        inferencer = self.create_inferencer()
+        loader, loader_val = self.prepare_loaders(inference_mode=True)
+        inferencer = self.create_inferencer(self.general_run_type)
         inferencer.set_dataloader(loader, loader_val)
-        inferencer.override_data_loader(self.pmi_data)
 
         # if self.solverparams_write_mode == 'GradCAM':
         #     #TODO: custom grad cam layers
@@ -250,24 +248,24 @@ class PMIController(object):
         #     inferencer.grad_cam_write_out(['att2'])
 
         with torch.no_grad():
-            if a.inference_all_checkpoints:
-                try:
-                    inferencer.write_out_allcps()
-                except AttributeError:
-                    logger.warning("Falling back to normal inference.")
-                    inferencer.write_out()
-            else:
-                inferencer.write_out()
+            # if a.inference_all_checkpoints:
+            #     try:
+            #         inferencer.write_out_allcps()
+            #     except AttributeError:
+            #         logger.warning("Falling back to normal inference.")
+            #         inferencer.write_out()
+            # else:
+            inferencer.write_out()
 
         # Output summary of results if implemented
         if not hasattr(inferencer, 'display_summary'):
-            logger.info(f"No summary for the class: {inferencer.__class__.__name__}")
+            self._logger.info(f"No summary for the class: {inferencer.__class__.__name__}")
         try:
             inferencer.display_summary()
         except AttributeError as e:
-            logger.exception("Error when computing summary.")
+            self._logger.exception("Error when computing summary.")
 
-    def prepare_loaders(self) -> Iterable[PMIDataLoaderBase]:
+    def prepare_loaders(self, inference_mode = False) -> Iterable[PMIDataLoaderBase]:
         r"""This creates the loader, i.e. torchio iterables for the DataLoader"""
         trainingSubjects = self.pmi_data.load_dataset()
         validationSubjects = self.pmi_data_val.load_dataset() if self.validation_FLAG else (None, None)
@@ -277,9 +275,9 @@ class PMIController(object):
             # num_workers is required to be zero by torchio
             loader = DataLoader(trainingSubjects,
                                 batch_size  = self.runparams_batch_size,
-                                shuffle     = True,
+                                shuffle     = not inference_mode,
                                 num_workers = 0,
-                                drop_last   = True,
+                                drop_last   = not inference_mode,
                                 pin_memory  = False)
             loader_val = DataLoader(validationSubjects,
                                     batch_size  = self.runparams_batch_size,
@@ -292,7 +290,7 @@ class PMIController(object):
             loader_factory = PMIBatchSamplerFactory()
             loader = loader_factory.produce_object(trainingSet, self.config)
             loader_val = loader_factory.produce_object(valSet, self.config,
-                                                       force_inference=True) if self.validation_FLAG else None
+                                                       force_inference=inference_mode) if self.validation_FLAG else None
         return loader, loader_val
 
     def _error_check(self):
@@ -463,7 +461,8 @@ class PMIController(object):
                     try:
                         val = config[_src_sec][_src_key]
                     except:
-                        val = None
+                        # val = None
+                        continue
                 else:
                     val = DEFAULT_DICT[dict_key]
                 att_dict[att_key] = val

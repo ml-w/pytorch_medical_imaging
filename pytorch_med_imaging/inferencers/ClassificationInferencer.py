@@ -1,52 +1,45 @@
-from .InferencerBase import InferencerBase
-from ..med_img_dataset import ImageDataSet, DataLabel, ImageDataMultiChannel
-from ..PMI_data_loader.pmi_dataloader_base import PMIDataLoaderBase
-from torch.utils.data import DataLoader
-from tqdm import *
-from torch.autograd import Variable
 import os
+from pathlib import Path
+from typing import Union
+
+import numpy as np
 import torch
 import torch.nn.functional as F
-import numpy as np
-from SimpleITK import WriteImage, ReadImage, GetImageFromArray
-from ..networks.GradCAM import *
-from torchvision.utils import make_grid
+from SimpleITK import GetImageFromArray, ReadImage, WriteImage
 from imageio import imsave
-from ..Algorithms.visualization import draw_overlay_heatmap
+from torch.autograd import Variable
+from torchvision.utils import make_grid
+from tqdm import *
 
+from .InferencerBase import InferencerBase
+from ..Algorithms.visualization import draw_overlay_heatmap
+from ..PMI_data_loader.pmi_dataloader_base import PMIDataLoaderBase
+from ..med_img_dataset import DataLabel
+from ..networks.GradCAM import *
 
 __all__ = ['ClassificationInferencer']
 
 class ClassificationInferencer(InferencerBase):
     def __init__(self,
-                 batch_size,
-                 net,
-                 checkpoint_dir,
-                 out_dir,
-                 iscuda,
-                 pmi_data_loader,
-                 config,
+                 net: torch.nn.Module,
+                 output_dir: Union[str, Path],
+                 hyperparam_dict: dict,
+                 use_cuda: bool,
+                 pmi_data_loader: PMIDataLoaderBase,
                  **kwargs):
-        inference_configs = {
-            'batch_size':       batch_size,
-            'net':              net,
-            'net_state_dict':   checkpoint_dir,
-            'outdir':          out_dir,
-            'iscuda':           iscuda,
-            'pmi_data_loader':  pmi_data_loader
-        }
-        super(ClassificationInferencer, self).__init__(inference_configs, config=config, **kwargs)
+        super(ClassificationInferencer, self).__init__(net, output_dir, hyperparam_dict,
+                                                       use_cuda, pmi_data_loader, **kwargs)
 
     def _input_check(self):
         assert isinstance(self.pmi_data_loader, PMIDataLoaderBase), "The pmi_data_loader was not configured correctly."
-        if not os.path.isdir(self.outdir):
+        if not os.path.isdir(self.output_dir):
             # Try to make dir first
-            os.makedirs(self.outdir, exist_ok=True)
-            assert os.path.isdir(self.outdir), f"Cannot open output directory: {self.outdir}"
+            os.makedirs(self.output_dir, exist_ok=True)
+            assert os.path.isdir(self.output_dir), f"Cannot open output directory: {self.output_dir}"
         return 0
 
     def attention_write_out(self, attention_list):
-        attention_outdir = os.path.dirname(self.outdir)
+        attention_outdir = os.path.dirname(self.output_dir)
         id_lists = self._in_dataset.get_unique_IDs()
         temp_atten_list = [t for t in zip(*attention_list)]
         assert len(id_lists) == len(temp_atten_list), \
@@ -113,7 +106,7 @@ class ClassificationInferencer(InferencerBase):
 
 
         ids = self._in_dataset.get_unique_IDs()
-        outdir = os.path.dirname(self.outdir)
+        outdir = os.path.dirname(self.output_dir)
         for i in tqdm(range(len(self._in_dataset))):
             t, c = self._in_dataset[i], cam_tensor[i].squeeze()
 
@@ -140,7 +133,7 @@ class ClassificationInferencer(InferencerBase):
         with torch.no_grad():
             for index, mb in enumerate(tqdm(self._inference_subjects, desc="Steps", position=0)):
                 self._logger.info(f"Operating with subject: {mb}")
-                s = self._unpack_minibatch(mb, self.unpack_keys_inf)
+                s = self._unpack_minibatch(mb, self.solverparams_unpack_keys_inf)
                 s = self._match_type_with_network(s)
 
                 if isinstance(s, list):
@@ -178,13 +171,13 @@ class ClassificationInferencer(InferencerBase):
             # self.attention_write_out(out_attention)
             pass
         if os.path.isdir(self._outdir):
-            self.outdir = os.path.join(self._outdir, 'class_inf.csv')
-        if not self.outdir.endswith('.csv'):
-            self.outdir += '.csv'
-        if os.path.isfile(self.outdir):
-            self._logger.log_print_tqdm("Overwriting file %s!" % self.outdir, 30)
-        if not os.path.isdir(os.path.dirname(self.outdir)):
-            os.makedirs(os.path.dirname(self.outdir), exist_ok=True)
+            self.output_dir = os.path.join(self._outdir, 'class_inf.csv')
+        if not self.output_dir.endswith('.csv'):
+            self.output_dir += '.csv'
+        if os.path.isfile(self.output_dir):
+            self._logger.log_print_tqdm("Overwriting file %s!" % self.output_dir, 30)
+        if not os.path.isdir(os.path.dirname(self.output_dir)):
+            os.makedirs(os.path.dirname(self.output_dir), exist_ok=True)
 
         # Write decision
         out_decisions['IDs'] = self._in_dataset.get_unique_IDs()
@@ -196,8 +189,5 @@ class ClassificationInferencer(InferencerBase):
 
         out_decisions['Decision'] = out_decision.tolist()
         dl = DataLabel.from_dict(out_decisions)
-        dl.write(self.outdir)
+        dl.write(self.output_dir)
         return dl
-
-    def set_dataloader(self, loader):
-        self._data_loader = loader

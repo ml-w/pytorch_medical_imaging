@@ -46,6 +46,7 @@ class InferencerBase(object):
         self.iscuda = use_cuda
         self.output_dir = output_dir
         self.hyperparam_dict = hyperparam_dict
+        self.pmi_data_loader = pmi_data_loader
         self.debug = debug
         self.__dict__.update(hyperparam_dict)
 
