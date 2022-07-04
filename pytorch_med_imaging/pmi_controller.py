@@ -238,9 +238,10 @@ class PMIController(object):
 
     def inference(self):
         self._logger.log_print_tqdm("Starting evaluation...")
-        loader, loader_val = self.prepare_loaders(inference_mode=True)
+        loader = self.prepare_loaders(inference_mode=True)
         inferencer = self.create_inferencer(self.general_run_type)
-        inferencer.set_dataloader(loader, loader_val)
+        inferencer.set_dataloader(loader)
+        inferencer.load_checkpoint(self.checkpoint_cp_load_dir)
 
         # if self.solverparams_write_mode == 'GradCAM':
         #     #TODO: custom grad cam layers
@@ -267,31 +268,40 @@ class PMIController(object):
 
     def prepare_loaders(self, inference_mode = False) -> Iterable[PMIDataLoaderBase]:
         r"""This creates the loader, i.e. torchio iterables for the DataLoader"""
-        trainingSubjects = self.pmi_data.load_dataset()
+        if inference_mode: # switch to inference loading mode
+            _tmp = self.pmi_data._run_mode
+            self.pmi_data._run_mode = 'inference'
+
+        subjects = self.pmi_data.load_dataset()
         validationSubjects = self.pmi_data_val.load_dataset() if self.validation_FLAG else (None, None)
         # Prepare dataset
         # numcpu = int(os.environ.get('SLURM_CPUS_ON_NODE', default=torch.multiprocessing.cpu_count()))
         if self.loaderparams_pmi_loader_name is None:
             # num_workers is required to be zero by torchio
-            loader = DataLoader(trainingSubjects,
+            loader = DataLoader(subjects,
                                 batch_size  = self.runparams_batch_size,
                                 shuffle     = not inference_mode,
                                 num_workers = 0,
                                 drop_last   = not inference_mode,
                                 pin_memory  = False)
-            loader_val = DataLoader(validationSubjects,
-                                    batch_size  = self.runparams_batch_size,
-                                    shuffle     = False,
-                                    num_workers = 0,
-                                    drop_last   = False,
-                                    pin_memory  = False) if self.validation_FLAG else None
+            if not inference_mode:
+                loader_val = DataLoader(validationSubjects,
+                                        batch_size  = self.runparams_batch_size,
+                                        shuffle     = False,
+                                        num_workers = 0,
+                                        drop_last   = False,
+                                        pin_memory  = False) if self.validation_FLAG else None
         else:
             self._logger.info("Loading custom dataloader.")
             loader_factory = PMIBatchSamplerFactory()
             loader = loader_factory.produce_object(trainingSet, self.config)
-            loader_val = loader_factory.produce_object(valSet, self.config,
-                                                       force_inference=inference_mode) if self.validation_FLAG else None
-        return loader, loader_val
+            loader_val = loader_factory.produce_object(valSet, self.config) if self.validation_FLAG else None
+
+        if inference_mode:
+            self.pmi_data._run_mode = _tmp
+            return loader
+        else:
+            return loader, loader_val
 
     def _error_check(self):
         # Error check

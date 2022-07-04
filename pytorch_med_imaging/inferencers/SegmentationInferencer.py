@@ -116,7 +116,7 @@ class SegmentationInferencer(InferencerBase):
                 dataloader = DataLoader(_queue, batch_size=self._data_loader.batch_size, num_workers=0)
                 ndim = subject.get_first_image()[tio.DATA].dim()  # Assume channel dim always exist even if only has 1 channel
                 for i, mb in enumerate(tqdm(dataloader, desc="Patch", position=1)):
-                    s = self._unpack_minibatch(mb, self.solverparams_unpack_keys_inf)
+                    s = self._unpack_minibatch(mb, self.solverparams_unpack_keys_inference)
                     s = self._match_type_with_network(s)
 
                     if isinstance(s, list):

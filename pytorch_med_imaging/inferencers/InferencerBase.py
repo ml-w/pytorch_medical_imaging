@@ -150,11 +150,11 @@ class InferencerBase(object):
         r"""Load the checkpoint states"""
         checkpoint_path = Path(checkpoint_path)
         if not checkpoint_path.is_file():
-            msg += f"Cannot open checkpoint at: {str(checkpoint_path)}!"
+            msg = f"Cannot open checkpoint at: {str(checkpoint_path)}!"
             raise IOError(msg)
 
-        self._logger.info("Loading checkpoint " + checkpoint_dir)
-        self.get_net().load_state_dict(torch.load(str(checkpoint_dir)), strict=False)
+        self._logger.info("Loading checkpoint " + str(checkpoint_path))
+        self.get_net().load_state_dict(torch.load(str(checkpoint_path)), strict=False)
 
     @abstractmethod
     def _prepare_data(self):
