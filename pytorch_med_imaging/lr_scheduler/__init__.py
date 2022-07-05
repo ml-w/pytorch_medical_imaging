@@ -1,1 +1,1 @@
-from .decay_cawr import DecayCAWR
+from .decay_cawr import *
