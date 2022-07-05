@@ -280,9 +280,11 @@ class TestSolvers(TestController):
         after = self.solver.get_last_lr()
         self.assertLess(before, after)
 
+
 class TestSegmentationSolver(TestSolvers):
     def __init__(self, *args, **kwargs):
         super(TestSegmentationSolver, self).__init__(*args, **kwargs)
+
 
 class TestClassificaitonSolver(TestSolvers):
     def __init__(self, *args, **kwargs):
@@ -291,12 +293,14 @@ class TestClassificaitonSolver(TestSolvers):
             sample_config = "./sample_data/config/sample_config_class.ini",
             **kwargs)
 
+
 class TestBinaryClassificaitonSolver(TestSolvers):
     def __init__(self, *args, **kwargs):
         super(TestBinaryClassificaitonSolver, self).__init__(
             *args,
             sample_config = "./sample_data/config/sample_config_binaryclass.ini",
             **kwargs)
+
 
 class TestrAIdiologistSolver(TestSolvers):
     def __init__(self, *args, **kwargs):
@@ -339,6 +343,7 @@ class TestInferencer(TestController):
             torch.save(self.controller.net.state_dict(), tmp_checkpoint.name)
             self.controller.run()
 
+
 class TestSegmentationInferencer(TestInferencer):
     def __init__(self, *args, **kwargs):
         super(TestSegmentationInferencer, self).__init__(
@@ -353,6 +358,7 @@ class TestSegmentationInferencer(TestInferencer):
             ('RunParams', 'Batch_size'): 15
         }
         super(TestSegmentationInferencer, self).override_config(override_dict)
+
 
 class TestClassificationInferencer(TestInferencer):
     def __init__(self, *args, **kwargs):
