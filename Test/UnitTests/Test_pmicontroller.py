@@ -113,7 +113,6 @@ class TestController(unittest.TestCase):
         self.assertIsInstance(loader, DataLoader)
         self.assertIsInstance(loader_val, DataLoader)
 
-
     def test_unpack_config(self):
         checks = {
             ('RunParams', 'batch_size')          : int,
@@ -269,7 +268,6 @@ class TestSolvers(TestController):
         self.solver.fit(str(self.temp_output_path.joinpath("test.pt")),
                         False)
         self.assertTrue(self.solver._early_stop_scheduler._last_epoch < 14)
-
 
     @unittest.skip("temp")
     def test_fit(self):
