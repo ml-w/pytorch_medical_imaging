@@ -122,11 +122,18 @@
         bs_rnn: 24
         debug: no
       steps:
-        - train        config=${config_stage0} epoch=200 debug=${debug} batch-size=${bs_swran} lr=2E-5 override="(General,fold_code)=${fold_code}"
-        - train_looped config=${config}        epoch=50  debug=${debug} batch-size=${bs_rnn}   lr=5E-5 override="(SolverParams,rAI_fixed_mode)=1;(General,fold_code)=${fold_code}"
-        - train_looped config=${config}        epoch=50  debug=${debug} batch-size=${bs_cnn}   lr=3E-5 override="(SolverParams,rAI_fixed_mode)=2;(General,fold_code)=${fold_code}"
-        - train_looped config=${config}        epoch=50  debug=${debug} batch-size=${bs_rnn}   lr=3E-5 override="(SolverParams,rAI_fixed_mode)=3;(General,fold_code)=${fold_code}"
-        - train_looped config=${config}        epoch=100 debug=${debug} batch-size=${bs_cnn}   lr=1E-5 override="(SolverParams,rAI_fixed_mode)=4;(General,fold_code)=${fold_code}"
+        - train        config=${config_stage0} epoch=200 debug=${debug} batch-size=${bs_swran} lr=2E-5
+          override="(General,fold_code)=${fold_code}"
+        - train_looped config=${config} epoch=50  debug=${debug} batch-size=${bs_rnn} lr=5E-5
+          override="(SolverParams,rAI_fixed_mode)=1;(General,fold_code)=${fold_code}"
+        - train_looped config=${config} epoch=50  debug=${debug} batch-size=${bs_cnn} lr=3E-5
+          override="(SolverParams,rAI_fixed_mode)=2;(General,fold_code)=${fold_code}"
+        - train_looped config=${config} epoch=50  debug=${debug} batch-size=${bs_rnn} lr=3E-5
+          override="(SolverParams,rAI_fixed_mode)=3;(General,fold_code)=${fold_code}"
+        - train_looped config=${config} epoch=100 debug=${debug} batch-size=${bs_cnn} lr=1E-5
+          override="(SolverParams,rAI_fixed_mode)=4;(General,fold_code)=${fold_code};(SolverParams,lr_scheduler_args)
+          =[0.98,0.98,20,3];(SolverParams,lr_scheduler_kwargs)={'eta_min':1E-6,'T_mult':2}"
+        - validation   config=${config} debug=${debug} batch-size={bs_rnn} override="(General,fold_code)=${fold_code}"
 
     pipeline:
       flags:
