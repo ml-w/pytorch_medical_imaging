@@ -47,6 +47,7 @@ class ClassificationInferencer(InferencerBase):
         return 0
 
     def attention_write_out(self, attention_list):
+        raise DeprecationWarning("Don't use this function!")
         attention_outdir = os.path.dirname(self.output_dir)
         id_lists = self._in_dataset.get_unique_IDs()
         temp_atten_list = [t for t in zip(*attention_list)]
@@ -78,6 +79,7 @@ class ClassificationInferencer(InferencerBase):
         pass
 
     def grad_cam_write_out(self, target_layer):
+        raise DeprecationWarning("Don't use this function!")
         gradcam = GradCam(self.net, target_layer)
 
         out_tensor = []

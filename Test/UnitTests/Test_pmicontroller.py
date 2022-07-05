@@ -121,11 +121,13 @@ class TestController(unittest.TestCase):
             ('SolverParams', 'momentum')         : float,
             ('SolverParams', 'num_of_epochs')    : int,
             ('SolverParams', 'decay_rate_LR')    : float,
-            ('SolverParams', 'lr_scheduler_dict'): dict,
-            ('SolverParams', 'early_stop')       : dict
+            ('SolverParams', 'lr_scheduler_dict'): (dict, None),
+            ('SolverParams', 'early_stop')       : (dict, None)
         }
         for keys in checks:
             try:
+                if getattr(self.controller, self.controller._make_dict_key(*keys)) is None:
+                    continue
                 self.assertIsInstance(getattr(self.controller, self.controller._make_dict_key(*keys)), checks[keys])
             except:
                 self.fail(f"Error when checking key: {keys}")
@@ -256,6 +258,18 @@ class TestSolvers(TestController):
         self.solver.fit(str(self.temp_output_path.joinpath("test.pt")),
                         True)
         self.assertTrue(len(list(self.temp_output_path.glob("*pt"))) != 0)
+
+    def test_early_stop(self):
+        from pytorch_med_imaging.solvers.SolverBase import SolverEarlyStopScheduler
+        early_stop = {'method'  : 'LossReference', 'warmup': 0, 'patience': 2}
+        self.solver._early_stop_scheduler = SolverEarlyStopScheduler(early_stop)
+        self.solver.solverparams_num_of_epochs= 15
+        loader, loader_val = self.controller.prepare_loaders()
+        self.solver.set_dataloader(loader, loader_val)
+        self.solver.fit(str(self.temp_output_path.joinpath("test.pt")),
+                        False)
+        self.assertTrue(self.solver._early_stop_scheduler._last_epoch < 14)
+
 
     @unittest.skip("temp")
     def test_fit(self):

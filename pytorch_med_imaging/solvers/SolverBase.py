@@ -69,12 +69,14 @@ class SolverBase(object):
         #     self._config = kwargs.get('config', None)
 
         # internal_attributes
-        self._net_weight_type   = None
-        self._data_logger       = None
-        self._data_loader       = None
-        self._data_loader_val   = None
-        self._tb_plotter        = None
-        self._local_rank        = 0
+        self._net_weight_type        = None
+        self._data_logger            = None
+        self._data_loader            = None
+        self._data_loader_val        = None
+        self._tb_plotter             = None
+        self._local_rank             = 0
+        self.lr_scheduler            = None
+        self.solverparams_early_stop = None
 
         # external_att
         self.plotter_dict      = {}
@@ -92,6 +94,9 @@ class SolverBase(object):
             self._logger.info("Moving lossfunction and network to GPU.")
             self.lossfunction = self.lossfunction.cuda()
             self.net = self.net.cuda()
+
+        # Stopping criteria
+        self._early_stop_scheduler = SolverEarlyStopScheduler(self.solverparams_early_stop)
 
     def _load_default_attr(self, default_dict = None):
         r"""If the default_dict items are not specified in the hyperparameter_dict, this will
@@ -143,7 +148,7 @@ class SolverBase(object):
             'cooldown':2,
             'min_lr': 1E-6,
             'threshold':0.05,
-            'threshold_mode':'rel'
+            'threshold_mode':'rel',
         }
         try:
             _default_kwargs.update(kwargs)
@@ -389,9 +394,6 @@ class SolverBase(object):
             if i % 5 == 0:
                 torch.save(self.get_net().state_dict(), checkpoint_path.replace('.pt', '_{:03d}.pt'.format(i)))
 
-            # TODO: early stopping if criteria true
-            # early_stop = earlystopper.step(loss)
-
             try:
                 current_lr = next(self.get_optimizer().param_groups)['lr']
             except:
@@ -400,6 +402,10 @@ class SolverBase(object):
                               %(i,
                                 f'{epoch_loss:.010f}' if epoch_loss is not None else 'None',
                                 f'{current_lr:.010f}' if current_lr is not None else 'None',))
+            if self._early_stop_scheduler.step(measure_loss, i) != 0:
+                self._logger.info("Early stopped.")
+                break
+
 
     @abstractmethod
     def validation(self, *args, **kwargs):
@@ -569,38 +575,54 @@ class SolverBase(object):
 
 
 class SolverEarlyStopScheduler(object):
-    def __init__(self, configs):
+    def __init__(self, configs: Union[str, dict]):
         super(SolverEarlyStopScheduler, self).__init__()
         self._configs = configs
         self._logger = MNTSLogger[__class__.__name__]
         self._last_loss = 1E-32
         self._watch = 0
+        self._func = None
 
-        if self._configs is None:
-            self._warmup = None
-            self._patience = None
-            pass
-        else:
-            _c = self._configs['RunParams'].get('early_stop', {})
-            _c = eval(_c)
+
+        if configs is None:
+            self._func = None
+            return
+
+        if self._configs is not None:
+            if isinstance(configs, str):
+                _c = configs
+                if re.search("[\W]+", _c.translate(str.maketrans('', '', ". "))) is not None:
+                    raise AttributeError(f"You requested_datatype specified ({requested_datatype}) "
+                                         f"contains illegal characters!")
+                _c = eval(_c)
+            else:
+                _c = configs
 
             if not isinstance(_c, dict):
                 self._logger.error(f"Wrong early stopping settings, cannot eval into dict. Receive arguments: {_c}")
                 self._logger.warning("Ignoring early stopping options")
                 self._configs = None
+            else:
+                self._configs = _c
+
+        policies = {
+            '(?i)loss.?reference': ('Loss Reference', self._loss_reference),
+        }
+        for keyregex in policies:
+            if self._configs.get('method', None) is None:
+                self._logger.info(f"No stopping policy specified")
                 return
+            if re.findall(keyregex, self._configs['method']):
+                name, func = policies[keyregex]
+                self._logger.info(f"Specified early stop policy: {name}")
+                self._func = func
+                break
 
-            warmup = _c.get('warmup', None)
-            patience = _c.get('patience', None)
-
-            if warmup is None or patience is None or warmup < 0 or patience < 0:
-                self._logger.warning(f"Wrong ealry stopping settings: {_c}")
-                self._logger.warning("Ignoring early stopping options")
-                self._configs = None
-                return
-
-            self._warmup = warmup
-            self._patience = patience
+        # if self._func is not specified at this point, configuration is incorrect, raise error
+        if self._func == None:
+            msg = f"Available methods were: [{'|'.join([i for (k, i) in policies.values()])}], " \
+                  f"but got {self._configs['method']}."
+            raise AttributeError(msg)
 
     def step(self,
              loss: float,
@@ -609,20 +631,45 @@ class SolverEarlyStopScheduler(object):
         Returns 1 if reaching stopping criteria, else 0.
         """
         # ignore if there are no configs
-        if self._configs is None:
+        self._last_loss = loss
+        self._last_epoch = epoch
+        if self._func is None:
             return 0
         else:
-            if epoch < self._warmup:
-                return 0
-            else:
-                # reset if lass is smaller than last loss
-                if loss < self._last_loss:
-                    self._watch = 0
-                    self._last_loss = loss
-                    return 0
-                else:
-                    self._watch += 1
+            return self._func(loss, epoch)
 
-            # Stop if enough iterations show no decrease
-            if self._watch > self._patience:
-                return 1
+
+    def _loss_reference(self, loss, epoch) -> int:
+        r"""
+        Attributes:
+
+        """
+        warmup   = self._configs.get('warmup'  , None)
+        patience = self._configs.get('patience', None)
+
+        if warmup is None:
+            raise AttributeError("Missing early stopping criteria: 'warmup'")
+        if patience is None:
+            raise AttributeError("Missing early stopping criteria: 'patience'")
+        if warmup < 0 or patience <= 0:
+            msg = f"Expect warmup < 0 or patience <= 0, but got 'warmup'={warmup} and 'patience'" \
+                  f"={patience}."
+            raise ArithmeticError(msg)
+
+        if epoch < warmup:
+                return 0
+        else:
+            if loss < self._last_loss:
+                # reset if new loss is smaller than last loss
+                self._watch = 0
+                self._last_loss = loss
+            else:
+                # otherwise, add 1 to counter
+                self._watch += 1
+
+        # Stop if enough iterations show no decrease
+        if self._watch > patience:
+            self._logger.info(f"Stopping criteria reached at epoch: {epoch}")
+            return 1
+        else:
+            return 0

@@ -426,6 +426,7 @@ class PMIController(object):
             ('LoaderParams', 'PMI_loader_kwargs')   : None,
             ('LoaderParams', 'PMI_datatype_name')   : None,
             ('SolverParams', 'lr_scheduler')        : None,
+            ('SolverParams', 'early_stop')          : None,
             ('SolverParams', 'decay_on_plateau')    : False,
             ('General'     , 'plot_tb')             : False,
             ('General'     , 'use_cuda')            : False,

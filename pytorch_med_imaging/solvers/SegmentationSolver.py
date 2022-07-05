@@ -253,7 +253,7 @@ class SegmentationSolver(SolverBase):
 
     def _step_callback(self, s, g, out, loss, step_idx=None):
         if self._tb_plotter is None:
-            self._logger.warning("There are no tb_plotter.")
+            self._logger.warning("There are no tb_plotter.", True)
             return
 
         # sometimes there extra inputs provided to forward, conventionally, the first input should be the image
