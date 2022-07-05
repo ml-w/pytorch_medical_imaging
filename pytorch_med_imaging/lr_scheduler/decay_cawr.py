@@ -1,5 +1,6 @@
 from torch.optim import lr_scheduler
 from bisect import bisect_right
+import numpy as np
 
 __all__ = ['DecayCAWR', 'DecayCAWR_n_EXP']
 
