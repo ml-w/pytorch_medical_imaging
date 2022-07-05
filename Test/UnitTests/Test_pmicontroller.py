@@ -30,8 +30,8 @@ class TestController(unittest.TestCase):
         self.temp_config_path = Path(self.temp_config.name)
 
         # replace logger
-        self.logger = MNTSLogger(self.temp_output_dir.name + "/log",
-                                 logger_name='unittest', verbose=True, keep_file=False, log_level='debug')
+        self._logger = MNTSLogger(self.temp_output_dir.name + "/log",
+                                  logger_name='unittest', verbose=True, keep_file=False, log_level='debug')
 
         # create the controller
         config_obj = configparser.ConfigParser(interpolation=configparser.ExtendedInterpolation())
@@ -79,14 +79,25 @@ class TestController(unittest.TestCase):
 
     def test_solver_create(self):
         #TODO: test all kind of solvers
+        if not self.__class__.__name__.find('Solver') > -1:
+            raise unittest.SkipTest("Skip for not testing solvers")
         solver = self.controller.create_solver(self.controller.general_run_type)
         self.assertEqual(solver.__class__.__name__,
                          re.search("^[\w]+", self.controller.general_run_type).group() + "Solver")
 
     def test_solver_net_create(self):
+        if not self.__class__.__name__.find('Solver') > -1:
+            raise unittest.SkipTest("Skip for not testing solvers")
         solver = self.controller.create_solver(self.controller.general_run_type)
         net_name = solver.net.__class__.__name__
         self.assertEqual(net_name, re.search("^[\w]+", self.controller.network_network_type).group())
+
+    def test_inferencer_create(self):
+        if not self.__class__.__name__.find('Inferencer') > -1:
+            raise unittest.SkipTest("Skip for not testing inferencer")
+        infer = self.controller.create_inferencer(self.controller.general_run_type)
+        self.assertEqual(infer.__class__.__name__,
+                         re.search("^[\w]+", self.controller.general_run_type).group() + "Inferencer")
 
     def test_create_tb_writter(self):
         from pytorch_med_imaging.tb_plotter import TB_plotter
@@ -102,12 +113,6 @@ class TestController(unittest.TestCase):
         self.assertIsInstance(loader, DataLoader)
         self.assertIsInstance(loader_val, DataLoader)
 
-    def test_inferencer_create(self):
-        # TODO: create inferencer requires checkpoint, need to put that into sample_data
-        # infer = self.controller.create_inferencer(self.controller.run_type)
-        # self.assertEqual(solver.__class__.__name__,
-        #                  re.search("^[\w]+", self.controller.run_type).group() + "Inferencer")
-        pass
 
     def test_unpack_config(self):
         checks = {
@@ -176,13 +181,13 @@ class TestSolvers(TestController):
                  'eta_min': 1E-6}
             ]
         }
-        self.logger.info("Testing creating of learning rate schedulers.")
+        self._logger.info("Testing creating of learning rate schedulers.")
         for key, val in scheduler_args.items():
             _args = val[0]
             _kwargs = val[1] if len(val) > 1 else {}
             try:
                 self.solver.set_lr_scheduler(key, *_args, **_kwargs)
-                self.logger.info(f"Passed for {key}.")
+                self._logger.info(f"Passed for {key}.")
             except Exception as e:
                 self.fail(f"Fail when creating lr_scheduler {key}")
 
@@ -219,7 +224,7 @@ class TestSolvers(TestController):
             ]
         }
         # Test create from config
-        self.logger.info("Testing creating of learning scheduler using config file.")
+        self._logger.info("Testing creating of learning scheduler using config file.")
         for key, val in scheduler_args.items():
             self.config['SolverParams']['lr_scheduler'] = key
             self.config['SolverParams']['lr_scheduler_args'] = val[0]
@@ -231,7 +236,7 @@ class TestSolvers(TestController):
                 self.solver.set_lr_scheduler(self.controller.solverparams_lr_scheduler,
                                              *self.controller.solverparams_lr_scheduler_args,
                                              **self.controller.solverparams_lr_scheduler_kwargs)
-                self.logger.info(f"Passed for {key}.")
+                self._logger.info(f"Passed for {key}.")
             except:
                 self.fail(f"Fail when creating lr_schedule {key} from config.")
 
@@ -311,17 +316,57 @@ class TestInferencer(TestController):
         super(TestInferencer, self).setUp()
         self.infer = self.controller.create_inferencer(self.controller.general_run_type)
 
+    def override_config(self, override_config ={}):
+        override_dict = {
+            ('General', 'run_mode'): 'inference'
+        }
+        override_dict.update(override_config)
+        for (section, key), value in override_dict.items():
+            self.config[section][key] = str(value)
+
+    def test_inference(self):
+        self._logger.info(f"Crearing checkpoint: {self.controller.checkpoint_cp_load_dir}")
+        with tempfile.NamedTemporaryFile(suffix=".pt", mode='w+') as tmp_checkpoint:
+            self.controller.checkpoint_cp_load_dir = tmp_checkpoint.name
+            torch.save(self.controller.net.state_dict(), tmp_checkpoint.name)
+            self.controller.run()
+
+    def test_inference_no_gt(self):
+        self._logger.info(f"Crearing checkpoint: {self.controller.checkpoint_cp_load_dir}")
+        with tempfile.NamedTemporaryFile(suffix=".pt", mode='w+') as tmp_checkpoint:
+            self.controller.pmi_data._target_dir = None
+            self.controller.checkpoint_cp_load_dir = tmp_checkpoint.name
+            torch.save(self.controller.net.state_dict(), tmp_checkpoint.name)
+            self.controller.run()
 
 class TestSegmentationInferencer(TestInferencer):
     def __init__(self, *args, **kwargs):
         super(TestSegmentationInferencer, self).__init__(
             *args,
             sample_config = "./sample_data/config/sample_config_seg.ini",
-            **kwargs)
+            **kwargs
+        )
 
     def override_config(self):
         override_dict = {
-            ('General', 'run_mode'): 'inference'
+            ('LoaderParams', 'inf_samples_per_vol'): 10,
+            ('RunParams', 'Batch_size'): 15
         }
-        for (section, key), value in override_dict.items():
-            self.config[section][key] = str(value)
+        super(TestSegmentationInferencer, self).override_config(override_dict)
+
+class TestClassificationInferencer(TestInferencer):
+    def __init__(self, *args, **kwargs):
+        super(TestClassificationInferencer, self).__init__(
+            *args,
+            sample_config = "./sample_data/config/sample_config_class.ini",
+            **kwargs
+        )
+
+
+class TestBinaryClassificationInferencer(TestInferencer):
+    def __init__(self, *args, **kwargs):
+        super(TestBinaryClassificationInferencer, self).__init__(
+            *args,
+            sample_config = "./sample_data/config/sample_config_binaryclass.ini",
+            **kwargs
+        )
