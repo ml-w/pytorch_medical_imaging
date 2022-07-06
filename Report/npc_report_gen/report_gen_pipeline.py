@@ -96,6 +96,8 @@ def main(raw_args=None):
             raise IOError(f"Input specified is incorrect, expect a directory or an nii file, got '{a.input}' instead.")
 
         # Normalize target
+        t_0 = time.time()
+        logger.info("{:-^80}".format(" Normalization "))
         nii_files = list(temp_dirname.iterdir())
         normalized_dir = temp_dirname.joinpath('normalized_image_raw')
         normalized_dir.mkdir()
@@ -103,6 +105,7 @@ def main(raw_args=None):
             raise FileNotFoundError(f"Nothing is found in the temporary directory.")
         run_graph_inference(f"-i {str(temp_dirname)} -o {str(normalized_dir)} "
                             f"-f ./asset/t2w_normalization.yaml --state-dir ./asset/trained_states".split())
+        logger.info("{:-^80}".format(f" Normalization Done (Total time: {time.time() - t_0:.01f}s) "))
 
         #!! Debug
         # normalized_dir.mkdir(exist_ok=True)
@@ -114,6 +117,8 @@ def main(raw_args=None):
         #=================
         # Run segmentation
         #=================
+        t_0 = time.time()
+        logger.info("{:-^80}".format(" Segmentation - Coarse "))
         segment_output = temp_dirname.joinpath('segment_output')
         override_tags = {
             '(Data,input_dir)': str(normalized_dir.joinpath('NyulNormalizer')),
@@ -125,11 +130,14 @@ def main(raw_args=None):
                   f"--override={override_string} --inference --verbose".split()
         logger.debug(f"{command}")
         pmi_main(command)
+        logger.info("{:-^80}".format(f" Segmentation - Coarse Done (Total time: {time.time() - t_0:.01f}s) "))
 
         # Slightly grow the segmented region such that the patch sampling is done better
         grow_segmentation(str(segment_output))
 
         # Re-run segmentation using the previous segmentation as sampling reference.
+        t_0 = time.time()
+        logger.info("{:-^80}".format(" Segmentation - Fine "))
         override_tags = {
             '(Data,input_dir)': str(normalized_dir.joinpath('NyulNormalizer')),
             '(Data,prob_map_dir)': str(segment_output),
@@ -140,6 +148,7 @@ def main(raw_args=None):
                   f"--override={override_string} --inference --verbose".split()
         logger.debug(f"{command}")
         pmi_main(command)
+        logger.info("{:-^80}".format(f" Segmentation - Fine Done (Total time: {time.time() - t_0:.01f}s) "))
 
         # Copy the image to temp folder
         normalized_image_dir = temp_dirname.joinpath('normalized_image')
@@ -172,6 +181,8 @@ def main(raw_args=None):
         #============================
         # Run deep learning diagnosis
         #============================
+        t_0 = time.time()
+        logger.info("{:-^80}".format(" rAIdiologist "))
         dl_output_dir = temp_dirname.joinpath('dl_diag')
         override_tags = {
             '(Data,input_dir)': str(normalized_dir.joinpath('NyulNormalizer')),
@@ -183,6 +194,7 @@ def main(raw_args=None):
                   f"--override={override_string} --inference".split()
         logger.info(f"Command for deep learning analysis: {command}")
         pmi_main(command)
+        logger.info("{:-^80}".format(f" rAIdiologist Done (Total time: {time.time() - t_0:.01f}s) "))
         # shutil.copytree(str(dl_output_dir), str(output_dir.joinpath(dl_output_dir.name)))
 
         # Convert DL outputs to report gen data and run gen report
@@ -190,13 +202,14 @@ def main(raw_args=None):
         report_dir.mkdir(exist_ok=True)
         generate_report(temp_dirname, report_dir, dump_diagnosis=a.dump_diagnosis)
 
+        logger.info("{:=^80}".format(f" Report Gen Done "))
         temp_dir.cleanup()
 
 def seg_post_main(in_dir: Path,
                   out_dir: Path):
     r"""Post processing segmentation"""
     with MNTSLogger('pipeline.log', 'seg_post_main') as logger:
-        logger.info("{:=^120}".format(" Post processing segmentation "))
+        logger.info("{:-^80}".format(" Post processing segmentation "))
         in_dir = Path(in_dir)
         out_dir = Path(out_dir)
         source = list(Path(in_dir).glob("*.nii.gz")) + list(Path(in_dir).glob("*.nii"))
