@@ -80,14 +80,18 @@ class PMIImageDataLoader(PMIDataLoaderBase):
         super(PMIImageDataLoader, self)._read_params(config_file)
         self._regex = self.get_from_config('Filters', 're_suffix', None)
         self._idlist = self.get_from_config('Filters', 'id_list', None)
-        if isinstance(self._idlist, str):
+        if not self._idlist in ("", None):
             if self._idlist.endswith('.ini'):
                 self._idlist = self.parse_ini_filelist(self._idlist, self._run_mode)
             elif self._idlist.endswith('.txt'):
                 self._idlist = [r.rstrip() for r in open(self._idlist).readlines()]
             else:
-                self._idlist = self._idlist.split(',')
+                if self._idlist.find(',') >= 0:
+                    self._idlist = self._idlist.split(',')
             self._idlist.sort()
+        else:
+            self._idlist = None
+
         self._exclude = self.get_from_config('Filters', 'id_exclude', None)
         if not self._exclude is None:
             self._exclude = self._exclude.split(',')
