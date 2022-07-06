@@ -119,7 +119,7 @@ class PMIController(object):
             return
 
         self.validation_FLAG=False
-        if not self.filters_validation_id_list is None and self.general_plot_tb:
+        if not self.filters_validation_id_list in (None , "") and self.general_plot_tb:
             self._logger.log_print_tqdm("Recieved validation parameters.")
             val_config = configparser.ConfigParser()
             val_config.read_dict(self.config)
@@ -420,8 +420,8 @@ class PMIController(object):
             ('Filters'     , 'validation_re_suffix'): ('Filters', 're_suffix'),
             ('RunParams'   , 'initial_weight')      : None,
             ('Network'     , 'initialization')      : None,
-            ('Filters'     , 'id_list')             : None,
-            ('Filters'     , 'validation_id_list')  : None,
+            ('Filters'     , 'id_list')             : "",
+            ('Filters'     , 'validation_id_list')  : "",
             ('LoaderParams', 'PMI_loader_name')     : None,
             ('LoaderParams', 'PMI_loader_kwargs')   : None,
             ('LoaderParams', 'PMI_datatype_name')   : None,
