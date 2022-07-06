@@ -751,6 +751,7 @@ class ReportGen_NPC_Screening(Canvas):
 
             # Crop first:
             img = self.crop_image(img, crop['center'], crop['size'])
+            seg = self.crop_image(seg, crop['center'], crop['size'])
 
             # TODO: Mark slices with prediction scores.
             # check if
@@ -805,6 +806,8 @@ class ReportGen_NPC_Screening(Canvas):
             if mode == 3:
                 seg = None
             img = self.crop_image(img, crop['center'], crop['size'])
+            seg = self.crop_image(seg, crop['center'], crop['size'])
+
             self.image = draw_grid_contour(img, [seg], color=[(255, 100, 55)],
                                            nrow=nrow, padding=2, thickness=1, alpha=0.8)
 
