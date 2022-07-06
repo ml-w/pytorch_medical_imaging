@@ -283,7 +283,8 @@ class ImageDataSet(PMIDataBase):
         r"""Filter the `file_dirs` using the specified attributions. Used in `parse_root_dir`."""
         # Filter by filelist
         #-------------------
-        if self._filtermode == 'idlist' or self._filtermode == 'both':
+        if (self._filtermode == 'idlist' or self._filtermode == 'both') and \
+                self._filterargs['idlist'] not in ("", None):
             self._logger.info("Globbing ID with globber: " + self._id_globber + " ...")
             file_basenames = [os.path.basename(f) for f in file_dirs]
             file_ids = {f: re.search(self._id_globber, f) for f in file_basenames}
@@ -295,7 +296,6 @@ class ImageDataSet(PMIDataBase):
                 self._logger.debug(f"{file_ids}")
             # Don't sort otherwise the order of file_ids and file_dirs will become different.
             file_ids = list(file_ids.values())
-
 
             if isinstance(self._filterargs['idlist'], str) and not self._filterargs['idlist'] == "":
                 # If its a file directory

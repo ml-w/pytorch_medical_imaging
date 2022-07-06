@@ -55,6 +55,9 @@ class rAIdiologistInferencer(BinaryClassificationInferencer):
         if gt_list is None:
             raise AttributeError("gt_list should not be none, if there are no gt, it should be an empty list.")
         out_tensor = torch.cat(out_list, dim=0) #(NxC)
+        if out_tensor.dim() < 2:
+            out_tensor = out_tensor.unsqueeze(0)
+
         gt_tensor = torch.cat(gt_list, dim=0) if len(gt_list) > 0 else None
         if not gt_tensor is None:
             while gt_tensor.dim() < out_tensor.dim():
