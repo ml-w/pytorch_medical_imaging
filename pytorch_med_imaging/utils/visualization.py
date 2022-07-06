@@ -341,7 +341,8 @@ def draw_grid_contour(im_grid, seg, crop=None, nrow=None, offset=0, background=0
 
     Args:
         im_grid (np.ndarray):
-            Input 3D image, should have a dimension of 3 with configuration Z x W x H.
+            Input 3D image, should have a dimension of 3 with configuration Z x W x H, or a dimension of 4 with
+            configuration Z x C x W x H
         seg (list):
             Input 3D segmentation list, each should have a dimension of 3 with configuration Z x W x H.
         crop (dict, Optional):
@@ -404,7 +405,7 @@ def draw_grid_contour(im_grid, seg, crop=None, nrow=None, offset=0, background=0
         if not crop is None:
             # Find center of mass for segmentation
             ss_shape = ss.shape
-            ss = ss[:, :, lower_bound[0]:upper_bound[0], lower_bound[1]:upper_bound[1]]
+            ss = ss[..., lower_bound[0]:upper_bound[0], lower_bound[1]:upper_bound[1]]
 
         if nrow is None:
             nrow = int(np.round(np.sqrt(ss.shape[0])))
@@ -425,7 +426,11 @@ def draw_grid_contour(im_grid, seg, crop=None, nrow=None, offset=0, background=0
         a_contours.append(contours)
     # Draw contour on image grid
     try:
-        im_grid = make_grid(torch.as_tensor(im_grid).unsqueeze(1), nrow=nrow, padding=margins, normalize=True, pad_value=0)
+        im_grid = torch.as_tensor(im_grid)
+        if im_grid.ndimension() == 3:
+            im_grid = im_grid.unsqueeze(1)
+
+        im_grid = make_grid(im_grid.float(), nrow=nrow, padding=margins, normalize=True, pad_value=0)
         im_grid = (im_grid.numpy().copy() * 255).astype('uint8').transpose(1, 2, 0)
         temp = np.zeros_like(im_grid)
         for idx, c in enumerate(a_contours):

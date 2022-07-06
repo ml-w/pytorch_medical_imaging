@@ -3,6 +3,7 @@ import pprint
 import shutil
 import time
 import datetime
+import json
 
 from typing import Union, Sequence
 
@@ -419,6 +420,8 @@ def generate_report(root_dir: Union[Path, str],
         report_dir.mkdir(exist_ok=True)
 
         res_csv = pd.read_csv(list(root_dir.joinpath('dl_diag').glob('*.csv'))[0], index_col=0)
+        risk_data = root_dir.joinpath('dl_diag/class_inf.json')
+        risk_data = {} if not risk_data.is_file() else json.load(risk_data.open('r'))
         for i, (f_im, f_seg, f_tag) in enumerate(zip(root_dir.joinpath('normalized_image').glob("*nii*"),
                                            root_dir.joinpath('segment_output').glob("*nii*"),
                                            root_dir.joinpath('normalized_image').glob('*.json'),
@@ -451,6 +454,7 @@ def generate_report(root_dir: Union[Path, str],
             write_out_data['diagnosis_dl'] = f"{dl_res:.03f}"
             write_out_data['image_nii'] = str(f_im)
             write_out_data['segment_nii'] = str(f_seg)
+            write_out_data['risk_data'] = risk_data.get(id, None)
 
             c.set_data_display(write_out_data)
             c.draw()

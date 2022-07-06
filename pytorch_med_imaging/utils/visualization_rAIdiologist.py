@@ -13,7 +13,7 @@ from typing import Union, Optional, Iterable
 from mnts.mnts_logger import MNTSLogger
 from threading import Semaphore
 import matplotlib
-matplotlib.use('Agg')
+# matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 
 
@@ -94,6 +94,7 @@ def mark_image_stacks(image_3d: Union[torch.Tensor, np.ndarray],
                       prediction: Union[np.ndarray, Iterable[float]],
                       indices: Union[np.ndarray, Iterable[int]],
                       trim_repeats: Optional[bool] = True,
+                      verticle_lines: Optional[Iterable[int]] = None,
                       **kwargs):
     r"""Call `make_marked_slices` for all slices of the input image.
 
@@ -121,10 +122,18 @@ def mark_image_stacks(image_3d: Union[torch.Tensor, np.ndarray],
         prediction = prediction[:last_index + 1]
         indices = indices[:last_index + 1]
 
-    out_stack = np.stack([make_marked_slice(s, p, i, v) for s, p, i, v in zip(image_3d.transpose(2, 0, 1),
+    if verticle_lines is None:
+        verts = range(image_3d.shape[-1])
+    else:
+        if len(verticle_lines) != image_3d.shape[-1]:
+            msg = f"Specified verticle_lines is not the same as number of slice fed in: " \
+                  f"{len(verticle_lines)} vs {image_3d.shape}"
+            raise IndexError(msg)
+        verts = verticle_lines
+    out_stack = np.stack([make_marked_slice(s, p, i, v) for s, p, i, v in zip(image_3d.transpose(2, 1, 0),
                                                                               itertools.repeat(prediction),
                                                                               itertools.repeat(indices),
-                                                                              range(image_3d.shape[-1]))])
+                                                                              verts)])
     return out_stack
 
 def marked_stack_2_gif(marked_stack: Union[torch.Tensor, np.ndarray],

@@ -7,8 +7,17 @@ from pytorch_med_imaging.Algorithms.post_proc_segment import main as seg_post_ma
 from pytorch_med_imaging.main import console_entry as pmi_main
 from npc_report_gen.report_gen_pipeline import get_t2w_series_files, main, generate_report, seg_post_main
 from pathlib import Path
+from mnts.mnts_logger import MNTSLogger
 
 class Test_pipeline(unittest.TestCase):
+    def setUp(self):
+        self._logger = MNTSLogger('.', 'test_report', verbose=True, keep_file=False, log_level='debug')
+        self.temp_output_path = tempfile.TemporaryDirectory()
+
+    def tearDown(self) -> None:
+        self._logger.cleanup()
+        self.temp_output_path.cleanup()
+
     def test_get_t2w_series(self):
         p = Path("example_data/npc_case/ALL_DICOM")
         files = get_t2w_series_files(str(p.absolute()))
@@ -41,8 +50,11 @@ class Test_pipeline(unittest.TestCase):
                       '--keep-data',
                       '--keep-log',
                       ])
-            except:
-                print(f"Something went wrong for {str(pp)}")
+                break
+            except Exception as e:
+                self._logger.exception(e)
+                self.fail(f"Something went wrong for {str(pp)}")
+
 
     def test_post_proc_main(self):
         import time
@@ -102,8 +114,8 @@ class Test_pipeline(unittest.TestCase):
             print(list(Path(temp_dir).joinpath("output").joinpath('class_inf.csv').open('r').readlines()))
 
     def test_process_output(self):
-        p = Path('/media/storage/Source/Repos/NPC_Segmentation/NPC_Segmentation/00.RAW/HKU/report/data_dir')
-        generate_report(p, p)
+        p = Path('./example_data/report_gen')
+        generate_report(p, self.temp_output_path.name)
 
 
 if __name__ == '__main__':

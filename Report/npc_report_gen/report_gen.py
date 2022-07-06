@@ -18,6 +18,7 @@ pdfmetrics.registerFont(TTFont('Courier', './asset/Courier.ttf'))
 
 from pathlib import Path
 from pytorch_med_imaging.utils.visualization import draw_grid_contour
+from pytorch_med_imaging.utils.visualization_rAIdiologist import mark_image_stacks
 from mnts.mnts_logger import MNTSLogger
 from torchvision.utils import make_grid
 from typing import Union, Callable, Optional, Iterable
@@ -756,7 +757,8 @@ class ReportGen_NPC_Screening(Canvas):
             # TODO: Mark slices with prediction scores.
             # check if
             if risk_data is not None:
-                pass
+                img = self._mark_slices(img, display_slice, risk_data) # output is (S x W x H x C)
+                img = img.permute(0, 3, 1, 2)
 
             self.image = draw_grid_contour(img, [seg], color=[(255, 100, 55)],
                                            nrow=self.image_setting['nrow'], padding=2, thickness=1, alpha=0.8)
@@ -808,6 +810,9 @@ class ReportGen_NPC_Screening(Canvas):
             img = self.crop_image(img, crop['center'], crop['size'])
             seg = self.crop_image(seg, crop['center'], crop['size'])
 
+            if risk_data is not None:
+                img = self._mark_slices(img, list(range(display_slide_d, display_slide_u)), risk_data)
+                img = img.permute(0, 3, 1, 2)
             self.image = draw_grid_contour(img, [seg], color=[(255, 100, 55)],
                                            nrow=nrow, padding=2, thickness=1, alpha=0.8)
 
@@ -815,6 +820,16 @@ class ReportGen_NPC_Screening(Canvas):
                 return self.image, (0, ori_size[-1])
             else:
                 return self.image
+
+    def _mark_slices(self, img, display_slice, risk_data) -> torch.Tensor:
+        # This returns np array, need to change it back
+        img = mark_image_stacks(img.permute([1, 2, 0]).numpy(),
+                                np.asarray(risk_data)[..., 0].ravel(),
+                                np.asarray(risk_data)[..., -1].ravel(),
+                                verticle_lines=display_slice,
+                                trim_repeats=True)
+        img = torch.as_tensor(img)
+        return img
 
     def dump_diagnosis_to_csv(self, out_dir: Union[Path, str]):
         out_dir = Path(out_dir).with_suffix('.csv')
