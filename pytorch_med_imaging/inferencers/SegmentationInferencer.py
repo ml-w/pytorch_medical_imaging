@@ -160,7 +160,7 @@ class SegmentationInferencer(InferencerBase):
 
         # terminated if there are not gt data
         if self.pmi_data_loader.data['gt'] is None:
-            self._logger.info("Ground-truth data was not specified.")
+            self._logger.info("Ground-truth data was not specified. Skip summary.")
             return
         else:
             self._logger.info(f"Ground-truth data specified, trying to compute summary.")
