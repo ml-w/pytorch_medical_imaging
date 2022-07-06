@@ -1,0 +1,13 @@
+ToCanonical:
+  {}
+RandomAffine:
+  scales: [0.9, 1.1]
+  degrees: [0, 0, 10]
+RandomFlip:
+  - 'lr'
+RandomNoise:
+  std: [0, 8]
+CropOrPad:
+  - [350, 350, 40]
+  - padding_mode: 0
+  - crop_pad_sides: "cct"

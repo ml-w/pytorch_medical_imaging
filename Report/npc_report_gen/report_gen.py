@@ -61,6 +61,7 @@ class LineSeparator(Flowable):
         canvas.setLineWidth(self.thickness)
         canvas.drawPath(p)
 
+
 class InteractiveCheckBox(Flowable):
     r"""Check box with label"""
     def __init__(self, text='A Box', fontsize=12):
@@ -88,6 +89,7 @@ class InteractiveCheckBox(Flowable):
 
     def wrap(self, availWidth, availHeight):
         return (availWidth, self._leading)
+
 
 class InteractiveTextField(Flowable):
     r"""Check box with label"""

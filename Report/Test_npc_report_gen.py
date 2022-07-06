@@ -96,7 +96,7 @@ class Test_pipeline(unittest.TestCase):
                 '(Data,output_dir)': str(Path(temp_dir).joinpath('output'))
             }
             override_string = ';'.join(['='.join([k, v]) for k, v in override_tags.items()])
-            command = f"--config=./asset/pmi_config/BM_nyul_v2.ini " \
+            command = f"--config=./asset/pmi_config/BM_rAIdiologist_nyul_v2.ini " \
               f"--override={override_string} --inference --verbose".split()
             pmi_main(command)
             print(list(Path(temp_dir).joinpath("output").joinpath('class_inf.csv').open('r').readlines()))

@@ -179,7 +179,7 @@ def main(raw_args=None):
             '(Data,output_dir)': str(dl_output_dir)
         }
         override_string = ';'.join(['='.join([k, v]) for k, v in override_tags.items()])
-        command = f"--config=./asset/pmi_config/BM_nyul_v2.ini " \
+        command = f"--config=./asset/pmi_config/BM_rAIdiologist_nyul_v2.ini " \
                   f"--override={override_string} --inference".split()
         logger.info(f"Command for deep learning analysis: {command}")
         pmi_main(command)
