@@ -73,6 +73,15 @@ class rAIdiologistInferencer(BinaryClassificationInferencer):
                                                           gt,
                                                           sig_out=False)
         dl._data_table['Conf_0'] = out_tensor[..., 1]
+        try:
+            # Sorting must be done after assigning the conf vector because the order of out_tensor
+            # is not indexed.
+            dl._data_table.set_index('IDs', inplace=True)
+            dl._data_table.sort_index(inplace=True)
+        except AttributeError or IndexError:
+            self._logger.warning("IDs is not a column in the data table.")
+        # Write again
+        dl.write(self.outdir)
 
         if self.rAI_inf_save_playbacks:
             out_path = Path(self.outdir).with_suffix('.json')
