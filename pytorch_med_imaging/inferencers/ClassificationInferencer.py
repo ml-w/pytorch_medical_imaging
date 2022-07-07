@@ -140,6 +140,7 @@ class ClassificationInferencer(InferencerBase):
         out_tensor = []
         last_batch_dim = 0
         with torch.no_grad():
+            self.net = self.net.eval()
             # dataloader = DataLoader(self._inference_subjects, batch_size=self.batch_size, shuffle=False)
             dataloader = self._data_loader
             for index, mb in enumerate(tqdm(dataloader, desc="Steps")):
