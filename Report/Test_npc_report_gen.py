@@ -36,7 +36,7 @@ class Test_pipeline(unittest.TestCase):
         # p = Path('/home/lwong/Desktop/NPC_Segmentation/NPC_Segmentation/0A.NIFTI_ALL/All/T2WFS_TRA')
         po = Path('/media/storage/Data/NPC_Segmentation/70.Screening_report/TestOutput/')
         pof = Path('/media/storage/Data/NPC_Segmentation/70.Screening_report/TestOutput/diag.csv')
-        for pp in p.glob("*177*nii.gz"):
+        for pp in p.glob("*nii.gz"):
             try:
                 main(['-i',
                       str(pp),
@@ -50,7 +50,6 @@ class Test_pipeline(unittest.TestCase):
                       '--keep-data',
                       '--keep-log',
                       ])
-                break
             except Exception as e:
                 self._logger.exception(e)
                 self.fail(f"Something went wrong for {str(pp)}")

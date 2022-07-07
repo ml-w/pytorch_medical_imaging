@@ -12,6 +12,7 @@
     batch-size: 4
     config: "./Configs/Test.ini"
     override: ""
+    debug: no
 
 - model: pmi
   params:
@@ -27,7 +28,14 @@
         - exclude:
             dir: 'Backup'
       output-scalars:
-        - classification
+        training/loss: 'EpochLoss: (\value)'
+        accuracy: 'ACC: (\value)'
+        training/validation_loss: 'VAL: (\value)'
+        step: 'Epoch (\step)'
+        training/step_lr: 'LR: (\value)'
+      compare:
+        - lr
+        - accuracy
       requires:
         - default
 
@@ -40,7 +48,14 @@
         - exclude:
             dir: 'Backup'
       output-scalars:
-        - classification
+        training/loss: 'EpochLoss: (\value)'
+        accuracy: 'ACC: (\value)'
+        training/validation_loss: 'VAL: (\value)'
+        step: 'Epoch (\step)'
+        training/step_lr: 'LR: (\value)'
+      compare:
+        - lr
+        - accuracy
       requires:
         - default
         - operation: train
@@ -53,7 +68,14 @@
       flags:
         $include: default-flags
       output-scalars:
+        loss/loss: 'EpochLoss: (\value)'
+        loss/validation_loss: 'VAL: (\value)'
+        step: 'Epoch (\step)'
+        step_lr: 'LR: (\value)'
         perf/dsc: 'DSC: (\value)'
+      compare:
+        - lr
+        - perf/dsc as dice
       sourcecode:
         - exclude:
             dir: 'Backup'
@@ -83,7 +105,16 @@
         - default
         - operation: train
           select: 'Backup'
-      output-scalars: classification-infer
+      output-scalars:
+        sensitivity: 'Sensitivity: (\value)'
+        specificity: 'Specificity: (\value)'
+        PPV: 'PPV: (\value)'
+        NPV: 'NPV: (\value)'
+        ACC: 'OverallACC: (\value)'
+      compare:
+        - sensitivity as sens
+        - specificity as spec
+        - ACC
 
     validation_segment:
       decription: Validate the trained model. Should be used in pipeline, otherwise it won't find the checkpoint.
@@ -133,7 +164,7 @@
         - train_looped config=${config} epoch=100 debug=${debug} batch-size=${bs_cnn} lr=1E-5
           override="(SolverParams,rAI_fixed_mode)=4;(General,fold_code)=${fold_code};(SolverParams,lr_scheduler_args)
           =[0.98,0.98,20,3];(SolverParams,lr_scheduler_kwargs)={'eta_min':1E-6,'T_mult':2}"
-        - validation   config=${config} debug=${debug} batch-size={bs_rnn} override="(General,fold_code)=${fold_code}"
+        - validation   config=${config} debug=${debug} batch-size=${bs_rnn} override="(General,fold_code)=${fold_code}"
       output-scalars:
         - classification
         - classification-infer
@@ -161,18 +192,18 @@
 
   output-scalars:
     classification:
-      loss/loss: 'EpochLoss: (\value)'
-      accuracy: 'ACC: (\value)'
-      loss/validation_loss: 'VAL: (\value)'
-      step: 'Epoch (\step)'
-      step_lr: 'LR: (\value)'
+      - loss/loss: 'EpochLoss: (\value)'
+      - accuracy: 'ACC: (\value)'
+      - loss/validation_loss: 'VAL: (\value)'
+      - step: 'Epoch (\step)'
+      - step_lr: 'LR: (\value)'
 
     classification-infer:
-      sensitivity: 'Sensitivity: (\value)'
-      specificity: 'Specificity: (\value)'
-      PPV: 'PPV: (\value)'
-      NPV: 'NPV: (\value)'
-      ACC: 'OverallACC: (\value)'
+      - sensitivity: 'Sensitivity: (\value)'
+      - specificity: 'Specificity: (\value)'
+      - PPV: 'PPV: (\value)'
+      - NPV: 'NPV: (\value)'
+      - ACC: 'OverallACC: (\value)'
 
   sourcecode:
     root: ../
