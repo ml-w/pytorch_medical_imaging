@@ -441,7 +441,7 @@ def generate_report(root_dir: Union[Path, str],
             except:
                 volume = 0
             dl_res = res_csv.iloc[i]['Prob_Class_0']
-            id = res_csv.iloc[i]['IDs']
+            id = res_csv.reset_index().iloc[i]['IDs']
             if np.isreal(id):
                 id = str(int(id))
 
