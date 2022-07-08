@@ -5,7 +5,7 @@ import numpy as np
 
 from torch.utils.data import DataLoader
 from ..med_img_dataset import ImageDataSet
-import tqdm.auto as auto
+from tqdm import tqdm
 import pandas as pd
 import SimpleITK as sitk
 
@@ -25,7 +25,7 @@ def remap_label(map_dict: dict,
     # using worker might cause overloading shared mem pool at /dev/shm, set to 0
     dataloader = DataLoader(data, batch_size=1, num_workers=num_workers)
 
-    for i, dat in enumerate(auto.tqdm(dataloader)):
+    for i, dat in enumerate(tqdm(dataloader)):
         o = dat['seg'][tio.DATA].permute(0, 1, 4, 3, 2) # (B x C x W x H x D) to (B x C x D x W x H)
         inputdata.write_uid(o, i, output_dir)
 
@@ -40,7 +40,7 @@ def label_statistics(label_dir,
     labelimages = ImageDataSet(label_dir, verbose=verbose, dtype='uint8', idGlobber=id_globber)
 
     out_df = pd.DataFrame()
-    for i, s in enumerate(auto.tqdm(labelimages.data_source_path)):
+    for i, s in enumerate(tqdm(labelimages.data_source_path)):
         s = sitk.ReadImage(s)
         shape_stat = sitk.LabelShapeStatisticsImageFilter()
         shape_stat.Execute(s)

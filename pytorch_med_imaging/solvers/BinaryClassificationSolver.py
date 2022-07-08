@@ -8,7 +8,7 @@ import torch
 import torch.nn as nn
 import numpy as np
 import pandas as pd
-import tqdm.auto as auto
+from tqdm import tqdm
 from typing import Union, Iterable, Any, Tuple
 
 __all__ = ['BinaryClassificationSolver']
@@ -44,7 +44,7 @@ class BinaryClassificationSolver(ClassificationSolver):
             dics = []
             gts = []
 
-            for mb in auto.tqdm(self._data_loader_val, desc="Validation", position=2):
+            for mb in tqdm(self._data_loader_val, desc="Validation", position=2):
                 # s: (B x num_class), g: (B x 1)
                 s, g = self._unpack_minibatch(mb, self.solverparams_unpack_keys_forward)
                 s = self._match_type_with_network(s)

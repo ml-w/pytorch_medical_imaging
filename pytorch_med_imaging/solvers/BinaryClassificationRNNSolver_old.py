@@ -9,7 +9,7 @@ import torch
 import torch.nn as nn
 import numpy as np
 import pandas as pd
-import tqdm.auto as auto
+from tqdm import tqdm
 
 
 __all__ = ['BinaryClassificationRNNSolver']
@@ -106,7 +106,7 @@ class BinaryClassificationRNNSolver(BinaryClassificationSolver):
             decisions = None # (B x N)
             validation_loss = []
 
-            for s, g in auto.tqdm(self._data_loader_val, desc="Validation", position=2):
+            for s, g in tqdm(self._data_loader_val, desc="Validation", position=2):
                 s, ori_len = s
 
                 #TODO: Expected 3D here, should be more general.

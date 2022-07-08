@@ -12,7 +12,7 @@ from torchio.constants import TYPE
 from torchio.transforms import Transform
 from torchio import Queue
 
-from tqdm.auto import tqdm
+from tqdm import tqdm
 import torch.multiprocessing as mpi
 from mnts.mnts_logger import MNTSLogger
 

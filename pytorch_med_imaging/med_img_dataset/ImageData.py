@@ -7,7 +7,7 @@ from .PMIDataBase import PMIDataBase
 
 import pandas as pd
 import torchio as tio
-import tqdm.auto as auto
+from tqdm import tqdm
 import fnmatch, re
 import os
 import numpy as np
@@ -249,9 +249,9 @@ class ImageDataSet(PMIDataBase):
         # Reading data
         #-------------
         self._itemindexes = [0] # [image index of start slice]
-        for i, f in enumerate(auto.tqdm(file_dirs, disable=not self.verbose, desc="Load Images")) \
-                if not self._debug else enumerate(auto.tqdm(file_dirs[:10],
-                                                       disable=not self.verbose,
+        for i, f in enumerate(tqdm(file_dirs, disable=not self.verbose, desc="Load Images")) \
+                if not self._debug else enumerate(tqdm.tqdm(file_dirs[:10],
+                                                            disable=not self.verbose,
                                                             desc="Load Images")):
             if self.verbose:
                 self._logger.info("Reading from "+f)
@@ -687,7 +687,7 @@ class ImageDataSet(PMIDataBase):
         subjects_loader = DataLoader(subjects, batch_size=1, num_workers=12)
 
         # Use a dataloader to do the trick
-        for d in auto.tqdm(subjects_loader, desc="get_unique_values_n_counts"):
+        for d in tqdm(subjects_loader, desc="get_unique_values_n_counts"):
             val, counts = unique(d['im'][tio.DATA], return_counts=True)
             for v, c, in zip(val, counts):
                 if v.item() not in out_dict:

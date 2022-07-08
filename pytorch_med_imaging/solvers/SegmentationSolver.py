@@ -12,7 +12,7 @@ from .SolverBase import SolverBase
 from ..med_img_dataset import ImageDataSet, ImageDataMultiChannel, PMIDataBase
 from mnts.mnts_logger import MNTSLogger
 
-import tqdm.auto as auto
+from tqdm import tqdm
 import torchio as tio
 
 __all__ = ['SegmentationSolver']
@@ -97,7 +97,7 @@ class SegmentationSolver(SolverBase):
             validation_loss = []
             perfs = []
             self.net.eval()
-            for mb in auto.tqdm(self._data_loader_val, desc="Validation", position=2):
+            for mb in tqdm(self._data_loader_val, desc="Validation", position=2):
                 s, g = self._unpack_minibatch(mb, self.solverparams_unpack_keys_forward)
                 s = self._match_type_with_network(s)
                 g = self._match_type_with_network(g) # no assumption but should be long in segmentation only.

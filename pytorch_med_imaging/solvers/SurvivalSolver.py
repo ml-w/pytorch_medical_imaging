@@ -10,7 +10,7 @@ from torch import optim
 from torch.utils import checkpoint
 from ..loss import CoxNLL, TimeDependentCoxNLL
 
-import tqdm.auto as auto
+from tqdm import tqdm
 
 __all__ = ['SurvivalSolver']
 
@@ -74,7 +74,7 @@ class SurvivalSolver(SolverBase):
             net_out = []
             G = []
 
-            for s, g in auto.tqdm(self._data_loader_val, desc="Validation", position=2):
+            for s, g in tqdm(self._data_loader_val, desc="Validation", position=2):
                 out, g = self._feed_forward(s, g)
                 while g.dim() < 2:
                     g = g.unsqueeze()
@@ -114,7 +114,7 @@ class SurvivalSolver(SolverBase):
             net_out = []
             G = []
 
-            for s, g in auto.tqdm(self._data_loader, desc="Validation", position=2):
+            for s, g in tqdm(self._data_loader, desc="Validation", position=2):
                 out, g = self._feed_forward(s, g)
                 while g.dim() < 2:
                     g = g.unsqueeze()
