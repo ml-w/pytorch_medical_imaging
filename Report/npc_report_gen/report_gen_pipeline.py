@@ -45,6 +45,10 @@ def main(raw_args=None):
     parser.add_argument('-f', '--dump-diagnosis', action='store', type=str, default=None,
                         help="If specified, the resultant meta-data will be dumped to a text file. If the file exist, "
                              "it will be appended to the bottom of the file.")
+    parser.add_argument('--idGlobber', action='store', type=str, default="[\w]+",
+                        help="ID globber.")
+    parser.add_argument('--skip-exist', action='store_true',
+                        help="If the output report exist skip processing.")
     parser.add_argument('--verbose', action='store_true',
                         help="Verbosity.")
     parser.add_argument('--keep-log', action='store_true',
@@ -95,6 +99,19 @@ def main(raw_args=None):
                       )
         else:
             raise IOError(f"Input specified is incorrect, expect a directory or an nii file, got '{a.input}' instead.")
+
+        # Check if skipping
+        if a.skip_exist:
+            p = temp_dirname.glob("*nii.gz")
+            mo = re.search(a.idGlobber, str(next(p).name))
+            if mo is None:
+                logger.warning(f"Cannot glob ID from files: {[str(pp) for pp in list(p)]}")
+            else:
+                id = mo.group()
+                report_path = output_dir.joinpath('report/report_dir').joinpath(f'npc_report_{id}.pdf')
+                if report_path.is_file():
+                    logger.info(f"Skip_exist specified and target {str(report_path)} exist. Doing nothing.")
+                    return
 
         # Normalize target
         t_0 = time.time()
