@@ -102,6 +102,7 @@ class SegmentationInferencer(InferencerBase):
         self.solverparams_inf_samples_per_vol = None
 
         with torch.no_grad():
+            self.net = self.net.eval()
             # Do inference subject by subject if sampler is not None`
             self.patch_size = self.pmi_data_loader.patch_size
             self._logger.info(f"Operating in patch-based mode with patch-size: {self.patch_size}")
