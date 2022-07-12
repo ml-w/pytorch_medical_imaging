@@ -319,7 +319,7 @@ class PMIController(object):
                 else:
                     msg = "Cannot locate %s: %s" % (key, d)
                     raise IOError(msg)
-        assert Path(self.data_input_dir).is_dir(), "Input data directory not exist!"
+        assert Path(self.data_input_dir).is_dir(), f"Input data directory {self.data_input_dir} not exist!"
         if (self.data_target_dir is None) & self.mode == 0:
             self._logger.warning("No target dir set but specified training mode. Are you sure you are doing "
                                 "unsupervised learning?")
