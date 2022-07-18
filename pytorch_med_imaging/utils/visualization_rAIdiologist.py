@@ -13,7 +13,7 @@ from typing import Union, Optional, Iterable
 from mnts.mnts_logger import MNTSLogger
 from threading import Semaphore
 import matplotlib
-# matplotlib.use('Agg')
+matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 
 
@@ -80,11 +80,12 @@ def make_marked_slice(image: np.ndarray,
     im_buf.seek(0)
     img_arr = np.reshape(np.frombuffer(im_buf.getvalue(), dtype=np.uint8),
                          newshape=(image.shape[1], image.shape[0], -1))
+
     im_buf.close()
-    fig.clear()
-    fig.clf()
     ax[0].cla()
     ax[1].cla()
+    fig.clear()
+    fig.clf()
     plt.close()
     plt.clf()
     plt.cla()
