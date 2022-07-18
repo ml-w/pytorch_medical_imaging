@@ -309,7 +309,7 @@ class ImageDataSet(PMIDataBase):
                 self._idlist = file_ids
             else:
                 raise TypeError(f"ID list is not correclty spefified. Expect str, list or None, got "
-                                f"{self._filterargs['idlsit']} instead")
+                                f"{self._filterargs['idlist']} instead")
 
             self._logger.debug(f'Target IDs: {self._idlist}')
             self._logger.debug(f'All IDs: {file_ids}')
