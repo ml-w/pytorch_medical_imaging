@@ -1,28 +1,20 @@
-import os, re
+import pprint
+import argparse
 import pprint
 import shutil
 import time
-import datetime
-import json
 
-from typing import Union, Sequence
-
-import numpy as np
-
-from pytorch_med_imaging.main import console_entry as pmi_main
-from pytorch_med_imaging.Algorithms.post_proc_segment import keep_n_largest_connected_body, edge_smoothing, remove_small_island_2d
-from mnts.scripts.normalization import run_graph_inference
-# from pytorch_med_imaging.scripts.dicom2nii import console_entry as dicom2nii
-from mnts.mnts_logger import MNTSLogger
-from mnts.scripts.dicom2nii import console_entry as dicom2nii
-
-from pathlib import Path
-import argparse
-import tempfile
-
-from .report_gen import *
 import SimpleITK as sitk
 import pandas as pd
+# from pytorch_med_imaging.scripts.dicom2nii import console_entry as dicom2nii
+from mnts.scripts.dicom2nii import console_entry as dicom2nii
+from mnts.scripts.normalization import run_graph_inference
+
+from pytorch_med_imaging.Algorithms.post_proc_segment import edge_smoothing, keep_n_largest_connected_body, \
+    remove_small_island_2d
+from pytorch_med_imaging.main import console_entry as pmi_main
+from .report_gen import *
+from .rgio import process_input
 
 __all__ = ['seg_post_main']
 
@@ -70,33 +62,11 @@ def main(raw_args=None):
         if not output_dir.is_dir():
             output_dir.mkdir(exist_ok=True)
 
+        #╔══════╗
+        #║▐ I/O ║
+        #╚══════╝
         input = Path(a.input)
-        if input.is_dir():
-            # if any nii files were in the dir, treat the directory as nii directory
-            if len(list(input.glob("*nii*"))) == 0:
-                # Get dicom files and copy to a temp directory
-                _dicom_files = get_t2w_series_files(a.input)
-                _temp_dicom_dir = tempfile.TemporaryDirectory()
-                [shutil.copy2(d, _temp_dicom_dir.name) for d in _dicom_files]
-                dicom2nii(f"-i {_temp_dicom_dir.name} -o {str(temp_dirname)} -n {a.num_worker} -g '.*' "
-                          f"--dump-dicom-tags --use-patient-id".split())
-            else:
-                #!! This is not functional yet
-                _nii_files = list(input.glob('*nii*'))
-                for f in _nii_files:
-                    shutil.copy2(str(f), str(temp_dirname))
-
-        elif input.is_file() and input.suffix in ('.nii', '.gz'):
-            # copy that to the temp dir
-            shutil.copy(str(input), str(temp_dirname))
-            # write json file
-            json_name = str(input.name).replace('.nii' if input.suffix == '.nii' else '.nii.gz', '.json')
-            json.dump({'0010|0010': str(input.name),
-                       '0010|0020': str(input.name)},
-                      Path(temp_dirname).joinpath(json_name).open('w')
-                      )
-        else:
-            raise IOError(f"Input specified is incorrect, expect a directory or an nii file, got '{a.input}' instead.")
+        process_input(a.input, tempfile)
 
         # Check if skipping
         if a.skip_exist:
@@ -189,7 +159,10 @@ def main(raw_args=None):
             dl_res = dl_res.iloc[i]['Prob_Class_0']
             stat_fil = sitk.LabelShapeStatisticsImageFilter()
             stat_fil.Execute(seg)
-            seg_vol = stat_fil.GetPhysicalSize(1)
+            try:
+                seg_vol = stat_fil.GetPhysicalSize(1)
+            except RuntimeError:
+                seg_vol = 0
 
             # convert from mm3 to cm3, threshold 0.5 is same as in :func:`get_overall_diagnosis`
             if seg_vol / 1000 >= 0.5 and dl_res < 0.5:
@@ -230,6 +203,10 @@ def main(raw_args=None):
 
 def run_segmentation(normalized_dir, temp_dirname, segment_output, logger) -> None:
     t_0 = time.time()
+
+    #╔══════════════════════╗
+    #║▐ Coarse Segmentation ║
+    #╚══════════════════════╝
     logger.info("{:-^80}".format(" Segmentation - Coarse "))
     override_tags = {
         '(Data,input_dir)': str(normalized_dir.joinpath('NyulNormalizer')),
@@ -244,6 +221,10 @@ def run_segmentation(normalized_dir, temp_dirname, segment_output, logger) -> No
     logger.info("{:-^80}".format(f" Segmentation - Coarse Done (Total time: {time.time() - t_0:.01f}s) "))
     # Slightly grow the segmented region such that the patch sampling is done better
     grow_segmentation(str(segment_output))
+
+    #╔═════════════════════╗
+    #║▐ Fine segmentation  ║
+    #╚═════════════════════╝
     # Re-run segmentation using the previous segmentation as sampling reference.
     t_0 = time.time()
     logger.info("{:-^80}".format(" Segmentation - Fine "))
@@ -300,73 +281,6 @@ def seg_post_main(in_dir: Path,
             out_fname = out_dir.joinpath(s.name)
             logger.info(f"writing to: {str(out_fname)}")
             sitk.WriteImage(out_im, str(out_fname))
-
-
-def get_t2w_series_files(in_dir):
-    r"""Check and see if there are T2w-fs files, if there are more than one, prompt users
-    to select from a list which to use"""
-    with MNTSLogger('pipeline.log', 'get_t2w_series_files') as logger:
-        in_dir = Path(in_dir)
-        # Check all subdirs
-        _tag_list = []
-        _file_list = []
-        for r, d, f in os.walk(str(in_dir)):
-            _curdir = Path(r)
-            if not len(f) == 0:
-                series_ids = sitk.ImageSeriesReader_GetGDCMSeriesIDs(str(_curdir))
-                for sid in series_ids:
-                    dicom_files = sitk.ImageSeriesReader_GetGDCMSeriesFileNames(
-                            str(_curdir),
-                            sid
-                        )
-                    dicom_files = [str(Path(difil).absolute()) for difil in dicom_files]
-                    logger.debug(f"Found files: {dicom_files}")
-
-                    header_reader = sitk.ImageFileReader()
-                    header_reader.SetFileName(dicom_files[0])
-                    header_reader.LoadPrivateTagsOn()
-                    header_reader.ReadImageInformation()
-                    all_tags = {k: header_reader.GetMetaData(k) for k in header_reader.GetMetaDataKeys()}
-
-                    tags = {
-                        '0008|103e': None,  # Image description, usually they put protocol name here
-                        '0018|1030': None,  # Acquisition protocol name
-                        '2001|100b': None,  # Scan Plane
-                    }
-                    for dctag in tags:
-                        try:
-                            tags[dctag] = header_reader.GetMetaData(dctag).rstrip().rstrip(' ')
-                        except:
-                            logger.debug(f"Tag [{dctag}] missing for image {f}")
-                            tags[dctag] = 'Missing'
-                    logger.debug(f"Tags: {pprint.pformat(tags)}")
-
-                    if (re.match("((?i)(?=).*T2.*)((?i)(?=).*(fs).*)|((?i)(?=).*stir.*)", tags['0018|1030']) is None) or \
-                            (re.match(f"(?i)(?=).*TRA.*", tags['2001|100b']) is None):
-                        logger.debug(f"Series {sid}({tags['0018|1030']}) is not T2w-fs")
-                        continue
-
-                    # If pass these two tests, return the file list
-                    logger.debug(f"Find target DICOM files '{tags['0018|1030']}'")
-                    _file_list.append(tuple([tags, dicom_files]))
-
-        if len(_file_list) == 0:
-            raise ArithmeticError(f"Cannot find a T2w-fs image in {in_dir}")
-        elif len(_file_list) > 1:
-            # force verbose
-            _v = logger._verbose
-            logger._verbose = True
-            logger.warning(f"More than one target sequence found, please choose from below the desired sequence...")
-            logger.info('\n' + '\n\n'.join([f"[{i}]: \n {pprint.pformat(_f[0], indent=4)}" for i, _f in enumerate(_file_list)]))
-            # _choice = input(f"Choose sequence [0 to {len(_file_list) - 1}]: ")
-            _choice = 1
-            logger.debug(f"Chosen sequence: {_choice}")
-            file_list = _file_list[int(_choice)][1]
-            # resume
-            logger._verbose = _v
-        else:
-            file_list = _file_list[0][1]
-    return file_list
 
 
 def grow_segmentation(input_segment: Union[Path, str]) -> None:
@@ -480,7 +394,6 @@ def np_specific_postproc(in_im: sitk.Image):
 
     out_im.CopyInformation(in_im)
     return out_im
-
 
 
 def generate_report(root_dir: Union[Path, str],

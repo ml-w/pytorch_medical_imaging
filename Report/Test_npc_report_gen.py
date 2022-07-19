@@ -5,7 +5,8 @@ import tempfile
 import shutil
 from pytorch_med_imaging.Algorithms.post_proc_segment import main as seg_post_main
 from pytorch_med_imaging.main import console_entry as pmi_main
-from npc_report_gen.report_gen_pipeline import get_t2w_series_files, main, generate_report, seg_post_main
+from npc_report_gen.report_gen_pipeline import main, generate_report, seg_post_main
+from npc_report_gen.rgio import get_t2w_series_files, process_input
 from pathlib import Path
 from mnts.mnts_logger import MNTSLogger
 
@@ -19,12 +20,37 @@ class Test_pipeline(unittest.TestCase):
         self.temp_output_path.cleanup()
 
     def tearDownClass() -> None:
+        # make sure the log file is cleaned properly
         MNTSLogger.cleanup()
 
     def test_get_t2w_series(self):
         p = Path("example_data/npc_case/ALL_DICOM")
         files = get_t2w_series_files(str(p.absolute()))
         self.assertEqual(len(files) > 0, True)
+
+    def test_process_input(self):
+        # input is a dir
+        temp_input = tempfile.TemporaryDirectory()
+        temp_out_path = Path(self.temp_output_path.name)
+        tfs = [tempfile.NamedTemporaryFile(dir=temp_input.name, suffix='.nii.gz') for i in range(5)]
+        process_input(temp_input.name, temp_out_path)
+        self.assertTrue(len(list(temp_out_path.glob("*nii.gz"))) > 0,
+                        f"Nothing was created: {list(temp_out_path.iterdir())}")
+        self.assertTrue(all([_tf.is_symlink() for _tf in temp_out_path.glob("*.nii.gz")]),
+                        f"Some of the file are not symlinks: {list(temp_out_path.iterdir())}")
+
+        # input is a single nifty file
+        named_file = list(Path(temp_input.name).glob("*.nii.gz"))[0]
+        temp_out_dir2 = tempfile.TemporaryDirectory()
+        temp_out_path2 = Path(temp_out_dir2.name)
+        process_input(named_file, temp_out_path2)
+        self.assertTrue(temp_out_path2.joinpath(named_file.name).is_symlink())
+
+        # input is a DICOM dir is tested elsewhere
+
+        # cleanup
+        [t.close() for t in tfs]
+        temp_out_dir2.cleanup()
 
     def test_main(self):
         # p = Path("example_data/npc_case/ALL_DICOM")
