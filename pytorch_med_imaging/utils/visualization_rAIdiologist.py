@@ -75,20 +75,15 @@ def make_marked_slice(image: np.ndarray,
     ax_pred.set_position([.80, .05, .15, .1]) # x_start, y_start, x_length, y_length
 
     # Save as numpy array
-    im_buf = io.BytesIO()
-    fig.savefig(im_buf, format='raw', dpi=dpi)
-    im_buf.seek(0)
-    img_arr = np.reshape(np.frombuffer(im_buf.getvalue(), dtype=np.uint8),
-                         newshape=(image.shape[1], image.shape[0], -1))
-
-    im_buf.close()
+    with io.BytesIO() as im_buf:
+        fig.savefig(im_buf, format='raw', dpi=dpi)
+        im_buf.seek(0)
+        img_arr = np.reshape(np.frombuffer(im_buf.getvalue(), dtype=np.uint8),
+                             newshape=(image.shape[1], image.shape[0], -1))
     ax[0].cla()
     ax[1].cla()
-    fig.clear()
     fig.clf()
-    plt.close()
-    plt.clf()
-    plt.cla()
+    plt.close('all')
     return img_arr
 
 def mark_image_stacks(image_3d: Union[torch.Tensor, np.ndarray],

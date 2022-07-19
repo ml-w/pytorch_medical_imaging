@@ -15,8 +15,11 @@ class Test_pipeline(unittest.TestCase):
         self.temp_output_path = tempfile.TemporaryDirectory()
 
     def tearDown(self) -> None:
-        self._logger.cleanup()
+        # self._logger.cleanup()
         self.temp_output_path.cleanup()
+
+    def tearDownClass() -> None:
+        MNTSLogger.cleanup()
 
     def test_get_t2w_series(self):
         p = Path("example_data/npc_case/ALL_DICOM")
@@ -26,13 +29,13 @@ class Test_pipeline(unittest.TestCase):
     def test_main(self):
         # p = Path("example_data/npc_case/ALL_DICOM")
         # p = Path("/media/storage/Source/Repos/NPC_Segmentation/NPC_Segmentation/00.RAW/extra_20210426/T1rhoNPC020")
-        # p = Path("/mnt/ftp_shared/NPC_New_case/2005-2021_not into T1rho studies/1719")
+        p = Path("/mnt/ftp_shared/NPC_New_case/2005-2021_not into T1rho studies/1719")
         # pp = Path("/mnt/ftp_shared/NPC_Screening_3_plain/Images/P385")
         # p = Path("/home/lwong/FTP/2.Projects/8.NPC_Segmentation/00.RAW/NPC_new_dx_cases/1249/")
         # p = Path("example_data/npc_case/1183-T2_FS_TRA+301.nii.gz")
         # p = Path("/media/storage/Source/Repos/NPC_Segmentation/NPC_Segmentation/00.RAW/HKU/0140")
         # p = Path('/media/storage/Data/NPC_Segmentation/70.Screening_report/TestInput/')
-        p = Path('/home/lwong/Desktop/NPC_Segmentation/NPC_Segmentation/0A.NIFTI_ALL/HKU/temp/T2WFS_TRA')
+        # p = Path('/home/lwong/Desktop/NPC_Segmentation/NPC_Segmentation/0A.NIFTI_ALL/HKU/temp/T2WFS_TRA')
         # p = Path('/home/lwong/Desktop/NPC_Segmentation/NPC_Segmentation/0A.NIFTI_ALL/All/T2WFS_TRA')
         po = Path('/media/storage/Data/NPC_Segmentation/70.Screening_report/TestOutput/')
         pof = Path('/media/storage/Data/NPC_Segmentation/70.Screening_report/TestOutput/diag.csv')
@@ -116,6 +119,12 @@ class Test_pipeline(unittest.TestCase):
         p = Path('./example_data/report_gen')
         generate_report(p, self.temp_output_path.name)
 
+
+    def test_skip_if_exist(self):
+        pass
+
+    def test_skip_normalization(self):
+        pass
 
 if __name__ == '__main__':
     diu = Test_pipeline()

@@ -418,11 +418,12 @@ def draw_grid_contour(im_grid, seg, crop=None, nrow=None, offset=0, background=0
         try:
             _a, contours, _b = cv2.findContours(ss_grid, mode=cv2.RETR_EXTERNAL,
                                                 method=cv2.CHAIN_APPROX_SIMPLE)
-        except Exception as e:
+        except ValueError as e:
             logger.warning(f"Find contour encounter problem. Falling back...")
-            logger.exception(e)
+            # logger.exception(e)
             contours, _b = cv2.findContours(ss_grid, mode=cv2.RETR_EXTERNAL,
                                             method=cv2.CHAIN_APPROX_SIMPLE)
+
         a_contours.append(contours)
     # Draw contour on image grid
     try:

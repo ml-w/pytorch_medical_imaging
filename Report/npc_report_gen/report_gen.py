@@ -251,6 +251,15 @@ class ReportGen_NPC_Screening(Canvas):
                                  frame_size_[1],
                                  leftPadding=0, bottomPadding=0, rightPadding=0, topPadding=0)
 
+        self.frame_p3 = Frame(page_margin, page_margin,
+                              frame_size_[0],
+                              frame_size_[1],
+                              leftPadding=frame_padding_,
+                              bottomPadding=frame_padding_,
+                              rightPadding=frame_padding_,
+                              topPadding=frame_padding_,
+                              showBoundary=1)
+
     def enrich_patient_data(self):
         items_display = {
             'Name': None,
@@ -295,6 +304,7 @@ class ReportGen_NPC_Screening(Canvas):
         column_map = {
             'diagnosis_dl': "Deep learning prediction",
             'diagnosis_radiomics': "Radiomics prediction",
+            'safety_dl': "Focal evaluation",
             'ref_radiomics': "Reference for normal",
             "ref_dl": "Reference for normal",
             'lesion_vol': "Lesion volume",
@@ -308,7 +318,9 @@ class ReportGen_NPC_Screening(Canvas):
                                                        data_display['diagnosis_dl'],
                                                        data_display['diagnosis_radiomics'],
                                                        lambda x: x >= _ref_dl,
-                                                       lambda x: x >= data_display['ref_radiomics'])
+                                                       data_display['safety_dl'] \
+                                                           if self._SAFETY_NET_FLAG else None
+                                                       )
         self.diagnosis_overall = diagnosis_overall
         # draw & save image
         try:
@@ -384,9 +396,11 @@ class ReportGen_NPC_Screening(Canvas):
             prop.append(Paragraph(msg))
         story.extend(prop)
 
+        list_of_kvpairs = [('diagnosis_dl', 'ref_dl')]
+        if self._SAFETY_NET_FLAG:
+            list_of_kvpairs.append(('safety_dl', 'ref_dl'))
         desc = []
-        for val, ref in zip(['diagnosis_radiomics', 'diagnosis_dl'],
-                            ['ref_radiomics', 'ref_dl']):
+        for val, ref in list_of_kvpairs:
             msg = self.generate_key_value_msg(column_map[val], data_display[val], underline_value=True)
             desc.append(Paragraph(msg))
             msg = self.generate_key_value_msg(column_map[ref], data_display[ref], left_indent_level=1, underline_value=False)
@@ -452,6 +466,9 @@ class ReportGen_NPC_Screening(Canvas):
         self.table_frame.addFromList([self.draw_grading_table()], self)
         im_file_.close()
 
+        #╔═════════════════════╗
+        #║▐ Second page        ║
+        #╚═════════════════════╝
         # New page displaying all segmented slides, max num of slide displayed without messing layout is 20,
         # if there are no segmentation, display only the center 20 slides.
         self._logger.info("Drawing the second page...")
@@ -488,7 +505,52 @@ class ReportGen_NPC_Screening(Canvas):
 
         self.frame_p2.drawBoundary(self)
         self.frame_p2.addFromList(story, self)
+
         im_file_.close()
+
+        #╔═════════════════════╗
+        #║▐ Third page         ║
+        #╚═════════════════════╝
+        # if there is a second evaluation add a new page to it
+        if self._SAFETY_NET_FLAG:
+            self._logger.info("Drawing third page for the addition evaluation.")
+            self.showPage()
+            if self.diagnosis_overall:
+                display_im = data_display['safety_net']['image_nii']
+                display_seg = data_display['safety_net']['segment_nii']
+                display_risk = data_display['safety_net']['risk_data']
+                try:
+                    im = self.draw_image(display_im, display_seg, return_num_seg=False,
+                                         mode=2, risk_data=display_risk)
+                except:
+                    self._logger.error("Something went wwrong when drawing the second page.")
+                    im = self.draw_image(display_im, display_seg, return_num_seg=False,
+                                         mode=3, risk_data=display_risk)
+            else:
+                im = self.draw_image(display_im, display_seg, return_num_seg=False, mode=3,
+                                     risk_data=display_risk)
+            im_file_ = tempfile.NamedTemporaryFile(mode='wb', suffix='.png')
+            imageio.imsave(im_file_, im, format='png')
+
+            story = []
+            style = getSampleStyleSheet()['Heading2']
+            msg = f"Focused evaluation (PID: {self._dicom_tags['Patient ID']})"
+            sect_title = Paragraph(f"<para face=times align=center><b>" + msg + "</b></para>", style=style)
+
+            fixed_aspect_ratio = 3
+            im = Image(im_file_.name,
+                       width  = (self.page_setting['frame_size'][0] - self.page_setting['padding'] * 2),
+                       height = 1E10,
+                       kind='proportional')
+            story.extend([sect_title,
+                          LineSeparator(1, self.page_setting['padding']),
+                          im,
+                          LineSeparator(1, self.page_setting['padding'])])
+
+            self.frame_p3.drawBoundary(self)
+            self.frame_p3.addFromList(story, self)
+
+            im_file_.close()
         pass
 
     @staticmethod
@@ -670,6 +732,9 @@ class ReportGen_NPC_Screening(Canvas):
         """
         self.dicom_tags = data_display.pop('dicom_tags')
         self.data_display = data_display
+        self._SAFETY_NET_FLAG = 'safety_net' in self.data_display
+        if self._SAFETY_NET_FLAG:
+            self.data_display['safety_dl'] = self.data_display['safety_net']['diagnosis_dl']
 
     def draw_image(self, img, seg,  mode=None, return_num_seg=False, risk_data=None):
         r"""
@@ -706,12 +771,12 @@ class ReportGen_NPC_Screening(Canvas):
             n = self.image_setting['n']
             img = sitk.GetArrayFromImage(img[bbox[0]:bbox[0] + l, bbox[1]:bbox[1] + l, bbox[2]:bbox[5]])
             slice_range = [cent[-1] - n // 2, cent[-1] + n // 2]
-            self.image = make_grid(torch.as_tensor(img[slice_range[0]:slice_range[1]+1]).unsqueeze(1),
+            png_image = make_grid(torch.as_tensor(img[slice_range[0]:slice_range[1]+1]).unsqueeze(1),
                                    nrow=self.image_setting['nrow'], padding=2, normalize=True).numpy().transpose(1, 2, 0)
             if return_num_seg:
-                return self.image, None
+                return png_image, None
             else:
-                return self.image
+                return png_image
         elif mode == 1:
             counts = np.sum(sitk.GetArrayFromImage(seg), axis=(1, 2)).astype('int32')
             non_zero_indices = np.nonzero(counts)[0]    # argsort is broken by zeros, so extract non-zero elements first
@@ -754,21 +819,20 @@ class ReportGen_NPC_Screening(Canvas):
             img = self.crop_image(img, crop['center'], crop['size'])
             seg = self.crop_image(seg, crop['center'], crop['size'])
 
-            # TODO: Mark slices with prediction scores.
             # check if
             if risk_data is not None:
                 img = self._mark_slices(img, display_slice, risk_data) # output is (S x W x H x C)
                 img = img.permute(0, 3, 1, 2)
 
-            self.image = draw_grid_contour(img, [seg], color=[(255, 100, 55)],
+            png_image = draw_grid_contour(img, [seg], color=[(255, 100, 55)],
                                            nrow=self.image_setting['nrow'], padding=2, thickness=1, alpha=0.8)
 
             if return_num_seg:
                 num_seg = bbox[-1]
                 all_slice = int(ori_size[-1])
-                return self.image, (num_seg, all_slice)
+                return png_image, (num_seg, all_slice)
             else:
-                return self.image
+                return png_image
         elif mode == 2 or mode == 3: # Draw all slice
             ori_size = seg.GetSize()
             f = sitk.LabelShapeStatisticsImageFilter()
@@ -813,13 +877,13 @@ class ReportGen_NPC_Screening(Canvas):
             if risk_data is not None:
                 img = self._mark_slices(img, list(range(display_slide_d, display_slide_u)), risk_data)
                 img = img.permute(0, 3, 1, 2)
-            self.image = draw_grid_contour(img, [seg], color=[(255, 100, 55)],
+            png_image = draw_grid_contour(img, [seg], color=[(255, 100, 55)],
                                            nrow=nrow, padding=2, thickness=1, alpha=0.8)
 
             if return_num_seg:
-                return self.image, (0, ori_size[-1])
+                return png_image, (0, ori_size[-1])
             else:
-                return self.image
+                return png_image
 
     def _mark_slices(self, img, display_slice, risk_data) -> torch.Tensor:
         # This returns np array, need to change it back
@@ -853,7 +917,7 @@ class ReportGen_NPC_Screening(Canvas):
                               dl_score, # not used now
                               rad_score,
                               dl_thres_func: Optional[Callable] = lambda x: x >= 0.5,
-                              rad_thres_func: Optional[Callable] = lambda x: None) -> int:
+                              second_dl_score: Optional[float] = None) -> int:
         r"""
         Key:
         - [0]   Normal
@@ -864,7 +928,13 @@ class ReportGen_NPC_Screening(Canvas):
         if dl_thres_func(dl_score) and float(volume) >= 0.5:
             return 1 # NPC
         elif not dl_thres_func(dl_score) and float(volume) >= 1 and float(volume) <= 25:
-            return 2 # benign hyperplasia
+            if second_dl_score is not None:
+                if dl_thres_func(second_dl_score):
+                    return 1
+                else:
+                    return 2
+            else:
+                return 2 # benign hyperplasia
         elif not dl_thres_func(dl_score) and float(volume) < 1:
             return 0 # normal
         else:
@@ -875,14 +945,9 @@ class ReportGen_NPC_Screening(Canvas):
                    center: Union[Iterable[int], int],
                    size  : Union[Iterable[int], int]) -> torch.Tensor:
         r"""
-
-        Args:
-            image:
-            center:
-            size:
-
-        Returns:
-
+        This fucntion is a replicate of the cropping mechanism in :func:`make_grid`. This
+        is to be used before contour drawing such that the slice-wise prediction can be
+        drawn to the correct location.
         """
         if isinstance(center, int):
             center = [center, center]
@@ -901,15 +966,15 @@ class ReportGen_NPC_Screening(Canvas):
         image = image[:, lower_bound[0]:upper_bound[0], lower_bound[1]:upper_bound[1]]
         return image
 
-
-if __name__ == '__main__':
-    import pprint
-    im = draw_image('./example_data/npc_case/1280-T2_FS_TRA+301.nii.gz',
-                    './example_data/npc_case/1280.nii.gz', mode=1)
-    # print(im.shape, type(im))
-    imageio.imsave('./example_data/npc_case/case.png', im)
-    #
-    c = ReportGen_NPC_Screening("hello.pdf")
-    c.dicom_tags = './example_data/npc_case/1280_dicom_tag.json'
-    pprint.pprint(c.page_setting)
-    c.draw()
+# 
+# if __name__ == '__main__':
+#     import pprint
+#     im = draw_image('./example_data/npc_case/1280-T2_FS_TRA+301.nii.gz',
+#                     './example_data/npc_case/1280.nii.gz', mode=1)
+#     # print(im.shape, type(im))
+#     imageio.imsave('./example_data/npc_case/case.png', im)
+#     #
+#     c = ReportGen_NPC_Screening("hello.pdf")
+#     c.dicom_tags = './example_data/npc_case/1280_dicom_tag.json'
+#     pprint.pprint(c.page_setting)
+#     c.draw()

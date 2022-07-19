@@ -45,6 +45,8 @@ def main(raw_args=None):
     parser.add_argument('-f', '--dump-diagnosis', action='store', type=str, default=None,
                         help="If specified, the resultant meta-data will be dumped to a text file. If the file exist, "
                              "it will be appended to the bottom of the file.")
+    parser.add_argument('--skip-norm', action='store_true',
+                        help="If specified, the program will skip the normalization step.")
     parser.add_argument('--idGlobber', action='store', type=str, default="[\w]+",
                         help="ID globber.")
     parser.add_argument('--skip-exist', action='store_true',
@@ -60,17 +62,13 @@ def main(raw_args=None):
     a = parser.parse_args(raw_args)
 
     # set up logger
-    with MNTSLogger('./pipline.log', 'main_report', keep_file=a.keep_log, verbose=a.verbose, log_level="debug") as logger:
+    with MNTSLogger('./pipline.log', 'main_report', keep_file=a.keep_log, verbose=a.verbose, log_level="debug") as logger, \
+            tempfile.TemporaryDirectory() as temp_dir:
         # Prepare directories
-        temp_dir = tempfile.TemporaryDirectory()
-        temp_dirname = Path(temp_dir.name)
+        temp_dirname = Path(temp_dir)
         output_dir = Path(a.output)
         if not output_dir.is_dir():
             output_dir.mkdir(exist_ok=True)
-
-        # TODO:
-        # * put radiomics models into trained_states
-        # * write an algorithm to make decisions based on the segmentation
 
         input = Path(a.input)
         if input.is_dir():
@@ -113,7 +111,9 @@ def main(raw_args=None):
                     logger.info(f"Skip_exist specified and target {str(report_path)} exist. Doing nothing.")
                     return
 
-        # Normalize target
+        #╔═════════════════════╗
+        #║▐ Normalization      ║
+        #╚═════════════════════╝
         t_0 = time.time()
         logger.info("{:-^80}".format(" Normalization "))
         nii_files = list(temp_dirname.iterdir())
@@ -121,8 +121,16 @@ def main(raw_args=None):
         normalized_dir.mkdir()
         if len(nii_files) == 0:
             raise FileNotFoundError(f"Nothing is found in the temporary directory.")
-        run_graph_inference(f"-i {str(temp_dirname)} -o {str(normalized_dir)} "
-                            f"-f ./asset/t2w_normalization.yaml --state-dir ./asset/trained_states".split())
+        if not a.skip_norm:
+            run_graph_inference(f"-i {str(temp_dirname)} -o {str(normalized_dir)} "
+                                f"-f ./asset/t2w_normalization.yaml --state-dir ./asset/trained_states".split())
+        else:
+            raise NotImplementedError("--skip-norm is not yet implemented.")
+            logger.info("Skipping normalization because --skip-norm is specified.")
+            logger.info("Copying source files to temp directory.")
+            for i in nii_files:
+                logger.info(f".. processing {str(i)}.")
+                shutil.copy2(str(i), str(normalized_dir))
         logger.info("{:-^80}".format(f" Normalization Done (Total time: {time.time() - t_0:.01f}s) "))
 
         #!! Debug
@@ -132,41 +140,11 @@ def main(raw_args=None):
         # shutil.copy2(str(input), str(normalized_dir.joinpath('NyulNormalizer')))
         # shutil.copy2(str(input.with_name('1183.nii.gz')), str(normalized_dir.joinpath('HuangThresholding')))
 
-        #=================
-        # Run segmentation
-        #=================
-        t_0 = time.time()
-        logger.info("{:-^80}".format(" Segmentation - Coarse "))
+        #╔══════════════════════╗
+        #║▐ Segment Primary NPC ║
+        #╚══════════════════════╝
         segment_output = temp_dirname.joinpath('segment_output')
-        override_tags = {
-            '(Data,input_dir)': str(normalized_dir.joinpath('NyulNormalizer')),
-            '(Data,prob_map_dir)': str(normalized_dir.joinpath('HuangThresholding')),
-            '(Data,output_dir)': str(segment_output)
-        }
-        override_string = ';'.join(['='.join([k, v]) for k, v in override_tags.items()])
-        command = f"--config=./asset/pmi_config/NPC_seg.ini " \
-                  f"--override={override_string} --inference --verbose".split()
-        logger.debug(f"{command}")
-        pmi_main(command)
-        logger.info("{:-^80}".format(f" Segmentation - Coarse Done (Total time: {time.time() - t_0:.01f}s) "))
-
-        # Slightly grow the segmented region such that the patch sampling is done better
-        grow_segmentation(str(segment_output))
-
-        # Re-run segmentation using the previous segmentation as sampling reference.
-        t_0 = time.time()
-        logger.info("{:-^80}".format(" Segmentation - Fine "))
-        override_tags = {
-            '(Data,input_dir)': str(normalized_dir.joinpath('NyulNormalizer')),
-            '(Data,prob_map_dir)': str(segment_output),
-            '(Data,output_dir)': str(segment_output)
-        }
-        override_string = ';'.join(['='.join([k, v]) for k, v in override_tags.items()])
-        command = f"--config=./asset/pmi_config/NPC_seg.ini " \
-                  f"--override={override_string} --inference --verbose".split()
-        logger.debug(f"{command}")
-        pmi_main(command)
-        logger.info("{:-^80}".format(f" Segmentation - Fine Done (Total time: {time.time() - t_0:.01f}s) "))
+        run_segmentation(normalized_dir, temp_dirname, segment_output, logger)
 
         # Copy the image to temp folder
         normalized_image_dir = temp_dirname.joinpath('normalized_image')
@@ -192,36 +170,114 @@ def main(raw_args=None):
                 logger.exception(e)
         seg_post_main(segment_output, segment_output)
 
-        #==============
-        # Run radiomics
-        #==============
-
-        #============================
-        # Run deep learning diagnosis
-        #============================
-        t_0 = time.time()
-        logger.info("{:-^80}".format(" rAIdiologist "))
+        #╔═════════════════════╗
+        #║▐ DL Analysis        ║
+        #╚═════════════════════╝
         dl_output_dir = temp_dirname.joinpath('dl_diag')
-        override_tags = {
-            '(Data,input_dir)': str(normalized_dir.joinpath('NyulNormalizer')),
-            '(Data,mask_dir)': str(segment_output), # This is for transformation "v1_swran_transform.yaml"
-            '(Data,output_dir)': str(dl_output_dir)
-        }
-        override_string = ';'.join(['='.join([k, v]) for k, v in override_tags.items()])
-        command = f"--config=./asset/pmi_config/BM_rAIdiologist_nyul_v2.ini " \
-                  f"--override={override_string} --inference".split()
-        logger.info(f"Command for deep learning analysis: {command}")
-        pmi_main(command)
-        logger.info("{:-^80}".format(f" rAIdiologist Done (Total time: {time.time() - t_0:.01f}s) "))
+        run_rAIdiologist(normalized_dir, segment_output, dl_output_dir, logger)
         # shutil.copytree(str(dl_output_dir), str(output_dir.joinpath(dl_output_dir.name)))
 
+        # if the outcome is NOT cancer, but there is segmentation, run rAIdiologist again with the slices that has
+        # segmentation.
+        dl_output_csv = dl_output_dir.glob('*csv')
+        im_dir = normalized_dir.joinpath('NyulNormalizer').glob('*nii.gz')
+        seg_dir = segment_output.glob("*nii.gz")
+        for i, (dl_res, _im_dir, _seg_dir) in enumerate(zip(dl_output_csv, im_dir, seg_dir)):
+            dl_res = pd.read_csv(dl_res)
+            # im = sitk.ReadImage(str(im))
+            seg = sitk.ReadImage(str(_seg_dir))
+            dl_res = dl_res.iloc[i]['Prob_Class_0']
+            stat_fil = sitk.LabelShapeStatisticsImageFilter()
+            stat_fil.Execute(seg)
+            seg_vol = stat_fil.GetPhysicalSize(1)
+
+            # convert from mm3 to cm3, threshold 0.5 is same as in :func:`get_overall_diagnosis`
+            if seg_vol / 1000 >= 0.5 and dl_res < 0.5:
+                # Create another path, with same directory structure as the original output path
+                out_dir     = temp_dirname.joinpath("safety_net")
+                dl_out_dir  = out_dir.joinpath("dl_diag")
+                out_im_dir  = out_dir.joinpath("normalized_image/NyulNormalizer")
+                out_seg_dir = out_dir.joinpath("segment_output")
+                out_im_dir.mkdir(parents=True, exist_ok=True)
+                out_seg_dir.mkdir(parents=True, exist_ok=True)
+
+                # [xstart, ystart, zstart, xsize, ysize, zsize]
+                bbox   = stat_fil.GetBoundingBox(1)
+                zstart = bbox[2]
+                zend   = zstart + bbox[5]
+
+                # Give it some extra slices
+                zstart = max(0                , zstart - 1)
+                zend   = min(seg.GetSize()[-1], zend + 2)
+
+                im = sitk.ReadImage(str(_im_dir))
+                sitk.WriteImage(im[... , zstart: zend], str(out_im_dir.joinpath(_im_dir.name)))
+                sitk.WriteImage(seg[..., zstart: zend], str(out_seg_dir.joinpath(_seg_dir.name)))
+
+                run_rAIdiologist(out_dir.joinpath('normalized_image'), out_seg_dir, dl_out_dir, logger)
+
+
+        #╔════════════╗
+        #║ Report Gen ║
+        #╚════════════╝
         # Convert DL outputs to report gen data and run gen report
         report_dir = output_dir.joinpath('report')
         report_dir.mkdir(exist_ok=True)
         generate_report(temp_dirname, report_dir, dump_diagnosis=a.dump_diagnosis)
 
         logger.info("{:=^80}".format(f" Report Gen Done "))
-        temp_dir.cleanup()
+
+
+def run_segmentation(normalized_dir, temp_dirname, segment_output, logger) -> None:
+    t_0 = time.time()
+    logger.info("{:-^80}".format(" Segmentation - Coarse "))
+    override_tags = {
+        '(Data,input_dir)': str(normalized_dir.joinpath('NyulNormalizer')),
+        '(Data,prob_map_dir)': str(normalized_dir.joinpath('HuangThresholding')),
+        '(Data,output_dir)': str(segment_output)
+    }
+    override_string = ';'.join(['='.join([k, v]) for k, v in override_tags.items()])
+    command = f"--config=./asset/pmi_config/NPC_seg.ini " \
+              f"--override={override_string} --inference --verbose".split()
+    logger.debug(f"{command}")
+    pmi_main(command)
+    logger.info("{:-^80}".format(f" Segmentation - Coarse Done (Total time: {time.time() - t_0:.01f}s) "))
+    # Slightly grow the segmented region such that the patch sampling is done better
+    grow_segmentation(str(segment_output))
+    # Re-run segmentation using the previous segmentation as sampling reference.
+    t_0 = time.time()
+    logger.info("{:-^80}".format(" Segmentation - Fine "))
+    override_tags = {
+        '(Data,input_dir)': str(normalized_dir.joinpath('NyulNormalizer')),
+        '(Data,prob_map_dir)': str(segment_output),
+        '(Data,output_dir)': str(segment_output)
+    }
+    override_string = ';'.join(['='.join([k, v]) for k, v in override_tags.items()])
+    command = f"--config=./asset/pmi_config/NPC_seg.ini " \
+              f"--override={override_string} --inference --verbose".split()
+    logger.debug(f"{command}")
+    pmi_main(command)
+    logger.info("{:-^80}".format(f" Segmentation - Fine Done (Total time: {time.time() - t_0:.01f}s) "))
+
+
+def run_rAIdiologist(normalized_dir, segment_output, dl_output_dir, logger) -> str:
+    t_0 = time.time()
+    logger.info("{:-^80}".format(" rAIdiologist "))
+    if not dl_output_dir.is_dir():
+        dl_output_dir.mkdir()
+    override_tags = {
+        '(Data,input_dir)': str(normalized_dir.joinpath('NyulNormalizer')),
+        '(Data,mask_dir)': str(segment_output),  # This is for transformation "v1_swran_transform.yaml"
+        '(Data,output_dir)': str(dl_output_dir)
+    }
+    override_string = ';'.join(['='.join([k, v]) for k, v in override_tags.items()])
+    command = f"--config=./asset/pmi_config/BM_rAIdiologist_nyul_v2.ini " \
+              f"--override={override_string} --inference".split()
+    logger.info(f"Command for deep learning analysis: {command}")
+    pmi_main(command)
+    logger.info("{:-^80}".format(f" rAIdiologist Done (Total time: {time.time() - t_0:.01f}s) "))
+    return dl_output_dir
+
 
 def seg_post_main(in_dir: Path,
                   out_dir: Path):
@@ -244,6 +300,7 @@ def seg_post_main(in_dir: Path,
             out_fname = out_dir.joinpath(s.name)
             logger.info(f"writing to: {str(out_fname)}")
             sitk.WriteImage(out_im, str(out_fname))
+
 
 def get_t2w_series_files(in_dir):
     r"""Check and see if there are T2w-fs files, if there are more than one, prompt users
@@ -310,6 +367,7 @@ def get_t2w_series_files(in_dir):
         else:
             file_list = _file_list[0][1]
     return file_list
+
 
 def grow_segmentation(input_segment: Union[Path, str]) -> None:
     r"""Grow the segmentation using `sitk.BinaryDilate` using a kernel of [5, 5, 2]"""
@@ -436,9 +494,15 @@ def generate_report(root_dir: Union[Path, str],
         report_dir = out_dir.joinpath('report_dir')
         report_dir.mkdir(exist_ok=True)
 
+        # If safety-net directory exist
         res_csv = pd.read_csv(list(root_dir.joinpath('dl_diag').glob('*.csv'))[0], index_col=0)
         risk_data = root_dir.joinpath('dl_diag/class_inf.json')
         risk_data = {} if not risk_data.is_file() else json.load(risk_data.open('r'))
+        if root_dir.joinpath('safety_net').is_dir():
+            res_csv_sv = pd.read_csv(list(root_dir.joinpath('safety_net/dl_diag').glob('*.csv'))[0], index_col=0)
+        else:
+            res_csv_sv = None
+
         for i, (f_im, f_seg, f_tag) in enumerate(zip(root_dir.joinpath('normalized_image').glob("*nii*"),
                                            root_dir.joinpath('segment_output').glob("*nii*"),
                                            root_dir.joinpath('normalized_image').glob('*.json'),
@@ -472,6 +536,23 @@ def generate_report(root_dir: Union[Path, str],
             write_out_data['image_nii'] = str(f_im)
             write_out_data['segment_nii'] = str(f_seg)
             write_out_data['risk_data'] = risk_data.get(id, None)
+            if root_dir.joinpath('safety_net').is_dir():
+                # Try to read if there are more files
+                _temp_dict = {}
+                _f_im = root_dir.joinpath('safety_net/normalized_image/NyulNormalizer').joinpath(f_im.name)
+                _f_seg = Path(str(f_seg).replace(str(root_dir), str(root_dir.joinpath('safety_net'))))
+                if res_csv_sv is not None:
+                    _f_diag = res_csv_sv.iloc[i]['Prob_Class_0']
+                    _risk_data = root_dir.joinpath('safety_net/dl_diag/class_inf.json')
+                    _risk_data = {} if not _risk_data.is_file() else json.load(_risk_data.open('r'))
+                # If the files are found, put it into the key "safety_net
+                if all([_f_im.is_file(), _f_seg.is_file()]):
+                    _temp_dict['image_nii'] = str(_f_im)
+                    _temp_dict['segment_nii'] = str(_f_seg)
+                    _temp_dict['diagnosis_dl'] = f"{_f_diag:.03f}"
+                    _temp_dict['risk_data'] = _risk_data.get(id, None)
+                    write_out_data['safety_net'] = _temp_dict
+
 
             c.set_data_display(write_out_data)
             c.draw()

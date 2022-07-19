@@ -3,6 +3,7 @@ import os
 import subprocess
 import tempfile
 import shutil
+import gc
 from npc_report_gen.report_gen_pipeline import get_t2w_series_files, main, generate_report, seg_post_main
 from pathlib import Path
 from mnts.mnts_logger import MNTSLogger
@@ -31,5 +32,84 @@ def main2():
             except Exception as e:
                 logger.exception(e)
 
+def main_():
+    from configparser import ConfigParser, ExtendedInterpolation
+    from pytorch_med_imaging.med_img_dataset import ImageDataSet
+    with MNTSLogger('.', 'main', verbose=True, log_level='debug', keep_file=False) as logger:
+        config_path = Path("../Configs/BM_LargerStudy/BM_rAIdiologist_nyul_v2.ini")
+        config = ConfigParser(interpolation=ExtendedInterpolation())
+        config.read(str(config_path))
+        config['General']['fold_code'] = "B00"
+
+        # Read ini file for idlist
+        idlist = ConfigParser()
+        idlist.read(Path('..').joinpath(config['Filters'].get('id_list')))
+        testing_ids = idlist['FileList']['testing'].split(',')
+
+        # Read other attributes
+        target_dir = Path('..').joinpath(config['Data']['target_dir'])
+        input_dir  = Path('..').joinpath(config['Data']['input_dir'])
+        input_dir  = Path('../NPC_Segmentation/0A.NIFTI_ALL/All/T2WFS_TRA')
+        idGlobber  = config['LoaderParams']['idGlobber']
+
+        # Small tumor list
+        small_tumors = ['NPC001',
+                        'NPC007',
+                        'NPC017',
+                        'NPC029',
+                        'NPC030',
+                        'NPC136',
+                        'NPC169',
+                        'NPC176',
+                        'NPC184',
+                        'NPC268',
+                        'P008',
+                        'P046',
+                        'P085',
+                        'P101',
+                        'P112',
+                        'P113',
+                        'P129',
+                        'P299']
+
+        # list where rAIdiologist got it wrong
+        wronglist = [
+            '1404',
+            '334'
+            # "NPC030",
+            # "NPC169",
+            # "NPC184",
+            # "NPC268",
+            # "P129"
+        ]
+
+        image_data = ImageDataSet(str(input_dir), verbose=True, filtermode='idlist',
+                                  idGlobber=idGlobber, idlist=testing_ids)
+
+        # Run report gen
+        po = Path('/media/storage/Data/NPC_Segmentation/70.Screening_report/TestOutput_B01_v2/')
+        pof = Path('/media/storage/Data/NPC_Segmentation/70.Screening_report/TestOutput_B01_v2/diag.csv')
+        for pp in image_data.data_source_path:
+            try:
+                main(['-i',
+                      str(pp),
+                      '-o',
+                      str(po),
+                      '-n',
+                      '16',
+                      '-f',
+                      str(pof),
+                      '--verbose',
+                      '--keep-data',
+                      '--keep-log',
+                      '--skip-exist'
+                      ])
+                gc.collect()
+            except Exception as e:
+                logger.exception(e)
+                gc.collect()
+
+    pass
+
 if __name__ == '__main__':
-    main2()
+    main_()
