@@ -37,11 +37,11 @@ def process_input(in_dir: Union[Path, str],
                 if not out_dir.is_dir():
                     msg = f"Multiple nifty files detected out out_dir is not a directory, got {str(out_dir)}"
                     raise IOError(msg)
-                out_dir.joinpath(f.name).symlink_to(f)
+                out_dir.joinpath(f.name).symlink_to(f.resolve())
     elif in_dir.is_file() and in_dir.suffix in ('.nii', '.gz'):
         # copy that to the temp dir
         if out_dir.is_dir():
-            out_dir.joinpath(in_dir.name).symlink_to(in_dir)
+            out_dir.joinpath(in_dir.name).symlink_to(in_dir.resolve())
         else:
             out_dir.symlink_to(in_dir)
         json_name = re.sub(".*\.nii(\.gz)?$", ".json", str(in_dir.name))
