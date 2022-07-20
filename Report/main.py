@@ -4,7 +4,8 @@ import subprocess
 import tempfile
 import shutil
 import gc
-from npc_report_gen.report_gen_pipeline import get_t2w_series_files, main, generate_report, seg_post_main
+from npc_report_gen.report_gen_pipeline import main, generate_report
+from img_proc import seg_post_main
 from pathlib import Path
 from mnts.mnts_logger import MNTSLogger
 

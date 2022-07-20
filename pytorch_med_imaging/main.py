@@ -3,6 +3,7 @@ import argparse
 import configparser
 import datetime
 import os
+import gc
 from pathlib import Path
 
 # Propietary
@@ -80,6 +81,8 @@ def console_entry(raw_args=None):
             logger.error("Uncaught exception!")
             logger.exception(e)
             raise BrokenPipeError("Unexpected error in main().")
+        finally:
+            gc.collect() # Sometimes the CUDA memory is occupied
         logger.info("=" * 40 + " Done " + "="* 40)
 
 if __name__ == '__main__':

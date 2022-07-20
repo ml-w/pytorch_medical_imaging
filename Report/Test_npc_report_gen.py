@@ -1,14 +1,17 @@
-import unittest
 import os
-import subprocess
-import tempfile
 import shutil
+import tempfile
+import unittest
+import pandas as pd
+from pathlib import Path
+
+from mnts.mnts_logger import MNTSLogger
+
+from img_proc import seg_post_main
+from npc_report_gen.report_gen_pipeline import generate_report, main
+from npc_report_gen.rgio import get_t2w_series_files, process_input, generate_id_path_map
 from pytorch_med_imaging.Algorithms.post_proc_segment import main as seg_post_main
 from pytorch_med_imaging.main import console_entry as pmi_main
-from npc_report_gen.report_gen_pipeline import main, generate_report, seg_post_main
-from npc_report_gen.rgio import get_t2w_series_files, process_input
-from pathlib import Path
-from mnts.mnts_logger import MNTSLogger
 
 
 class Test_pipeline(unittest.TestCase):
@@ -54,38 +57,27 @@ class Test_pipeline(unittest.TestCase):
         temp_out_dir2.cleanup()
 
     def test_main(self):
-        # p = Path("test_data/npc_case/ALL_DICOM")
-        # p = Path("/media/storage/Source/Repos/NPC_Segmentation/NPC_Segmentation/00.RAW/extra_20210426/T1rhoNPC020")
-        p = Path("/mnt/ftp_shared/NPC_New_case/2005-2021_not into T1rho studies/1719")
-        # pp = Path("/mnt/ftp_shared/NPC_Screening_3_plain/Images/P385")
-        # p = Path("/home/lwong/FTP/2.Projects/8.NPC_Segmentation/00.RAW/NPC_new_dx_cases/1249/")
-        # p = Path("test_data/npc_case/1183-T2_FS_TRA+301.nii.gz")
-        # p = Path("/media/storage/Source/Repos/NPC_Segmentation/NPC_Segmentation/00.RAW/HKU/0140")
-        # p = Path('/media/storage/Data/NPC_Segmentation/70.Screening_report/TestInput/')
-        # p = Path('/home/lwong/Desktop/NPC_Segmentation/NPC_Segmentation/0A.NIFTI_ALL/HKU/temp/T2WFS_TRA')
-        # p = Path('/home/lwong/Desktop/NPC_Segmentation/NPC_Segmentation/0A.NIFTI_ALL/All/T2WFS_TRA')
-        po = Path('/media/storage/Data/NPC_Segmentation/70.Screening_report/TestOutput/')
-        pof = Path('/media/storage/Data/NPC_Segmentation/70.Screening_report/TestOutput/diag.csv')
-        for pp in p.glob("*nii.gz"):
-            try:
-                main(['-i',
-                      str(pp),
-                      '-o',
-                      str(po),
-                      '-n',
-                      '16',
-                      '-f',
-                      str(pof),
-                      '--verbose',
-                      '--keep-data',
-                      '--keep-log',
-                      ])
-            except Exception as e:
-                self._logger.exception(e)
-                self.fail(f"Something went wrong for {str(pp)}")
+        p = Path("./test_data/npc_case/NIFTI/img")
+        po = Path(self.temp_output_path.name)
+        pof = po.joinpath('diag.csv')
+        # for pp in p.glob("*nii.gz"):
+        #     try:
+        main(['-i',
+              str(p),
+              '-o',
+              str(po),
+              '-n',
+              '16',
+              '-f',
+              str(pof),
+              '--verbose',
+              '--keep-log',
+              ])
+        # except Exception as e:
+        #     self._logger.exception(e)
+        #     self.fail(f"Something went wrong for {str(pp)}")
 
     def test_post_proc_main(self):
-        import time
         p = Path("test_data/npc_case/NIFTI/seg/eg01.nii.gz")
 
         with tempfile.TemporaryDirectory() as temp_dir:
@@ -116,7 +108,7 @@ class Test_pipeline(unittest.TestCase):
             }
             override_string = ';'.join(['='.join([k, v]) for k, v in override_tags.items()])
             command = f"--config=./asset/pmi_config/NPC_seg.ini " \
-              f"--override={override_string} --inference --verbose".split()
+                      f"--override={override_string} --inference --verbose".split()
             pmi_main(command)
 
     def test_dl_diag(self):
@@ -136,13 +128,22 @@ class Test_pipeline(unittest.TestCase):
             }
             override_string = ';'.join(['='.join([k, v]) for k, v in override_tags.items()])
             command = f"--config=./asset/pmi_config/BM_rAIdiologist_nyul_v2.ini " \
-              f"--override={override_string} --inference --verbose".split()
+                      f"--override={override_string} --inference --verbose".split()
             pmi_main(command)
             print(list(Path(temp_dir).joinpath("output").joinpath('class_inf.csv').open('r').readlines()))
 
     def test_process_output(self):
         p = Path('./test_data/report_gen')
         generate_report(p, self.temp_output_path.name)
+
+    def test_generate_id_path_map(self):
+        p = Path("./test_data/npc_case/NIFTI/img/")
+        idGlobber = "^[\w\d]+"
+        id_map = generate_id_path_map(p.glob("*nii.gz"), idGlobber)
+        expected = pd.Series(data = [str(s) for s in Path("./test_data/npc_case/NIFTI/img/").glob("*nii.gz")],
+                             index = [f"eg{i+1:02d}" for i in range(len(list(p.glob("*nii.gz"))))])
+        self.assertTrue(expected.equals(id_map),
+                        f"Expected: \n{expected}\nGot: \n{id_map}")
 
 
     def test_skip_if_exist(self):
@@ -151,6 +152,10 @@ class Test_pipeline(unittest.TestCase):
     def test_skip_normalization(self):
         pass
 
+
 if __name__ == '__main__':
     diu = Test_pipeline()
     diu.test_main()
+
+
+

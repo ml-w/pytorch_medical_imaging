@@ -93,8 +93,8 @@ def plot_DCA(thresholds: Iterable[float],
 
     return fig, ax
 
-def binary_performance(prediction: Union[Iterable[int, bool], pd.Series],
-                       gt: Union[Iterable[int, bool], pd.Series]):
+def binary_performance(prediction: Union[Iterable[Union[int, bool]], pd.Series],
+                       gt: Union[Iterable[Union[int, bool]], pd.Series]):
     r"""Compute the sensitivity, specificity, npv, ppv and acc
 
     Args:

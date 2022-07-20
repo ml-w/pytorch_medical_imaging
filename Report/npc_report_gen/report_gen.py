@@ -515,10 +515,10 @@ class ReportGen_NPC_Screening(Canvas):
         if self._SAFETY_NET_FLAG:
             self._logger.info("Drawing third page for the addition evaluation.")
             self.showPage()
+            display_im = data_display['safety_net']['image_nii']
+            display_seg = data_display['safety_net']['segment_nii']
+            display_risk = data_display['safety_net']['risk_data']
             if self.diagnosis_overall:
-                display_im = data_display['safety_net']['image_nii']
-                display_seg = data_display['safety_net']['segment_nii']
-                display_risk = data_display['safety_net']['risk_data']
                 try:
                     im = self.draw_image(display_im, display_seg, return_num_seg=False,
                                          mode=2, risk_data=display_risk)
@@ -869,10 +869,10 @@ class ReportGen_NPC_Screening(Canvas):
                 nrow = self.image_setting['nrow']
             img, seg = (torch.as_tensor(sitk.GetArrayFromImage(x).astype('float')) for x in [img, seg])
             img, seg = img[display_slide_d:display_slide_u], seg[display_slide_d:display_slide_u]
-            if mode == 3:
-                seg = None
             img = self.crop_image(img, crop['center'], crop['size'])
             seg = self.crop_image(seg, crop['center'], crop['size'])
+            if mode == 3:
+                seg = None
 
             if risk_data is not None:
                 img = self._mark_slices(img, list(range(display_slide_d, display_slide_u)), risk_data)

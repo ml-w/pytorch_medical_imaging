@@ -1,17 +1,21 @@
-import tempfile
-import SimpleITK as sitk
-import shutil
 import json
 import os
-from pathlib import Path
-from typing import Union, Iterable, Any, Optional
-from mnts.scripts.dicom2nii import console_entry as dicom2nii
-from mnts.mnts_logger import MNTSLogger
-import re
 import pprint
+import re
+import shutil
+import tempfile
+import pandas as pd
+from pathlib import Path
+from typing import Iterable, Optional, Union
+
+import SimpleITK as sitk
+from mnts.mnts_logger import MNTSLogger
+from mnts.scripts.dicom2nii import console_entry as dicom2nii
+
 
 def process_input(in_dir: Union[Path, str],
                   out_dir: Union[Path, str],
+                  idGlobber: Optional[str] = "^[\w\d]+",
                   num_worker: Optional[int] = 1) -> None:
     r"""Process the input directories. If the directories already are nifty, create symbolic
     links in the target dir. If the directory looks like a DICOM directory, calls
@@ -38,15 +42,29 @@ def process_input(in_dir: Union[Path, str],
                     msg = f"Multiple nifty files detected out out_dir is not a directory, got {str(out_dir)}"
                     raise IOError(msg)
                 out_dir.joinpath(f.name).symlink_to(f.resolve())
+                fid = re.search(idGlobber, str(f.name))
+                if fid is None:
+                    raise IOError(f"ID cannot be obtained for {str(f.name)} using patterm '{idGlobber}'")
+                else:
+                    fid = fid.group()
+                json_name = out_dir.joinpath(re.sub("\.nii(\.gz)?$", ".json", str(f.name)))
+                json.dump({'0010|0010': fid,
+                           '0010|0020': fid},
+                            Path(json_name).open('w')
+                          )
     elif in_dir.is_file() and in_dir.suffix in ('.nii', '.gz'):
         # copy that to the temp dir
         if out_dir.is_dir():
             out_dir.joinpath(in_dir.name).symlink_to(in_dir.resolve())
         else:
             out_dir.symlink_to(in_dir)
-        json_name = re.sub(".*\.nii(\.gz)?$", ".json", str(in_dir.name))
-        json.dump({'0010|0010': str(in_dir.name),
-                   '0010|0020': str(in_dir.name)},
+        if fid is None:
+            raise IOError(f"ID cannot be obtained for {str(in_dir.name)} using patterm '{idGlobber}'")
+        else:
+            fid = fid.group()
+        json_name = out_dir.joinpath(re.sub("\.nii(\.gz)?$", ".json", str(f.name)))
+        json.dump({'0010|0010': fid,
+                   '0010|0020': fid},
                   Path(out_dir).joinpath(json_name).open('w')
                   )
     else:
@@ -118,3 +136,18 @@ def get_t2w_series_files(in_dir):
         else:
             file_list = _file_list[0][1]
     return file_list
+
+def generate_id_path_map(file_list: Iterable[Union[Path, str]],
+                         idGlobber: str,
+                         name: Optional[str] = None) -> pd.Series:
+    r"""Glob IDs from an iterable of path or string and create a named pd.Series where
+    the index are the ID and the data is the corresponding file path."""
+    # glob ids
+    re_obj = {str(r): re.search(idGlobber, str(Path(r).name)) for r in file_list}
+    if None in re_obj.values():
+        msg = f"ID cannot be globbed from some of the paths: \n"
+        msg += '\n\t'.join([str(key) for key, values in re_obj.items() if values is None])
+        raise ArithmeticError(msg)
+
+    out = pd.Series(data=re_obj.keys(), index=[obj.group() for obj in re_obj.values()], name=name)
+    return out
