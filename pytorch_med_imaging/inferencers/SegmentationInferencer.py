@@ -110,6 +110,13 @@ class SegmentationInferencer(InferencerBase):
                 # sample and inference
                 self._logger.info(f"Processing subject: {subject}")
 
+                # check if probmap is empty
+                probmap = subject.get('probmap', None)
+                if not probmap is None:
+                    if probmap.count_nonzeros() == 0:
+                        self._logger.warning(f"Subject {probmap['uid']} has no proper prob-map, skipping")
+                        continue
+
                 # create new sampling queue based on inf_sample_per_vol
                 _queue, _aggregator = self.pmi_data_loader.create_aggregation_queue(
                     subject, self.solverparams_inf_samples_per_vol)
