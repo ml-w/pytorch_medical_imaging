@@ -3,8 +3,8 @@ import shutil
 import time
 import gc
 
-# from pytorch_med_imaging.scripts.dicom2nii import console_entry as dicom2nii
 from mnts.scripts.normalization import run_graph_inference
+import torchio as tio
 
 from pytorch_med_imaging.main import console_entry as pmi_main
 from .img_proc import grow_segmentation, seg_post_main, np_specific_postproc
@@ -36,6 +36,8 @@ def main(raw_args=None):
                         help="If specified, the program will skip the normalization step.")
     parser.add_argument('--idGlobber', action='store', type=str, default="[\w\d]+",
                         help="ID globber.")
+    parser.add_argument('--idlist', action='store', default=None,
+                        help="If this is provided, only images with the given IDs are processed.")
     parser.add_argument('--skip-exist', action='store_true',
                         help="If the output report exist skip processing.")
     parser.add_argument('--verbose', action='store_true',
@@ -61,7 +63,8 @@ def main(raw_args=None):
         #║▐ I/O ║
         #╚══════╝
         input = Path(a.input)
-        process_input(a.input, temp_dir, idGlobber=a.idGlobber, num_worker=a.num_worker)
+        idlist = a.idlist.split(',') if a.idlist is not None else None
+        process_input(a.input, temp_dir, idGlobber=a.idGlobber, idlist=idlist, num_worker=a.num_worker)
 
         # Check if skipping
         if a.skip_exist:
@@ -220,6 +223,9 @@ def run_safety_net(dl_output_dir : Path,
                 ├── class_inf.csv
                 └── class_inf.json (the risk curve)
       """
+    # Added range for focal evaluation
+    offset = 2
+
     # Read results from rAIdiologist
     dl_output_csv = pd.read_csv(str(dl_output_dir.joinpath('class_inf.csv')), index_col=0)
     dl_output_csv = dl_output_csv[dl_output_csv['Prob_Class_0'] < 0.5]
@@ -255,8 +261,8 @@ def run_safety_net(dl_output_dir : Path,
             zstart = bbox[2]
             zend = zstart + bbox[5]
             # Give it some extra slices
-            zstart = max(0, zstart - 1)
-            zend = min(seg.GetSize()[-1], zend + 2)
+            zstart = max(0, zstart - offset)
+            zend = min(seg.GetSize()[-1], zend + offset + 1)
             im = sitk.ReadImage(str(_img_path))
             sitk.WriteImage(im[..., zstart: zend], str(safety_out_im_dir.joinpath(_img_path.name)))
             sitk.WriteImage(seg[..., zstart: zend], str(safety_out_seg_dir.joinpath(_seg_path.name)))
@@ -289,25 +295,45 @@ def run_segmentation(normalized_dir, temp_dirname, segment_output, idGlobber, lo
     # Slightly grow the segmented region such that the patch sampling is done better
     grow_segmentation(str(segment_output))
 
+    # sometimes the coarse segmentation results in nothing when there are no thickening. Temporally disable
+    # them by removing the *nii.gz
+    changed = []
+    for f_seg in segment_output.glob("*nii???"):
+        # check if label is empty
+        seg_im = tio.LabelMap(f_seg)
+        if seg_im.count_nonzero() == 0:
+            logger.warning(f"{f_seg} found to have no coarse segmentatino. Skipping it.")
+            img_link = normalized_dir.joinpath('NyulNormalizer').joinpath(f_seg.name)
+            new_name = Path(re.sub("\.nii(\.gz)?", '', str(img_link)))
+            changed.append((img_link.absolute(), new_name.absolute()))
+            logger.debug(f"{str(img_link.absolute())} renamed to {str(new_name.absolute())}")
+            img_link.replace(new_name)
+
     #╔═════════════════════╗
     #║▐ Fine segmentation  ║
     #╚═════════════════════╝
     # Re-run segmentation using the previous segmentation as sampling reference.
-    t_0 = time.time()
-    logger.info("{:-^80}".format(" Segmentation - Fine "))
-    override_tags = {
-        '(Data,input_dir)': str(normalized_dir.joinpath('NyulNormalizer')),
-        '(Data,prob_map_dir)': str(segment_output),
-        '(Data,output_dir)': str(segment_output),
-        '(LoaderParams,idGlobber)': str(idGlobber)
-    }
-    override_string = ';'.join(['='.join([k, v]) for k, v in override_tags.items()])
-    command = f"--config=./asset/pmi_config/NPC_seg.ini " \
-              f"--override={override_string} --inference --verbose".split()
-    logger.debug(f"{command}")
-    pmi_main(command)
-    logger.info("{:-^80}".format(f" Segmentation - Fine Done (Total time: {time.time() - t_0:.01f}s) "))
+    if len(changed) < len(list(normalized_dir.joinpath('NyulNormalizer').iterdir())):
+        t_0 = time.time()
+        logger.info("{:-^80}".format(" Segmentation - Fine "))
+        override_tags = {
+            '(Data,input_dir)': str(normalized_dir.joinpath('NyulNormalizer')),
+            '(Data,prob_map_dir)': str(segment_output),
+            '(Data,output_dir)': str(segment_output),
+            '(LoaderParams,idGlobber)': str(idGlobber)
+        }
+        override_string = ';'.join(['='.join([k, v]) for k, v in override_tags.items()])
+        command = f"--config=./asset/pmi_config/NPC_seg.ini " \
+                  f"--override={override_string} --inference --verbose".split()
+        logger.debug(f"{command}")
+        pmi_main(command)
+        logger.info("{:-^80}".format(f" Segmentation - Fine Done (Total time: {time.time() - t_0:.01f}s) "))
+    else:
+        logger.info("Skipping fine segmentation because coarse segmentation resulted in nothing.")
 
+    # change back the names:
+    for ori, now in changed:
+        now.replace(ori)
 
 def run_rAIdiologist(normalized_dir, segment_output, dl_output_dir, idGlobber, logger) -> str:
     t_0 = time.time()
