@@ -7,7 +7,7 @@ from pytorch_med_imaging.networks import UNet_p
 import torch
 import torch.nn as nn
 import random
-from tqdm.auto import tqdm
+from tqdm import tqdm
 from torch.optim import Adam
 from torch.utils.data import DataLoader, TensorDataset
 
