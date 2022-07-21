@@ -234,7 +234,7 @@ class PMIImageDataLoader(PMIDataLoaderBase):
             self.queue_args[1] = int(self.inf_samples_per_vol)
 
         # No transform for subjects
-        return self._create_queue(True, subjects, return_sampler=False)
+        return self._create_queue(True, subjects, return_sampler=False, start_background=False)
 
     def _prepare_data(self, gt_out, img_out, mask_out, prob_out):
         """
@@ -283,6 +283,7 @@ class PMIImageDataLoader(PMIDataLoaderBase):
     def _create_queue(self,
                       exclude_augment: bool,
                       subjects: tio.SubjectsDataset,
+                      start_background: Optional[bool]=True,
                       return_sampler: Optional[bool] =False) -> [tio.Queue, tio.GridSampler] or \
                                                                 [tio.SubjectsDataset, None]:
         r"""This method build the queue from the input subjects. If the queue involves a :class:`tio.GridSampler`,
@@ -319,6 +320,7 @@ class PMIImageDataLoader(PMIDataLoaderBase):
             if re.search("[\W]+", self.patch_sampling_callback.translate(str.maketrans('', '', "[], "))) is not None:
                 raise AttributeError(f"You patch_sampling_callback specified ({self.patch_sampling_callback}) "
                                      f"contains illegal characters!")
+            queue_dict['start_background'] = start_background
             _callback_func = eval(self.patch_sampling_callback)
             _callback_func = partial(_callback_func, **self.patch_sampling_callback_kwargs)
             queue = CallbackQueue(subjects, *self.queue_args,
@@ -328,6 +330,7 @@ class PMIImageDataLoader(PMIDataLoaderBase):
         else: # Else use the normal queue
             # queue_dict.pop('patch_sampling_callback')
             # queue_dict.pop('create_new_attribute')
+            # ignore 'start_background` option for ordinary queues
             queue = tio.Queue(subjects, *self.queue_args, **queue_dict)
         self._logger.debug(f"Created queue: {queue}")
         self.queue = queue
