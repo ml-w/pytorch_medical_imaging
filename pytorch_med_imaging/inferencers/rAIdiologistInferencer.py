@@ -81,6 +81,7 @@ class rAIdiologistInferencer(BinaryClassificationInferencer):
         except AttributeError or IndexError:
             self._logger.warning("IDs is not a column in the data table.")
         # Write again
+        self._logger.info(f"Writing results to {self.outdir}")
         dl.write(self.outdir)
 
         if self.rAI_inf_save_playbacks:
