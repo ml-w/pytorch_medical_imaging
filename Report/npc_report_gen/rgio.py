@@ -16,6 +16,7 @@ from mnts.scripts.dicom2nii import console_entry as dicom2nii
 def process_input(in_dir: Union[Path, str],
                   out_dir: Union[Path, str],
                   idGlobber: Optional[str] = "^[\w\d]+",
+                  idlist: Optional[Iterable[str]] = None,
                   num_worker: Optional[int] = 1) -> None:
     r"""Process the input directories. If the directories already are nifty, create symbolic
     links in the target dir. If the directory looks like a DICOM directory, calls
@@ -41,12 +42,14 @@ def process_input(in_dir: Union[Path, str],
                 if not out_dir.is_dir():
                     msg = f"Multiple nifty files detected out out_dir is not a directory, got {str(out_dir)}"
                     raise IOError(msg)
-                out_dir.joinpath(f.name).symlink_to(f.resolve())
                 fid = re.search(idGlobber, str(f.name))
                 if fid is None:
                     raise IOError(f"ID cannot be obtained for {str(f.name)} using patterm '{idGlobber}'")
                 else:
                     fid = fid.group()
+                if not fid in idlist:
+                    continue
+                out_dir.joinpath(f.name).symlink_to(f.resolve())
                 json_name = out_dir.joinpath(re.sub("\.nii(\.gz)?$", ".json", str(f.name)))
                 json.dump({'0010|0010': fid,
                            '0010|0020': fid},
@@ -58,6 +61,7 @@ def process_input(in_dir: Union[Path, str],
             out_dir.joinpath(in_dir.name).symlink_to(in_dir.resolve())
         else:
             out_dir.symlink_to(in_dir)
+        fid = re.search(idGlobber, str(f.name))
         if fid is None:
             raise IOError(f"ID cannot be obtained for {str(in_dir.name)} using patterm '{idGlobber}'")
         else:

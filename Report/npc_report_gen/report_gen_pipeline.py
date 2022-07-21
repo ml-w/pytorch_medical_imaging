@@ -268,7 +268,7 @@ def run_safety_net(dl_output_dir : Path,
             sitk.WriteImage(seg[..., zstart: zend], str(safety_out_seg_dir.joinpath(_seg_path.name)))
 
     # Only perform next step when there are benign cases because the directory will be empty otherwise.
-    if len(list(safety_dl_out_dir.iterdir())) > 0:
+    if len(dl_output_csv) > 0:
         run_rAIdiologist(safety_net_dir.joinpath('normalized_image'),
                          safety_out_seg_dir, safety_dl_out_dir, idGlobber, logger)
 
@@ -385,23 +385,21 @@ def generate_report(root_dir: Union[Path, str],
         map_normalized_images = generate_id_path_map(path_normalized_images.glob("*.nii.gz"), idGlobber, name="norm")
         map_normalized_jsons  = generate_id_path_map(path_normalized_images.glob("*.json")  , idGlobber, name="json")
         map_segment_output    = generate_id_path_map(path_segment_output.glob("*nii.gz")   , idGlobber, name="seg")
-        risk_data_series      = pd.Series(risk_data, name="risk")
+        risk_data_series      = pd.Series(data=risk_data, name="risk")
         maps = [res_csv['Prob_Class_0'], map_normalized_images, map_normalized_jsons, map_segment_output, risk_data_series]
         if safety_net_FLAG:
             map_safety_net_norm = generate_id_path_map(
-                safety_net_dir.joinpath("normalized_image/NyulNormalizer/").glob("*nii.gz", idGlobber), name="sf_norm")
+                safety_net_dir.joinpath("normalized_image/NyulNormalizer/").glob("*nii.gz"), idGlobber, name="sf_norm")
             map_safety_net_seg = generate_id_path_map(
-                safety_net_dir.joinpath("segment_output/").glob("*nii.gz", idGlobber), name="sf_seg")
-            map_safety_json = generate_id_path_map(
-                safety_net_dir.joinpath("normalized_image/NyulNormalizer/").glob("*json", idGlobber), name="sf_json")
-            safety_net_risk_data = safety_net_dir.joinpath("diag_dl/class_inf.json")
+                safety_net_dir.joinpath("segment_output/").glob("*nii.gz"), idGlobber, name="sf_seg")
+            safety_net_risk_data = safety_net_dir.joinpath("dl_diag/class_inf.json")
             safety_net_risk_data = {} if not safety_net_risk_data.is_file() else json.load(safety_net_risk_data.open('r'))
-            safety_net_risk_data_series = pd.Series(safety_net_risk_data, "sf_risk")
+            safety_net_risk_data_series = pd.Series(data=safety_net_risk_data, name="sf_risk")
             # need new keys for safety net outputs
             safety_net_prob_class = res_csv_sv['Prob_Class_0']
             safety_net_prob_class.name = "sf_Prob_Class_0"
             maps.extend([safety_net_prob_class, map_safety_net_norm,
-                         map_safety_json, map_safety_net_seg, safety_net_risk_data_series])
+                         map_safety_net_seg, safety_net_risk_data_series])
         mapped_table = pd.concat(maps, axis=1)
 
         # iterate for each set of data
@@ -440,10 +438,9 @@ def generate_report(root_dir: Union[Path, str],
             write_out_data['image_nii'] = str(f_im)
             write_out_data['segment_nii'] = str(f_seg)
             write_out_data['risk_data'] = f_risk
-            if safety_net_FLAG:
+            if safety_net_FLAG and not pd.isna(row['sf_norm']):
                 sf_im = Path(row['sf_norm'])
                 sf_seg = Path(row['sf_seg'])
-                sf_tag = Path(row['sf_json'])
                 sf_diag = row['sf_Prob_Class_0']
                 sf_risk = row['sf_risk'] if len(row['sf_risk']) > 0 else None
                 # Try to read if there are more files
