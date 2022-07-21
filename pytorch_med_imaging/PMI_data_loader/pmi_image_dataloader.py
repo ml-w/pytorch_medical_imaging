@@ -360,8 +360,13 @@ class PMIImageDataLoader(PMIDataLoaderBase):
             raise TypeError(msg)
 
         # Replace subjects in queue and reset the queue
+        if isinstance(subject, tio.Subject):
+            subject = tio.SubjectsDataset([subject])
+        del self.queue._subjects_iterable, self.queue.sampler
+        self.queue.subjects_dataset = subject
         self.queue._subjects_iterable = None
         self.queue.sampler = self.sampler
+        self.queue._initialize_subjects_iterable()
         aggregator = tio.GridAggregator(self.sampler, 'average')
         return self.queue, aggregator
 

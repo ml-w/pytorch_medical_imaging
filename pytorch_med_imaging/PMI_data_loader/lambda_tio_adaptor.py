@@ -1,20 +1,20 @@
-from typing import Sequence, Optional, Union
-from functools import wraps, update_wrapper, partial
+from typing import Optional, Sequence, Union
 
+import gc
 import torch
-# import torch.multiprocessing
-# torch.multiprocessing.set_sharing_strategy('file_system')
-
-import torchio
-from torchio.typing import TypeCallable
-from torchio.data.subject import Subject
-from torchio.constants import TYPE
-from torchio.transforms import Transform
-from torchio import Queue
-
-from tqdm import tqdm
 import torch.multiprocessing as mpi
 from mnts.mnts_logger import MNTSLogger
+from tqdm import tqdm
+
+import torchio
+from torchio import Queue
+from torchio.constants import TYPE
+from torchio.data.subject import Subject
+from torchio.transforms import Transform
+from torchio.typing import TypeCallable
+
+# import torch.multiprocessing
+# torch.multiprocessing.set_sharing_strategy('file_system')
 
 __all__ = ['LambdaAdaptor', 'CallbackQueue']
 
@@ -130,25 +130,26 @@ class CallbackQueue(Queue):
             #   * seems like the program runs correctly with pool.terminate() + pool.join() trap
             #   * If patch-size is too large, this still goes into deadlock even when number of sample per volume is small
             #   * Turns out the function torch.tensor(something) to turn a numpy array to a pytorch tensor is causing some problem
+            #   * Bad File Descriptor error probably have nothing to do with this
+
 
             #  Create thread pool
             while len(res) == 0:
+                [s.load() for s in self.patches_list] # pre-load the patches
+                pool = mpi.Pool(self.num_workers)
+                p = pool.map_async(self.callback,
+                                   self.patches_list)
                 try:
-                    [s.load() for s in self.patches_list] # pre-load the patches
-                    pool = mpi.Pool(self.num_workers)
-                    p = pool.map_async(self.callback,
-                                       self.patches_list)
                     pool.close()
                     pool.join()
 
                     res.extend(p.get(300))
                     pool.terminate()
-                    del pool, p
-                except:
+                except TimeoutError as e:
                     # reset and clear the pool worker and try again
-                    pool.terminate()
+                    pool.close()
+                    # pool.terminate()
                     pool.join()
-                    del pool, p
                     res = []
 
                     # save the details of the failed patch list
@@ -162,9 +163,9 @@ class CallbackQueue(Queue):
                     # make a copy to avoid deadlock
                     self.patches_list = [Subject(sub) for sub in self.patches_list]
 
-
-
-
+                pool.terminate()
+                del pool, p
+                gc.collect()
         else:
             # Do it in a single thread. Could be slow.
             for p in tqdm(self.patches_list):
