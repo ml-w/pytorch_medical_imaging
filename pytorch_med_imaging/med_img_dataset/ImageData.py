@@ -278,6 +278,7 @@ class ImageDataSet(PMIDataBase):
             self._raw_length += 1
         self.length = len(self.data_source_path)
         self._logger.info("Finished loading. Loaded {} files.".format(self.length))
+        self._logger.deubg(f"IDs of loaded images: {','.join(self.get_unique_IDs())}")
 
     def _filter_filelist(self, file_dirs, filtered_away, removed_fnames):
         r"""Filter the `file_dirs` using the specified attributions. Used in `parse_root_dir`."""
