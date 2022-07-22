@@ -4,7 +4,7 @@ import subprocess
 import tempfile
 import shutil
 import gc
-from npc_report_gen.report_gen_pipeline import main, generate_report
+from npc_report_gen.report_gen_pipeline import main, generate_report, run_rAIdiologist
 from img_proc import seg_post_main
 from pathlib import Path
 from mnts.mnts_logger import MNTSLogger
@@ -84,31 +84,36 @@ def main_():
             # "P129"
         ]
 
-        image_data = ImageDataSet(str(input_dir), verbose=True, filtermode='idlist',
-                                  idGlobber=idGlobber, idlist=testing_ids)
+        # image_data = ImageDataSet(str(input_dir), verbose=True, filtermode='idlist',
+        #                           idGlobber=idGlobber, idlist=small_tumors)
 
         # Run report gen
-        po = Path('/media/storage/Data/NPC_Segmentation/70.Screening_report/TestOutput_B01_v2/')
-        pof = Path('/media/storage/Data/NPC_Segmentation/70.Screening_report/TestOutput_B01_v2/diag.csv')
-        for pp in image_data.data_source_path:
-            try:
-                main(['-i',
-                      str(pp),
-                      '-o',
-                      str(po),
-                      '-n',
-                      '16',
-                      '-f',
-                      str(pof),
-                      '--verbose',
-                      '--keep-data',
-                      '--keep-log',
-                      '--skip-exist'
-                      ])
-                gc.collect()
-            except Exception as e:
-                logger.exception(e)
-                gc.collect()
+        po = Path('/media/storage/Data/NPC_Segmentation/70.Screening_report/TestOutput_B00_v3/')
+        pof = Path('/media/storage/Data/NPC_Segmentation/70.Screening_report/TestOutput_B00_v3/diag.csv')
+        po = Path('/media/storage/Data/NPC_Segmentation/70.Screening_report/TestOutput_small_tumors_v3/')
+        pof = Path('/media/storage/Data/NPC_Segmentation/70.Screening_report/TestOutput_small_tumors_v3/diag.csv')
+        try:
+            main(['-i',
+                  str(input_dir),
+                  '-o',
+                  str(po),
+                  '-n',
+                  '16',
+                  '-f',
+                  str(pof),
+                  '--idGlobber',
+                  str(idGlobber),
+                  '--idlist',
+                  ','.join(small_tumors),
+                  '--verbose',
+                  '--keep-data',
+                  '--keep-log',
+                  # '--skip-exist'
+                  ])
+            gc.collect()
+        except Exception as e:
+            logger.exception(e)
+            gc.collect()
 
     pass
 

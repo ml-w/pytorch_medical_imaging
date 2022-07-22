@@ -110,10 +110,10 @@ def main(raw_args=None):
         # normalized_dir.joinpath('HuangThresholding').mkdir(exist_ok=True)
         # shutil.copy2(str(input), str(normalized_dir.joinpath('NyulNormalizer')))
         # shutil.copy2(str(input.with_name('1183.nii.gz')), str(normalized_dir.joinpath('HuangThresholding')))
-
-        #╔══════════════════════╗
-        #║▐ Segment Primary NPC ║
-        #╚══════════════════════╝
+        #
+        # #╔══════════════════════╗
+        # #║▐ Segment Primary NPC ║
+        # #╚══════════════════════╝
         segment_output = temp_dirpath.joinpath('segment_output')
         run_segmentation(normalized_dir, temp_dirpath, segment_output, a.idGlobber, logger)
 

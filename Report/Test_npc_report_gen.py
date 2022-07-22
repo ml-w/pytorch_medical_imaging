@@ -16,8 +16,11 @@ from pytorch_med_imaging.main import console_entry as pmi_main
 
 class Test_pipeline(unittest.TestCase):
     def setUp(self):
-        self._logger = MNTSLogger('.', 'test_report', verbose=True, keep_file=False, log_level='debug')
+        self._logger = Test_pipeline._logger
         self.temp_output_path = tempfile.TemporaryDirectory()
+
+    def setUpClass() -> None:
+        Test_pipeline._logger = MNTSLogger('.', 'test_report', verbose=True, keep_file=False, log_level='debug')
 
     def tearDown(self) -> None:
         # self._logger.cleanup()
@@ -32,6 +35,7 @@ class Test_pipeline(unittest.TestCase):
         files = get_t2w_series_files(str(p.absolute()))
         self.assertEqual(len(files) > 0, True)
 
+    @unittest.SkipTest
     def test_process_input(self):
         # input is a dir
         temp_input = tempfile.TemporaryDirectory()
@@ -116,6 +120,7 @@ class Test_pipeline(unittest.TestCase):
 
             self.assertGreater(len(list(Path(temp_dir).joinpath('output').iterdir())), 0)
 
+    # @unittest.SkipTest
     def test_dl_diag(self):
         p = Path('test_data/npc_case/')
         with tempfile.TemporaryDirectory() as temp_dir:
@@ -124,7 +129,9 @@ class Test_pipeline(unittest.TestCase):
             mask_dir.mkdir(exist_ok=True)
             img_dir.mkdir(exist_ok=True)
             shutil.copy2(str(p.joinpath('NIFTI/seg/eg01.nii.gz')), str(mask_dir))
+            shutil.copy2(str(p.joinpath('NIFTI/seg/eg02.nii.gz')), str(mask_dir))
             shutil.copy2(str(p.joinpath('NIFTI/img/eg01.nii.gz')), str(img_dir))
+            shutil.copy2(str(p.joinpath('NIFTI/img/eg02.nii.gz')), str(img_dir))
 
             override_tags = {
                 '(Data,input_dir)': str(img_dir),
@@ -137,9 +144,10 @@ class Test_pipeline(unittest.TestCase):
             pmi_main(command)
             print(list(Path(temp_dir).joinpath("output").joinpath('class_inf.csv').open('r').readlines()))
 
-    def test_process_output(self):
+    @unittest.SkipTest
+    def test_report_gen(self):
         p = Path('./test_data/report_gen')
-        generate_report(p, self.temp_output_path.name)
+        generate_report(p, self.temp_output_path.name, idGlobber="^[^\W_]+")
 
     def test_generate_id_path_map(self):
         p = Path("./test_data/npc_case/NIFTI/img/")

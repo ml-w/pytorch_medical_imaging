@@ -15,9 +15,9 @@ from mnts.scripts.dicom2nii import console_entry as dicom2nii
 
 def process_input(in_dir: Union[Path, str],
                   out_dir: Union[Path, str],
-                  idGlobber: Optional[str] = "^[\w\d]+",
+                  idGlobber: Optional[str] = "^[^\W_]+",
                   idlist: Optional[Iterable[str]] = None,
-                  num_worker: Optional[int] = 1) -> None:
+                  num_worker: Optional[int] = 1) -> Iterable[str]:
     r"""Process the input directories. If the directories already are nifty, create symbolic
     links in the target dir. If the directory looks like a DICOM directory, calls
     `get_t2w_series_files` and generate a nifty. If the directory consist of many nifty
@@ -26,6 +26,7 @@ def process_input(in_dir: Union[Path, str],
     in_dir = Path(in_dir)
     out_dir = Path(out_dir)
 
+    available_ids = []
     if in_dir.is_dir():
         # if any nii files were in the dir, treat the directory as nii directory
         if len(list(in_dir.glob("*nii???"))) == 0:
@@ -35,6 +36,8 @@ def process_input(in_dir: Union[Path, str],
                 [shutil.copy2(d, _temp_dicom_dir.name) for d in _dicom_files]
                 dicom2nii(f"-i {_temp_dicom_dir.name} -o {str(out_dir)} -n {num_worker} -g '.*' "
                           f"--dump-dicom-tags --use-patient-id".split())
+            _dicom2nii_success = generate_id_path_map(out_dir.glob("*nii.gz"), idGlobber=idGlobber)
+            available_ids.extend(_dicom2nii_success.keys())
 
         else:
             #!! This is not functional yet
@@ -47,33 +50,37 @@ def process_input(in_dir: Union[Path, str],
                     raise IOError(f"ID cannot be obtained for {str(f.name)} using patterm '{idGlobber}'")
                 else:
                     fid = fid.group()
-                if not fid in idlist:
-                    continue
+                # Ignore idlist if it is none
+                if idlist is not None:
+                    if not fid in idlist:
+                        continue
                 out_dir.joinpath(f.name).symlink_to(f.resolve())
                 json_name = out_dir.joinpath(re.sub("\.nii(\.gz)?$", ".json", str(f.name)))
                 json.dump({'0010|0010': fid,
                            '0010|0020': fid},
                             Path(json_name).open('w')
                           )
+                available_ids.append(fid)
     elif in_dir.is_file() and in_dir.suffix in ('.nii', '.gz'):
         # copy that to the temp dir
         if out_dir.is_dir():
             out_dir.joinpath(in_dir.name).symlink_to(in_dir.resolve())
         else:
             out_dir.symlink_to(in_dir)
-        fid = re.search(idGlobber, str(f.name))
+        fid = re.search(idGlobber, str(in_dir.name))
         if fid is None:
             raise IOError(f"ID cannot be obtained for {str(in_dir.name)} using patterm '{idGlobber}'")
         else:
             fid = fid.group()
-        json_name = out_dir.joinpath(re.sub("\.nii(\.gz)?$", ".json", str(f.name)))
+        json_name = out_dir.joinpath(re.sub("\.nii(\.gz)?$", ".json", str(in_dir.name)))
         json.dump({'0010|0010': fid,
                    '0010|0020': fid},
                   Path(out_dir).joinpath(json_name).open('w')
                   )
+        available_ids.append(fid)
     else:
         raise IOError(f"Input specified is incorrect, expect a directory or an nii file, got '{in_dir}' instead.")
-
+    return available_ids
 
 def get_t2w_series_files(in_dir):
     r"""Check and see if there are T2w-fs files, if there are more than one, prompt users
