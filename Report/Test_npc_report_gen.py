@@ -7,10 +7,10 @@ from pathlib import Path
 
 from mnts.mnts_logger import MNTSLogger
 
-from img_proc import seg_post_main
+from npc_report_gen.img_proc import seg_post_main
 from npc_report_gen.report_gen_pipeline import generate_report, main
 from npc_report_gen.rgio import get_t2w_series_files, process_input, generate_id_path_map
-from pytorch_med_imaging.Algorithms.post_proc_segment import main as seg_post_main
+# from pytorch_med_imaging.Algorithms.post_proc_segment import main as seg_post_main
 from pytorch_med_imaging.main import console_entry as pmi_main
 
 
@@ -56,6 +56,7 @@ class Test_pipeline(unittest.TestCase):
         [t.close() for t in tfs]
         temp_out_dir2.cleanup()
 
+    @unittest.SkipTest
     def test_main(self):
         p = Path("./test_data/npc_case/NIFTI/img")
         po = Path(self.temp_output_path.name)
@@ -99,7 +100,9 @@ class Test_pipeline(unittest.TestCase):
             mask_dir.mkdir(exist_ok=True)
             img_dir.mkdir(exist_ok=True)
             shutil.copy2(str(p.joinpath('NIFTI/seg/eg01.nii.gz')), str(mask_dir))
+            shutil.copy2(str(p.joinpath('NIFTI/seg/eg02.nii.gz')), str(mask_dir))
             shutil.copy2(str(p.joinpath('NIFTI/img/eg01.nii.gz')), str(img_dir))
+            shutil.copy2(str(p.joinpath('NIFTI/img/eg02.nii.gz')), str(img_dir))
 
             override_tags = {
                 '(Data,input_dir)': str(img_dir),
@@ -110,6 +113,8 @@ class Test_pipeline(unittest.TestCase):
             command = f"--config=./asset/pmi_config/NPC_seg.ini " \
                       f"--override={override_string} --inference --verbose".split()
             pmi_main(command)
+
+            self.assertGreater(len(list(Path(temp_dir).joinpath('output').iterdir())), 0)
 
     def test_dl_diag(self):
         p = Path('test_data/npc_case/')
