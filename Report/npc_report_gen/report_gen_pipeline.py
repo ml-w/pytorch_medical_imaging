@@ -34,7 +34,7 @@ def main(raw_args=None):
                              "it will be appended to the bottom of the file.")
     parser.add_argument('--skip-norm', action='store_true',
                         help="If specified, the program will skip the normalization step.")
-    parser.add_argument('--idGlobber', action='store', type=str, default="[\w\d]+",
+    parser.add_argument('--idGlobber', action='store', type=str, default="[^\W_]+",
                         help="ID globber.")
     parser.add_argument('--idlist', action='store', default=None,
                         help="If this is provided, only images with the given IDs are processed.")
@@ -51,6 +51,7 @@ def main(raw_args=None):
     a = parser.parse_args(raw_args)
 
     # set up logger
+    t_start = time.time()
     with MNTSLogger('./pipline.log', 'main_report', keep_file=a.keep_log, verbose=a.verbose, log_level="debug") as logger, \
             tempfile.TemporaryDirectory() as temp_dir:
         # Prepare directories
@@ -63,21 +64,23 @@ def main(raw_args=None):
         #║▐ I/O ║
         #╚══════╝
         input = Path(a.input)
-        idlist = a.idlist.split(',') if a.idlist is not None else None
-        process_input(a.input, temp_dir, idGlobber=a.idGlobber, idlist=idlist, num_worker=a.num_worker)
+        if a.idlist is not None:
+            idlist = a.idlist.split(',')
+        else:
+            idlist = generate_id_path_map(input.glob("*nii.gz"), idGlobber=a.idGlobber)
+            if len(idlist) == 0:
+                idlist = None
 
         # Check if skipping
         if a.skip_exist:
-            p = temp_dirpath.glob("*nii.gz")
-            mo = re.search(a.idGlobber, str(next(p).name))
-            if mo is None:
-                logger.warning(f"Cannot glob ID from files: {[str(pp) for pp in list(p)]}")
-            else:
-                id = mo.group()
-                report_path = output_dir.joinpath('report/report_dir').joinpath(f'npc_report_{id}.pdf')
-                if report_path.is_file():
-                    logger.info(f"Skip_exist specified and target {str(report_path)} exist. Doing nothing.")
-                    return
+            if idlist is not None:
+                copy_list = list(idlist)
+                for _id in copy_list:
+                    report_path = output_dir.joinpath('report/report_dir').joinpath(f'npc_report_{_id}.pdf')
+                    if report_path.is_file():
+                        logger.info(f"Skip_exist specified and target {str(report_path)} exist. Doing nothing.")
+                        idlist.remove(_id)
+        avail_idlist = process_input(a.input, temp_dir, idGlobber=a.idGlobber, idlist=idlist, num_worker=a.num_worker)
 
         #╔═════════════════════╗
         #║▐ Normalization      ║
@@ -145,48 +148,6 @@ def main(raw_args=None):
         run_rAIdiologist(normalized_dir, segment_output, dl_output_dir, a.idGlobber, logger)
         # shutil.copytree(str(dl_output_dir), str(output_dir.joinpath(dl_output_dir.name)))
 
-        # if the outcome is NOT cancer, but there is segmentation, run rAIdiologist again with the slices that has
-        # segmentation.
-        # dl_output_csv = dl_output_dir.glob('*csv')
-        # im_dir = normalized_dir.joinpath('NyulNormalizer').glob('*nii.gz')
-        # seg_dir = segment_output.glob("*nii.gz")
-        # for i, (dl_res, _im_dir, _seg_dir) in enumerate(zip(dl_output_csv, im_dir, seg_dir)):
-        #     dl_res = pd.read_csv(dl_res)
-        #     # im = sitk.ReadImage(str(im))
-        #     seg = sitk.ReadImage(str(_seg_dir))
-        #     dl_res = dl_res.iloc[i]['Prob_Class_0']
-        #     stat_fil = sitk.LabelShapeStatisticsImageFilter()
-        #     stat_fil.Execute(seg)
-        #     try:
-        #         seg_vol = stat_fil.GetPhysicalSize(1)
-        #     except RuntimeError:
-        #         seg_vol = 0
-        #
-        #     # convert from mm3 to cm3, threshold 0.5 is same as in :func:`get_overall_diagnosis`
-        #     if seg_vol / 1000 >= 0.5 and dl_res < 0.5:
-        #         # Create another path, with same directory structure as the original output path
-        #         out_dir     = temp_dirpath.joinpath("safety_net")
-        #         dl_out_dir  = out_dir.joinpath("dl_diag")
-        #         out_im_dir  = out_dir.joinpath("normalized_image/NyulNormalizer")
-        #         out_seg_dir = out_dir.joinpath("segment_output")
-        #         out_im_dir.mkdir(parents=True, exist_ok=True)
-        #         out_seg_dir.mkdir(parents=True, exist_ok=True)
-        #
-        #         # [xstart, ystart, zstart, xsize, ysize, zsize]
-        #         bbox   = stat_fil.GetBoundingBox(1)
-        #         zstart = bbox[2]
-        #         zend   = zstart + bbox[5]
-        #
-        #         # Give it some extra slices
-        #         zstart = max(0                , zstart - 1)
-        #         zend   = min(seg.GetSize()[-1], zend + 2)
-        #
-        #         im = sitk.ReadImage(str(_im_dir))
-        #         sitk.WriteImage(im[... , zstart: zend], str(out_im_dir.joinpath(_im_dir.name)))
-        #         sitk.WriteImage(seg[..., zstart: zend], str(out_seg_dir.joinpath(_seg_dir.name)))
-        #
-        #         run_rAIdiologist(out_dir.joinpath('normalized_image'), out_seg_dir, dl_out_dir, a.idGlobber, logger)
-
         run_safety_net(dl_output_dir, normalized_dir, segment_output, temp_dirpath, a.idGlobber, logger)
 
         #╔════════════╗
@@ -195,9 +156,9 @@ def main(raw_args=None):
         # Convert DL outputs to report gen data and run gen report
         report_dir = output_dir.joinpath('report')
         report_dir.mkdir(exist_ok=True)
-        generate_report(temp_dirpath, report_dir, dump_diagnosis=a.dump_diagnosis)
+        generate_report(temp_dirpath, report_dir, idGlobber=a.idGlobber, dump_diagnosis=a.dump_diagnosis)
 
-        logger.info("{:=^80}".format(f" Report Gen Done "))
+        logger.info("{:=^80}".format(f" Report Gen Done (Total: {time.time() - t_start:.01f}s) "))
 
 
 def run_safety_net(dl_output_dir : Path,
@@ -271,6 +232,7 @@ def run_safety_net(dl_output_dir : Path,
     if len(dl_output_csv) > 0:
         run_rAIdiologist(safety_net_dir.joinpath('normalized_image'),
                          safety_out_seg_dir, safety_dl_out_dir, idGlobber, logger)
+
 
 
 def run_segmentation(normalized_dir, temp_dirname, segment_output, idGlobber, logger) -> None:
@@ -357,7 +319,7 @@ def run_rAIdiologist(normalized_dir, segment_output, dl_output_dir, idGlobber, l
 
 def generate_report(root_dir: Union[Path, str],
                     out_dir: Union[Path, str],
-                    idGlobber: Optional[str] = "^[\w\d]+",
+                    idGlobber: Optional[str] = "^[^\W_]+",
                     dump_diagnosis: Union[Path, str] = None) -> None:
     with MNTSLogger('pipeline.log', 'generate_report') as logger:
         root_dir = Path(root_dir)
@@ -373,13 +335,13 @@ def generate_report(root_dir: Union[Path, str],
         risk_data = {} if not risk_data.is_file() else json.load(risk_data.open('r'))
         path_normalized_images = root_dir.joinpath('normalized_image')
         path_segment_output = root_dir.joinpath('segment_output')
-        # If safety-net directory exist
+        # If safety-net directory exist11
         safety_net_dir = root_dir.joinpath('safety_net')
         safety_net_FLAG = len(list(safety_net_dir.rglob("*nii.gz"))) > 0
         if safety_net_FLAG:
-            res_csv_sv = pd.read_csv(list(safety_net_dir.joinpath('dl_diag').glob('class_inf.csv'))[0], index_col=0)
+            safety_net_csv = pd.read_csv(list(safety_net_dir.joinpath('dl_diag').glob('class_inf.csv'))[0], index_col=0)
         else:
-            res_csv_sv = None
+            safety_net_csv = None
 
         # Construct data array
         map_normalized_images = generate_id_path_map(path_normalized_images.glob("*.nii.gz"), idGlobber, name="norm")
@@ -396,71 +358,87 @@ def generate_report(root_dir: Union[Path, str],
             safety_net_risk_data = {} if not safety_net_risk_data.is_file() else json.load(safety_net_risk_data.open('r'))
             safety_net_risk_data_series = pd.Series(data=safety_net_risk_data, name="sf_risk")
             # need new keys for safety net outputs
-            safety_net_prob_class = res_csv_sv['Prob_Class_0']
+            safety_net_prob_class = safety_net_csv['Prob_Class_0']
             safety_net_prob_class.name = "sf_Prob_Class_0"
             maps.extend([safety_net_prob_class, map_safety_net_norm,
                          map_safety_net_seg, safety_net_risk_data_series])
+        for _df in maps:
+            if any(_df.duplicated()):
+                logger.warning(f"Duplicate found in {_df.to_string()}."
+                               f"Trying to drop but results might be wrong.")
+                _df.drop_duplicate(inplace=True)
+
+
         mapped_table = pd.concat(maps, axis=1)
 
         # iterate for each set of data
         overall_diagnosis = {}
         for id, row in mapped_table.iterrows():
-            # Default TODO: Move this to report_gen.py
-            f_im = Path(row['norm'])
-            f_seg = Path(row['seg'])
-            f_tag = Path(row['json'])
-            f_diag_dl = row['Prob_Class_0']
-            f_risk = row['risk'] if len(row['risk']) > 0 else None
-
-            write_out_data = {
-                'ref_radiomics': '',
-                'ref_dl': 0.5
-            }
-
-            # Analyse the segmentation and the output
-            seg = sitk.ReadImage(str(f_seg))
-            stat_fil = sitk.LabelShapeStatisticsImageFilter()
-            stat_fil.Execute(seg)
             try:
-                volume = stat_fil.GetPhysicalSize(1)
-            except:
-                volume = 0
-            if np.isreal(id):
-                id = str(int(id))
+                # Default TODO: Move this to report_gen.py
+                f_im = Path(row['norm'])
+                f_seg = Path(row['seg'])
+                f_tag = Path(row['json'])
+                f_diag_dl = row['Prob_Class_0']
+                f_risk = row['risk'] if len(row['risk']) > 0 else None
 
-            report_path = report_dir.joinpath(f'npc_report_{id}.pdf')
-            c = ReportGen_NPC_Screening(str(report_path))
-            c.set_dump_diagnosis(dump_diagnosis)
+                write_out_data = {
+                    'ref_radiomics': '',
+                    'ref_dl': 0.5
+                }
 
-            write_out_data['dicom_tags'] = str(f_tag)
-            write_out_data['lesion_vol'] = f'{volume / 1000.:.02f}' # convert from mm3 to cm3
-            write_out_data['diagnosis_dl'] = f"{f_diag_dl:.03f}"
-            write_out_data['image_nii'] = str(f_im)
-            write_out_data['segment_nii'] = str(f_seg)
-            write_out_data['risk_data'] = f_risk
-            if safety_net_FLAG and not pd.isna(row['sf_norm']):
-                sf_im = Path(row['sf_norm'])
-                sf_seg = Path(row['sf_seg'])
-                sf_diag = row['sf_Prob_Class_0']
-                sf_risk = row['sf_risk'] if len(row['sf_risk']) > 0 else None
-                # Try to read if there are more files
-                _temp_dict = {}
-                # If the files are found, put it into the key "safety_net
-                if all([sf_im.is_file(), sf_seg.is_file()]):
-                    _temp_dict['image_nii'] = str(sf_im)
-                    _temp_dict['segment_nii'] = str(sf_seg)
-                    _temp_dict['diagnosis_dl'] = f"{sf_diag:.03f}"
-                    _temp_dict['risk_data'] = sf_risk
-                    write_out_data['safety_net'] = _temp_dict
+                # Analyse the segmentation and the output
+                seg = sitk.ReadImage(str(f_seg))
+                stat_fil = sitk.LabelShapeStatisticsImageFilter()
+                stat_fil.Execute(seg)
+                try:
+                    volume = stat_fil.GetPhysicalSize(1)
+                except:
+                    volume = 0
+                if np.isreal(id):
+                    id = str(int(id))
 
-            c.set_data_display(write_out_data)
-            c.draw()
-            overall_diagnosis[id] = c.diagnosis_overall
+                report_path = report_dir.joinpath(f'npc_report_{id}.pdf')
+                c = ReportGen_NPC_Screening(str(report_path))
+                c.set_dump_diagnosis(dump_diagnosis)
+
+                write_out_data['dicom_tags'] = str(f_tag)
+                write_out_data['lesion_vol'] = f'{volume / 1000.:.02f}' # convert from mm3 to cm3
+                write_out_data['diagnosis_dl'] = f"{f_diag_dl:.03f}"
+                write_out_data['image_nii'] = str(f_im)
+                write_out_data['segment_nii'] = str(f_seg)
+                write_out_data['risk_data'] = f_risk
+                if safety_net_FLAG and not pd.isna(row['sf_norm']):
+                    sf_im = Path(row['sf_norm'])
+                    sf_seg = Path(row['sf_seg'])
+                    sf_diag = row['sf_Prob_Class_0']
+                    sf_risk = row['sf_risk'] if len(row['sf_risk']) > 0 else None
+                    # Try to read if there are more files
+                    _temp_dict = {}
+                    # If the files are found, put it into the key "safety_net
+                    if all([sf_im.is_file(), sf_seg.is_file()]):
+                        _temp_dict['image_nii'] = str(sf_im)
+                        _temp_dict['segment_nii'] = str(sf_seg)
+                        _temp_dict['diagnosis_dl'] = f"{sf_diag:.03f}"
+                        _temp_dict['risk_data'] = sf_risk
+                        write_out_data['safety_net'] = _temp_dict
+
+                c.set_data_display(write_out_data)
+                c.draw()
+                overall_diagnosis[id] = c.diagnosis_overall
+            except Exception as e:
+                msg = f"Error when dealing with file with id: {id}\n" \
+                      f"{row}"
+                logger.error(msg)
+                logger.exception(e)
+                continue
 
         if dump_diagnosis:
             overall_diagnosis = pd.Series(overall_diagnosis, name='Overall Diagnosis').to_frame()
             overall_diagnosis = overall_diagnosis.join(mapped_table['Prob_Class_0'])
             if safety_net_FLAG:
                 overall_diagnosis = overall_diagnosis.join(mapped_table['sf_Prob_Class_0'])
-            overall_diagnosis.to_csv(str(out_dir.joinpath("diagnosis.csv")))
+
+            csv_path =  out_dir.joinpath("diagnosis.csv")
+            overall_diagnosis.to_csv(str(csv_path), mode='a', header=not csv_path.is_file())
 
