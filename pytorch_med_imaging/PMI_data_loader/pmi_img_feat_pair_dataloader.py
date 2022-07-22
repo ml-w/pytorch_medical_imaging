@@ -147,4 +147,4 @@ class PMIImageFeaturePair(PMIImageDataLoader):
                         for row in zip(*data_exclude_none.values())]
             subjects = tio.SubjectsDataset(subjects=subjects, transform=self.transform)
 
-            return self._create_queue(True, subjects)
+            return self._create_queue(True, subjects, training=self._training_mode)

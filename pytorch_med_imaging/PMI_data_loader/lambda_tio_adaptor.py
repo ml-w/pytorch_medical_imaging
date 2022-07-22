@@ -148,7 +148,7 @@ class CallbackQueue(Queue):
                 except TimeoutError as e:
                     # reset and clear the pool worker and try again
                     pool.close()
-                    # pool.terminate()
+                    pool.terminate()
                     pool.join()
                     res = []
 
@@ -189,3 +189,6 @@ class CallbackQueue(Queue):
                                      f"{len(self.patches_list)}).")
                 for att, rr in zip(self.create_new_attribute, r):
                     p[att] = rr
+
+    def __str__(self):
+        return super(CallbackQueue, self).__str__().replace("Queue", "CallBackQueue")

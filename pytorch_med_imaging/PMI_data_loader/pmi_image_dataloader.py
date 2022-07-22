@@ -127,7 +127,7 @@ class PMIImageDataLoader(PMIDataLoaderBase):
             'shuffle_subjects': True,
             'shuffle_patches':  True,
             'start_background': True,
-            'verbose': True,
+            'verbose': self._logger._verbose,
         }
         default_queue_kwargs.update(self.queue_kwargs)  # self.queue_kwargs is loaded by _load_default_attr
         if default_queue_kwargs['num_workers'] > mpi.cpu_count():
@@ -234,7 +234,7 @@ class PMIImageDataLoader(PMIDataLoaderBase):
             self.queue_args[1] = int(self.inf_samples_per_vol)
 
         # No transform for subjects
-        return self._create_queue(True, subjects, return_sampler=False, start_background=False)
+        return self._create_queue(True, subjects, return_sampler=False, training=False)
 
     def _prepare_data(self, gt_out, img_out, mask_out, prob_out):
         """
@@ -283,13 +283,17 @@ class PMIImageDataLoader(PMIDataLoaderBase):
     def _create_queue(self,
                       exclude_augment: bool,
                       subjects: tio.SubjectsDataset,
-                      start_background: Optional[bool]=True,
-                      return_sampler: Optional[bool] =False) -> [tio.Queue, tio.GridSampler] or \
+                      training: Optional[bool]=None,
+                      return_sampler: Optional[bool]=False) -> [tio.Queue, tio.GridSampler] or \
                                                                 [tio.SubjectsDataset, None]:
         r"""This method build the queue from the input subjects. If the queue involves a :class:`tio.GridSampler`,
         it is generally needed by the inferencer to reconstruct it back into its original dimension. Thus, an
         optional to also return the sampler is given.
         """
+        # default is based on self._training_mode, read from config file
+        if training is None:
+            training = self._training_mode
+
         # Return the queue
         if not self.patch_size is None:
             overlap = [ps // 2 for ps in self.patch_size]
@@ -313,6 +317,12 @@ class PMIImageDataLoader(PMIDataLoaderBase):
         else:
             queue_dict = self.queue_kwargs
 
+        if not training:
+            # don't shuffle subject if inference
+            queue_dict['shuffle_subjects'] = False
+            queue_dict['shuffle_patches'] = False # This might haunt you later because some inference might require
+                                                  # shuffling the patches (e.g., grid sampler)
+
         # Create queue
         # If option to use post-sampling processing was provided, use CallbackQueue instead
         if  self.patch_sampling_callback != "":
@@ -320,12 +330,12 @@ class PMIImageDataLoader(PMIDataLoaderBase):
             if re.search("[\W]+", self.patch_sampling_callback.translate(str.maketrans('', '', "[], "))) is not None:
                 raise AttributeError(f"You patch_sampling_callback specified ({self.patch_sampling_callback}) "
                                      f"contains illegal characters!")
-            queue_dict['start_background'] = start_background
+            queue_dict['start_background'] = training # if not training, delay dataloading
             _callback_func = eval(self.patch_sampling_callback)
             _callback_func = partial(_callback_func, **self.patch_sampling_callback_kwargs)
             queue = CallbackQueue(subjects, *self.queue_args,
                                   patch_sampling_callback=_callback_func,
-                                  create_new_attribute=self.create_new_attribute,
+                                  create_new_attribute = self.create_new_attribute,
                                   **queue_dict)
         else: # Else use the normal queue
             # queue_dict.pop('patch_sampling_callback')

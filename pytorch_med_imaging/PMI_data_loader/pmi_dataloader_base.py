@@ -131,8 +131,10 @@ class PMIDataLoaderBase(object):
 
         """
         if re.match('(?=.*train.*)', self._run_mode):
+            self._training_mode = True
             return self._load_data_set_training()
         else:
+            self._training_mode = False
             return self._load_data_set_inference()
 
     def write_log(self, msg, level=MNTSLogger.INFO):
