@@ -756,9 +756,16 @@ class ReportGen_NPC_Screening(Canvas):
 
         self._logger.info(f"Drawing grid, mode: {mode}")
         if mode == 0:
-            tissue_mask = sitk.HuangThreshold(img, 0, 1, 200)
+            for thres_func in (lambda _img: sitk.HuangThreshold(_img, 0, 1, 200),
+                               lambda _img: sitk.HuangThreshold(_img, 0, 1, 128),
+                               lambda _img: sitk.HuangThreshold(_img * 50, 0, 1, 64)):
+                try:
+                    tissue_mask = thres_func(img)  # Use tissue mask
+                    break
+                except RuntimeError:
+                    pass
             f = sitk.LabelShapeStatisticsImageFilter()
-            f.Execute(tissue_mask == 1)
+            f.Execute(tissue_mask != 0)
             cent = f.GetCentroid(1)
             cent = seg.TransformPhysicalPointToIndex(cent) # use seg instead of img because its faster
 
@@ -839,7 +846,14 @@ class ReportGen_NPC_Screening(Canvas):
             if mode == 2:
                 f.Execute(seg >= 1)
             elif mode == 3:
-                f.Execute(sitk.HuangThreshold(img, 0, 1, 200) != 0) # Use tissue mask
+                for thres_func in (lambda _img: sitk.HuangThreshold(_img, 0, 1, 200),
+                                   lambda _img: sitk.HuangThreshold(_img, 0, 1, 128),
+                                   lambda _img: sitk.HuangThreshold(_img * 50, 0, 1, 64)):
+                    try:
+                        f.Execute(thres_func(img) != 0) # Use tissue mask
+                        break
+                    except RuntimeError:
+                        pass
             bbox = f.GetBoundingBox(1)
             cent = f.GetCentroid(1)
             cent = seg.TransformPhysicalPointToIndex(cent) # use seg instead of img because its faster
