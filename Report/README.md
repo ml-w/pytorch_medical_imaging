@@ -1,3 +1,23 @@
+## Required 
+
+* [pytorch_medical_imaging](url: https://github.com/alabamagan/pytorch_medical_imaging)
+* [torchio](url:https://github.com/alabamagan/torchio) - custom build
+* [mri_normalization_tools](url:https://github.com/alabamagan/mri_normalization_tools/tree/v0.2.0) - v0.2.0
+
+## Usage
+
+### Batch processing
+
+For generating reports for a batch of data, only nifty format is supported. Place all the nifty file in the same directory with a naming system such that a unique ID can be globbed from their file names using a regex pattern. Run the following command:
+
+```bash
+report_gen --input INPUT --output OUTPUT -n NUM_WORKER --dump-diagnosis OUTPUT_CSV --idGlobber ID_GLOBBER [--idlist IDLIST|--verbose|--keep-data|---keep-log|--skip-exist]
+```
+
+### Single subject
+
+For a single subject, it is possible to process a DICOM directory. The program will try to find suitable Axial T2-weighted fat-suppressed sequence, but in case it can't find any, it will prompt for user input. 
+
 ## File structure
 
 ```
@@ -86,31 +106,49 @@ In this step, the coarse segmentation is used a reference for patch extraction s
 
 The post-process of the fine segmentation is recorded in `seg_post_main()` function and the steps in `post_proc_segment.py`.
 
-## Output file structure
+### rAIdiologist
 
-## Possible outputs
+#### Input
 
-### NPC
+| Description            | Relative Path                                 |
+| ---------------------- | --------------------------------------------- |
+| Nyul normalized Images | `[temp_path]/normalized_image/NyulNormalizer` |
+| Lesion mask            | `[temp_path]/segment_output`                  |
 
-* DL score >= threshold
-* Radiomics score >= threshold
-* Total volume >= 0.5 cm^3
+#### Output
 
-### Benign hyperplasia or normal
 
-* DL score < threshold
-* Radiomics score < threshold
-* Total volume >= 3 cm ^3
+| Description | Relative Path                        |
+| ----------- | ------------------------------------ |
+| Diagnosis   | `[temp_path]/dl_diag/class_inf.csv`  |
+| Risk curve  | `[temp_path]/dl_diag/class_inf.json` |
 
-### Normal
+In this step, the lesion mask is used as a reference for `CropOrPad` transformer in `torchio`, the center of cropping/padding is aligned with the center of the lesion segmentation. The diagnosis with column header `Prob_Class_0` is the predicted probability for NPC positive, which was trained using sigmoid as the output layer and 0.5 as the natural cut-off. The risk curve JSON file contains the changes of predicted risk when the AI scans across the slices. It is read as a dictionary with study number (ID) as its key, and the data were numpy arrays of dimension.
 
-* DL score < threshold (Radiomics skipped because no lesion)
-* Total volume < 0.5 cm^3
+### Focal evaluation by rAIdiologist
 
-### Indeterminate
+#### Input
 
-* Otherwise
+| Description            | Relative Path                                 |
+| ---------------------- | --------------------------------------------- |
+| Nyul normalized Images | `[temp_path]/normalized_image/NyulNormalizer` |
+| Lesion mask            | `[temp_path]/segment_output`                  |
 
-## Note
+#### Output
 
-* There should be no 'space bar' in all the directories
+
+| Description | Relative Path                                   |
+| ----------- | ----------------------------------------------- |
+| Diagnosis   | `[temp_path]/safety_net/dl_diag/class_inf.csv`  |
+| Risk curve  | `[temp_path]/safety_net/dl_diag/class_inf.json` |
+
+Input and outputs formats are the same except outputs are placed under `safety_net` in the temporary directory. This focal evaluate crops the input images to only containing the slices with segmentation ± 2 slices above and below the edge of the segmentation. Also, only those that are diagnosed as benign under go this step. 
+
+The purpose of this step is for it to serve as a safety net and improve the sensitivity for small tumors. 
+
+## FQA
+
+### Q1. Why does the program finds nothing under the input directory?
+
+Check your `--idGlobber` setting and make sure the regex provided has a valid match on at least one file within the input directory.
+
