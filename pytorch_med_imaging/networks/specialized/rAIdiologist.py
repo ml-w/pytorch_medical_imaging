@@ -99,19 +99,26 @@ class rAIdiologist(nn.Module):
             elif isinstance(m, nn.Linear):
                 nn.init.kaiming_normal_(m.weight)
 
-    def forward_(self, x):
-        # input is (B x 1 x H x W x S)
+    def forward_(self, x, seg = None):
+        # input is x: (B x 1 x H x W x S) seg: (B x 1 x H x W x S)
         while x.dim() < 5:
             x = x.unsqueeze(0)
+        if seg is not None:
+            seg = seg.view_as(x)
 
-        sum_slice = x.sum(dim=[1, 2, 3]) # (B x S)
-        where_0 = torch.argwhere(sum_slice == 0)
-        zero_slices = {i: x.shape[-1] - 1 for i in range(len(x))}
-        for b, s in where_0:
-            zero_slices[b.item()] = min(s.item() -  1, zero_slices[b.item()])
+        # compute non-zero slices from seg if it is not None
+        _tmp = seg if seg is not None else x
+        sum_slice = _tmp.sum(dim=[1, 2, 3]) # (B x S)
+        where_non0 = torch.argwhere(sum_slice != 0)
+        nonzero_slices = {i.cpu().item(): (where_non0[where_non0[:, 0]==i][:, 1].min().cpu().item(),
+                                           where_non0[where_non0[:, 0]==i][:, 1].max().cpu().item()) for i in where_non0[:, 0]}
+
 
         x = self.cnn(x)     # Shape -> (B x 2048 x S)
         x = self.dropout(x)
+        if seg is not None: # zero out slices without segmentation
+            seg_slices = (seg.sum(dim=[-2, -3]) != 0).expand_as(x) # (B x 1 x S)
+            x[~seg_slices] = 0
 
         while x.dim() < 3:
             x = x.unsqueeze(0)
@@ -125,7 +132,7 @@ class rAIdiologist(nn.Module):
             tmp_list = []
             for i, xx in enumerate(x):
                 # xx dimension is (1 x H x W x S), trim away zero padded slices
-                _x = xx[..., :zero_slices[i] + 1].unsqueeze(0)
+                _x = xx[..., nonzero_slices[i][0]:nonzero_slices[i][1] + 1].unsqueeze(0)
                 tmp_list.append(_x)
             # Loop batch
             o = []
@@ -137,7 +144,7 @@ class rAIdiologist(nn.Module):
             o = torch.cat(o)
             del tmp_list
         else:
-            raise AttributeError(f"Got wrong mode: {self._mode}, can only be one of [1|2|3|4].")
+            raise AttributeError(f"Got wrong mode: {self._mode}, can only be one of [1|2|3|4|5].")
 
         # make sure there are no negative values because lstm behave strangly and sometimes gives
         # negative value even though the output should be sigmoid-ed.
@@ -147,13 +154,16 @@ class rAIdiologist(nn.Module):
         return o
 
     def forward_swran(self, *args):
-        return self.cnn.forward(*args)
-
-    def forward(self, x):
-        if self._mode == 0:
-            return self.forward_swran(x)
+        if len(args) > 0: # restrict input to only a single image
+            return self.cnn.forward(args[0])
         else:
-            return self.forward_(x)
+            return self.cnn.forward(*args)
+
+    def forward(self, *args):
+        if self._mode == 0:
+            return self.forward_swran(*args)
+        else:
+            return self.forward_(*args)
 
 class LSTM_rater(nn.Module):
     r"""This LSTM rater receives inputs as a sequence of deep features extracted from each slice. This module has two
