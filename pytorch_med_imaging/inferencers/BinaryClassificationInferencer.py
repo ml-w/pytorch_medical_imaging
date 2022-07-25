@@ -22,45 +22,6 @@ class BinaryClassificationInferencer(ClassificationInferencer):
         except:
             self._inference_subjects = self.pmi_data_loader._load_data_set_inference()
 
-    # def write_out(self):
-    #     uids = []
-    #     gt_tensor = []
-    #     out_tensor = []
-    #     last_batch_dim = 0
-    #     with torch.no_grad():
-    #         # dataloader = DataLoader(self._inference_subjects, batch_size=self.batch_size, shuffle=False)
-    #         dataloader = self._data_loader
-    #         for index, mb in enumerate(tqdm(dataloader, desc="Steps")):
-    #             s = self._unpack_minibatch(mb, self.solverparams_unpack_keys_inference)
-    #             s = self._match_type_with_network(s)
-    #
-    #             self._logger.debug(f"s size: {s.shape if not isinstance(s, list) else [ss.shape for ss in s]}")
-    #
-    #             # Squeezing output directly cause problem if the output has only one output channel.
-    #             if isinstance(s, list):
-    #                 out = self.net(*s)
-    #             else:
-    #                 out = self.net(s)
-    #             if out.shape[-1] > 1:
-    #                 out = out.squeeze()
-    #
-    #             while ((out.dim() < last_batch_dim) or (out.dim() < 2)) and last_batch_dim != 0:
-    #                 out = out.unsqueeze(0)
-    #                 self._logger.log_print_tqdm('Unsqueezing last batch.' + str(out.shape))
-    #
-    #             out_tensor.append(out.data.cpu())
-    #             uids.extend(mb['uid'])
-    #             if 'gt' in mb:
-    #                 gt_tensor.append(mb['gt'])
-    #
-    #             last_batch_dim = out.dim()
-    #             del out, s
-    #
-    #         out_tensor, gt_tensor = self._reshape_tensors(out_tensor, gt_tensor)
-    #         dl = self._writter(out_tensor, uids, gt_tensor)
-    #         self._logger.debug('\n' + dl._data_table.to_string())
-
-
     def _reshape_tensors(self,
                          out_list: Iterable[torch.FloatTensor],
                          gt_list: Iterable[torch.FloatTensor]):
