@@ -33,7 +33,8 @@ def main(raw_args=None):
                         help="If specified, the resultant meta-data will be dumped to a text file. If the file exist, "
                              "it will be appended to the bottom of the file.")
     parser.add_argument('--skip-norm', action='store_true',
-                        help="If specified, the program will skip the normalization step.")
+                        help="If specified, the program will skip the normalization step. Mask is required to skip "
+                             "normalization.")
     parser.add_argument('--idGlobber', action='store', type=str, default="[^\W_]+",
                         help="ID globber.")
     parser.add_argument('--idlist', action='store', default=None,
@@ -80,6 +81,9 @@ def main(raw_args=None):
                     if report_path.is_file():
                         logger.info(f"Skip_exist specified and target {str(report_path)} exist. Doing nothing.")
                         idlist.remove(_id)
+                if len(idlist) == 0:
+                    logger.info("Nothing left to process, terminating...")
+                    return
         avail_idlist = process_input(a.input, temp_dir, idGlobber=a.idGlobber, idlist=idlist, num_worker=a.num_worker)
 
         #╔═════════════════════╗
@@ -189,6 +193,7 @@ def run_safety_net(dl_output_dir : Path,
 
     # Read results from rAIdiologist
     dl_output_csv = pd.read_csv(str(dl_output_dir.joinpath('class_inf.csv')), index_col=0)
+    dl_output_csv.index = dl_output_csv.index.astype(str)
     dl_output_csv = dl_output_csv[dl_output_csv['Prob_Class_0'] < 0.5]
     normed_imgs = list(normalized_dir.joinpath('NyulNormalizer').glob("*nii.gz"))
     normed_id_map = {re.search(idGlobber, str(s.name)).group(): s for s in normed_imgs}
@@ -232,7 +237,6 @@ def run_safety_net(dl_output_dir : Path,
     if len(dl_output_csv) > 0:
         run_rAIdiologist(safety_net_dir.joinpath('normalized_image'),
                          safety_out_seg_dir, safety_dl_out_dir, idGlobber, logger)
-
 
 
 def run_segmentation(normalized_dir, temp_dirname, segment_output, idGlobber, logger) -> None:
@@ -331,6 +335,7 @@ def generate_report(root_dir: Union[Path, str],
 
         # define directories
         res_csv = pd.read_csv(str(root_dir.joinpath('dl_diag/class_inf.csv')), index_col=0)
+        res_csv.index = res_csv.index.astype(str)
         risk_data = root_dir.joinpath('dl_diag/class_inf.json')
         risk_data = {} if not risk_data.is_file() else json.load(risk_data.open('r'))
         path_normalized_images = root_dir.joinpath('normalized_image')
@@ -340,6 +345,7 @@ def generate_report(root_dir: Union[Path, str],
         safety_net_FLAG = len(list(safety_net_dir.rglob("*nii.gz"))) > 0
         if safety_net_FLAG:
             safety_net_csv = pd.read_csv(list(safety_net_dir.joinpath('dl_diag').glob('class_inf.csv'))[0], index_col=0)
+            safety_net_csv.index = safety_net_csv.index.astype(str)
         else:
             safety_net_csv = None
 
@@ -437,7 +443,11 @@ def generate_report(root_dir: Union[Path, str],
             overall_diagnosis = pd.Series(overall_diagnosis, name='Overall Diagnosis').to_frame()
             overall_diagnosis = overall_diagnosis.join(mapped_table['Prob_Class_0'])
             if safety_net_FLAG:
-                overall_diagnosis = overall_diagnosis.join(mapped_table['sf_Prob_Class_0'])
+                try:
+                    overall_diagnosis = overall_diagnosis.join(mapped_table['sf_Prob_Class_0'])
+                except Exception as e:
+                    logger.warning("Attach safety net results failed. Skipping.")
+                    logger.debug(f"Original error: {e}")
 
             csv_path =  out_dir.joinpath("diagnosis.csv")
             overall_diagnosis.to_csv(str(csv_path), mode='a', header=not csv_path.is_file())
