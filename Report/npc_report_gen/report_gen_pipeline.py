@@ -199,6 +199,7 @@ def run_safety_net(dl_output_dir : Path,
     normed_id_map = {re.search(idGlobber, str(s.name)).group(): s for s in normed_imgs}
     seg_paths = list(segment_output.glob("*nii.gz"))
     seg_id_map = {re.search(idGlobber, str(s.name)).group(): s for s in seg_paths}
+    safety_net_FLAG = False
     safety_net_dir = temp_dirpath.joinpath("safety_net")
     safety_dl_out_dir = safety_net_dir.joinpath("dl_diag")
     safety_out_im_dir = safety_net_dir.joinpath("normalized_image/NyulNormalizer")
@@ -232,9 +233,10 @@ def run_safety_net(dl_output_dir : Path,
             im = sitk.ReadImage(str(_img_path))
             sitk.WriteImage(im[..., zstart: zend], str(safety_out_im_dir.joinpath(_img_path.name)))
             sitk.WriteImage(seg[..., zstart: zend], str(safety_out_seg_dir.joinpath(_seg_path.name)))
+            safety_net_FLAG = True
 
     # Only perform next step when there are benign cases because the directory will be empty otherwise.
-    if len(dl_output_csv) > 0:
+    if len(dl_output_csv) > 0 and safety_net_FLAG:
         run_rAIdiologist(safety_net_dir.joinpath('normalized_image'),
                          safety_out_seg_dir, safety_dl_out_dir, idGlobber, logger)
 
