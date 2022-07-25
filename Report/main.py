@@ -90,30 +90,31 @@ def main_():
         # Run report gen
         po = Path('/media/storage/Data/NPC_Segmentation/70.Screening_report/TestOutput_B00_v3/')
         pof = Path('/media/storage/Data/NPC_Segmentation/70.Screening_report/TestOutput_B00_v3/diag.csv')
-        po = Path('/media/storage/Data/NPC_Segmentation/70.Screening_report/TestOutput_small_tumors_v3/')
-        pof = Path('/media/storage/Data/NPC_Segmentation/70.Screening_report/TestOutput_small_tumors_v3/diag.csv')
-        try:
-            main(['-i',
-                  str(input_dir),
-                  '-o',
-                  str(po),
-                  '-n',
-                  '16',
-                  '-f',
-                  str(pof),
-                  '--idGlobber',
-                  str(idGlobber),
-                  '--idlist',
-                  ','.join(small_tumors),
-                  '--verbose',
-                  '--keep-data',
-                  '--keep-log',
-                  # '--skip-exist'
-                  ])
-            gc.collect()
-        except Exception as e:
-            logger.exception(e)
-            gc.collect()
+        # po = Path('/media/storage/Data/NPC_Segmentation/70.Screening_report/TestOutput_small_tumors_v3/')
+        # pof = Path('/media/storage/Data/NPC_Segmentation/70.Screening_report/TestOutput_small_tumors_v3/diag.csv')
+        for _id in testing_ids:
+            try:
+                main(['-i',
+                      str(input_dir),
+                      '-o',
+                      str(po),
+                      '-n',
+                      '16',
+                      '-f',
+                      str(pof),
+                      '--idGlobber',
+                      str(idGlobber),
+                      '--idlist',
+                      _id,
+                      '--verbose',
+                      '--keep-data',
+                      '--keep-log',
+                      '--skip-exist'
+                      ])
+                gc.collect()
+            except Exception as e:
+                logger.exception(e)
+                gc.collect()
 
     pass
 

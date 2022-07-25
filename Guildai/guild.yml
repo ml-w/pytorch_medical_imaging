@@ -33,9 +33,6 @@
         training/validation_loss: 'VAL: (\value)'
         step: 'Epoch (\step)'
         training/step_lr: 'LR: (\value)'
-      compare:
-        - lr
-        - accuracy
       requires:
         - default
 
@@ -165,9 +162,7 @@
           override="(SolverParams,rAI_fixed_mode)=4;(General,fold_code)=${fold_code};(SolverParams,lr_scheduler_args)
           =[0.98,0.98,20,3];(SolverParams,lr_scheduler_kwargs)={'eta_min':1E-6,'T_mult':2}"
         - validation   config=${config} debug=${debug} batch-size=${bs_rnn} override="(General,fold_code)=${fold_code}"
-      output-scalars:
-        - classification
-        - classification-infer
+
 
     pipeline:
       flags:
