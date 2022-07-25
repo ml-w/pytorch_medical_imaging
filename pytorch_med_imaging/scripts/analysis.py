@@ -10,7 +10,7 @@ import pandas as pd
 
 from pytorch_med_imaging.med_img_dataset import ImageDataSet
 from mnts.mnts_logger import MNTSLogger
-import tqdm.auto as auto
+from tqdm import tqdm
 import argparse
 from surface_distance import compute_surface_distances, compute_average_surface_distance
 
@@ -252,13 +252,13 @@ def EVAL(seg, gt, vars):
     if len(segindexes) == 0:
         raise ArithmeticError('Cannot glob ID from tested segmentation.')
 
-    for i, row in enumerate(auto.tqdm(segindexes, desc='Eval')):
+    for i, row in enumerate(tqdm(segindexes, desc='Eval')):
         logger.info("Computing {}".format(row))
         # check if both have same ID
         try:
             gtindexes.index(segindexes[i])
         except ValueError:
-            auto.tqdm.write("Skipping " + os.path.basename(seg.get_data_source(
+            tqdm.write("Skipping " + os.path.basename(seg.get_data_source(
                 i)))
             data = pd.DataFrame([[os.path.basename(seg.get_data_source(i)),
                                   'Not Found',
@@ -327,7 +327,7 @@ def EVAL(seg, gt, vars):
                 # except:
                 #     # tqdm.write("Error encounter for {}".format(keys))
                 #     values.append(np.nan)
-                #     # auto.tqdm.write(e)
+                #     # tqdm.write(e)
             # Construct multi-index
             row_name = pd.MultiIndex.from_tuples([(str(segindexes[i]), c)], names=('StudyNumber', 'Class'))
             data = pd.DataFrame([[os.path.basename(seg.get_data_source(i)),
