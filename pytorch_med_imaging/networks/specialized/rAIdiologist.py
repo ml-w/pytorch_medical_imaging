@@ -22,10 +22,6 @@ class rAIdiologist(nn.Module):
         self.play_back = []
         # Create inception for 2D prediction
         self.cnn = SlicewiseAttentionRAN(1, 1, exclude_fc=True, sigmoid_out=True)
-        # self.cnn.load_state_dict(torch.load("/home/lwong/Source/Repos/NPC_Segmentation/Report/asset/trained_states/"
-        #                                     "deeplearning/NPC_BM-vv2.0-sv3.pt"), strict=False)
-        # for p in self.cnn.parameters():
-        #     p.requires_grad = False
         self.dropout = nn.Dropout(p=0.2)
 
         # LSTM for
