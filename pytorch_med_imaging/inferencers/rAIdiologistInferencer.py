@@ -88,7 +88,8 @@ class rAIdiologistInferencer(BinaryClassificationInferencer):
             out_path = Path(self.outdir).with_suffix('.json')
             self._logger.info(f"Writing playbacks to: {str(out_path)}")
             out_dict = {u: l.tolist() for u, l in zip(uids, self.playbacks)}
-            json.dump(out_dict, out_path.open('w'), sort_keys=True)
+            with out_path.open('w') as jf:
+                json.dump(out_dict, jf, sort_keys=True)
         return dl
 
     def _forward_hook_gen(self):
