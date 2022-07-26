@@ -15,15 +15,11 @@ class Test_PMIData(unittest.TestCase):
     def setUp(self):
         if self.__class__.__name__ == 'Test_PMIData':
             raise unittest.SkipTest("Base class")
-
         self.temp_dir = tempfile.TemporaryDirectory()
         self.temp_dir_path = Path(self.temp_dir.name)
-
         self._logger = MNTSLogger(self.temp_dir.name + "/log",
                                   logger_name='unittest', verbose=True, keep_file=False, log_level='debug')
-
         self._idGlobber = "MRI_\d+"
-        pass
 
     def tearDown(self):
         self.temp_dir.cleanup()
