@@ -112,6 +112,17 @@ class TestController(unittest.TestCase):
                          self.controller.loaderparams_pmi_datatype_name)
         self.assertIsInstance(loader, DataLoader)
         self.assertIsInstance(loader_val, DataLoader)
+        self._logger.debug("Loader create passed.")
+
+        # Test unpack minibatch
+        solver = self.controller.create_solver(self.controller.general_run_type)
+        for i, mb in enumerate(loader):
+            row = solver._unpack_minibatch(mb, [('input', 'gt'), 'gt'])
+            self.assertIsInstance(row[0], tuple)
+            self.assertIsInstance(row[1], torch.Tensor)
+            self.assertEqual(2, len(row[0]))
+            break
+        self._logger.debug("Unpack minibatch passed.")
 
     def test_unpack_config(self):
         checks = {
@@ -258,6 +269,7 @@ class TestSolvers(TestController):
                         True)
         self.assertTrue(len(list(self.temp_output_path.glob("*pt"))) != 0)
 
+    @unittest.skip("temp")
     def test_early_stop(self):
         from pytorch_med_imaging.solvers.SolverBase import SolverEarlyStopScheduler
         early_stop = {'method'  : 'LossReference', 'warmup': 0, 'patience': 2}
