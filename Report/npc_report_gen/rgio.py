@@ -55,8 +55,8 @@ def process_input(in_dir: Union[Path, str],
                     if not fid in idlist:
                         continue
                 out_dir.joinpath(f.name).symlink_to(f.resolve())
+                json_name = out_dir.joinpath(re.sub("\.nii(\.gz)?$", ".json", str(f.name)))
                 with Path(json_name).open('w') as jf:
-                    json_name = out_dir.joinpath(re.sub("\.nii(\.gz)?$", ".json", str(f.name)))
                     json.dump({'0010|0010': fid,
                                '0010|0020': fid},
                               jf
