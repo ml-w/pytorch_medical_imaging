@@ -117,11 +117,7 @@ class PMIImageFeaturePair(PMIImageDataLoader):
         data_exclude_none = {k: v for k, v in self.data.items() if v is not None}
 
         # Create subject list
-        subjects = [tio.Subject(**{k: v for k, v in zip(data_exclude_none.keys(), row)})
-                    for row in zip(*data_exclude_none.values())]
-        self._logger.debug(f"subjects: {subjects[0]}")
-        subjects = tio.SubjectsDataset(subjects=subjects, transform=self.transform)
-
+        subjects = self._pack_data_into_subjects(data_exclude_none, transform=self.transform)
         return self._create_queue(exclude_augment, subjects)
 
     def _load_data_set_inference(self) -> tio.Queue or tio.SubjectsDataset:
@@ -143,8 +139,5 @@ class PMIImageFeaturePair(PMIImageDataLoader):
 
             # Create subject list
             data_exclude_none = {k: v for k, v in self.data.items() if v is not None}
-            subjects = [tio.Subject(**{k: v for k, v in zip(data_exclude_none.keys(), row)})
-                        for row in zip(*data_exclude_none.values())]
-            subjects = tio.SubjectsDataset(subjects=subjects, transform=self.transform)
-
+            subjects = self._pack_data_into_subjects(data_exclude_none, transform=self.transform)
             return self._create_queue(True, subjects, training=self._training_mode)

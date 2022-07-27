@@ -1,13 +1,9 @@
 import torchio
-import inspect
 from .pmi_dataloader_base import PMIDataLoaderBase
 from .. import med_img_dataset
-from .computations import *
-from .augmenter_factory import create_transform_compose
 from .lambda_tio_adaptor import CallbackQueue
 
 from typing import *
-from pathlib import Path
 from functools import partial
 import torchio as tio
 import multiprocessing as mpi
@@ -196,13 +192,6 @@ class PMIImageDataLoader(PMIDataLoaderBase):
 
         # Return the queue
         return self._create_queue(exclude_augment, subjects)
-
-    def _pack_data_into_subjects(self, data: dict, transform):
-        data_exclude_none = {k: v for k, v in data.items() if v is not None}
-        subjects = [tio.Subject(**{k: v for k, v in zip(data_exclude_none.keys(), row)})
-                    for row in zip(*data_exclude_none.values())]
-        subjects = tio.SubjectsDataset(subjects=subjects, transform=transform)
-        return subjects
 
     def _load_data_set_inference(self) -> [tio.Queue, tio.GridSampler] or [tio.SubjectsDataset, None]:
         """Same as :func:`_load_data_set_training` in this class, except the ground-truth is

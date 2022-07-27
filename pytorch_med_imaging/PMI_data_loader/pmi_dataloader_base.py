@@ -1,10 +1,14 @@
 import os
 import re
 import configparser
+import pandas as pd
+import itertools
 from abc import *
 from pathlib import Path
 
+import torchio as tio
 from .augmenter_factory import create_transform_compose
+from ..med_img_dataset.PMIDataBase import PMIDataBase
 from mnts.mnts_logger import MNTSLogger
 
 class PMIDataLoaderBase(object):
@@ -327,3 +331,31 @@ class PMIDataLoaderBase(object):
             else:
                 self._logger.warning(f"Transform file provided but could not be located! Got {str(self.augmentation)}")
         return self.transform
+
+    def _pack_data_into_subjects(self,
+                                 data_dict: dict,
+                                 transform: tio.Transform = None) -> tio.SubjectsDataset:
+        r"""Create subjects from a dictionary of data"""
+        data_exclude_none = {k: v for k, v in data_dict.items() if v is not None}
+
+        # check if all items has the same length
+        if not len(set([len(v) for v in data_dict.values()])):
+            msg = f"Expect all data to have the same length, but got: "
+            msg += str({k: len(v) for k, v in data_dict.items()})
+            raise IndexError(msg)
+
+        # check if the IDs are aligned
+        ids = {k: set(_d.get_unique_IDs()) for k, _d in data_dict.items() if isinstance(_d, PMIDataBase)}
+        if not all([ids[a] == ids[b] for a, b in itertools.combinations(ids.keys(), 2)]):
+            uni = set.union(*list(ids.values()))
+            _table = pd.concat([pd.Series([index in v for index in uni], index=uni, name=k) for k, v in ids.items()], axis=1)
+            _table.sort_index(inplace=True)
+            _table = _table[[False in list(row[1]) for row in _table.iterrows()]]
+            msg = f"Expect all data to have same unique IDs, but some are not: \n"
+            msg += _table.to_string()
+            raise IndexError(msg)
+
+        subjects = [tio.Subject(**{k: v for k, v in zip(data_exclude_none.keys(), row)})
+                    for row in zip(*data_exclude_none.values())]
+        subjects = tio.SubjectsDataset(subjects=subjects, transform=transform)
+        return subjects
