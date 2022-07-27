@@ -10,7 +10,7 @@ class Test3DNetworks(unittest.TestCase):
         super(Test3DNetworks, self).__init__(*args, **kwargs)
 
     def setUp(self) -> None:
-        self.sample_input = torch.rand(2, 1, 350, 350, 40).cuda()
+        self.sample_input = torch.rand(2, 1, 128, 128, 30).cuda()
         self.sample_input[0, ..., 28::].fill_(0)
         self.sample_seg = torch.zeros_like(self.sample_input).cuda()
         self.sample_seg[0, 0, 50, 50, 10:20].fill_(1)
@@ -45,11 +45,25 @@ class Test3DNetworks(unittest.TestCase):
                 self.assertEqual(0, temp_out[~bool_index.expand_as(temp_out)].sum())
                 self.assertNotEqual(0, temp_out[bool_index.expand_as(temp_out)].sum())
                 _inter_mediate_data.clear()
+
+                # raise error if all zeros
+                zeros = torch.zeros_like(self.sample_input)
+                zeros[0] = 1 # One of the batch member wasn't all zero
+                with self.assertRaises(ArithmeticError):
+                    net(self.sample_input, zeros)
+                _inter_mediate_data.clear()
                 print(f"Mode {mode} passed")
             for mode in (3, 4, 5):
                 net.set_mode(mode)
                 out = net(self.sample_input, self.sample_seg)
                 for temp_out in _inter_mediate_data:
+                    # None of the inputs should contain slices with all zeros
                     self.assertFalse(0 in list(temp_out.sum(dim=[0, 1])))
-                    _inter_mediate_data.clear()
+                _inter_mediate_data.clear()
+
+                zeros = torch.zeros_like(self.sample_input)
+                zeros[0] = 1 # One of the batch member wasn't all zero
+                with self.assertRaises(ArithmeticError):
+                    net(self.sample_input, zeros)
+                _inter_mediate_data.clear()
                 print(f"Mode {mode} passed")
