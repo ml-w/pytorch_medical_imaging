@@ -339,7 +339,7 @@ class PMIDataLoaderBase(object):
         data_exclude_none = {k: v for k, v in data_dict.items() if v is not None}
 
         # check if all items has the same length
-        if not len(set([len(v) for v in data_dict.values()])):
+        if not len(set([len(v) for v in data_exclude_none.values()])):
             msg = f"Expect all data to have the same length, but got: "
             msg += str({k: len(v) for k, v in data_dict.items()})
             raise IndexError(msg)

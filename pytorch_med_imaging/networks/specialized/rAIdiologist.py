@@ -105,10 +105,14 @@ class rAIdiologist(nn.Module):
         # compute non-zero slices from seg if it is not None
         _tmp = seg if seg is not None else x
         sum_slice = _tmp.sum(dim=[1, 2, 3]) # (B x S)
+        # Raise error if everything is zero in any of the minibatch
+        if 0 in list(sum_slice.sum(dim=[1])):
+            msg = f"An item in the mini-batch is completely empty or have no segmentation:\n" \
+                  f"{sum_slice.sum(dim=[1])}"
+            raise ArithmeticError(msg)
         where_non0 = torch.argwhere(sum_slice != 0)
         nonzero_slices = {i.cpu().item(): (where_non0[where_non0[:, 0]==i][:, 1].min().cpu().item(),
                                            where_non0[where_non0[:, 0]==i][:, 1].max().cpu().item()) for i in where_non0[:, 0]}
-
 
         x = self.cnn(x)     # Shape -> (B x 2048 x S)
         x = self.dropout(x)

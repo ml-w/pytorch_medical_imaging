@@ -16,10 +16,10 @@ class rAIdiologistSolver(BinaryClassificationSolver):
 
         self._current_mode = None # initially, the mode is unsetted
         if Path(self.solverparams_rai_pretrained_swran).is_file():
-            self._logger.info(f"Loading pretrained network from: {self.solverparams_rai_pretrained_swran}")
+            self._logger.info(f"Loading pretrained SWRAN network from: {self.solverparams_rai_pretrained_swran}")
             self.net.load_pretrained_swran(self.solverparams_rai_pretrained_swran)
         else:
-            self._logger.warning(f"Pretrained network specified ({self.solverparams_rai_pretrained_swran}) "
+            self._logger.warning(f"Pretrained SWRAN network specified ({self.solverparams_rai_pretrained_swran}) "
                                  f"but not loaded.")
 
         if os.getenv('CUBLAS_WORKSPACE_CONFIG') not in [":16:8", ":4096:2"]:

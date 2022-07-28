@@ -109,6 +109,15 @@ class PMIController(object):
         except:
             raise AttributeError(f"Failed to create network from name: {self.network_network_type}")
 
+        # Try to load pretrain checkpoint if specified
+        if self.network_pretrain_cp != "":
+            self._logger.info("Loading pretrained network.")
+            try:
+                self.net.load_state_dict(torch.load(self.network_pretrain_cp))
+            except Exception as e:
+                self._logger.exception(e)
+                self._logger.warning("Pretrain network specified but cannot be loaded.")
+
         # Prepare data object
         try:
             self.pmi_factory = PMIDataFactory()
@@ -420,6 +429,7 @@ class PMIController(object):
             ('Filters'     , 'validation_re_suffix'): ('Filters', 're_suffix'),
             ('RunParams'   , 'initial_weight')      : None,
             ('Network'     , 'initialization')      : None,
+            ('Network'     , 'pretrain_cp')         : "",
             ('Filters'     , 'id_list')             : "",
             ('Filters'     , 'validation_id_list')  : "",
             ('LoaderParams', 'PMI_loader_name')     : None,

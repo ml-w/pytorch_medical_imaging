@@ -17,6 +17,7 @@
 - model: pmi
   params:
     rAI_config: "./Configs/BM_LargerStudy/BM_rAIdiologist_nyul_v2.ini"
+    rAI_focal_config: "./Configs/BM_LargerStudy/BM_rAIdiologist_focal_v2.ini"
     swran_config: "./Configs/BM_LargerStudy/BM_rAIdiologist_stage0_v2.ini"
   operations:
     train:
@@ -35,6 +36,33 @@
         training/step_lr: 'LR: (\value)'
       requires:
         - default
+
+    train_focal:
+      decription: Traing focal model for rAIdiologist
+      main: pytorch_med_imaging.main
+      flags:
+        config: "{{rAI_focal_config}}"
+        epoch: 50
+        batch-size: 4
+        lr: 1E-4
+        debug: no
+        override: ""
+      sourcecode:
+        - exclude:
+            dir: 'Backup'
+      output-scalars:
+        training/loss: 'EpochLoss: (\value)'
+        accuracy: 'ACC: (\value)'
+        training/validation_loss: 'VAL: (\value)'
+        step: 'Epoch (\step)'
+        training/step_lr: 'LR: (\value)'
+      requires:
+        - default
+        - file: '../Backup'
+          select: 'BM_rAI_focal_pretrained_.*-vv2\.0-sv3\.pt'
+          target-path: 'Backup'
+          target-type: 'copy'
+          fail-if-empty: 'yes'
 
     train_looped:
       description: Train a model in a looped fashion. Suitable when the model needs a recipe of hyperparameters.
@@ -219,6 +247,7 @@
       - file: '../NPC_Segmentation'
       - file: '../Sinus'
       - file: '../Backup/Log'
+
     checkpoint-space:
       target-path: Backup
       target-type: link
