@@ -7,6 +7,7 @@ import torch
 
 from .BinaryClassificationSolver import BinaryClassificationSolver
 from ..loss import ConfidenceBCELoss
+import gc
 
 __all__ = ['rAIdiologistSolver']
 
@@ -114,3 +115,42 @@ class rAIdiologistSolver(BinaryClassificationSolver):
 
     def _schedular(self):
         pass
+
+    def solve_epoch(self, epoch_number):
+        """
+        Modify this to expect ArithmeticError from step
+        """
+        self._epoch_prehook()
+        E = []
+        # Reset dict each epoch
+        self.net.train()
+        self.plotter_dict = {'scalars': {}, 'epoch_num': epoch_number}
+        for step_idx, mb in enumerate(self._data_loader):
+            s, g = self._unpack_minibatch(mb, self.solverparams_unpack_keys_forward)
+
+            # initiate one train step. Things should be plotted in decorator of step if needed.
+            try:
+                out, loss = self.step(s, g)
+            except ArithmeticError:
+                self._logger.warning(f"Recovering from error when dealing with: {mb['uid']}, "
+                                     f"skipping step {step_idx:04d}")
+                self.net.zero_grad()
+                del s, g
+                continue
+
+            E.append(loss.data.cpu())
+            self._logger.info("\t[Step %04d] loss: %.010f"%(step_idx, loss.data))
+
+            self._step_callback(s, g, out.cpu().float(), loss.data.cpu(),
+                                step_idx=epoch_number * len(self._data_loader) + step_idx)
+            del s, g, out, loss, mb
+            gc.collect()
+
+        epoch_loss = np.array(E).mean()
+        self.plotter_dict['scalars']['Loss/Loss'] = epoch_loss
+        self._last_epoch_loss = epoch_loss
+
+        self._logger.info("Initiating validation.")
+        self._last_val_loss = self.validation()
+        self._epoch_callback()
+        self.decay_optimizer(epoch_loss)

@@ -42,11 +42,13 @@ class Test3DNetworks(unittest.TestCase):
                 out = net(self.sample_input, self.sample_seg)
                 temp_out = _inter_mediate_data[0]
                 bool_index = self.sample_seg.sum(dim=[-2, -3]).bool()
+                # Assert the temp_out is zero where the segmentation is zero
                 self.assertEqual(0, temp_out[~bool_index.expand_as(temp_out)].sum())
+                # Assert the temp out is not zero where the segmetnation is not zero
                 self.assertNotEqual(0, temp_out[bool_index.expand_as(temp_out)].sum())
                 _inter_mediate_data.clear()
 
-                # raise error if all zeros
+                # raise error if there are no segmentation (all zeros)
                 zeros = torch.zeros_like(self.sample_input)
                 zeros[0] = 1 # One of the batch member wasn't all zero
                 with self.assertRaises(ArithmeticError):
@@ -66,4 +68,10 @@ class Test3DNetworks(unittest.TestCase):
                 with self.assertRaises(ArithmeticError):
                     net(self.sample_input, zeros)
                 _inter_mediate_data.clear()
+
+                # check if things are correct when there's only one slice with nonzero
+                zeros = torch.zeros_like(self.sample_input)
+                zeros[0, ..., 12] = 1
+                zeros[1, ..., 13] = 1
+                out = net(self.sample_input, zeros)
                 print(f"Mode {mode} passed")
