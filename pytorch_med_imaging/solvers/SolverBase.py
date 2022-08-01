@@ -636,6 +636,7 @@ class SolverEarlyStopScheduler(object):
         if self._func is None:
             return 0
         else:
+            self._logger.debug(f"Epoch {epoch:.03d} Loss: {loss}")
             return self._func(loss, epoch)
 
 
