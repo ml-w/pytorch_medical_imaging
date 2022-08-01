@@ -269,7 +269,6 @@ class TestSolvers(TestController):
                         True)
         self.assertTrue(len(list(self.temp_output_path.glob("*pt"))) != 0)
 
-    @unittest.skip("temp")
     def test_early_stop(self):
         from pytorch_med_imaging.solvers.SolverBase import SolverEarlyStopScheduler
         early_stop = {'method'  : 'LossReference', 'warmup': 0, 'patience': 2}
@@ -281,7 +280,6 @@ class TestSolvers(TestController):
                         False)
         self.assertTrue(self.solver._early_stop_scheduler._last_epoch < 14)
 
-    @unittest.skip("temp")
     def test_fit(self):
         self.solver._last_epoch_loss = 10
         self.solver._last_val_loss = 15
