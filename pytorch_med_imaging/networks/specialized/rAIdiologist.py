@@ -16,18 +16,18 @@ class rAIdiologist(nn.Module):
     interpretability as the SWRAN was already pretty good reaching accuracy of 95%. This network also has a benefit
     of not limiting the number of slices viewed such that scans with a larger field of view can also fit in.
     """
-    def __init__(self, record=False, iter_limit=100):
+    def __init__(self, record=False, iter_limit=100, dropout=0.2):
         super(rAIdiologist, self).__init__()
         self.RECORD_ON = record
         self.play_back = []
         # Create inception for 2D prediction
         self.cnn = SlicewiseAttentionRAN(1, 1, exclude_fc=True, sigmoid_out=True)
-        self.dropout = nn.Dropout(p=0.2)
+        self.dropout = nn.Dropout(p=dropout)
 
         # LSTM for
         # self.lstm_prefc = nn.Linear(2048, 512)
         self.lstm_prelayernorm = nn.LayerNorm(2048)
-        self.lstm_rater = LSTM_rater(2048, record=record, iter_limit=iter_limit)
+        self.lstm_rater = LSTM_rater(2048, record=record, iter_limit=iter_limit, dropout=dropout)
 
         # Mode
         self.register_buffer('_mode', torch.IntTensor([1]))
@@ -179,11 +179,12 @@ class LSTM_rater(nn.Module):
          ...]
 
     """
-    def __init__(self, in_ch, record=False, iter_limit=5):
+    def __init__(self, in_ch, record=False, iter_limit=5, dropout=0.2):
         super(LSTM_rater, self).__init__()
         # Batch size should be 1
         self.lstm_reviewer = nn.LSTM(in_ch, 100, batch_first=True, bias=True)
         self.out_fc = nn.Linear(100, 2)
+        self.dropout = nn.Dropout(p=dropout)
         self.play_back = []
         self.iter_limit = iter_limit
         self.RECORD_ON = record
@@ -234,7 +235,7 @@ class LSTM_rater(nn.Module):
                     _o = self.out_fc(o)
                 row = torch.cat([_o.detach().cpu(), torch.Tensor(range(num_slice)).view(1, -1, 1)], dim=-1) # concat chans
                 play_back.append(row)
-            h = self.out_fc(hidden[0])
+            h = self.out_fc(self.dropout(hidden[0]))
 
             # restrict number of runs else mem will run out quick.
             if iter_num >= self.iter_limit:
