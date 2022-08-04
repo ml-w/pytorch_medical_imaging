@@ -98,7 +98,7 @@ class PMIController(object):
 
         # Create net
         try:
-            if re.search("[\W]+", self.network_network_type.translate(str.maketrans('', '', "(), ="))) is not None:
+            if re.search("[\W]+", self.network_network_type.translate(str.maketrans('', '', "(), =\."))) is not None:
                 raise AttributeError(f"You net_nettype specified ({self.network_network_type}) contains illegal characters!")
             self.net = eval(self.network_network_type)
             so = re.search('.+?(?=\()', self.network_network_type)
@@ -181,6 +181,8 @@ class PMIController(object):
         self._logger.info(f"Creating solver: {self.general_run_type}")
         solver = self.create_solver(self.general_run_type)
         loader, loader_val = self.prepare_loaders()
+        # Push dataloader to solver
+        solver.set_dataloader(loader, loader_val)
 
         # Set learning rate scheduler, TODO: move this to solver
         if self.solverparams_decay_on_plateau:
@@ -198,9 +200,6 @@ class PMIController(object):
             self._logger.info("LR scheduler not specified, using default exponential.")
             solver.set_lr_decay_exp(self.solverparams_decay_rate_lr)
 
-        # Push dataloader to solver
-        solver.set_dataloader(loader, loader_val)
-
         # Read tensorboard dir from env, disable plot if it fails
         self.prepare_tensorboard_writter()
 
@@ -214,6 +213,10 @@ class PMIController(object):
         solver.get_net().train()
         solver.load_checkpoint(self.checkpoint_cp_load_dir)
 
+        try:
+            debug_validation = self.a.debug_validation
+        except AttributeError:
+            debug_validation = False
         solver.fit(self.checkpoint_cp_save_dir,
                    debug_validation=self.a.debug_validation) # TODO: move checkpoint_save argument to else where
         self.solver = solver
