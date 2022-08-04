@@ -100,7 +100,7 @@ class rAIdiologistSolver(BinaryClassificationSolver):
         current_epoch = self.plotter_dict.get('epoch_num', None)
         total_epoch = self.solverparams_num_of_epochs
 
-        if self._current_mode in (3, 4):
+        if self._current_mode in (3, 4, 5):
             # step conf loss function scheduler
             if isinstance(self.lossfunction, ConfidenceBCELoss):
                 self._logger.info(f"Stepping conf loss using mode: {self.solverparams_rai_conf_weight_scheduler}")
