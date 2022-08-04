@@ -3,6 +3,7 @@ from mnts.mnts_logger import MNTSLogger
 
 from torch import optim
 from torch.utils.data import DataLoader, TensorDataset
+from torch.optim import lr_scheduler
 from ..loss import FocalLoss, TverskyDiceLoss
 import torch
 import torch.nn as nn
@@ -175,6 +176,10 @@ class BinaryClassificationSolver(ClassificationSolver):
         self.optimizer.zero_grad()
         loss.backward()
         self.optimizer.step()
+        # if schedular is OneCycleLR
+        if isinstance(self.lr_scheduler, lr_scheduler.OneCycleLR):
+            self.lr_scheduler.step()
+        self._called_time += 1
         return out, loss.cpu().data
 
     def _loss_eval(self, *args):

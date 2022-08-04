@@ -102,6 +102,7 @@ class SolverBase(object):
         r"""If the default_dict items are not specified in the hyperparameter_dict, this will
         load the hyperparameters into __dict__ and self.hyperparameter_dict
         """
+        self.__dict__.update(self.hyperparam_dict)
         if default_dict is None:
             return
 
@@ -173,6 +174,8 @@ class SolverBase(object):
             sche_class = eval('lr_scheduler.' + name)
         except AttributeError:
             sche_class = eval('pmi_lr_scheduler.' + name)
+        #TODO: If scheduler is OneCycleLR, need to recalculate the total_steps
+
         self._logger.debug(f"Optimizer args: {args}")
         self._logger.debug(f"Optimizer kwargs: {kwargs}")
         self.lr_scheduler = sche_class(self.optimizer, *args, **kwargs)
@@ -251,7 +254,9 @@ class SolverBase(object):
         self.optimizer.zero_grad()
         loss.backward()
         self.optimizer.step()
-
+        # if schedular is OneCycleLR
+        if isinstance(self.lr_scheduler, lr_scheduler.OneCycleLR):
+            self.lr_scheduler.step()
         self._called_time += 1
         return out, loss.cpu().data
 
@@ -280,6 +285,9 @@ class SolverBase(object):
         if not self.lr_scheduler is None:
             if isinstance(self.lr_scheduler, (lr_scheduler.ReduceLROnPlateau)):
                 self.lr_scheduler.step(*args)
+            elif isinstance(self.lr_scheduler, lr_scheduler.OneCycleLR):
+                # Do nothing because it's supposed to be done in `step()`
+                pass
             else:
                 self.lr_scheduler.step()
         self._decayed_time += 1
@@ -583,12 +591,13 @@ class SolverEarlyStopScheduler(object):
         self._watch = 0
         self._func = None
 
-
         if configs is None:
+            self._logger.debug("Config is None.")
             self._func = None
             return
 
         if self._configs is not None:
+            self._logger.debug(f"Creating early stop scheduler with config: {configs}")
             if isinstance(configs, str):
                 _c = configs
                 if re.search("[\W]+", _c.translate(str.maketrans('', '', ". "))) is not None:
@@ -636,7 +645,7 @@ class SolverEarlyStopScheduler(object):
         if self._func is None:
             return 0
         else:
-            self._logger.debug(f"Epoch {epoch:.03d} Loss: {loss}")
+            self._logger.debug(f"Epoch {epoch:03d} Loss: {loss}")
             return self._func(loss, epoch)
 
 
@@ -662,6 +671,8 @@ class SolverEarlyStopScheduler(object):
         else:
             if loss < self._last_loss:
                 # reset if new loss is smaller than last loss
+                self._logger.debug(f"Counter reset because loss {loss:.05f} is smaller than "
+                                   f"last_loss {self._last_loss:.05f}.")
                 self._watch = 0
                 self._last_loss = loss
             else:
