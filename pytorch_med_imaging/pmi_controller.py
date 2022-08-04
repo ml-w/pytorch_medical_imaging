@@ -189,12 +189,7 @@ class PMIController(object):
             self._logger.warning("Decay on plateau option is deprecated.")
 
         if self.solverparams_lr_scheduler is not None:
-            self._logger.info(f"Creating lr_scheduler: {self.solverparams_lr_scheduler}.")
-            if isinstance(self.solverparams_lr_scheduler_args, (float, int, str)):
-                self.solverparams_lr_scheduler_args = [self.solverparams_lr_scheduler_args]
-            solver.set_lr_scheduler(self.solverparams_lr_scheduler,
-                                    *self.solverparams_lr_scheduler_args,
-                                    **self.solverparams_lr_scheduler_kwargs)
+            self.create_lr_scheduler(solver)
 
         else:
             self._logger.info("LR scheduler not specified, using default exponential.")
@@ -220,6 +215,14 @@ class PMIController(object):
         solver.fit(self.checkpoint_cp_save_dir,
                    debug_validation=debug_validation) # TODO: move checkpoint_save argument to else where
         self.solver = solver
+
+    def create_lr_scheduler(self, solver):
+        self._logger.info(f"Creating lr_scheduler: {self.solverparams_lr_scheduler}.")
+        if isinstance(self.solverparams_lr_scheduler_args, (float, int, str)):
+            self.solverparams_lr_scheduler_args = [self.solverparams_lr_scheduler_args]
+        solver.set_lr_scheduler(self.solverparams_lr_scheduler,
+                                *self.solverparams_lr_scheduler_args,
+                                **self.solverparams_lr_scheduler_kwargs)
 
     def prepare_tensorboard_writter(self) -> None:
         r"""Prepare the Tensorboard writer if `general_plot_tb` is set to True. The writer will be automatically
