@@ -218,7 +218,7 @@ class PMIController(object):
         except AttributeError:
             debug_validation = False
         solver.fit(self.checkpoint_cp_save_dir,
-                   debug_validation=self.a.debug_validation) # TODO: move checkpoint_save argument to else where
+                   debug_validation=debug_validation) # TODO: move checkpoint_save argument to else where
         self.solver = solver
 
     def prepare_tensorboard_writter(self) -> None:
