@@ -16,7 +16,7 @@ class rAIdiologist(nn.Module):
     interpretability as the SWRAN was already pretty good reaching accuracy of 95%. This network also has a benefit
     of not limiting the number of slices viewed such that scans with a larger field of view can also fit in.
     """
-    def __init__(self, record=False, iter_limit=100, dropout=0.2):
+    def __init__(self, record=False, iter_limit=100, dropout=0.2, lstm_dropout=0.1):
         super(rAIdiologist, self).__init__()
         self.RECORD_ON = record
         self.play_back = []
@@ -27,7 +27,7 @@ class rAIdiologist(nn.Module):
         # LSTM for
         # self.lstm_prefc = nn.Linear(2048, 512)
         self.lstm_prelayernorm = nn.LayerNorm(2048)
-        self.lstm_rater = LSTM_rater(2048, record=record, iter_limit=iter_limit, dropout=dropout)
+        self.lstm_rater = LSTM_rater(2048, record=record, iter_limit=iter_limit, dropout=lstm_dropout)
 
         # Mode
         self.register_buffer('_mode', torch.IntTensor([1]))
