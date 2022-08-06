@@ -175,10 +175,14 @@ class SolverBase(object):
         except AttributeError:
             sche_class = eval('pmi_lr_scheduler.' + name)
         #TODO: If scheduler is OneCycleLR, need to recalculate the total_steps
-
+        if name == 'OneCycleLR':
+            if 'total_steps' in kwargs:
+                kwargs.pop('total_steps')
+            kwargs['epochs'] = self.solverparams_num_of_epochs
+            kwargs['steps_per_epoch'] = len(self._data_loader)
+        self.lr_scheduler = sche_class(self.optimizer, *args, **kwargs)
         self._logger.debug(f"Optimizer args: {args}")
         self._logger.debug(f"Optimizer kwargs: {kwargs}")
-        self.lr_scheduler = sche_class(self.optimizer, *args, **kwargs)
 
     def set_plotter(self, plotter):
         self._tb_plotter = plotter
@@ -669,6 +673,7 @@ class SolverEarlyStopScheduler(object):
         if epoch < warmup:
                 return 0
         else:
+            self._logger.deubg(f"{loss}, {self._lass_loss}")
             if loss < self._last_loss:
                 # reset if new loss is smaller than last loss
                 self._logger.debug(f"Counter reset because loss {loss:.05f} is smaller than "
