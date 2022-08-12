@@ -92,7 +92,7 @@ class PMIController(object):
         if self.data_output_dir.endswith('.csv'):
             Path(self.data_output_dir).parent.mkdir(exist_ok=True)
         else:
-            Path(self.data_output_dir).mkdir(exist_ok=True)
+            Path(self.data_output_dir).mkdir(exist_ok=True, parents=True)
         # simple error check
         self._error_check()
 
