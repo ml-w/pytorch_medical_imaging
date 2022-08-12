@@ -382,6 +382,9 @@ class PMIController(object):
                 else:
                     mo_dict = mo.groupdict()
                     _section, _key, _val = [mo_dict[k] for k in ['section', 'key', 'value']]
+                    # ' and " charaters are not allowed
+                    _section = re.sub("('|\")", "", _section)
+                    _key = re.sub("('|\")", "", _key)
                     self._logger.info(f"Overrided: ({_section},{_key})={_val}")
                     if not _section in self.config:
                         self.config.add_section(_section)
