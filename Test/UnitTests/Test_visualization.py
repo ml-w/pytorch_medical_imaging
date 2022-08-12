@@ -52,7 +52,10 @@ class Test_visualization_rAIdiologist(unittest.TestCase):
         self.indices = np.asarray(self.json['MRI_01'])[..., -1].ravel()
         self.temp_out_dir = tempfile.TemporaryDirectory()
 
-    def tearDown(self):
+    def setUpClass() -> None:
+        MNTSLogger('.', verbose=True, log_level='debug')
+
+    def tearDownClass() -> None:
         # self.temp_out_dir.cleanup()
         MNTSLogger.cleanup()
 
