@@ -70,7 +70,8 @@ def make_marked_slice(image: np.ndarray,
     ax_pred.plot(slice_indices, prediction, linewidth=ax_pred_linewidth, color='yellow')
     ax_pred.axhline(0.5, 0, image.shape[-1], color='red', linewidth=ax_pred_linewidth)        # plot a line at 0 or 0.5
     if not vert_line is None:
-        assert 0 <= vert_line < image.shape[-1], f"Wrong vert_line provided, got {vert_line}"
+        assert 0 <= vert_line < image.shape[-1], f"Wrong vert_line provided, got {vert_line}, but image shape " \
+                                                 f"is : {image.shape}"
         ax_pred.axvline(x=vert_line, color='#0F0', linewidth=ax_pred_linewidth)
     ax_pred.set_position([.80, .05, .15, .1]) # x_start, y_start, x_length, y_length
 
@@ -217,7 +218,7 @@ def _wrap_mpi_mark_image_stacks(im_dir, pred, indi, outdir, kwargs):
     global semaphore
     semaphore.acquire()
     im = tio.ScalarImage(im_dir)
-    stack = mark_image_stacks(im[tio.DATA].squeeze(), pred, indi, **kwargs)
+    stack = mark_image_stacks(im[tio.DATA].squeeze().permute(1, 2, 0), pred, indi, **kwargs)
     marked_stack_2_gif(stack, outdir)
     im.clear()
     semaphore.release()
