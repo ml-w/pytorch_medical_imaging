@@ -302,6 +302,21 @@ class TestSolvers(TestController):
         after = self.solver.get_last_lr()
         self.assertLess(before, after)
 
+    def test_accumulate_grad(self):
+        # manually set params
+        accumulate_grad = 4
+        self.solver.solverparams_accumulate_grad = accumulate_grad
+        self.controller.runparams_batch_size = 1
+        loader, loader_val = self.controller.prepare_loaders()
+        self.solver.set_dataloader(loader, loader_val)
+        for step_idx, mb in enumerate(self.solver._data_loader):
+            s, g = self.solver._unpack_minibatch(mb, self.solver.solverparams_unpack_keys_forward)
+            msg = f"Error at {step_idx}"
+            self.assertEqual(step_idx % self.solver.solverparams_accumulate_grad,
+                             self.solver._accumulated_steps,
+                             msg)
+            out, loss = self.solver.step(s, g)
+            del s, g, mb
 
 class TestSegmentationSolver(TestSolvers):
     def __init__(self, *args, **kwargs):
