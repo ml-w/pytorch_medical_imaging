@@ -173,7 +173,6 @@ class BinaryClassificationSolver(ClassificationSolver):
         # else:
         out = self._feed_forward(*args)
         loss = self._loss_eval(out, *args)
-
         self._update_network(loss)
 
         # if schedular is OneCycleLR
