@@ -414,6 +414,7 @@ class PMIController(object):
             ('SolverParams', 'learning_rate')      : float,
             ('SolverParams', 'momentum')           : float,
             ('SolverParams', 'num_of_epochs')      : int,
+            ('SolverParams', 'accumulate_grad')    : int,
             ('SolverParams', 'decay_rate_lr')      : float,
             ('SolverParams', 'lr_scheduler_dict')  : dict,
             ('SolverParams', 'lr_scheduler_kwargs'): dict,
@@ -423,7 +424,7 @@ class PMIController(object):
             ('General'     , 'plot_tb')            : bool,
             ('General'     , 'use_cuda')           : bool,
             ('General'     , 'debug')              : bool,
-            ('General'     , 'debug_validation')   : bool
+            ('General'     , 'debug_validation')   : bool,
         }
         DEFAULT_DICT = {
             ('General'     , 'run_mode')            : 'training',
@@ -453,6 +454,7 @@ class PMIController(object):
             ('General'     , 'debug_validation')    : False,
             ('SolverParams', 'decay_rate_lr')       : 0.99,
             ('SolverParams', 'lr_scheduler_args')   : ('SolverParams', 'decay_rate_lr'),
+            ('SolverParams', 'accumulate_grad')     : 0,
         }
 
         # read_dict from
