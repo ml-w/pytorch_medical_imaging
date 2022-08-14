@@ -173,9 +173,9 @@ class BinaryClassificationSolver(ClassificationSolver):
         # else:
         out = self._feed_forward(*args)
         loss = self._loss_eval(out, *args)
-        self.optimizer.zero_grad()
-        loss.backward()
-        self.optimizer.step()
+
+        self._update_network(loss)
+
         # if schedular is OneCycleLR
         if isinstance(self.lr_scheduler, lr_scheduler.OneCycleLR):
             self.lr_scheduler.step()

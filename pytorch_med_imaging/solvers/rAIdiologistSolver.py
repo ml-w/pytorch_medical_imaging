@@ -96,6 +96,9 @@ class rAIdiologistSolver(BinaryClassificationSolver):
                 self.net.set_mode(self._current_mode)
 
     def _epoch_callback(self, *args, **kwargs):
+        r"""
+        Used to fine tune loss weights here
+        """
         super(rAIdiologistSolver, self)._epoch_callback(*args, **kwargs)
         current_epoch = self.plotter_dict.get('epoch_num', None)
         total_epoch = self.solverparams_num_of_epochs
@@ -112,9 +115,6 @@ class rAIdiologistSolver(BinaryClassificationSolver):
                     self._logger.debug("Nothing was done.")
                     return
                 self._logger.info(f"Updated conf loss: {self.lossfunction.conf_factor}")
-
-    def _schedular(self):
-        pass
 
     def solve_epoch(self, epoch_number):
         """

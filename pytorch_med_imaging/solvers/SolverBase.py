@@ -76,13 +76,16 @@ class SolverBase(object):
         self._tb_plotter             = None
         self._local_rank             = 0
         self.lr_scheduler            = None
-        self.solverparams_early_stop = None
+        self._accumulated_steps       = 0        # For gradient accumulation
 
         # external_att
         self.plotter_dict      = {}
 
         # create loss function if not specified
-        self._load_default_attr(None)   # inherit in child to default other attributes
+        default_dict = {
+            'solverparams_early_stop': None
+        }
+        self._load_default_attr(default_dict)   # inherit in child to default other attributes
         self.create_lossfunction()
         self.create_optimizer(self.net.parameters())
 
@@ -255,14 +258,31 @@ class SolverBase(object):
     def step(self, *args):
         out = self._feed_forward(*args)
         loss = self._loss_eval(out, *args)
-        self.optimizer.zero_grad()
-        loss.backward()
-        self.optimizer.step()
+
+        self._update_network(loss)
+
         # if schedular is OneCycleLR
         if isinstance(self.lr_scheduler, lr_scheduler.OneCycleLR):
             self.lr_scheduler.step()
         self._called_time += 1
         return out, loss.cpu().data
+
+    def _update_network(self, loss):
+        # Gradient accumulation
+        if self.solverparams_accumulate_grad > 0:
+            self._accumulated_steps += 1
+            _loss = loss / self.solverparams_accumulate_grad
+            _loss.backward()
+            loss.detach_()
+            if self._accumulated_steps >= self.solverparams_accumulate_grad:
+                self._logger.debug("Updating network params from accumulated loss")
+                self.optimizer.step()
+                self.optimizer.zero_grad()
+                self._accumulated_steps = 0
+        else:
+            self.optimizer.zero_grad()
+            loss.backward()
+            self.optimizer.step()
 
     def create_optimizer(self,
                          net_params
