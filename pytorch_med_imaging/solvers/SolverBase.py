@@ -382,6 +382,7 @@ class SolverBase(object):
                     'Loss/Loss'           : None,
                     'Loss/Validation Loss': None
                 }
+                self._epoch_prehook()
                 self._last_val_loss = self.validation()
 
             # Prepare values for epoch callback plots
@@ -591,7 +592,8 @@ class SolverEarlyStopScheduler(object):
         super(SolverEarlyStopScheduler, self).__init__()
         self._configs = configs
         self._logger = MNTSLogger[__class__.__name__]
-        self._last_loss = 1E-32
+        self._last_loss = 1E32
+        self._last_epoch = 0
         self._watch = 0
         self._func = None
 
@@ -644,7 +646,6 @@ class SolverEarlyStopScheduler(object):
         Returns 1 if reaching stopping criteria, else 0.
         """
         # ignore if there are no configs
-        self._last_loss = loss
         self._last_epoch = epoch
         if self._func is None:
             return 0
@@ -673,7 +674,7 @@ class SolverEarlyStopScheduler(object):
         if epoch < warmup:
                 return 0
         else:
-            self._logger.deubg(f"{loss}, {self._lass_loss}")
+            self._logger.debug(f"{loss}, {self._last_loss}")
             if loss < self._last_loss:
                 # reset if new loss is smaller than last loss
                 self._logger.debug(f"Counter reset because loss {loss:.05f} is smaller than "
