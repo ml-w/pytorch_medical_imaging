@@ -218,6 +218,9 @@ class UNet_p(nn.Module):
         Returns:
             (Tensor)
         """
+        if x.shape[-1] == 1:
+            x = x.squeeze(-1)
+
         x = self.inconv(x)
         short_conn = [x]
         for i, d in enumerate(self.downs):
@@ -227,7 +230,7 @@ class UNet_p(nn.Module):
                 short_conn.append(x)
 
         for i, u in enumerate(self.ups):
-            print(short_conn[-i - 1].shape)
+            # print(short_conn[-i - 1].shape)
             x = u(short_conn[-i - 1], x)
         x = self.lastconv(x)
         return x
