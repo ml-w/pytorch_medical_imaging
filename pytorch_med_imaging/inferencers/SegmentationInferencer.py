@@ -175,7 +175,7 @@ class SegmentationInferencer(InferencerBase):
 
         arguments = ['-a',
                      '--test-data', self.output_dir,
-                     '--gt-data', self.pmi_data_loader.data['gt'].root_dir,
+                     '--gt-data', self.pmi_data_loader.data['gt'].rootdir,
                      '--idlist', str(list(set(self.pmi_data_loader.data['gt'].get_unique_IDs())))
                      ]
 
