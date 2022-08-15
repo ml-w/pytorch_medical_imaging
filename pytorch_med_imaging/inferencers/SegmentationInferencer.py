@@ -76,6 +76,7 @@ class SegmentationInferencer(InferencerBase):
             raise TypeError(msg)
 
         self.pmi_data_loader = pmi_data_loader
+        self.pmi_data_loader.inf_samples_per_vol = self.solverparams_inf_samples_per_vol
         # self._loader_queue = pmi_data_loader._load_data_set_inference()
         # self._inference_subjects = self._loader_queue._get_subjects_iterable()
         # self._inference_sampler = pmi_data_loader.get_sampler()
@@ -99,7 +100,6 @@ class SegmentationInferencer(InferencerBase):
         last_batch_dim = 0
         # compute size to pass to piece_patches
         in_image_data = self.pmi_data_loader.data['input']
-        self.solverparams_inf_samples_per_vol = None
 
         with torch.no_grad():
             self.net = self.net.eval()
