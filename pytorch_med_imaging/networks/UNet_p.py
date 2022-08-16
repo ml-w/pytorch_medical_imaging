@@ -218,6 +218,7 @@ class UNet_p(nn.Module):
         Returns:
             (Tensor)
         """
+        # If last dimension is 1, squeeze it automatically (tends to happen with torchio)
         if x.shape[-1] == 1:
             x = x.squeeze(-1)
 
