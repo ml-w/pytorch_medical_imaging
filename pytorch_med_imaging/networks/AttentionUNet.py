@@ -34,6 +34,10 @@ class AttentionUNet(nn.Module):
         self.att4 = AttentionBlock(64, 256)
 
     def forward(self, x):
+        # If last dimension is 1, squeeze it automatically (tends to happen with torchio)
+        if x.shape[-1] == 1 and x.dim() == 5:
+            x = x.squeeze(-1)
+
         x1 = self.inc(x)
         x2 = self.down1(x1)
         x3 = self.down2(x2)
@@ -65,6 +69,7 @@ class AttentionUNet(nn.Module):
             return u5
         else:
             self.att = [att1, att2, att3, att4]
+            [_att.detach_() for _att in self.att]
             return u5
 
     def get_att_map(self):

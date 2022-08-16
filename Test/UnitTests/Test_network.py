@@ -113,3 +113,10 @@ class Test3DNetworks(unittest.TestCase):
                     print(f"Mode {i} passed.")
                 except:
                     self.fail(f"Mode {i} error.")
+
+    def test_AttentionUNet(self):
+        net = AttentionUNet(1, 2).cuda()
+        with torch.no_grad():
+            # in dim: (B x C x W x H)
+            out = net(self.sample_input[0].permute(3, 0, 1, 2))
+            self.assertEqual((30, 2, 128, 128), out.shape)
