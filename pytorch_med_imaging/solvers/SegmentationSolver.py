@@ -194,16 +194,20 @@ class SegmentationSolver(SolverBase):
         super().decay_optimizer(*args)
 
         # Decay the class weight using a sigmoid curve.
-        s = self.solverparams_sigmoid_params['stretch']
-        d = self.solverparams_sigmoid_params['delay']
-        cap = self.solverparams_sigmoid_params['cap']
-        if isinstance(self.lossfunction, nn.CrossEntropyLoss):
-            self._logger.debug('Current weight: ' + str(self.lossfunction.weight))
-            offset = self._decayed_time + self.solverparams_decay_init_weight # init_weight is t_0
-            new_weight = torch.as_tensor([self.sigmoid_plus(offset, self.solverparams_class_weights[i], s, d, cap) for i in range(len(
-                self.solverparams_class_weights))])
-            self.lossfunction.weight.copy_(new_weight)
-            self._logger.debug('New weight: ' + str(self.lossfunction.weight))
+        try:
+            s = self.solverparams_sigmoid_params['stretch']
+            d = self.solverparams_sigmoid_params['delay']
+            cap = self.solverparams_sigmoid_params['cap']
+            if isinstance(self.lossfunction, nn.CrossEntropyLoss):
+                self._logger.debug('Current weight: ' + str(self.lossfunction.weight))
+                offset = self._decayed_time + self.solverparams_decay_init_weight # init_weight is t_0
+                new_weight = torch.as_tensor([self.sigmoid_plus(offset, self.solverparams_class_weights[i], s, d, cap) for i in range(len(
+                    self.solverparams_class_weights))])
+                self.lossfunction.weight.copy_(new_weight)
+                self._logger.debug('New weight: ' + str(self.lossfunction.weight))
+        except (AttributeError, KeyError):
+            msg = "Sigmoid param was not provided, skipping loss weight scheduling."
+            self._logger.warning(msg, no_repeat=True)
 
 
     @staticmethod
