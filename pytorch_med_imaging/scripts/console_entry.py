@@ -21,12 +21,11 @@ class PMI_ConsoleEntry(argparse.ArgumentParser):
             self.add_argument(*args, **kwargs)
 
         # For convinient, but not very logical to put this here
-        self.logger = MNTSLogger('pmi_script', verbose=False, keep_file=False)
+        self.logger = MNTSLogger('.', logger_name='pmi_script', verbose=False, keep_file=False)
 
     @staticmethod
     def make_console_entry_io():
         return PMI_ConsoleEntry('iogLv')
-
 
     def parse_args(self, *args, **kwargs):
         a = super(PMI_ConsoleEntry, self).parse_args(*args, **kwargs)
@@ -39,3 +38,6 @@ class PMI_ConsoleEntry(argparse.ArgumentParser):
         if hasattr(a, 'verbose'):
             self.logger._verbose = a.verbose
         return a
+
+    def __del__(self):
+        self.logger.__del__()
