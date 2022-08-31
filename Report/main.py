@@ -46,6 +46,9 @@ def main_():
         idlist = ConfigParser()
         idlist.read(Path('..').joinpath(config['Filters'].get('id_list')))
         testing_ids = idlist['FileList']['testing'].split(',')
+        training_ids = idlist['FileList']['training'].split(',')
+        valiadtion = config['Filters'].get('validation_id_list')
+        val_ids = [r.rstrip() for r in Path('..').joinpath(valiadtion).open('r').readlines()]
 
         # Read other attributes
         target_dir = Path('..').joinpath(config['Data']['target_dir'])
@@ -88,11 +91,17 @@ def main_():
         #                           idGlobber=idGlobber, idlist=small_tumors)
 
         # Run report gen
+
+
+        # po = Path('/media/storage/Data/NPC_Segmentation/70.Screening_report/TestOutput_B00TRAIN_v3/')
+        # po = Path('/media/storage/Data/NPC_Segmentation/70.Screening_report/TestOutput_B00VAL_v3/')
         po = Path('/media/storage/Data/NPC_Segmentation/70.Screening_report/TestOutput_B00_v3/')
-        pof = Path('/media/storage/Data/NPC_Segmentation/70.Screening_report/TestOutput_B00_v3/diag.csv')
-        # po = Path('/media/storage/Data/NPC_Segmentation/70.Screening_report/TestOutput_small_tumors_v3/')
-        # pof = Path('/media/storage/Data/NPC_Segmentation/70.Screening_report/TestOutput_small_tumors_v3/diag.csv')
-        for _id in testing_ids:
+        pof = po.joinpath('diag.csv')
+
+        # po = Path('/media/storage/Data/NPC_Segmentation/70.Screening_report/TestOutput_small_tumors_v4/')
+        # pof = Path('/media/storage/Data/NPC_Segmentation/70.Screening_report/TestOutput_small_tumors_v4/diag.csv')
+        errorlist = []
+        for _id in ['281']:
             try:
                 main(['-i',
                       str(input_dir),
@@ -115,7 +124,9 @@ def main_():
             except Exception as e:
                 logger.exception(e)
                 gc.collect()
-
+                errorlist.append(_id)
+        if len(errorlist) > 0:
+            logger.error(f"List of IDs that encounter errors: {', '.join(errorlist)}")
     pass
 
 if __name__ == '__main__':
