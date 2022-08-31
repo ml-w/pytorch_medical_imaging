@@ -115,6 +115,10 @@ class rAIdiologistSolver(BinaryClassificationSolver):
                     self._logger.debug("Nothing was done.")
                     return
                 self._logger.info(f"Updated conf loss: {self.lossfunction.conf_factor}")
+        elif self._current_mode in (1, 2):
+            # turn off confidence
+            if isinstance(self.lossfunction, ConfidenceBCELoss):
+                self.lossfunction.conf_factor = 0
 
     def solve_epoch(self, epoch_number):
         """
