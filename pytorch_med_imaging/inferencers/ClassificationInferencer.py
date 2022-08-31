@@ -147,15 +147,25 @@ class ClassificationInferencer(InferencerBase):
                 s = self._unpack_minibatch(mb, self.solverparams_unpack_keys_inference)
                 s = self._match_type_with_network(s)
 
-                self._logger.debug(f"s size: {s.shape if not isinstance(s, list) else [ss.shape for ss in s]}")
+                try:
+                    self._logger.debug(f"Processing: {mb['uid']}")
+                    _msg = f"s size: {s.shape if not isinstance(s, (list, tuple)) else [ss.shape for ss in s]}"
+                    self._logger.debug(_msg)
+                except:
+                    pass
 
                 # Squeezing output directly cause problem if the output has only one output channel.
-                if isinstance(s, list):
-                    out = self.net(*s)
-                else:
-                    out = self.net(s)
-                if out.shape[-1] > 1:
-                    out = out.squeeze()
+                try:
+                    if isinstance(s, (list, tuple)):
+                        out = self.net(*s)
+                    else:
+                        out = self.net(s)
+                    if out.shape[-1] > 1:
+                        out = out.squeeze()
+                except Exception as e:
+                    if 'uid' in mb:
+                        self._logger.error(f"Error when dealing with minibatch: {mb['uid']}")
+                    raise e
 
                 while ((out.dim() < last_batch_dim) or (out.dim() < 2)) and last_batch_dim != 0:
                     out = out.unsqueeze(0)
