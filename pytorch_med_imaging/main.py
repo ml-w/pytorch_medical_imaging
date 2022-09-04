@@ -39,6 +39,8 @@ def console_entry(raw_args=None):
                         help="Set this to true to run validation direction. This also sets --debug to true.")
     parser.add_argument('--verbose', dest='verbose', action='store_true', default=False,
                         help="Print message to stdout.")
+    parser.add_argument('--fold-code', action='store', default=None,
+                        help="Convenient port to update (General,fold_code).")
     parser.add_argument('--override', dest='override', action='store', type=str, default='',
                         help="Use syntax '(section1,key1)=value1;(section2,key2)=value' to override any"
                              "settings specified in the config file. Note that no space is allowed.")

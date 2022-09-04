@@ -373,6 +373,8 @@ class PMIController(object):
             self.config['General']['debug_validation'] = "yes"
         if a.debug:
             self.config['General']['debug'] = "yes"
+        if a.fold_code not in (None, ""):
+            self.config['General']['fold_code'] = a.fold_code
         if not a.override == '':
             for substring in a.override.split(';'):
                 substring = substring.replace(' ', '')
