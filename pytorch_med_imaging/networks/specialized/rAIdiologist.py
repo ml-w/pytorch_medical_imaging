@@ -16,7 +16,7 @@ class rAIdiologist(nn.Module):
     interpretability as the SWRAN was already pretty good reaching accuracy of 95%. This network also has a benefit
     of not limiting the number of slices viewed such that scans with a larger field of view can also fit in.
     """
-    def __init__(self, record=False, iter_limit=100, dropout=0.2, lstm_dropout=0.1):
+    def __init__(self, record=False, iter_limit=5, dropout=0.2, lstm_dropout=0.1):
         super(rAIdiologist, self).__init__()
         self.RECORD_ON = record
         self.play_back = []
@@ -116,15 +116,21 @@ class rAIdiologist(nn.Module):
 
         x = self.cnn(x)     # Shape -> (B x 2048 x S)
         x = self.dropout(x)
+        added_radius = 1
         if seg is not None: # zero out slices without segmentation
-            seg_slices = (seg.sum(dim=[-2, -3]) != 0).expand_as(x) # (B x 1 x S)
-            x[~seg_slices] = 0
+            bool_mat = torch.zeros_like(x, dtype=bool)
+            for i in nonzero_slices:
+                bot_slice = max(0, nonzero_slices[i][0] - added_radius)
+                top_slice = min(x.shape[-1], nonzero_slices[i][1] + added_radius)
+                bool_mat[i,...,bot_slice:top_slice + 1] = True
+            x[~bool_mat] = 0
 
         while x.dim() < 3:
             x = x.unsqueeze(0)
 
         if self._mode == 1 or self._mode == 2:
             o = self.lstm_rater(self.lstm_prelayernorm(x.permute(0, 2, 1).contiguous()).permute(0, 2, 1)).contiguous() # o: (B x S x 2)
+            # max pool along slice dimension by permuting it to the last axis first
             o = F.adaptive_max_pool1d(o.permute(0, 2, 1), 1).view(-1, 2)
             # o = torch.stack([o[i,j] for i, j in zero_slices.items()], dim=0)
         elif self._mode == 3 or self._mode == 4 or self._mode == 5:
@@ -132,7 +138,9 @@ class rAIdiologist(nn.Module):
             tmp_list = []
             for i, xx in enumerate(x):
                 # xx dimension is (1 x H x W x S), trim away zero padded slices
-                _x = xx[..., nonzero_slices[i][0]:nonzero_slices[i][1] + 1].unsqueeze(0)
+                bot_slice = max(0, nonzero_slices[i][0] - added_radius)
+                top_slice = min(x.shape[-1] - 1, nonzero_slices[i][1] + added_radius)
+                _x = xx[..., bot_slice:top_slice + 1].unsqueeze(0)
                 tmp_list.append(_x)
             # Loop batch
             o = []
@@ -141,7 +149,10 @@ class rAIdiologist(nn.Module):
                 if self.RECORD_ON:
                     self.play_back.extend(self.lstm_rater.get_playback())
                     self.lstm_rater.clean_playback()
-            o = torch.cat(o)
+            if len(o) > 1:
+                o = torch.cat(o)
+            else:
+                o = o[0]
             del tmp_list
         else:
             raise AttributeError(f"Got wrong mode: {self._mode}, can only be one of [1|2|3|4|5].")
@@ -185,12 +196,17 @@ class LSTM_rater(nn.Module):
         self.lstm_reviewer = nn.LSTM(in_ch, 100, batch_first=True, bias=True)
         self.out_fc = nn.Linear(100, 2)
         self.dropout = nn.Dropout(p=dropout)
+        self.out_fc = nn.Linear(in_ch, 2)
+
+        # for playback
         self.play_back = []
+
+        # other settings
         self.iter_limit = iter_limit
         self.RECORD_ON = record
-        self.register_buffer('_mode', torch.IntTensor([1]))
+        self.register_buffer('_mode', torch.IntTensor([1])) # let it save the state too
 
-        self.init()
+        self.init() # initialization
         # if os.getenv('CUBLAS_WORKSPACE_CONFIG') not in [":16:8", ":4096:2"]:
         #     raise AttributeError("You are invoking LSTM without properly setting the environment CUBLAS_WORKSPACE_CONFIG"
         #                          ", which might result in non-deterministic behavior of LSTM. See "
@@ -218,44 +234,53 @@ class LSTM_rater(nn.Module):
         assert x.shape[0] == 1, f"This rater can only handle one sample at a time, got input of dimension {x.shape}."
         # required input size: (1 x C x S)
         num_slice = x.shape[-1]
-        mid_index = num_slice // 2
 
         # Now start again from the middle
         play_back = []
         hidden = None
         iter_num = 0
         consec_conf = 0
-        next_slice = mid_index
+        next_slice = 0
         BREAK_FLAG = False
         while not BREAK_FLAG:
+            # x: (1 x C x S) -> (1 x S x C)
             o, hidden = self.lstm_reviewer(x.permute(0, 2, 1), hidden)
-            if self.RECORD_ON:
-                # _: (1 x S x C), _: (1 x S x 3)
-                with torch.no_grad():
-                    _o = self.out_fc(o)
-                row = torch.cat([_o.detach().cpu(), torch.Tensor(range(num_slice)).view(1, -1, 1)], dim=-1) # concat chans
-                play_back.append(row)
-            h = self.out_fc(self.dropout(hidden[0]))
+            o = self.out_fc(o) # o: (1 x S x 2)
+
+            # `hidden` is the output from the last of the series, hidden: (1 x C)
+            # h = self.out_fc(self.dropout(hidden[0]))
+
+            # calculate consecutive +ve confidence
+            for i in range(num_slice):
+                if o[0, i, 1] > 0:
+                    consec_conf += 1
+                else:
+                    consec_conf = 0
+
+                # if confidence is constantly larger than 0, and also the RNN has already read
+                # the whole stack once, break
+                if consec_conf > num_slice // 2 and iter_num >= 1:
+                    BREAK_FLAG = True
+                    break
 
             # restrict number of runs else mem will run out quick.
             if iter_num >= self.iter_limit:
                 BREAK_FLAG = True
-            if h[..., 1] > 0:
-                consec_conf += 1
-                if consec_conf > 2:
-                    BREAK_FLAG = True
-            else:
-                consec_conf = 0
+
+            if self.RECORD_ON:
+                # _: (1 x S x C), _: (1 x S x 3)
+                row = torch.cat([o.detach().cpu()[:, :i + 1], torch.Tensor(range(i + 1)).view(1, -1, 1)], dim=-1) # concat chans
+                play_back.append(row)
             iter_num += 1
 
         # output size: (1 x 2)
         if self.RECORD_ON:
             # concat along the slice dim
             self.play_back.append(torch.cat(play_back, dim=1))
-        return h.squeeze()[:2].view(1, -1) # no need to deal with up or down afterwards
+        return o.squeeze()[i].view(1, -1) # no need to deal with up or down afterwards
 
     def forward_stage_1(self, x: torch.Tensor):
-        r"""In this stage, just read every slices"""
+        r"""In this stage, just read every slices, output are max-pooled in main branch"""
         # input (B x C x S), output (B x S x 2)
         o, (h, c) = self.lstm_reviewer(x.permute(0, 2, 1))
         o = self.out_fc(o)
