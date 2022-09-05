@@ -375,6 +375,8 @@ class PMIController(object):
             self.config['General']['debug'] = "yes"
         if a.fold_code not in (None, ""):
             self.config['General']['fold_code'] = a.fold_code
+        if a.network not in (None, ""):
+            self.config['Network']['network_type'] = a.network
         if not a.override == '':
             for substring in a.override.split(';'):
                 substring = substring.replace(' ', '')

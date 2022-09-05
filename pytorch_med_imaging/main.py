@@ -27,6 +27,8 @@ def console_entry(raw_args=None):
                         help="Set this to override number of epoch when loading config.")
     parser.add_argument("-l", "--lr", dest='lr', type=float, default=None,
                         help="Set this to override learning rate.")
+    parser.add_argument('--network', type=str, default="",
+                        help="Convenient port to update (Network,network_type)")
     parser.add_argument("--all-checkpoints", dest='inference_all_checkpoints', action='store_true',
                         help="Set this to inference all checkpoints.")
     parser.add_argument("--log-level", dest='log_level', type=str, choices=('debug', 'info', 'warning','error'),

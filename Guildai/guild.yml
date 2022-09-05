@@ -5,12 +5,14 @@
     batch-size: 4
     lr: 1E-4
     debug: no
+    fold-code: ""
     override: ""
 
 - config: val-flags
   flags:
     batch-size: 4
     config: "./Configs/Test.ini"
+    fold-code: ""
     override: ""
     debug: no
 
@@ -187,8 +189,7 @@
         - train_looped config=${config} epoch=50  debug=${debug} batch-size=${bs_rnn} lr=1E-4
           override="(SolverParams,rAI_fixed_mode)=3;(General,fold_code)=${fold_code}"
         - train_looped config=${config} epoch=100 debug=${debug} batch-size=${bs_cnn} lr=1E-4
-          override="(SolverParams,rAI_fixed_mode)=4;(General,fold_code)=${fold_code};(SolverParams,lr_scheduler_args)
-          =[0.98,0.98,20,3];(SolverParams,lr_scheduler_kwargs)={'eta_min':1E-6,'T_mult':2}"
+          override="(SolverParams,rAI_fixed_mode)=4;(General,fold_code)=${fold_code}"
         - validation   config=${config} debug=${debug} batch-size=${bs_rnn} override="(General,fold_code)=${fold_code}"
 
 
