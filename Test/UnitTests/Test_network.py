@@ -15,6 +15,8 @@ class Test3DNetworks(unittest.TestCase):
         num_data = 2
         self.sample_input = torch.rand(num_data, 1, 128, 128, num_slice).cuda()
         self.sample_input_size1 = torch.rand(1, 1, 128, 128, num_slice).cuda()
+        self.sample_input_3d = torch.rand(num_data, 1, 128, 128, 128).cuda()
+        self.sample_input_3d_size1 = torch.rand(1, 1, 128, 128, 128).cuda()
         self.sample_input[0, ..., 28::].fill_(0)
         self.sample_seg = torch.zeros_like(self.sample_input).cuda()
         self.sample_seg[0, 0, 50, 50, 10:20].fill_(1)
@@ -128,3 +130,9 @@ class Test3DNetworks(unittest.TestCase):
             # in dim: (B x C x W x H)
             out = net(self.sample_input[0].permute(3, 0, 1, 2))
             self.assertEqual((30, 2, 128, 128), out.shape)
+
+    def test_VNet(self):
+        net = VNet(1, 2).cuda()
+        with torch.no_grad():
+            out = net(self.sample_input_3d)
+            out = net(self.sample_input_3d_size1)

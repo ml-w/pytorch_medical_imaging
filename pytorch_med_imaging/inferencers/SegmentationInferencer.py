@@ -76,7 +76,10 @@ class SegmentationInferencer(InferencerBase):
             raise TypeError(msg)
 
         self.pmi_data_loader = pmi_data_loader
-        self.pmi_data_loader.inf_samples_per_vol = self.solverparams_inf_samples_per_vol
+        try:
+            self.pmi_data_loader.inf_samples_per_vol = self.solverparams_inf_samples_per_vol
+        except:
+            pass
         # self._loader_queue = pmi_data_loader._load_data_set_inference()
         # self._inference_subjects = self._loader_queue._get_subjects_iterable()
         # self._inference_sampler = pmi_data_loader.get_sampler()
@@ -119,7 +122,7 @@ class SegmentationInferencer(InferencerBase):
 
                 # create new sampling queue based on inf_sample_per_vol
                 _queue, _aggregator = self.pmi_data_loader.create_aggregation_queue(
-                    subject, self.solverparams_inf_samples_per_vol)
+                    subject, self.pmi_data_loader.inf_samples_per_vol)
 
                 dataloader = DataLoader(_queue, batch_size=self._data_loader.batch_size, num_workers=0)
                 ndim = subject.get_first_image()[tio.DATA].dim()  # Assume channel dim always exist even if only has 1 channel

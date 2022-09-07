@@ -10,6 +10,14 @@ class Test_visualization(unittest.TestCase):
     def __init__(self, *args, **kwargs):
         super(Test_visualization, self).__init__(*args, **kwargs)
 
+    @classmethod
+    def setUpClass(cls):
+        cls._logger = MNTSLogger('.', logger_name=cls.__name__, verbose=True, keep_file=False, log_level='debug')
+
+    @classmethod
+    def tearDownClass(cls) -> None:
+        MNTSLogger.cleanup()
+
     def setUp(self):
         self.subject = tio.datasets.FPG()
         self.img_dir = Path('./sample_data/img')
@@ -17,8 +25,8 @@ class Test_visualization(unittest.TestCase):
         self.temp_out_dir = tempfile.TemporaryDirectory()
 
     def tearDown(self):
-        # self.temp_out_dir.cleanup()
-        MNTSLogger.cleanup()
+        self.temp_out_dir.cleanup()
+        # MNTSLogger.cleanup()
 
     def test_draw_grid(self):
         img = self.subject['t1'][tio.DATA].squeeze().permute(2, 0, 1).unsqueeze(1)
@@ -43,6 +51,14 @@ class Test_visualization_rAIdiologist(unittest.TestCase):
     def __init__(self, *args, **kwargs):
         super(Test_visualization_rAIdiologist, self).__init__(*args, **kwargs)
 
+    @classmethod
+    def setUpClass(cls):
+        cls._logger = MNTSLogger('.', logger_name=cls.__name__, verbose=True, keep_file=False, log_level='debug')
+
+    @classmethod
+    def tearDownClass(cls) -> None:
+        MNTSLogger.cleanup()
+
     def setUp(self):
         self.img_dir = Path('./sample_data/img')
         self.seg_dir = Path('./sample_data/seg')
@@ -50,14 +66,11 @@ class Test_visualization_rAIdiologist(unittest.TestCase):
         self.image = tio.ScalarImage(str(self.img_dir.joinpath('MRI_01.nii.gz')))[tio.DATA].squeeze()
         self.prediction = np.asarray(self.json['MRI_01'])[..., 0].ravel()
         self.indices = np.asarray(self.json['MRI_01'])[..., -1].ravel()
+        self.one_hot = np.asarray(self.json['MRI_01'])[..., -2].ravel()
         self.temp_out_dir = tempfile.TemporaryDirectory()
 
     def setUpClass() -> None:
         MNTSLogger('.', verbose=True, log_level='debug')
-
-    def tearDownClass() -> None:
-        # self.temp_out_dir.cleanup()
-        MNTSLogger.cleanup()
 
     def test_mark_slice(self):
         x1 = make_marked_slice(self.image[..., 15], self.prediction, self.indices)

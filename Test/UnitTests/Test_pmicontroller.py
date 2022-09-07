@@ -274,6 +274,7 @@ class TestSolvers(TestController):
         early_stop = {'method'  : 'LossReference', 'warmup': 0, 'patience': 2}
         self.solver._early_stop_scheduler = SolverEarlyStopScheduler(early_stop)
         self.solver.solverparams_num_of_epochs= 15
+        self.controller.runparams_batch_size = 2
         loader, loader_val = self.controller.prepare_loaders()
         self.solver.set_dataloader(loader, loader_val)
         self.solver.fit(str(self.temp_output_path.joinpath("test.pt")),
@@ -306,7 +307,7 @@ class TestSolvers(TestController):
         # manually set params
         accumulate_grad = 4
         self.solver.solverparams_accumulate_grad = accumulate_grad
-        self.controller.runparams_batch_size = 1
+        self.controller.runparams_batch_size = 2
         loader, loader_val = self.controller.prepare_loaders()
         self.solver.set_dataloader(loader, loader_val)
         for step_idx, mb in enumerate(self.solver._data_loader):
@@ -411,5 +412,13 @@ class TestBinaryClassificationInferencer(TestInferencer):
         super(TestBinaryClassificationInferencer, self).__init__(
             *args,
             sample_config = "./sample_data/config/sample_config_binaryclass.ini",
+            **kwargs
+        )
+
+class TestrAIdiologistInferencer(TestInferencer):
+    def __init__(self, *args, **kwargs):
+        super(TestrAIdiologistInferencer, self).__init__(
+            *args,
+            sample_config = "./sample_data/config/sample_config_rAIdiologist.ini",
             **kwargs
         )

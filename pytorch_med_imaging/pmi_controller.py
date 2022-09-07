@@ -258,11 +258,6 @@ class PMIController(object):
         inferencer.set_dataloader(loader)
         inferencer.load_checkpoint(self.checkpoint_cp_load_dir)
 
-        # if self.solverparams_write_mode == 'GradCAM':
-        #     #TODO: custom grad cam layers
-        #     raise NotImplementedError("GradCAM is not implemented")
-        #     inferencer.grad_cam_write_out(['att2'])
-
         with torch.no_grad():
             # if a.inference_all_checkpoints:
             #     try:

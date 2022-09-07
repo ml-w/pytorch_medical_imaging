@@ -61,7 +61,7 @@ class SegmentationSolver(SolverBase):
 
     def auto_compute_class_weights(self, gt_data, param_initWeight):
         r"""Compute the counts of each class in the ground-truth data. Use for class weights in optimizer."""
-        raise NotImplementedError
+        raise DeprecationWarning
 
         self._logger.info("Detecting number of classes...")
         valcountpair = gt_data.get_unique_values_n_counts()
@@ -158,7 +158,13 @@ class SegmentationSolver(SolverBase):
         if self.iscuda:
             g = self._force_cuda(g)
 
-        loss = self.lossfunction(out, g.squeeze().long())
+        if isinstance(self.lossfunction, (nn.BCELoss, nn.BCEWithLogitsLoss)):
+            if not g.dim() == out.dim():
+                g = g.squeeze()
+            loss = self.lossfunction(out, g.long())
+        else:
+            # For other loss function, deal with the dimension yourselves
+            loss = self.lossfunction(out, g.long())
         return loss
 
     def decay_optimizer(self, *args):
