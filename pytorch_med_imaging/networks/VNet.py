@@ -82,6 +82,9 @@ class VNet(nn.Module):
         self.out_conv = nn.Conv3d(start_ch, out_ch, kernel_size=1)
 
     def forward(self, x):
+        assert x.dim() == 5, f"Input should be (B x C x H x W x D) but got: {x.shape}."
+        assert all([xx > 64 for xx in x.shape[2:]]), f"No dimension should be under 64, but got {x.shape}"
+
         x = self.in_conv(x) + x
         short_cut = [x]
         for layer in self.down:

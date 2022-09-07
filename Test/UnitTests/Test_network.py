@@ -135,4 +135,8 @@ class Test3DNetworks(unittest.TestCase):
         net = VNet(1, 2).cuda()
         with torch.no_grad():
             out = net(self.sample_input_3d)
+            self.assertEqual(self.sample_input_3d.shape[2:], out.shape[2:])
             out = net(self.sample_input_3d_size1)
+            self.assertEqual(self.sample_input_3d_size1.shape[2:], out.shape[2:])
+            with self.assertRaises(AssertionError):
+                net(self.sample_input)
