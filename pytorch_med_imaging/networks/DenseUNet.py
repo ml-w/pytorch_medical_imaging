@@ -1,6 +1,5 @@
 import torch
 import torch.nn as nn
-
 from .layers import DenseBlock, DenseConv
 
 __all__ = ['DenseUNet2D']
@@ -66,7 +65,11 @@ class DenseUNet2D(nn.Module):
         )
         self.lastup = DenseConv(64, n_classes, 1)
 
-    def forward(self, x):
+    def forward(self, x: torch.FloatTensor) -> torch.FloatTensor:
+        if x.dim() == 5:
+            # torchio load 2D data as 3D
+            x = x.squeeze(dim=-1)
+
         d1 = self.inconv(x)
         # print d1.shape
         d2 = self.down1(self.pooling(d1))

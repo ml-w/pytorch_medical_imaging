@@ -6,6 +6,7 @@
     lr: 1E-4
     debug: no
     fold-code: ""
+    network: ""
     override: ""
 
 - config: val-flags
@@ -14,6 +15,7 @@
     config: "./Configs/Test.ini"
     fold-code: ""
     override: ""
+    network: ""
     debug: no
 
 - model: pmi
@@ -197,22 +199,22 @@
       flags:
         $include: default-flags
       steps:
-        - train config=${config} epoch=${epoch} batch-size=${batch-size} lr=${lr} override=${override}
-        - validation config=${config} batch-size=${batch-size} override=${override}
+        - train config=${config} epoch=${epoch} batch-size=${batch-size} lr=${lr} override=${override} network=${network} fold-code=${fold-code}
+        - validation config=${config} batch-size=${batch-size} override=${override} network=${network} fold-code=${fold-code}
 
     pipeline_segment:
       flags:
         $include: default-flags
       steps:
-        - train_segment config=${config} epoch=${epoch} batch-size=${batch-size} lr=${lr} override=${override}
-        - validation_segment config=${config} batch-size=${batch-size} override="${override};(LoaderParams,random_patches)=75"
+        - train_segment config=${config} epoch=${epoch} batch-size=${batch-size} lr=${lr} override=${override} network=${network} fold-code=${fold-code}
+        - validation_segment config=${config} batch-size=${batch-size} override="${override};(LoaderParams,random_patches)=75" network=${network} fold-code=${fold-code}
 
     pipeline_survival:
       flags:
         $include: default-flags
       steps:
-        - train_survival config=${config} epoch=${epoch} batch-size=${batch-size} lr=${lr} override=${override}
-        - validation_survival config=${config} batch-size=${batch-size} override=${override}
+        - train_survival config=${config} epoch=${epoch} batch-size=${batch-size} lr=${lr} override=${override} network=${network} fold-code=${fold-code}
+        - validation_survival config=${config} batch-size=${batch-size} override=${override} network=${network} fold-code=${fold-code}
 
   output-scalars:
     classification:

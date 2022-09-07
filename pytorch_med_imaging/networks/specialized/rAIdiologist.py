@@ -5,6 +5,7 @@ import torchio as tio
 import os
 from pathlib import Path
 
+from ..layers import PositionalEncoding
 from ..third_party_nets import *
 from . import SlicewiseAttentionRAN
 
@@ -129,8 +130,10 @@ class rAIdiologist(nn.Module):
             x = x.unsqueeze(0)
 
         if self._mode == 1 or self._mode == 2:
-            o = self.lstm_rater(self.lstm_prelayernorm(x.permute(0, 2, 1).contiguous()).permute(0, 2, 1)).contiguous() # o: (B x S x 2)
-            # max pool along slice dimension by permuting it to the last axis first
+            # o: (B x S x 2)
+            o = self.lstm_rater(self.lstm_prelayernorm(x.permute(0, 2, 1).contiguous()).permute(0, 2, 1)).contiguous()
+            # max pool along slice dimension by permuting it to the last axis first, in this mode the confidence
+            # is ignored.
             o = F.adaptive_max_pool1d(o.permute(0, 2, 1), 1).view(-1, 2)
             # o = torch.stack([o[i,j] for i, j in zero_slices.items()], dim=0)
         elif self._mode == 3 or self._mode == 4 or self._mode == 5:
@@ -194,9 +197,13 @@ class LSTM_rater(nn.Module):
         super(LSTM_rater, self).__init__()
         # Batch size should be 1
         self.lstm_reviewer = nn.LSTM(in_ch, 100, batch_first=True, bias=True)
-        self.out_fc = nn.Linear(100, 2)
+
+        trans_encoder_layer = nn.TransformerEncoderLayer(d_model=in_ch, nhead=8, dim_feedforward=512, dropout=dropout)
+        self.embedding = nn.TransformerEncoder(trans_encoder_layer, num_layers=6)
+        self.pos_encoder = PositionalEncoding(d_model=in_ch)
+
         self.dropout = nn.Dropout(p=dropout)
-        self.out_fc = nn.Linear(in_ch, 2)
+        self.out_fc = nn.Linear(100, 2)
 
         # for playback
         self.play_back = []
@@ -235,54 +242,43 @@ class LSTM_rater(nn.Module):
         # required input size: (1 x C x S)
         num_slice = x.shape[-1]
 
+        # embed with transformer encoder
+        # input (1 x C x S), but pos_encoding request [S, 1, C]
+        embed = self.embedding(self.pos_encoder(x.permute(2, 0, 1)))
+        # embeded: (S, 1, C) -> (1, S, C)
+        embed = embed.permute(1, 0, 2)
+
         # Now start again from the middle
         play_back = []
-        hidden = None
-        iter_num = 0
-        consec_conf = 0
-        next_slice = 0
-        BREAK_FLAG = False
-        while not BREAK_FLAG:
-            # x: (1 x C x S) -> (1 x S x C)
-            o, hidden = self.lstm_reviewer(x.permute(0, 2, 1), hidden)
-            o = self.out_fc(o) # o: (1 x S x 2)
 
-            # `hidden` is the output from the last of the series, hidden: (1 x C)
-            # h = self.out_fc(self.dropout(hidden[0]))
+        # embeded: (1, S, C)
+        o, hidden = self.lstm_reviewer(embed)
+        o = self.out_fc(o) # o: (1 x S x 2)
 
-            # calculate consecutive +ve confidence
-            for i in range(num_slice):
-                if o[0, i, 1] > 0:
-                    consec_conf += 1
-                else:
-                    consec_conf = 0
+        # which slice has highest confidence
+        arg_max_index = torch.argmax(o[0, :, 1], dim=-1)
 
-                # if confidence is constantly larger than 0, and also the RNN has already read
-                # the whole stack once, break
-                if consec_conf > num_slice // 2 and iter_num >= 1:
-                    BREAK_FLAG = True
-                    break
-
-            # restrict number of runs else mem will run out quick.
-            if iter_num >= self.iter_limit:
-                BREAK_FLAG = True
-
-            if self.RECORD_ON:
-                # _: (1 x S x C), _: (1 x S x 3)
-                row = torch.cat([o.detach().cpu()[:, :i + 1], torch.Tensor(range(i + 1)).view(1, -1, 1)], dim=-1) # concat chans
-                play_back.append(row)
-            iter_num += 1
+        if self.RECORD_ON:
+            # _: (1 x S x C), _: (1 x S x 3)
+            row = torch.cat([o.detach().cpu(), torch.Tensor(range(num_slice)).view(1, -1, 1)], dim=-1) # concat chans
+            play_back.append(row)
 
         # output size: (1 x 2)
         if self.RECORD_ON:
             # concat along the slice dim
             self.play_back.append(torch.cat(play_back, dim=1))
-        return o.squeeze()[i].view(1, -1) # no need to deal with up or down afterwards
+        return o.squeeze()[arg_max_index].view(1, -1) # no need to deal with up or down afterwards
 
     def forward_stage_1(self, x: torch.Tensor):
-        r"""In this stage, just read every slices, output are max-pooled in main branch"""
+        r"""In this stage, just read every slices, output are max-pooled in main branch so mask is not needed."""
         # input (B x C x S), output (B x S x 2)
-        o, (h, c) = self.lstm_reviewer(x.permute(0, 2, 1))
+        # o, (h, c) = self.lstm_reviewer(x.permute(0, 2, 1))
+        # o = self.out_fc(o)
+
+        # input (B x C x S), but pos_encoding request [S, B, C]
+        embeded = self.embedding(self.pos_encoder(x.permute(2, 0, 1)))
+        # require input (B, S, C)
+        o, (h, c) = self.lstm_reviewer(embeded.permute(1, 0, 2))
         o = self.out_fc(o)
         return o[...,:2]
 

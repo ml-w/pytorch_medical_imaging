@@ -27,6 +27,9 @@ class rAIdiologistSolver(BinaryClassificationSolver):
             self._logger.warning(f"Env variable CUBLAS_WORKSPACE_CONFIG was not set properly, which may invalidate"
                                  f" deterministic behavior of LSTM.")
 
+        # Turn off record
+        self.get_net().RECORD_ON = False
+
     def create_lossfunction(self):
         self.lossfunction = ConfidenceBCELoss()
         self.lossfunction.conf_weight = self.solverparams_rai_conf_weight

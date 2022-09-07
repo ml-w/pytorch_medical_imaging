@@ -1,4 +1,5 @@
 import unittest
+from pytorch_model_summary import summary
 from pytorch_med_imaging.networks import *
 from pytorch_med_imaging.networks.specialized import *
 import torch
@@ -116,6 +117,13 @@ class Test3DNetworks(unittest.TestCase):
 
     def test_AttentionUNet(self):
         net = AttentionUNet(1, 2).cuda()
+        with torch.no_grad():
+            # in dim: (B x C x W x H)
+            out = net(self.sample_input[0].permute(3, 0, 1, 2))
+            self.assertEqual((30, 2, 128, 128), out.shape)
+
+    def test_DenseUNet(self):
+        net = DenseUNet2D(1, 2).cuda()
         with torch.no_grad():
             # in dim: (B x C x W x H)
             out = net(self.sample_input[0].permute(3, 0, 1, 2))
