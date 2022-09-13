@@ -4,6 +4,7 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 import torch
+import torch.nn as nn
 
 from .BinaryClassificationSolver import BinaryClassificationSolver
 from ..loss import ConfidenceBCELoss
@@ -30,21 +31,14 @@ class rAIdiologistSolver(BinaryClassificationSolver):
         # Turn off record
         self.get_net().RECORD_ON = False
 
-    def create_lossfunction(self):
-        self.lossfunction = ConfidenceBCELoss()
-        self.lossfunction.conf_weight = self.solverparams_rai_conf_weight
-
     def _load_default_attr(self, default_attr):
         _default_attr = {
             'solverparams_rai_fixed_mode': None,
-            'solverparams_rai_conf_weight': 0.2,
-            'solverparams_rai_conf_weight_scheduler': 'default',
             'solverparams_rai_pretrained_swran': ""
         }
         if isinstance(default_attr, dict):
             _default_attr.update(default_attr)
         super(rAIdiologistSolver, self)._load_default_attr(_default_attr)
-
 
     def _build_validation_df(self, g, res):
         r"""Tailored for rAIdiologist, model output were of shape (B x 3), where the first element is
@@ -105,23 +99,6 @@ class rAIdiologistSolver(BinaryClassificationSolver):
         super(rAIdiologistSolver, self)._epoch_callback(*args, **kwargs)
         current_epoch = self.plotter_dict.get('epoch_num', None)
         total_epoch = self.solverparams_num_of_epochs
-
-        if self._current_mode in (3, 4, 5):
-            # step conf loss function scheduler
-            if isinstance(self.lossfunction, ConfidenceBCELoss):
-                self._logger.info(f"Stepping conf loss using mode: {self.solverparams_rai_conf_weight_scheduler}")
-                if self.solverparams_rai_conf_weight_scheduler == 'default':
-                    if self.lossfunction.conf_factor == 0: # generally in mode 1 & 2, confidence is ignored
-                        self.lossfunction.conf_factor = 0.1
-                    self.lossfunction.conf_factor = min(self.lossfunction.conf_factor * 1.05, 0.8)
-                if self.solverparams_rai_conf_weight_scheduler == 'constant':
-                    self._logger.debug("Nothing was done.")
-                    return
-                self._logger.info(f"Updated conf loss: {self.lossfunction.conf_factor}")
-        elif self._current_mode in (1, 2):
-            # turn off confidence
-            if isinstance(self.lossfunction, ConfidenceBCELoss):
-                self.lossfunction.conf_factor = 0
 
     def solve_epoch(self, epoch_number):
         """

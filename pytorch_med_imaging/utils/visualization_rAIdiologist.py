@@ -24,6 +24,7 @@ def make_marked_slice(image: np.ndarray,
                       prediction: Union[np.ndarray, Iterable[float]],
                       slice_indices: Union[np.ndarray, Iterable[int]],
                       vert_line: Optional[int] = None,
+                      decision_point: Optional[int] = None,
                       imshow_kwargs: Optional[dict] = {}
                       ):
     r"""Make a 2D image where the input `image` is shown on it with a plot where `prediction` is the
@@ -38,6 +39,8 @@ def make_marked_slice(image: np.ndarray,
             A vector of the corresponding slices where the prediction were made.
         vert_line (Optional, int):
             If specified, a yellow verticle line will be draw indicating the slice position. Default to `None`.
+        decision_point (Optional, int):
+            If specified, a dot will be marked at the location of where the decision was made.
         imshow_kwargs (Optional, dict):
             If specified, the arguments will be forwarded to the `imshow` function for displaying the image.
 
@@ -71,7 +74,7 @@ def make_marked_slice(image: np.ndarray,
     ax_pred.axhline(0.5, 0, image.shape[-1], color='red', linewidth=ax_pred_linewidth)        # plot a line at 0 or 0.5
     if not vert_line is None:
         assert 0 <= vert_line < image.shape[-1], f"Wrong vert_line provided, got {vert_line}, but image shape " \
-                                                 f"is : {image.shape}"
+                                                 f"is : {image.shape}."
         ax_pred.axvline(x=vert_line, color='#0F0', linewidth=ax_pred_linewidth)
     ax_pred.set_position([.80, .05, .15, .1]) # x_start, y_start, x_length, y_length
 
@@ -92,6 +95,7 @@ def mark_image_stacks(image_3d: Union[torch.Tensor, np.ndarray],
                       indices: Union[np.ndarray, Iterable[int]],
                       trim_repeats: Optional[bool] = True,
                       verticle_lines: Optional[Iterable[int]] = None,
+                      decision_point: Optional[int] = None,
                       **kwargs):
     r"""Call `make_marked_slices` for all slices of the input image.
 
@@ -120,17 +124,18 @@ def mark_image_stacks(image_3d: Union[torch.Tensor, np.ndarray],
         indices = indices[:last_index + 1]
 
     if verticle_lines is None:
-        verts = range(image_3d.shape[-1])
+        verts = range(image_3d.shape[0] - 1)
     else:
         if len(verticle_lines) != image_3d.shape[-1]:
             msg = f"Specified verticle_lines is not the same as number of slice fed in: " \
                   f"{len(verticle_lines)} vs {image_3d.shape}"
             raise IndexError(msg)
         verts = verticle_lines
-    out_stack = np.stack([make_marked_slice(s, p, i, v) for s, p, i, v in zip(image_3d.transpose(2, 1, 0),
-                                                                              itertools.repeat(prediction),
-                                                                              itertools.repeat(indices),
-                                                                              verts)])
+    out_stack = np.stack([make_marked_slice(s, p, i, v, k) for s, p, i, v, k in zip(image_3d.transpose(2, 1, 0),
+                                                                                    itertools.repeat(prediction),
+                                                                                    itertools.repeat(indices),
+                                                                                    verts,
+                                                                                    itertools.repeat(decision_point))])
     return out_stack
 
 def marked_stack_2_gif(marked_stack: Union[torch.Tensor, np.ndarray],
@@ -199,7 +204,13 @@ def label_images_in_dir(img_src: Union[Path, str],
     for k in json_dat.keys():
         logger.info(f"Processing {k}")
         pred = np.asarray(json_dat[k])[..., 0].ravel()
-        indi = np.asarray(json_dat[k])[..., -1].ravel()
+        indi = np.asarray(json_dat[k])[..., -2].ravel()
+        try:
+            # decision points
+            decpt = np.asarray(json_dat[k])[..., -1].ravel()
+            decpt = int(indi[decpt])
+        except IndexError:
+            decpt = None
         _out_dir = out_dir.joinpath(f'{k}.gif')
         _im_dir = img_src.get_data_source(uids.index(k))
         p[k] = pool.apply_async(_wrap_mpi_mark_image_stacks, args=[_im_dir, pred, indi, _out_dir, kwargs])

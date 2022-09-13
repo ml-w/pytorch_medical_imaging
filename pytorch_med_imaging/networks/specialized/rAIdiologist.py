@@ -23,13 +23,14 @@ class rAIdiologist(nn.Module):
         self.RECORD_ON = record
         self.play_back = []
         # Create inception for 2D prediction
-        self.cnn = SlicewiseAttentionRAN(1, 1, exclude_fc=True, sigmoid_out=False)
+        self.cnn = SlicewiseAttentionRAN(1, 1, exclude_fc=True, sigmoid_out=True)
         self.dropout = nn.Dropout(p=dropout)
 
         # LSTM for
         # self.lstm_prefc = nn.Linear(2048, 512)
         self.lstm_prelayernorm = nn.LayerNorm(2048)
-        self.lstm_rater = LSTM_rater(2048, out_ch=out_ch, record=record, iter_limit=iter_limit, dropout=lstm_dropout)
+        self.lstm_rater = LSTM_rater(2048, out_ch=out_ch, embeded=128, record=record,
+                                     iter_limit=iter_limit, dropout=lstm_dropout)
 
         # Mode
         self.register_buffer('_mode', torch.IntTensor([1]))
@@ -101,11 +102,11 @@ class rAIdiologist(nn.Module):
         # input is x: (B x 1 x H x W x S) seg: (B x 1 x H x W x S)
         while x.dim() < 5:
             x = x.unsqueeze(0)
-        if seg is not None:
-            seg = seg.view_as(x)
+        if not seg is None:
+            raise DeprecationWarning("Focal mode is no longer available.")
 
         # compute non-zero slices from seg if it is not None
-        _tmp = seg if seg is not None else x
+        _tmp = x
         sum_slice = _tmp.sum(dim=[1, 2, 3]) # (B x S)
         # Raise error if everything is zero in any of the minibatch
         if 0 in list(sum_slice.sum(dim=[1])):
@@ -122,15 +123,6 @@ class rAIdiologist(nn.Module):
 
         x = self.cnn(x)     # Shape -> (B x 2048 x S)
         x = self.dropout(x)
-        if seg is not None: # zero out slices without segmentation for stage 1
-            bool_mat = torch.zeros_like(x, dtype=bool)
-            for i in nonzero_slices:
-                bot_slice = bot_slices[i]
-                top_slice = top_slices[i]
-                bool_mat[i,...,bot_slice:top_slice + 1] = True
-            x[~bool_mat] = 0
-            # reconstruct x afterward, note that bot-slices is not updated, don't use it after this point.
-            x, top_slices = self.reconstruct_tensor(x, bot_slices, top_slices)
 
         while x.dim() < 3:
             x = x.unsqueeze(0)
@@ -178,36 +170,6 @@ class rAIdiologist(nn.Module):
         else:
             return self.forward_(*args)
 
-    @staticmethod
-    def reconstruct_tensor(x: torch.Tensor,
-                           bot_slices: Iterable[int],
-                           top_slices: Iterable[int]) -> [torch.Tensor, Iterable[int]]:
-        r"""
-        Reconstruct x such that the slice dimension starts from non-zero slice.
-        Args:
-            x (torch.Tensor):
-                Dimension should be (B x C x S)
-            bot_slices (list of int):
-                Starts with these indices in the reconstructed x.
-            top_slices (list of int):
-                End with these indices in the reconstructed x.
-        Returns:
-            new_x, new_top_slices
-        """
-        assert x.shape[1]
-        max_length = max([b - a for a, b in zip(bot_slices, top_slices)])
-        o = []
-        new_top_slices = []
-        for i in range(x.shape[0]): # iterate each element in the batch
-            non_zeros_len = top_slices[i] - bot_slices[i]
-            new_top_slices.append(non_zeros_len - 1)
-            pad = (0, max_length - non_zeros_len) # pad the last dim
-            o.append(torch.nn.functional.pad(torch.narrow(x[i], dim=1, start=bot_slices[i], length=non_zeros_len),
-                                             pad, "constant", 0))
-
-        new_x = torch.stack(o, dim=0)
-        return new_x, new_top_slices
-
 
 class LSTM_rater(nn.Module):
     r"""This LSTM rater receives inputs as a sequence of deep features extracted from each slice. This module has two
@@ -228,7 +190,7 @@ class LSTM_rater(nn.Module):
         # Batch size should be 1
         self.lstm_reviewer = nn.LSTM(in_ch, embeded, batch_first=True, bias=True)
 
-        trans_encoder_layer = nn.TransformerEncoderLayer(d_model=in_ch, nhead=8, dim_feedforward=512, dropout=dropout)
+        trans_encoder_layer = nn.TransformerEncoderLayer(d_model=in_ch, nhead=4, dim_feedforward=embeded, dropout=dropout)
         self.embedding = nn.TransformerEncoder(trans_encoder_layer, num_layers=6)
         self.pos_encoder = PositionalEncoding(d_model=in_ch)
 
@@ -284,7 +246,7 @@ class LSTM_rater(nn.Module):
         if self.RECORD_ON:
             # _: (1 x S x C), _: (1 x S x 2)
             row = torch.cat([o.detach().cpu(), torch.Tensor(range(num_slice)).view(1, -1, 1).expand_as(o)], dim=-1) # concat chans
-            self.play_back.append(torch.cat(play_back, dim=1))
+            self.play_back.append(row)
         return o # no need to deal with up or down afterwards
 
     def clean_playback(self):

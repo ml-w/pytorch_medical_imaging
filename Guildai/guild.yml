@@ -68,6 +68,28 @@
           target-type: 'copy'
           fail-if-empty: 'yes'
 
+    train_rAI:
+      description: Train a model.
+      main: pytorch_med_imaging.main
+      flags:
+        $include: default-flags
+      sourcecode:
+        - exclude:
+            dir: 'Backup'
+      output-scalars:
+        training/loss: 'EpochLoss: (\value)'
+        accuracy: 'ACC: (\value)'
+        training/validation_loss: 'VAL: (\value)'
+        step: 'Epoch (\step)'
+        training/step_lr: 'LR: (\value)'
+      requires:
+        - default
+        - file: '../Backup'
+          select: 'BM_rAIPretrain_.*'
+          target-path: 'Backup'
+          target-type: 'copy'
+          fail-if-empty: 'yes'
+
     train_looped:
       description: Train a model in a looped fashion. Suitable when the model needs a recipe of hyperparameters.
       main: pytorch_med_imaging.main
@@ -78,7 +100,7 @@
             dir: 'Backup'
       output-scalars:
         training/loss: 'EpochLoss: (\value)'
-        accuracy: 'ACC: (\value)'
+        ACC: 'ACC: (\value)'
         training/validation_loss: 'VAL: (\value)'
         step: 'Epoch (\step)'
         training/step_lr: 'LR: (\value)'
@@ -174,6 +196,7 @@
       description:
         "This recipe requires two config files, one trains the SWRAN and the other train rAIdiologist."
       flags:
+        network: "rAIdiologist(1)"
         config: "{{rAI_config}}"
         config_stage0: '{{swran_config}}'
         fold_code: "B00"
@@ -184,15 +207,16 @@
       steps:
         - train        config=${config_stage0} epoch=200 debug=${debug} batch-size=${bs_swran} lr=1E-4
           override="(General,fold_code)=${fold_code}"
+#        - train_rAI config=${config} epoch=50  debug=${debug} batch-size=${bs_rnn} lr=1E-4
+#          override="(SolverParams,rAI_fixed_mode)=1;(General,fold_code)=${fold_code}" network=${network}
+#        - train_looped config=${config} epoch=50  debug=${debug} batch-size=${bs_cnn} lr=1E-4
+#          override="(SolverParams,rAI_fixed_mode)=2;(General,fold_code)=${fold_code}" network=${network}
         - train_looped config=${config} epoch=50  debug=${debug} batch-size=${bs_rnn} lr=1E-4
-          override="(SolverParams,rAI_fixed_mode)=1;(General,fold_code)=${fold_code}"
-        - train_looped config=${config} epoch=50  debug=${debug} batch-size=${bs_cnn} lr=1E-4
-          override="(SolverParams,rAI_fixed_mode)=2;(General,fold_code)=${fold_code}"
-        - train_looped config=${config} epoch=50  debug=${debug} batch-size=${bs_rnn} lr=1E-4
-          override="(SolverParams,rAI_fixed_mode)=3;(General,fold_code)=${fold_code}"
+          override="(SolverParams,rAI_fixed_mode)=3;(General,fold_code)=${fold_code}" network=${network}
         - train_looped config=${config} epoch=100 debug=${debug} batch-size=${bs_cnn} lr=1E-4
-          override="(SolverParams,rAI_fixed_mode)=4;(General,fold_code)=${fold_code}"
-        - validation   config=${config} debug=${debug} batch-size=${bs_rnn} override="(General,fold_code)=${fold_code}"
+          override="(SolverParams,rAI_fixed_mode)=4;(General,fold_code)=${fold_code}" network=${network}
+        - validation   config=${config} debug=${debug} batch-size=${bs_cnn} override="(General,fold_code)=${fold_code}"
+          network=${network}
 
 
     pipeline:

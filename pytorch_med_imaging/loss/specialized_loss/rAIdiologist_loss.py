@@ -5,7 +5,7 @@ __all__ = ['ConfidenceBCELoss']
 
 class ConfidenceBCELoss(nn.Module):
     def __init__(self, *args, conf_factor=0, **kwargs):
-        r"""Assumes input from model have not passed through sigmoid"""
+        r"""Assumes input from model have already passed through sigmoid"""
         super(ConfidenceBCELoss, self).__init__()
         self.base_loss = nn.BCELoss(*args, **kwargs, reduction='none')
         self.conf_factor = conf_factor

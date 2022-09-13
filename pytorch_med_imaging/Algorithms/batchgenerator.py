@@ -210,27 +210,29 @@ if __name__ == '__main__':
     from pytorch_med_imaging.med_img_dataset import ImageDataSet
     from pathlib import Path
 
-    table_dir = Path('../../NPC_Segmentation/99.Testing/Screening_Segmentation/v1_seg-datasheet.csv')
-    table = pd.read_csv(table_dir.__str__(), index_col='Study Number')
-    data_dir = Path('../../NPC_Segmentation/60.Large-Study/v1-All-Data/Normalized_2/T2WFS_TRA/01.NyulNormalized')
-    out_file_dir = Path('../../NPC_Segmentation/99.Testing/Screening_Segmentation/')
+    # table_dir = Path('../../NPC_Segmentation/99.Testing/Screening_Segmentation/v1_seg-datasheet.csv')
+    # table = pd.read_csv(table_dir.__str__(), index_col='Study Number')
+    # data_dir = Path('../../NPC_Segmentation/60.Large-Study/v1-All-Data/Normalized_2/T2WFS_TRA/01.NyulNormalized')
+    # out_file_dir = Path('../../NPC_Segmentation/99.Testing/Screening_Segmentation/')
+    data_dir = Path("../../SCC/10.Pilot_Study/Normed_Images/NyulNormalizer")
+    out_file_dir = Path("../../SCC/99.Testing/Pilot")
 
 
-    regex = r"^[a-zA-Z]{0,3}[0-9]+"
+    regex = r"^[0-9]+"
     images = ImageDataSet(data_dir.__str__(), verbose=True, idGlobber=regex)
-    im_ids =images.get_unique_IDs("^(P|T|NPC|RHO|K)?[0-9]+")
+    im_ids =images.get_unique_IDs(regex)
 
-    # Check if all images are available
-    for i in table.index:
-        if i not in im_ids:
-            print(f"Dropping: {i}")
-            table.drop(i, axis=0, inplace=True)
+    # # Check if all images are available
+    # for i in table.index:
+    #     if i not in im_ids:
+    #         print(f"Dropping: {i}")
+    #         table.drop(i, axis=0, inplace=True)
 
-    GenerateTestBatch(table.index,
+    GenerateTestBatch(images.get_unique_IDs(),
                       5,
                       out_file_dir.__str__(),
-                      stratification_class=table['Tstage'],
-                      validation=len(table) // 10,
+                      # stratification_class=table['Tstage'],
+                      validation=len(images) // 10,
                       prefix='B'
                       )
 
