@@ -12,10 +12,12 @@ class DataLabel(PMIDataBase):
         if isinstance(data_table, (str, Path)):
             _p = Path(data_table)
             if _p.suffix == '.csv':
-                data_table = pd.read_csv(str(data_table), index_col=0, **kwargs)
+                data_table = pd.read_csv(str(data_table), index_col=[0], header=[0], **kwargs)
             elif _p.suffix == '.xlsx':
-                data_table = pd.read_excel(str(data_table), index_col=0, **kwargs)
+                data_table = pd.read_excel(str(data_table), index_col=[0], header=[0], **kwargs)
         assert isinstance(data_table, pd.DataFrame)
+        if not data_table.index.is_unique:
+            data_table
 
 
         # Convert to tensor

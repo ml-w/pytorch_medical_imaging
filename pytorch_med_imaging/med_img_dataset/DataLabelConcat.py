@@ -3,9 +3,7 @@ import pandas as pd
 from pathlib import Path
 from .PMIDataBase import PMIDataBase
 from .DataLabel import DataLabel
-from typing import Optional, Union, Iterable, Type
-
-__all__ = ['DataLabelConcat']
+from typing import Optional, Union, Iterable, Type, Any
 
 class DataLabelConcat(DataLabel):
     def __init__(self,
@@ -32,10 +30,26 @@ class DataLabelConcat(DataLabel):
         self.dtype = dtype
 
         self._deliminator = config.get('deliminator', ' ')
+        self._reconstruct_data_table()
 
-    def _concat(self, target):
+    def _reconstruct_data_table(self):
+        r""""""
+        _df = self._data_table.copy()
+        rows = {}
+        for key, row in _df.groupby(level=0):
+            rows[key] = [self._concat(row[col]) for col in row]
+        self._data_table = pd.DataFrame(data=rows.values(), index=rows.keys(), columns=_df.columns)
+        self._data_table.index.set_names = _df.index.names
+
+    def _concat(self, target) -> Any:
+        r"""Type return is same as self.dtype"""
         if self.dtype == str:
-            return self._deliminator.join([r.rstrip() for r in target])
+            if len(target) > 1 and not isinstance(target, str):
+                return self._deliminator.join([r.rstrip() for r in target])
+            elif len(target) == 1 and isinstance(target, pd.Series):
+                return target.item()
+            else:
+                return target
         elif self.dtype == int:
             return [int(o) for o in out]
         else:
