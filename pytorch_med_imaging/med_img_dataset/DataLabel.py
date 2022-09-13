@@ -4,13 +4,17 @@ from pathlib import Path
 from .PMIDataBase import PMIDataBase
 
 class DataLabel(PMIDataBase):
-    def __init__(self, data_table):
+    def __init__(self, data_table, **kwargs):
         """
         Datasheet should b arrange with rows of values
         """
         super(DataLabel, self).__init__()
         if isinstance(data_table, (str, Path)):
-            data_table = pd.read_csv(str(data_table), index_col=0)
+            _p = Path(data_table)
+            if _p.suffix == '.csv':
+                data_table = pd.read_csv(str(data_table), index_col=0, **kwargs)
+            elif _p.suffix == '.xlsx':
+                data_table = pd.read_excel(str(data_table), index_col=0, **kwargs)
         assert isinstance(data_table, pd.DataFrame)
 
 
