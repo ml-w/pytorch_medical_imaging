@@ -56,7 +56,8 @@ setup(
             'pmi-match_dimension = pytorch_med_imaging.scripts.match_dimension:console_entry',
             'pmi-make_masks = pytorch_med_imaging.scripts.make_masks:console_entry',
             'pmi-labels_remap = pytorch_med_imaging.scripts.preprocessing_labelmaps:remap_label',
-            'pmi-labels_statistic = pytorch_med_imaging.scripts.preprocessing_labelmaps:pmi_label_statistics'
+            'pmi-labels_statistic = pytorch_med_imaging.scripts.preprocessing_labelmaps:pmi_label_statistics',
+            'pmi-gen_batch = pytorch_med_imaging.scripts.gen_batch:console_entry'
         ]
     },
     # scripts = scripts,
