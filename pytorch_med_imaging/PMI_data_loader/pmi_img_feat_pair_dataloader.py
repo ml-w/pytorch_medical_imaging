@@ -15,15 +15,23 @@ class PMIImageFeaturePair(PMIImageDataLoader):
         * Image classifications
         * Image to coordinates
 
+    Additional attributes can be set using LoaderParams.
+
     Attributes:
         regex (str, Optional):
             Filter for loading files. See :class:`ImageDataSet`
         idlist (str or list, Optional):
             Filter for loading files. See :class:`ImageDataSet`
-        augmentation (int):
-            If `_augmentation` > 0, :class:`ImageDataSetAugment` will be used instead.
-        load_by_slice (int):
-            If `_load_by_slice` > -1, images volumes are loaded slice by slice along the axis specified.
+        excel_sheetname (str, Optional):
+            Name of the sheet. Only work if input ends with xlsx. Default to None.
+        net_in_colname (str, Optional):
+            If this is specified, the feature loaded from this datasheet is input to the network as one of the
+            attribute of the :class:`torchio.Subject`. Default to None.
+        lossfunc_in_colname (str, Optional):
+            Specify this to extract a column for inputting as ground-truth in loss function. Default to None.
+
+
+
 
     Loader_Params:
         excel_sheetname (Optional):
