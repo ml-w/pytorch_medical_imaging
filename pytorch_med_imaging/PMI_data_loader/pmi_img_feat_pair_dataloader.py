@@ -63,7 +63,7 @@ class PMIImageFeaturePair(PMIImageDataLoader):
         default_attr = {
             'excel_sheetname': None,        # If the excel has multiple sheets
             'net_in_colname': None,         # Name(s) of the column(s) to input into the network
-            'lossfunc_in_colname': None,    # Name(s) of the column(s) to input into the loss function
+            'lossfunc_in_colname': "",    # Name(s) of the column(s) to input into the loss function
         }
         self._load_default_attr(default_attr)
 
@@ -81,7 +81,7 @@ class PMIImageFeaturePair(PMIImageDataLoader):
         gt_dat = self._load_gt_dat()
 
         # Load selected columns only
-        if not self.lossfunc_in_colname is None:
+        if not self.lossfunc_in_colname in (None, ""):
             self._logger.info("Selecting target column: {}".format(self.lossfunc_in_colname))
             gt_dat.set_target_column(self.lossfunc_in_colname)
         gt_dat.map_to_data(img_out)
