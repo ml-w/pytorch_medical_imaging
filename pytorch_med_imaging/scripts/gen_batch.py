@@ -1,5 +1,6 @@
 from ..Algorithms.batchgenerator import *
 import argparse
+import pandas as pd
 
 def console_entry(raw_args=None):
     parser = argparse.ArgumentParser()
@@ -9,6 +10,8 @@ def console_entry(raw_args=None):
                         help='Output directory to folds')
     parser.add_argument('-g', '--idglobber', action='store', default=None, dest='idglobber',
                         help='If a directory holding nii files is provided ')
+    parser.add_argument('-t', '--validation', action='store', default=None, type=float,
+                        help="Set validation percentage.")
     parser.add_argument('-n', '--num-workers', action='store', type=int, default=None,
                         help="Specify number of workers. If not specified, use all CPU cores.")
     parser.add_argument('-m', '--num-of-folds', action='store', type=int, required=True,
@@ -24,12 +27,23 @@ def console_entry(raw_args=None):
 
     with MNTSLogger('./default.log', logger_name='dicom2nii', verbose=True, keep_file=a.log) as logger:
         logger.info("Recieve argumetns: {}".format(a))
-        dicom2nii(a, logger)
+
+        # if input is excel or csv
+        input_dir = Path(a.input)
+        output_dir = Path(a.output)
+        if input_dir.suffix in ('csv', 'xlsx'):
+            # take first column as ids
+            if input_dir.suffix == 'csv':
+                table = pd.read_csv(str(input_dir.resolve()), index_col=0)
+            else:
+                table = pd.read_excel(str(inptu_dir.resolve()), index_col=0)
+        else:
+            raise AttributeError("Only able to process csv or excel files currently.")
 
         GenerateTestBatch(table.index,
                           a.num_of_folds,
                           out_file_dir.__str__(),
-                          stratification_class=table['Tstage'],
+                          stratification_class=table[a.stratification],
                           validation=len(table) // 10,
-                          prefix='B'
+                          prefix=a.prefix
                           )
