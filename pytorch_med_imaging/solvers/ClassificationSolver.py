@@ -60,6 +60,7 @@ class ClassificationSolver(SolverBase):
         if not self.solverparams_ordinal_class:
             self.lossfunction = nn.CrossEntropyLoss(weight=loss_init_weights) #TODO: Allow custom loss function
         else:
+            self._logger.info("Using ordinal classification mode.")
             self.lossfunction = nn.BCEWithLogitsLoss()
 
     def _feed_forward(self, *args):
@@ -111,7 +112,9 @@ class ClassificationSolver(SolverBase):
             num_chan = out.shape[1]
             new_g = torch.zeros([num_batch, num_chan], dtype=torch.long)
             for i in range(num_batch):
-                new_g[i, 0:g[i]+1] = 1
+                if g[i] == 0:
+                    continue
+                new_g[i, 0:g[i]] = 1
             new_g = self._match_type_with_network(new_g)
             loss = self.lossfunction(out, new_g)
         else:
@@ -174,4 +177,4 @@ class ClassificationSolver(SolverBase):
             so on ...
 
         """
-        return (pred > 0.5).cumprod(dim=1).sum(dim=1) - 1
+        return (pred > 0.5).cumprod(dim=1).sum(dim=1)
