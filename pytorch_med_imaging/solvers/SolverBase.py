@@ -271,7 +271,7 @@ class SolverBase(object):
         # Gradient accumulation
         if self.solverparams_accumulate_grad > 0:
             self._accumulated_steps += 1
-            _loss = loss / self.solverparams_accumulate_grad
+            _loss = loss / float(self.solverparams_accumulate_grad)
             _loss.backward()
             loss.detach_()
             if self._accumulated_steps >= self.solverparams_accumulate_grad:

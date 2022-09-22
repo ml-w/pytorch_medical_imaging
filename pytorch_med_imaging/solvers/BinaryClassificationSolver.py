@@ -76,9 +76,7 @@ class BinaryClassificationSolver(ClassificationSolver):
                 # Decision were made by checking whether value is > 0.5 after sigmoid
                 dics.append(dic.cpu())
                 gts.append(g.cpu())
-
                 validation_loss.append(loss.item())
-
                 # tqdm.write(str(torch.stack([torch.stack([a, b, c]) for a, b, c, in zip(dic, torch.sigmoid(res), g)])))
                 del dic, s, g, _df
 

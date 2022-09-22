@@ -34,11 +34,18 @@ class rAIdiologistSolver(BinaryClassificationSolver):
     def _load_default_attr(self, default_attr):
         _default_attr = {
             'solverparams_rai_fixed_mode': None,
-            'solverparams_rai_pretrained_swran': ""
+            'solverparams_rai_pretrained_swran': "",
+            'solverparams_rai_classification': False
         }
         if isinstance(default_attr, dict):
             _default_attr.update(default_attr)
         super(rAIdiologistSolver, self)._load_default_attr(_default_attr)
+
+    def create_lossfunction(self):
+        if not self.solverparams_rai_classification:
+            super(rAIdiologistSolver, self).create_lossfunction()
+        else:
+            super(BinaryClassificationSolver, self).create_lossfunction()
 
     def _build_validation_df(self, g, res):
         r"""Tailored for rAIdiologist, model output were of shape (B x 3), where the first element is
@@ -138,3 +145,15 @@ class rAIdiologistSolver(BinaryClassificationSolver):
         self._last_val_loss = self.validation()
         self._epoch_callback()
         self.decay_optimizer(epoch_loss)
+
+    def validation(self):
+        if not self.solverparams_rai_classification:
+            super(rAIdiologistSolver, self).validation()
+        else:
+            super(BinaryClassificationSolver, self).validation()
+
+    def _loss_eval(self, *args):
+        if not self.solverparams_rai_classification:
+            return super(rAIdiologistSolver, self)._loss_eval(*args)
+        else:
+            return super(BinaryClassificationSolver, self)._loss_eval(*args)
