@@ -1,4 +1,9 @@
-r"""Directly copied from https://github.com/EthanRosenthal/spacecutter/blob/master/spacecutter/losses.py"""
+r"""Directly copied from https://github.com/EthanRosenthal/spacecutter/blob/master/spacecutter/losses.py
+No particularly useful with the following problem:
+- The initialization of cutting points are linear but the prediction by cumulative link is not.
+- Very easilly trapped by all X situation.
+- The cutting points learning rate is too slow, probably need to scale it up by a factor of 10 for it to be useful.
+"""
 
 import numpy as np
 import torch
@@ -60,6 +65,8 @@ def cumulative_link_loss(y_pred: torch.Tensor, y_true: torch.Tensor,
     -------
     loss: torch.Tensor
     """
+    if y_true.dim() == 1:
+        y_true = y_true.unsqueeze(1)
     eps = 1e-15
     likelihoods = torch.clamp(torch.gather(y_pred, 1, y_true), eps, 1 - eps)
     neg_log_likelihood = -torch.log(likelihoods)
