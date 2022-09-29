@@ -4,9 +4,10 @@ import torch.nn.functional as F
 from typing import Union, Optional
 from ..layers import ResidualBlock3d, DoubleConv3d, Conv3d
 from ..AttentionResidual import AttentionModule_Modified
+from ..third_party_nets.spacecutter import LogisticCumulativeLink
 
 
-__all__ = ['SlicewiseAttentionRAN', 'AttentionRAN_25D']
+__all__ = ['SlicewiseAttentionRAN', 'AttentionRAN_25D', 'OrdinalSlicewiseAttentionRAN', 'AttentionRAN_25D_MSE']
 
 class SlicewiseAttentionRAN(nn.Module):
     r"""
@@ -28,6 +29,13 @@ class SlicewiseAttentionRAN(nn.Module):
             If `True`, the output FC layer would be excluded.
 
     """
+    _strats_dict = {
+        'max': 0,
+        'min': 1,
+        'mean': 2,
+        'avg': 2,
+        'attn': 3,
+    }
     def __init__(self,
                  in_ch: int,
                  out_ch: int,
@@ -35,7 +43,9 @@ class SlicewiseAttentionRAN(nn.Module):
                  save_mask: Optional[bool] = False,
                  save_weight: Optional[bool] = False,
                  exclude_fc: Optional[bool] = False,
-                 sigmoid_out: Optional[bool] = False):
+                 sigmoid_out: Optional[bool] = False,
+                 reduce_strats: Optional[str] = 'max'):
+
         super(SlicewiseAttentionRAN, self).__init__()
 
         self.save_weight=save_weight
@@ -69,27 +79,29 @@ class SlicewiseAttentionRAN(nn.Module):
             nn.Linear(2048, out_ch),
         )
 
+        # Reduce strategy
+        if reduce_strats not in self._strats_dict:
+            raise AttributeError("Reduce strategy is incorrect.")
+        self.register_buffer('reduce_strats', torch.Tensor([self._strats_dict[reduce_strats]]))
+
     def forward(self, x):
+        r"""Expect input (B x in_ch x H x W x S), output (B x out_ch)"""
+        B = x.shape[0]
         while x.dim() < 5:
             x = x.unsqueeze(0)
         x = self.in_conv1(x)
 
 
         # Construct slice weight
-        x_w = self.in_sw(x).squeeze()
+        x_w = F.softmax(self.in_sw(x).view(B, -1), dim=1)
         if self.save_weight:
             self.x_w = x_w.data.cpu()
 
         # Permute the axial dimension to the last
-        x = F.max_pool3d(x, [2, 2, 1], stride=[2, 2, 1]).permute([1, 2, 3, 0, 4])
-        x_shape = x.shape
-        new_shape = list(x_shape[:3]) + [x_shape[-2] * x_shape[-1]]
-        x = x.reshape(new_shape)
-
-        x = x * x_w.view([-1]).expand_as(x)
+        x = F.max_pool3d(x, [2, 2, 1], stride=[2, 2, 1])
+        x = x * x_w.view([x.shape[0], 1, 1, 1, -1]).expand_as(x)
 
         # Resume dimension
-        x = x.view(x_shape).permute([3, 0, 1, 2, 4])
         x = self.in_conv2(x)
 
         x = self.att1(x)
@@ -99,14 +111,25 @@ class SlicewiseAttentionRAN(nn.Module):
         x = self.att3(x)
 
         x = self.out_conv1(x)
-        x = F.max_pool3d(x, kernel_size=list(x.shape[-3:-1]) + [1]).squeeze()
+        if self.reduce_strats == 0:
+            x = F.adaptive_max_pool3d(x, [1, 1, None]).squeeze()
+        else:
+            x = F.adaptive_avg_pool3d(x, [1, 1, None]).squeeze()
 
         if x.dim() < 3:
             x = x.unsqueeze(0)
 
         if not self.exclude_top:
             # Get best prediction across the slices
-            x = x.max(dim=-1).values
+            if self.reduce_strats == 0:
+                x = x.max(dim=-1).values
+            elif self.reduce_strats == 1:
+                x = x.min(dim=-1).values
+            elif self.reduce_strats == 2:
+                x = x.mean(dim=-1)
+            elif self.reduce_strats == 3:
+                x = x * x_w.view([x.shape[0], 1, -1]).expand_as(x)
+                x = x.mean(dim=-1)
 
             x = self.out_fc1(x)
             while x.dim() < 2:
@@ -151,7 +174,8 @@ class AttentionRAN_25D(nn.Module):
                  in_ch: int,
                  out_ch: int,
                  first_conv_ch: Optional[int] = 64,
-                 save_mask: Optional[bool] = False):
+                 save_mask: Optional[bool] = False,
+                 sigmoid_out: Optional[bool] = True):
         super(AttentionRAN_25D, self).__init__()
 
         self.in_conv1 = Conv3d(in_ch, first_conv_ch, kern_size=[3, 3, 1], stride=[1, 1, 1], padding=[1, 1, 0])
@@ -160,17 +184,22 @@ class AttentionRAN_25D(nn.Module):
         # RAN
         self.in_conv2 = ResidualBlock3d(first_conv_ch, 256)
         self.att1 = AttentionModule_Modified(256, 256, save_mask=save_mask)
-        self.r1 = ResidualBlock3d(256, 512, p=0.1)
+        self.r1 = ResidualBlock3d(256, 512, p=0.2)
         self.att2 = AttentionModule_Modified(512, 512, save_mask=save_mask)
-        self.r2 = ResidualBlock3d(512, 1024, p=0.1)
+        self.r2 = ResidualBlock3d(512, 1024, p=0.2)
         self.att3 = AttentionModule_Modified(1024, 1024, save_mask=save_mask)
-        self.out_conv1 = ResidualBlock3d(1024, 2048, p=0.1)
+        self.out_conv1 = ResidualBlock3d(1024, 2048, p=0.2)
+        self.sigmoid_out = sigmoid_out
+
+        # slice down
+        self.slice_down = nn.Conv1d(out_ch, out_ch, kernel_size=5)
 
         # Output layer
         self.out_fc1 = nn.Sequential(
             nn.Linear(2048, 1024),
-            nn.BatchNorm1d(1024),
-            nn.ReLU()
+            # nn.BatchNorm1d(1024),
+            # nn.LayerNorm(1024),
+            nn.LeakyReLU()
         )
         self.out_fc2 = nn.Linear(1024, out_ch)
 
@@ -190,17 +219,89 @@ class AttentionRAN_25D(nn.Module):
         x = self.att3(x)
 
         x = self.out_conv1(x)
-        x = F.max_pool3d(x, kernel_size=list(x.shape[-3:-1]) + [1]).squeeze()
+        x = F.adaptive_max_pool3d(x, [1, 1, None]).squeeze() # (B x 2048 x 1 x 1 x S)
 
         if x.dim() < 3:
             x = x.unsqueeze(0)
 
-        x = x.max(dim=-1).values
+        # Original way to reduce the slice dimension
+        # x = x.max(dim=-1).values
 
-        x = self.out_fc1(x)
-        x = self.out_fc2(x)
+        x = self.out_fc1(x.view([x.shape[0], x.shape[1], x.shape[-1]]).permute(0, 2, 1)) # (B x S x 2048)
+        x = self.out_fc2(x).permute(0, 2, 1) # (B x out_ch x S)
+        while x.shape[-1]>= 5:
+            x = self.slice_down(x)
+        x = x.mean(dim=-1)
         while x.dim() < 2:
             x = x.unsqueeze(0)
-        if x.shape[-1] >= 2:
+        if self.sigmoid_out:
             x = torch.sigmoid(x)
         return x
+
+class OrdinalSlicewiseAttentionRAN(SlicewiseAttentionRAN):
+    def __init__(self,
+                 in_ch: int,
+                 out_ch: int,
+                 **kwargs):
+        super(OrdinalSlicewiseAttentionRAN, self).__init__(in_ch, out_ch, **kwargs)
+
+        # new output layer
+        self.LCL = LogisticCumulativeLink(num_classes=out_ch) # note this performs its own sigmoid
+        self.out_fc1 = nn.Linear(2048, 1)
+        self.sigmoid_out = False
+
+    def _batch_callback(self):
+        r"""Copied and translated from
+        https://github.com/EthanRosenthal/spacecutter/blob/master/spacecutter/callbacks.py"""
+        margin  = 0
+        min_val = -1.0e6
+        cutpoints = self.LCL.cutpoints.data
+        for i in range(cutpoints.shape[0] - 1):
+            cutpoints[i].clamp_(min_val,
+                                cutpoints[i + 1] - margin)
+
+    def forward(self, x):
+        x = super(OrdinalSlicewiseAttentionRAN, self).forward(x)
+        # scale the output to adapt for the initial range of the LCL layer
+        return self.LCL(x)
+
+class OriginalAttentionRAN_25D(AttentionRAN_25D):
+    def __init__(self,
+                 in_ch: int,
+                 out_ch: int,
+                 **kwargs):
+        super(OriginalAttentionRAN_25D, self).__init__(in_ch, out_ch, **kwargs)
+
+        # new output layer
+        self.LCL = LogisticCumulativeLink(num_classes=out_ch) # note this performs its own sigmoid
+        self.out_fc2 = nn.Linear(1024, 1)
+        self.slice_down = nn.Conv1d(1, 1, kernel_size=5)
+        self.sigmoid_out = False
+
+    def _batch_callback(self):
+        r"""Copied and translated from
+        https://github.com/EthanRosenthal/spacecutter/blob/master/spacecutter/callbacks.py"""
+        margin  = 0.1
+        min_val = -1.0e6
+        cutpoints = self.LCL.cutpoints.data
+        for i in range(cutpoints.shape[0] - 1):
+            cutpoints[i].clamp_(min_val,
+                                cutpoints[i + 1] - margin)
+
+    def forward(self, x):
+        return self.LCL(super(OriginalAttentionRAN_25D, self).forward(x))
+
+class AttentionRAN_25D_MSE(AttentionRAN_25D):
+    def __init__(self,
+                 in_ch,
+                 out_ch,
+                 val_range: list,
+                 **kwargs):
+        super(AttentionRAN_25D_MSE, self).__init__(in_ch, out_ch, **kwargs)
+        assert len(val_range) == 2
+        self.register_buffer('val_range', torch.Tensor(val_range))
+        self.sigmoid_out = True
+
+    def forward(self, x):
+        x = super(AttentionRAN_25D_MSE, self).forward(x)
+        return x * (self.val_range[1] - self.val_range[0]) + self.val_range[0]

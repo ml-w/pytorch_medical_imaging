@@ -63,6 +63,7 @@ class DataLabel(PMIDataBase):
         df = pd.read_csv(fname, **kwargs, index_col=0)
         df.index = df.index.astype('str')
         datalabel = DataLabel(df)
+        print(datalabel)
         return datalabel
 
     @staticmethod
@@ -122,11 +123,16 @@ class DataLabel(PMIDataBase):
             out = self._get_table.iloc[item]
         else:
             out = self._get_table.loc[item]
+        if len(out) == 1:
+                out = out.item()
+        else:
+                out = out.to_numpy()
 
         try:
             # if multiple rows are requested, a pandas dataframe object is directly returned
             return torch.tensor(out)
         except:
+            self._logger.info(f"Failed to convert to tensor {out}")
             return out
 
 

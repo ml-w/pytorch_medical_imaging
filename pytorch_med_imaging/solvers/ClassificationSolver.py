@@ -8,6 +8,7 @@ import torch
 import torch.nn as nn
 import numpy as np
 from tqdm import *
+from ..loss import CumulativeLinkLoss
 
 import pandas as pd
 
@@ -38,6 +39,7 @@ class ClassificationSolver(SolverBase):
             'solverparams_class_weights'    : None,
             'solverparams_decay_init_weight': 0,
             'solverparams_ordinal_class'    : False,
+            'solverparams_ordinal_mse'      : False
         }
         if isinstance(default_attr, dict):
             _default_attr.update(default_attr)
@@ -57,11 +59,14 @@ class ClassificationSolver(SolverBase):
             self._logger.warning("Weight convertion to tensor fails. Falling back!")
             loss_init_weights = None
 
-        if not self.solverparams_ordinal_class:
-            self.lossfunction = nn.CrossEntropyLoss(weight=loss_init_weights) #TODO: Allow custom loss function
-        else:
+        if self.solverparams_ordinal_class:
             self._logger.info("Using ordinal classification mode.")
-            self.lossfunction = nn.BCEWithLogitsLoss()
+            self.lossfunction = CumulativeLinkLoss(class_weights=loss_init_weights)
+        elif self.solverparams_ordinal_mse:
+            self._logger.info("Using ordinal mse mode.")
+            self.lossfunction = nn.SmoothL1Loss()
+        else:
+            self.lossfunction = nn.CrossEntropyLoss(weight=loss_init_weights) #TODO: Allow custom loss function
 
     def _feed_forward(self, *args):
         s, g = args
@@ -76,18 +81,32 @@ class ClassificationSolver(SolverBase):
         else:
             out = self.net.forward(s)
 
+        self._logger.debug(f"s: {s.shape} out: {out.shape}")
         # Print step information
-        _df = pd.DataFrame.from_dict({f'res_{d}': list(out[:,d].cpu().detach().numpy())
-                                      for d in range(out.shape[-1])})
-        _df_gt = pd.DataFrame.from_dict({'gt': list(g.flatten().cpu().detach().numpy())})
-        _df = pd.concat([_df, _df_gt], axis=1)
-        if self.solverparams_ordinal_class:
-            _df['Predicted'] = self._pred2label4ordinal(torch.sigmoid(out.squeeze())).cpu().detach().numpy()
-        else:
-            _df['Predicted'] = torch.argmax(out.squeeze(), dim=1).cpu().detach().numpy()
+        _df, _ = self._build_validation_df(g, out)
         self._logger.debug('\n' + _df.to_string())
         del _df
         return out
+
+    def _build_validation_df(self, g, res):
+        _df = pd.DataFrame.from_dict({f'res_{d}': list(res[:, d].cpu().detach().numpy())
+                                      for d in range(res.shape[-1])})
+        if not self.solverparams_ordinal_mse:
+            if g.dim() == 1:
+                _df_gt = pd.DataFrame.from_dict({'gt': list(g.flatten().cpu().detach().numpy())})
+                _df = pd.concat([_df, _df_gt], axis=1)
+                _df['predicted'] = torch.argmax(res.squeeze(), dim=1).cpu().detach().numpy()
+                _df['eval'] = (_df['predicted'] == _df['gt']).replace({True: 'Correct', False: 'Wrong'})
+            else:
+                _df_gt = pd.DataFrame.from_dict({f'gt_{d}': list(g[:, d].cpu().detach().numpy())
+                                                 for d in range(g.shape[-1])})
+                _df = pd.concat([_df, _df_gt], axis=1)
+        else:
+            _df_gt = pd.DataFrame.from_dict({'gt': list(g.flatten().cpu().detach().numpy())})
+            _df = pd.concat([_df, _df_gt], axis=1)
+            _df['predicted'] = torch.round(res.squeeze()).cpu().detach().long().numpy()
+            _df['eval'] = (_df['predicted'] == _df['gt']).replace({True: 'Correct', False: 'Wrong'})
+        return _df, _df['predicted']
 
     def _loss_eval(self, *args):
         out, s, g = args
@@ -97,29 +116,11 @@ class ClassificationSolver(SolverBase):
             g = self._match_type_with_network(g)
 
         out = out.squeeze() # Expect (B x C) where C is same as number of classes
-        g = g.squeeze().long()
+        if g.squeeze().dim() == 1 and not self.solverparams_ordinal_mse:
+            g = g.squeeze().long()
         self._logger.debug(f"Output size out: {out.shape} g: {g.shape}")
-        if self.solverparams_ordinal_class:
-            # g expected to be long labels with a single dimension where max value label equal to # output channels (B)
-            # encode g such that, for cases with max number of class = 5
-            #   0 = [0, 0, 0, 0, 0]
-            #   1 = [1, 0, 0, 0, 0]
-            #   2 = [1, 1, 0, 0, 0]
-            #   3 = [1, 1, 1, 0, 0]
-            #   4 = [1, 1, 1, 1, 0]
-            #   5 = [1, 1, 1, 1, 1]
-            num_batch = out.shape[0]
-            num_chan = out.shape[1]
-            new_g = torch.zeros([num_batch, num_chan], dtype=torch.long)
-            for i in range(num_batch):
-                if g[i] == 0:
-                    continue
-                new_g[i, 0:g[i]] = 1
-            new_g = self._match_type_with_network(new_g)
-            loss = self.lossfunction(out, new_g)
-        else:
-            # Cross entropy does not need any processing, just give the raw output
-            loss = self.lossfunction(out, g)
+        # Cross entropy does not need any processing, just give the raw output
+        loss = self.lossfunction(out, g)
         return loss
 
     def validation(self):
@@ -144,10 +145,10 @@ class ClassificationSolver(SolverBase):
                 while res.dim() < 2:
                     res = res.unsqueeze(0)
 
-                if self.solverparams_ordinal_class:
-                    dic = self._pred2label4ordinal(torch.sigmoid(res))
-                else:
+                if not self.solverparams_ordinal_mse:
                     dic = torch.argmax(torch.softmax(res, dim=1), dim=1)
+                else:
+                    dic = torch.round(res).long()
                 decisions.extend([guess == truth for guess, truth in zip(dic.tolist(), g.tolist())])
                 loss = self._loss_eval(res, s, g)
                 validation_loss.append(loss.item())
@@ -161,20 +162,11 @@ class ClassificationSolver(SolverBase):
         self.plotter_dict['scalars']['Performance/ACC'] = acc
         return validation_loss
 
-    def _build_validation_df(self, g, res):
-        chan = res.shape[-1] # chan should be equal to number of classes
-        _data =np.concatenate([res.view(-1, chan).data.cpu().numpy(), g.data.cpu().numpy()], axis=-1)
-        _df = pd.DataFrame(data=_data, columns=['res_%i'%i for i in range(chan)] + ['g'])
-        _df['Predicted'] = torch.argmax(res, dim=1).long().cpu()
-
-    @staticmethod
-    def _pred2label4ordinal(pred: torch.FloatTensor):
-        r"""Convert encoded predictions back to class
-            0 <- [0.1, 0.1, 0.1, 0.1, 0.1]
-            1 <- [0.9, 0.1, 0.1, 0.1, 0.1]
-            2 <- [0.8, 0.9, 0.1, 0.2, 0.1]
-            3 <- [0.6, 0.9, 0.7, 0.2, 0.1]
-            so on ...
-
-        """
-        return (pred > 0.5).cumprod(dim=1).sum(dim=1)
+    def _step_callback(self, s, g, out, loss, step_idx=None):
+        if hasattr(self.net, 'module'):
+            if hasattr(self.net.module, '_batch_callback'):
+                self.net.module._batch_callback()
+                self._logger.debug(f"LCL:{self.net.module.LCL.cutpoints}")
+        elif hasattr(self.net, '_batch_callback'):
+            self.net.module._batch_callback()
+            self._logger.debug(f"LCL:{self.net.module.LCL.cutpoints}")

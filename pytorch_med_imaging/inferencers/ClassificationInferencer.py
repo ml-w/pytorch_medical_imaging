@@ -3,6 +3,7 @@ from pathlib import Path
 from typing import Union, Optional, Iterable
 
 import numpy as np
+import pandas as pd
 import torch
 import torch.nn.functional as F
 from SimpleITK import GetImageFromArray, ReadImage, WriteImage
@@ -219,6 +220,10 @@ class ClassificationInferencer(InferencerBase):
         return dl
 
     def display_summary(self):
+        dl = pd.read_csv(self.output_dir, index_col=0)
+        n = len(dl)
+        tp = (dl['Truth_0'] == dl['Decision']).sum()
+        self._logger.info(f"ACC: {n * 100/ float(tp):.01f}%")
         return
 
     def _reshape_tensors(self,

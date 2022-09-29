@@ -20,7 +20,10 @@ class rAIdiologist_img2seq(nn.Module):
     max length or until a "<end>" token is generated.
     """
 
-    def __init__(self, out_ch, cnn_dropout=0.2, rnn_dropout=0.2):
+    def __init__(self, out_ch, cnn_dropout=0.2, rnn_dropout=0.2, pull_from_hub=None):
+        if not pull_from_hub is None:
+            tk = AutoTokenizer.from_pretrained(pull_from_hub)
+            out_ch = len(tk.vocab)
         super(rAIdiologist_img2seq, self).__init__()
         self.cnn = SlicewiseAttentionRAN(1, 1, exclude_fc=True, sigmoid_out=True)
         self.cnn_dropout = nn.Dropout(p=cnn_dropout)
