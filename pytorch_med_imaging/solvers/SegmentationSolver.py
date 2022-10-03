@@ -164,6 +164,8 @@ class SegmentationSolver(SolverBase):
             loss = self.lossfunction(out, g.long())
         else:
             # For other loss function, deal with the dimension yourselves
+            if g.dim() == 5 and g.shape[1] == 1:
+                g = g.squeeze()
             loss = self.lossfunction(out, g.long())
         return loss
 
