@@ -8,3 +8,5 @@ Backup
 *build
 Configs
 /.SynologyWorkingDirectory/
+Doc/html
+Doc/doctrees
