@@ -39,6 +39,8 @@ def console_entry(raw_args=None):
                         help="Set this to initiate the config with debug setting.")
     parser.add_argument('--debug-validation', action='store_true',
                         help="Set this to true to run validation direction. This also sets --debug to true.")
+    parser.add_argument('--validate-on-test-set', action='store_true',
+                        help="If specified, validation after each epoch will be done on the testing set.")
     parser.add_argument('--verbose', dest='verbose', action='store_true', default=False,
                         help="Print message to stdout.")
     parser.add_argument('--fold-code', action='store', default=None,

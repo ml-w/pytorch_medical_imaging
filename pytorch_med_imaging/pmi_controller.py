@@ -127,13 +127,20 @@ class PMIController(object):
             self._logger.error("Original error: {}".format(e))
             return
 
+        # If validation flags were set, create data loaders required for validation
         self.validation_FLAG=False
         if not self.filters_validation_id_list in (None , "") and self.general_plot_tb:
             self._logger.log_print_tqdm("Recieved validation parameters.")
             val_config = configparser.ConfigParser()
             val_config.read_dict(self.config)
             val_config.set('Filters', 're_suffix', self.filters_validation_re_suffix)
-            val_config.set('Filters', 'id_list', self.filters_validation_id_list)
+            if a is not None: # --validate-on-test-set option
+                if a.validate_on_test_set:
+                    val_config.set('Filters', 'id_list', self.filters_id_list)
+                    # This will trick pmi_data to load from .ini the testing row
+                    val_config.set('General', 'run_mode', 'inference')
+                else:
+                    val_config.set('Filters', 'id_list', self.filters_validation_id_list)
             val_config['Data']['input_dir']  = str(self.data_validation_input_dir)
             val_config['Data']['target_dir'] = str(self.data_validation_gt_dir)
             self.pmi_data_val = self.pmi_factory.produce_object(val_config)

@@ -20,6 +20,10 @@ class PMIDataFactory(object):
         """
         Use this to produce a dataset loader.
 
+        Attributes:
+            ('General','forece_train_data')
+                If this tag is True in config, this will load the training data regardless of other specifications.
+
         Args:
             config (configparser.ConfigParser):
                 This is the same as the config file you loaded in the main thread.
