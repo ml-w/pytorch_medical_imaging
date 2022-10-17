@@ -12,7 +12,8 @@ class LiNet3d(nn.Module):
                  first_conv_out_ch: int = 32,
                  decode_layers: int = 3,
                  fc_layers: int = 3 ,
-                 dropout: float = 0.2
+                 dropout: float = 0.2,
+                 use_layer_norm: bool = False,
                  ):
         super(LiNet3d, self).__init__()
 
@@ -22,7 +23,8 @@ class LiNet3d(nn.Module):
             'first_conv_out_ch': torch.Tensor([first_conv_out_ch]),
             'decode_layers': torch.Tensor([decode_layers]),
             'fc_layers': torch.Tensor([fc_layers]),
-            'drop_out': torch.Tensor([dropout])
+            'drop_out': torch.Tensor([dropout]),
+            'use_layer_norm': torch.Tensor([use_layer_norm])
         }
 
         for name in self._config:
@@ -35,11 +37,12 @@ class LiNet3d(nn.Module):
                          stride=[1, 2, 2], kern_size=[1, 3, 3], padding=[0, 1, 1], dropout=dropout)
             for i in range(decode_layers)
         ]
+        norm = nn.BatchNorm1d if self.use_layer_norm else nn.LayerNorm
         self.decode = nn.Sequential(*_decode_layers)
         _fcs = [
             nn.Sequential(
                 nn.Linear(2 ** decode_layers * first_conv_out_ch, 2 ** decode_layers * first_conv_out_ch),
-                nn.BatchNorm1d(2 ** decode_layers * first_conv_out_ch),
+                norm(2 ** decode_layers * first_conv_out_ch),
                 nn.ReLU(inplace=False)
             )\
             for i in range(fc_layers - 1)

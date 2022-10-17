@@ -72,7 +72,10 @@ class rAIdiologistInferencer(BinaryClassificationInferencer):
                                                           uids,
                                                           gt,
                                                           sig_out=False)
-        dl._data_table['Conf_0'] = out_tensor[..., 1]
+        try:
+            dl._data_table['Conf_0'] = out_tensor[..., 1]
+        except IndexError:
+            pass
         try:
             # Sorting must be done after assigning the conf vector because the order of out_tensor
             # is not indexed.

@@ -23,7 +23,7 @@ class rAIdiologist(nn.Module):
         self.RECORD_ON = record
         self.play_back = []
         # Create inception for 2D prediction
-        self.cnn = SlicewiseAttentionRAN(1, 1, exclude_fc=True, sigmoid_out=True)
+        self.cnn = SlicewiseAttentionRAN(1, 1, exclude_fc=True, sigmoid_out=False)
         self.dropout = nn.Dropout(p=dropout)
 
         # LSTM for

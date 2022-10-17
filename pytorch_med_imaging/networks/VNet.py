@@ -53,6 +53,7 @@ class VNet(nn.Module):
         super(VNet, self).__init__()
         self.residual = True
         self.depth = depth
+        self.min_dim = 2 ** depth
         start_ch = init_conv_out_ch
 
         # First conv
@@ -83,7 +84,7 @@ class VNet(nn.Module):
 
     def forward(self, x):
         assert x.dim() == 5, f"Input should be (B x C x H x W x D) but got: {x.shape}."
-        assert all([xx > 64 for xx in x.shape[2:]]), f"No dimension should be under 64, but got {x.shape}"
+        assert all([xx > self.min_dim for xx in x.shape[2:]]), f"No dimension should be under {self.min_dim}, but got {x.shape}"
 
         x = self.in_conv(x) + x
         short_cut = [x]

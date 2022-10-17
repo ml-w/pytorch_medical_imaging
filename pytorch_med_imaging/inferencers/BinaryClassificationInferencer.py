@@ -80,7 +80,12 @@ class BinaryClassificationInferencer(ClassificationInferencer):
             out_decisions[f'Prob_Class_{i}'] = out_tensor[:, i].data.cpu().tolist()
             out_decisions[f'Decision_{i}'] = out_decision[:, i].tolist()
             if gt is not None:
-                out_decisions[f'Truth_{i}'] = gt[:, i].tolist()
+                # if gt is one single column vector with same shape as out_decision
+                self._logger.error(f"fucking gt: {gt}")
+                if gt.shape[1] == out_tensor.shape[1]:
+                    out_decisions[f'Truth_{i}'] = gt[:, i].tolist()
+                else:
+                    out_decisions[f'Truth_{i}'] = gt.flatten().tolist()
                 self._TARGET_DATASET_EXIST_FLAG = True
             else:
                 self._TARGET_DATASET_EXIST_FLAG = False

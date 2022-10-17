@@ -210,7 +210,13 @@ class ClassificationInferencer(InferencerBase):
             out_decisions['Prob_Class_%s'%i] = out_tensor[:, i].data.cpu().tolist()
 
         if gt is not None:
-            out_decisions[f'Truth_{i}'] = gt.flatten().tolist()
+            # check gt dim, if dim == 2, assume (B x C)
+            if gt.dim() == 1:
+                gt = gt.unsqueeze(-1)
+
+            for j in range(gt.shape[1]):
+                out_decisions[f'Truth_{j}'] = gt[:, j].flatten().tolist()
+
             self._TARGET_DATASET_EXIST_FLAG = True
         else:
             self._TARGET_DATASET_EXIST_FLAG = False
@@ -222,8 +228,11 @@ class ClassificationInferencer(InferencerBase):
     def display_summary(self):
         dl = pd.read_csv(self.output_dir, index_col=0)
         n = len(dl)
-        tp = (dl['Truth_0'] == dl['Decision']).sum()
-        self._logger.info(f"ACC: {n * 100/ float(tp):.01f}%")
+        try:
+            tp = (dl['Truth_0'] == dl['Decision']).sum()
+            self._logger.info(f"ACC: {n * 100/ float(tp):.01f}%")
+        except KeyError:
+            pass
         return
 
     def _reshape_tensors(self,
