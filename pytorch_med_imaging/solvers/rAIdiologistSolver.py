@@ -54,7 +54,7 @@ class rAIdiologistSolver(BinaryClassificationSolver):
 
         # res: (B x C)/(B x 1), g: (B x 1)
         chan = res.shape[-1] # if chan > 1, there is a value for confidence
-        _data =np.concatenate([res.view(-1, chan).data.cpu().numpy(), g.data.cpu().numpy()], axis=-1)
+        _data =np.concatenate([res.view(-1, chan).data.cpu().numpy(), g.data.view(-1, 1).cpu().numpy()], axis=-1)
         _df = pd.DataFrame(data=_data, columns=['res_%i'%i for i in range(chan)] + ['g'])
         _df['Verify_wo_conf'] = (_df['res_0'] >= 0.5) == (_df['g'] > 0)
         _df['Verify_wo_conf'].replace({True: "Correct", False: "Wrong"}, inplace=True)
@@ -148,9 +148,9 @@ class rAIdiologistSolver(BinaryClassificationSolver):
 
     def validation(self):
         if not self.solverparams_rai_classification:
-            super(rAIdiologistSolver, self).validation()
+            return super(rAIdiologistSolver, self).validation()
         else:
-            super(BinaryClassificationSolver, self).validation()
+            return super(BinaryClassificationSolver, self).validation()
 
     def _loss_eval(self, *args):
         if not self.solverparams_rai_classification:
