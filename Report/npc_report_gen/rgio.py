@@ -33,8 +33,8 @@ def process_input(in_dir: Union[Path, str],
             # Get dicom files and copy to a temp directory
             _dicom_files = get_t2w_series_files(in_dir)
             with tempfile.TemporaryDirectory() as _temp_dicom_dir:
-                [shutil.copy2(d, _temp_dicom_dir.name) for d in _dicom_files]
-                dicom2nii(f"-i {_temp_dicom_dir.name} -o {str(out_dir)} -n {num_worker} -g '.*' "
+                [shutil.copy2(d, _temp_dicom_dir) for d in _dicom_files]
+                dicom2nii(f"-i {_temp_dicom_dir} -o {str(out_dir)} -n {num_worker} -g '.*' "
                           f"--dump-dicom-tags --use-patient-id".split())
             _dicom2nii_success = generate_id_path_map(out_dir.glob("*nii.gz"), idGlobber=idGlobber)
             available_ids.extend(_dicom2nii_success.keys())
@@ -138,8 +138,8 @@ def get_t2w_series_files(in_dir):
             logger._verbose = True
             logger.warning(f"More than one target sequence found, please choose from below the desired sequence...")
             logger.info('\n' + '\n\n'.join([f"[{i}]: \n {pprint.pformat(_f[0], indent=4)}" for i, _f in enumerate(_file_list)]))
-            # _choice = input(f"Choose sequence [0 to {len(_file_list) - 1}]: ")
-            _choice = 1
+            _choice = input(f"Choose sequence [0 to {len(_file_list) - 1}]: ")
+            # _choice = 1
             logger.debug(f"Chosen sequence: {_choice}")
             file_list = _file_list[int(_choice)][1]
             # resume
