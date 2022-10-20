@@ -113,9 +113,11 @@ class rAIdiologist(nn.Module):
             msg = f"An item in the mini-batch is completely empty or have no segmentation:\n" \
                   f"{sum_slice.sum(dim=[1])}"
             raise ArithmeticError(msg)
-        where_non0 = torch.argwhere(sum_slice != 0)
+        padding_mask = sum_slice != 0 # (B x S)
+        where_non0 = torch.argwhere(padding_mask)
         nonzero_slices = {i.cpu().item(): (where_non0[where_non0[:, 0]==i][:, 1].min().cpu().item(),
                                            where_non0[where_non0[:, 0]==i][:, 1].max().cpu().item()) for i in where_non0[:, 0]}
+
         # Calculate the loading bounds
         added_radius = 0
         bot_slices = [max(0, nonzero_slices[i][0] - added_radius) for i in range(len(nonzero_slices))]
@@ -129,18 +131,24 @@ class rAIdiologist(nn.Module):
 
         if self._mode == 1 or self._mode == 2:
             # o: (B x S x out_ch)
-            o = self.lstm_rater(self.lstm_prelayernorm(x.permute(0, 2, 1).contiguous()).permute(0, 2, 1)).contiguous()
+            o = self.lstm_rater(self.lstm_prelayernorm(x.permute(0, 2, 1).contiguous()).permute(0, 2, 1),
+                                ~padding_mask).contiguous()
             # max pool along slice dimension by permuting it to the last axis first, in this mode the confidence
             # is ignored.
 
             # (B x S x C) -> (B x C x S) -> (B x C)
-            o = F.adaptive_max_pool1d(o.permute(0, 2, 1), 1).squeeze(2)
+            # !!this following line is suppose to be correct, but there's a bug in torch such that it returns a vector
+            # !!with same value when C = 1
+            # !!o = F.adaptive_max_pool1d(o.permute(0, 2, 1), 1).squeeze(2)
+            chan_size = o.shape[2]
+            o = F.adaptive_max_pool1d(o.permute(0, 2, 1).squeeze(1), 1).view(-1, chan_size)
             # o = torch.stack([o[i,j] for i, j in zero_slices.items()], dim=0)
         elif self._mode == 3 or self._mode == 4 or self._mode == 5:
             # Loop batch
             o = []
 
-            _o = self.lstm_rater(self.lstm_prelayernorm(x.permute(0, 2, 1).contiguous()).permute(0, 2, 1).contiguous())
+            _o = self.lstm_rater(self.lstm_prelayernorm(x.permute(0, 2, 1).contiguous()).permute(0, 2, 1),
+                                 ~padding_mask).contiguous()
             for i in nonzero_slices:
                 tmp = torch.narrow(_o[i], 0, top_slices[i], 1)
                 o.append(tmp)
@@ -188,14 +196,14 @@ class LSTM_rater(nn.Module):
     def __init__(self, in_ch, embeded=1024, out_ch=2, record=False, iter_limit=5, dropout=0.2):
         super(LSTM_rater, self).__init__()
         # Batch size should be 1
-        self.lstm_reviewer = nn.LSTM(in_ch, embeded, batch_first=True, bias=True)
+        # self.lstm_reviewer = nn.LSTM(in_ch, embeded, batch_first=True, bias=True)
 
         trans_encoder_layer = nn.TransformerEncoderLayer(d_model=in_ch, nhead=4, dim_feedforward=embeded, dropout=dropout)
         self.embedding = nn.TransformerEncoder(trans_encoder_layer, num_layers=6)
         self.pos_encoder = PositionalEncoding(d_model=in_ch)
 
         self.dropout = nn.Dropout(p=dropout)
-        self.out_fc = nn.Linear(embeded, out_ch)
+        self.out_fc = nn.Linear(in_ch, out_ch)
 
         # for playback
         self.play_back = []
@@ -212,11 +220,12 @@ class LSTM_rater(nn.Module):
         #                          "https://pytorch.org/docs/stable/generated/torch.nn.LSTM.html#torch.nn.LSTM for more.")
 
     def init(self):
-        for r in self.lstm_reviewer.parameters():
+        for name, r in self.embedding.named_parameters():
             try:
                 nn.init.kaiming_normal_(r)
             except:
-                nn.init.zeros_(r)
+                if name.find('bias') >= 0:
+                    nn.init.zeros_(r)
 
     def forward(self, *args):
         if self._mode in (1, 2, 3, 4, 5):
@@ -225,23 +234,31 @@ class LSTM_rater(nn.Module):
             raise ValueError("There are only stage `1` or `2`, when mode = [1|2], this runs in stage 1, when "
                              "mode = [3|4], this runs in stage 2.")
 
-    def forward_(self, x: torch.Tensor):
-        r"""In this stage, the RNN scan through the stack back and forth until confidence > 0.5"""
+    def forward_(self, x: torch.Tensor, padding_mask: Optional[torch.Tensor] = None):
+        r"""
+
+
+        Args:
+            padding_mask:
+                Passed to `self.embedding` attribute `src_key_padding_mask`. The masked portion should be `True`.
+
+        Returns:
+
+        """
         # assert x.shape[0] == 1, f"This rater can only handle one sample at a time, got input of dimension {x.shape}."
-        # required input size: (B x C x S)
+        # required input size: (B x C x S), padding_mask: (B x S)
         num_slice = x.shape[-1]
 
         # embed with transformer encoder
         # input (B x C x S), but pos_encoding request [S, B, C]
-        embed = self.embedding(self.pos_encoder(x.permute(2, 0, 1)))
+        embed = self.embedding(self.pos_encoder(x.permute(2, 0, 1)), src_key_padding_mask=padding_mask)
         # embeded: (S, B, C) -> (B, S, C)
         embed = embed.permute(1, 0, 2)
 
         play_back = []
 
-        # embeded: (1, S, C)
-        o, hidden = self.lstm_reviewer(embed)
-        o = self.out_fc(o) # o: (1 x S x 2)
+        # embeded: (B, S, C) -> o: (B x S x C)
+        o = self.out_fc(embed) # o: (B x S x 1)
 
         if self.RECORD_ON:
             # _: (1 x S x C), _: (1 x S x 2)
