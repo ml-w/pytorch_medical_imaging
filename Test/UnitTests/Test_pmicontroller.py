@@ -422,3 +422,7 @@ class TestrAIdiologistInferencer(TestInferencer):
             sample_config = "./sample_data/config/sample_config_rAIdiologist.ini",
             **kwargs
         )
+
+    def test_inference(self):
+        super(TestrAIdiologistInferencer, self).test_inference()
+        self.assertTrue(len(list(Path(self.temp_output_dir.name).glob("*"))) != 0)

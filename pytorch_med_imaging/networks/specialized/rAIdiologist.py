@@ -20,7 +20,7 @@ class rAIdiologist(nn.Module):
     """
     def __init__(self, out_ch=2, record=False, iter_limit=5, dropout=0.2, lstm_dropout=0.1):
         super(rAIdiologist, self).__init__()
-        self.RECORD_ON = record
+        self._RECORD_ON = None
         self.play_back = []
         # Create inception for 2D prediction
         self.cnn = SlicewiseAttentionRAN(1, 1, exclude_fc=True, sigmoid_out=False)
@@ -38,6 +38,16 @@ class rAIdiologist(nn.Module):
 
         # initialization
         self.innit()
+        self.RECORD_ON = record
+
+    @property
+    def RECORD_ON(self):
+        return self._RECORD_ON
+
+    @RECORD_ON.setter
+    def RECORD_ON(self, r):
+        self._RECORD_ON = r
+        self.lstm_rater.RECORD_ON = r
 
     def load_pretrained_swran(self, directory: str):
         self.cnn.load_state_dict(torch.load(directory), strict=False)
@@ -104,6 +114,7 @@ class rAIdiologist(nn.Module):
             x = x.unsqueeze(0)
         if not seg is None:
             raise DeprecationWarning("Focal mode is no longer available.")
+
 
         # compute non-zero slices from seg if it is not None
         _tmp = x
@@ -210,7 +221,7 @@ class LSTM_rater(nn.Module):
 
         # other settings
         self.iter_limit = iter_limit
-        self.RECORD_ON = record
+        self._RECORD_ON = record
         self.register_buffer('_mode', torch.IntTensor([1])) # let it save the state too
 
         self.init() # initialization
@@ -218,6 +229,14 @@ class LSTM_rater(nn.Module):
         #     raise AttributeError("You are invoking LSTM without properly setting the environment CUBLAS_WORKSPACE_CONFIG"
         #                          ", which might result in non-deterministic behavior of LSTM. See "
         #                          "https://pytorch.org/docs/stable/generated/torch.nn.LSTM.html#torch.nn.LSTM for more.")
+
+    @property
+    def RECORD_ON(self):
+        return self._record_on
+
+    @RECORD_ON.setter
+    def RECORD_ON(self, r):
+        self._RECORD_ON = r
 
     def init(self):
         for name, r in self.embedding.named_parameters():
@@ -260,7 +279,7 @@ class LSTM_rater(nn.Module):
         # embeded: (B, S, C) -> o: (B x S x C)
         o = self.out_fc(embed) # o: (B x S x 1)
 
-        if self.RECORD_ON:
+        if self._RECORD_ON:
             # _: (1 x S x C), _: (1 x S x 2)
             row = torch.cat([o.detach().cpu(), torch.Tensor(range(num_slice)).view(1, -1, 1).expand_as(o)], dim=-1) # concat chans
             self.play_back.append(row)

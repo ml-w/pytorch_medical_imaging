@@ -57,18 +57,18 @@ class Test3DNetworks(unittest.TestCase):
                 except Exception as e:
                     self.fail(f"Mode {i} error. Original message {e}")
 
-    def test_rAIdiologist_v2(self):
-        net = rAIdiologist_v2(record=False).cuda()
+    def test_rAIdiologist_recordon(self):
+        net = rAIdiologist(out_ch=1, record=True).cuda()
+        net.set_mode(5)
         with torch.no_grad():
-            for i in range(6):
-                try:
-                    net.set_mode(i)
-                    self.assertTrue(net._mode == i)
-                    out = net(self.sample_input)
-                    self.assertEqual(2, out.dim())
-                    print(f"Mode {i} passed.")
-                except:
-                    self.fail(f"Mode {i} error.")
+            try:
+                out = net(self.sample_input)
+                self.assertNotEqual(0, len(net.get_playback()), "Playback length is zero")
+                self.assertEqual(2, out.dim(), "Failed during forward.")
+                out = net(self.sample_input_size1)
+                self.assertEqual(2, out.dim(), "Failed for batch-size = 1.")
+            except Exception as e:
+                self.fail(f"Original message: {e}")
 
     def test_rAIdiologist_record(self):
         net = rAIdiologist(record=True).cuda()

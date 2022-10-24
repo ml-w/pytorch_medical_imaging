@@ -29,7 +29,7 @@ class rAIdiologistSolver(BinaryClassificationSolver):
                                  f" deterministic behavior of LSTM.")
 
         # Turn off record
-        self.get_net().RECORD_ON = False
+        self.get_net()._RECORD_ON = False
 
     def _load_default_attr(self, default_attr):
         _default_attr = {

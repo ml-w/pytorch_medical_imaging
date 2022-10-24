@@ -31,6 +31,7 @@ class rAIdiologistInferencer(BinaryClassificationInferencer):
         self.net.set_mode(-1) # -1 is the inference mode, which is actually mode 4 for now.
         self.net_handles = []
         if self.rAI_inf_save_playbacks:
+            self._logger.info("Registering save playback hooks...")
             self.net.RECORD_ON = True
             self.net_handles.append(self.net.register_forward_pre_hook(_playback_clean_hook))
             self.net_handles.append(self.net.register_forward_hook(self._forward_hook_gen()))
@@ -71,7 +72,7 @@ class rAIdiologistInferencer(BinaryClassificationInferencer):
         dl = super(rAIdiologistInferencer, self)._writter(out_tensor[..., 0].view(-1, 1),
                                                           uids,
                                                           gt,
-                                                          sig_out=False)
+                                                          sig_out=True)
         try:
             dl._data_table['Conf_0'] = out_tensor[..., 1]
         except IndexError:
@@ -89,6 +90,7 @@ class rAIdiologistInferencer(BinaryClassificationInferencer):
 
         if self.rAI_inf_save_playbacks:
             out_path = Path(self.outdir).with_suffix('.json')
+            self._logger.debug(f"playbacks: {self.playbacks}")
             self._logger.info(f"Writing playbacks to: {str(out_path)}")
             out_dict = {u: l.tolist() for u, l in zip(uids, self.playbacks)}
             with out_path.open('w') as jf:
