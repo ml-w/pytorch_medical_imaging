@@ -19,7 +19,10 @@ class rAIdiologistSolver(BinaryClassificationSolver):
         self._current_mode = None # initially, the mode is unsetted
         if Path(self.solverparams_rai_pretrained_swran).is_file():
             self._logger.info(f"Loading pretrained SWRAN network from: {self.solverparams_rai_pretrained_swran}")
-            self.net.load_pretrained_swran(self.solverparams_rai_pretrained_swran)
+            result = self.net.load_pretrained_swran(self.solverparams_rai_pretrained_swran)
+            if str(result) != "<All keys matched successfully>":
+                self._logger.warning(f"Some keys were not loaded.")
+                self._logger.warning(f"{result}")
         else:
             self._logger.warning(f"Pretrained SWRAN network specified ({self.solverparams_rai_pretrained_swran}) "
                                  f"but not loaded.")

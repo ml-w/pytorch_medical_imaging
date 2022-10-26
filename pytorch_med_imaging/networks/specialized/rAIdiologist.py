@@ -29,7 +29,7 @@ class rAIdiologist(nn.Module):
         # LSTM for
         # self.lstm_prefc = nn.Linear(2048, 512)
         self.lstm_prelayernorm = nn.LayerNorm(2048)
-        self.lstm_rater = LSTM_rater(2048, out_ch=out_ch, embeded=128, record=record,
+        self.lstm_rater = LSTM_rater(2048, out_ch=out_ch, embed_ch=128, record=record,
                                      iter_limit=iter_limit, dropout=lstm_dropout)
 
         # Mode
@@ -50,7 +50,8 @@ class rAIdiologist(nn.Module):
         self.lstm_rater.RECORD_ON = r
 
     def load_pretrained_swran(self, directory: str):
-        self.cnn.load_state_dict(torch.load(directory), strict=False)
+        return self.cnn.load_state_dict(torch.load(directory), strict=False)
+
 
     def clean_playback(self):
         r"""Call this after each forward run to clean the playback. Otherwise, you need to keep track of the order
@@ -151,8 +152,10 @@ class rAIdiologist(nn.Module):
             # !!this following line is suppose to be correct, but there's a bug in torch such that it returns a vector
             # !!with same value when C = 1
             # !!o = F.adaptive_max_pool1d(o.permute(0, 2, 1), 1).squeeze(2)
-            chan_size = o.shape[2]
-            o = F.adaptive_max_pool1d(o.permute(0, 2, 1).squeeze(1), 1).view(-1, chan_size)
+            chan_size = o.shape[-1]
+            o_top = F.adaptive_max_pool1d(o[:, :, 0].permute(0, 2, 1).squeeze(1), 1).view(-1, chan_size)
+            o_bot = F.adaptive_max_pool1d(o[:, :, 1].permute(0, 2, 1).squeeze(1), 1).view(-1, chan_size)
+            o = (o_top + o_bot) / 2.
             # o = torch.stack([o[i,j] for i, j in zero_slices.items()], dim=0)
         elif self._mode == 3 or self._mode == 4 or self._mode == 5:
             # Loop batch
@@ -160,6 +163,9 @@ class rAIdiologist(nn.Module):
 
             _o = self.lstm_rater(self.lstm_prelayernorm(x.permute(0, 2, 1).contiguous()).permute(0, 2, 1),
                                  ~padding_mask).contiguous()
+            _o = _o.mean(dim=2) # lstm_rater is bidirection and reshaped to (B x S x 2 x C)
+            num_ch = _o.shape[-1]
+
             for i in nonzero_slices:
                 tmp = torch.narrow(_o[i], 0, top_slices[i], 1)
                 o.append(tmp)
@@ -204,17 +210,18 @@ class LSTM_rater(nn.Module):
          ...]
 
     """
-    def __init__(self, in_ch, embeded=1024, out_ch=2, record=False, iter_limit=5, dropout=0.2):
+    def __init__(self, in_ch, embed_ch=1024, out_ch=2, record=False, iter_limit=5, dropout=0.2):
         super(LSTM_rater, self).__init__()
         # Batch size should be 1
         # self.lstm_reviewer = nn.LSTM(in_ch, embeded, batch_first=True, bias=True)
 
-        trans_encoder_layer = nn.TransformerEncoderLayer(d_model=in_ch, nhead=4, dim_feedforward=embeded, dropout=dropout)
+        trans_encoder_layer = nn.TransformerEncoderLayer(d_model=in_ch, nhead=4, dim_feedforward=embed_ch, dropout=dropout)
         self.embedding = nn.TransformerEncoder(trans_encoder_layer, num_layers=6)
         self.pos_encoder = PositionalEncoding(d_model=in_ch)
 
         self.dropout = nn.Dropout(p=dropout)
-        self.out_fc = nn.Linear(in_ch, out_ch)
+        self.out_fc = nn.Linear(embed_ch, out_ch)
+        self.lstm = nn.LSTM(in_ch, embed_ch, bidirectional=True, num_layers=2)
 
         # for playback
         self.play_back = []
@@ -223,8 +230,9 @@ class LSTM_rater(nn.Module):
         self.iter_limit = iter_limit
         self._RECORD_ON = record
         self.register_buffer('_mode', torch.IntTensor([1])) # let it save the state too
+        self.register_buffer('_embed_ch', torch.IntTensor([embed_ch]))
 
-        self.init() # initialization
+        # self.init() # initialization
         # if os.getenv('CUBLAS_WORKSPACE_CONFIG') not in [":16:8", ":4096:2"]:
         #     raise AttributeError("You are invoking LSTM without properly setting the environment CUBLAS_WORKSPACE_CONFIG"
         #                          ", which might result in non-deterministic behavior of LSTM. See "
@@ -237,14 +245,6 @@ class LSTM_rater(nn.Module):
     @RECORD_ON.setter
     def RECORD_ON(self, r):
         self._RECORD_ON = r
-
-    def init(self):
-        for name, r in self.embedding.named_parameters():
-            try:
-                nn.init.kaiming_normal_(r)
-            except:
-                if name.find('bias') >= 0:
-                    nn.init.zeros_(r)
 
     def forward(self, *args):
         if self._mode in (1, 2, 3, 4, 5):
@@ -274,14 +274,23 @@ class LSTM_rater(nn.Module):
         # embeded: (S, B, C) -> (B, S, C)
         embed = embed.permute(1, 0, 2)
 
+        # LSTM embed: (B, S, C) -> _o: (B, S, 2 x C) !!LSTM is bidirectional!!
+        # !note that LSTM reorders reverse direction run of `output` already
+        _o, (_h, _c) = self.lstm(embed)
+
         play_back = []
 
-        # embeded: (B, S, C) -> o: (B x S x C)
-        o = self.out_fc(embed) # o: (B x S x 1)
+        # _o: (B, S, C) -> _o: (B x S x 2 x C)
+        bsize, ssize, _ = _o.shape
+        o = _o.view(bsize, ssize, 2, -1) # separate the outputs from two direction
+        o = self.out_fc(o)    # _o: (B x S x 2 x fc)
 
         if self._RECORD_ON:
-            # _: (1 x S x C), _: (1 x S x 2)
-            row = torch.cat([o.detach().cpu(), torch.Tensor(range(num_slice)).view(1, -1, 1).expand_as(o)], dim=-1) # concat chans
+            # d = direction, s = slice_index
+            d = torch.cat([torch.zeros(ssize), torch.ones(ssize)]).view(1, -1, 1)
+            slice_index = torch.cat([torch.arange(ssize)] * 2).view(1 ,-1, 1)
+            _o = o.view(bsize, ssize, -1)
+            row = torch.cat([_o, d.expand_as(_o), slice_index.expand_as(_o)], dim=-1) # concat chans
             self.play_back.append(row)
         return o # no need to deal with up or down afterwards
 
