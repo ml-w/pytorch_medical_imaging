@@ -221,7 +221,7 @@ class LSTM_rater(nn.Module):
 
         self.dropout = nn.Dropout(p=dropout)
         self.out_fc = nn.Linear(embed_ch, out_ch)
-        self.lstm = nn.LSTM(in_ch, embed_ch, bidirectional=True, num_layers=2)
+        self.lstm = nn.LSTM(in_ch, embed_ch, bidirectional=True, num_layers=2, batch_first=True)
 
         # for playback
         self.play_back = []
