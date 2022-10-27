@@ -66,6 +66,7 @@ class Test_visualization_rAIdiologist(unittest.TestCase):
         self.image = tio.ScalarImage(str(self.img_dir.joinpath('MRI_01.nii.gz')))[tio.DATA].squeeze()
         self.prediction = np.asarray(self.json['MRI_01'])[..., 0].ravel()
         self.indices = np.asarray(self.json['MRI_01'])[..., -1].ravel()
+        self.direction = np.asarray(self.json['MRI_01'])[..., 1].ravel()
         self.one_hot = np.asarray(self.json['MRI_01'])[..., -2].ravel()
         self.temp_out_dir = tempfile.TemporaryDirectory()
 
@@ -73,22 +74,18 @@ class Test_visualization_rAIdiologist(unittest.TestCase):
         MNTSLogger('.', verbose=True, log_level='debug')
 
     def test_mark_slice(self):
-        x1 = make_marked_slice(self.image[..., 15], self.prediction, self.indices)
-        x2 = make_marked_slice(self.image[..., 15], self.prediction, self.indices, vert_line=15)
-        x3 = make_marked_slice(self.image[..., 15], self.prediction, self.indices, imshow_kwargs={'cmap':'jet'})
+        x1 = make_marked_slice(self.image[..., 15], self.prediction, self.indices, self.direction)
+        x2 = make_marked_slice(self.image[..., 15], self.prediction, self.indices, self.direction, vert_line=15)
+        x3 = make_marked_slice(self.image[..., 15], self.prediction, self.indices, self.direction, imshow_kwargs={'cmap':'jet'})
 
         self.assertTrue(x1.shape == x2.shape == x3.shape)
 
     def test_mark_stack(self):
-        mark_image_stacks(self.image,
-                          self.prediction,
-                          self.indices,
-                          trim_repeats=False)
-
-        mark_image_stacks(self.image,
-                          self.prediction,
-                          self.indices,
-                          trim_repeats=True)
+        s = mark_image_stacks(self.image,
+                              self.prediction,
+                              self.indices,
+                              self.direction)
+        marked_stack_2_grid(s, '/home/lwong/test.png')
 
     def test_label_images_in_dir(self):
         temp_dir = tempfile.TemporaryDirectory()

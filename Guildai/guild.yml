@@ -158,6 +158,7 @@
         - default
         - operation: train
           select: 'Backup'
+          target-type: 'link'
       output-scalars:
         sensitivity: 'Sensitivity: (\value)'
         specificity: 'Specificity: (\value)'
@@ -178,6 +179,7 @@
         - default
         - operation: train_segment
           select: 'Backup'
+          target-type: 'link'
       output-scalars:
         DSC: 'Avg_DICE: (\value)'
         med_DSC: 'Med_DICE: (\value)'
@@ -191,6 +193,7 @@
         - default
         - operation: train_survival
           select: 'Backup'
+          target-type: 'link'
       output-scalars:
         C-index: 'C-index: (\value)'
 

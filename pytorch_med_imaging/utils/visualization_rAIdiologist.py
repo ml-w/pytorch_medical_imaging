@@ -3,6 +3,7 @@ import numpy as np
 import io
 import torch
 import torchio as tio
+from torchvision.utils import make_grid
 import multiprocessing as mpi
 import itertools
 import imageio
@@ -23,6 +24,7 @@ semaphore = Semaphore(mpi.cpu_count())
 def make_marked_slice(image: np.ndarray,
                       prediction: Union[np.ndarray, Iterable[float]],
                       slice_indices: Union[np.ndarray, Iterable[int]],
+                      direction: Union[np.ndarray, Iterable[int]],
                       vert_line: Optional[int] = None,
                       decision_point: Optional[int] = None,
                       imshow_kwargs: Optional[dict] = {}
@@ -37,6 +39,8 @@ def make_marked_slice(image: np.ndarray,
             A vector of prediction values.
         slice_indices (np.ndarray):
             A vector of the corresponding slices where the prediction were made.
+        direction (np.ndarray):
+            The direction of lstm read,
         vert_line (Optional, int):
             If specified, a yellow verticle line will be draw indicating the slice position. Default to `None`.
         decision_point (Optional, int):
@@ -61,16 +65,26 @@ def make_marked_slice(image: np.ndarray,
     ax[0].imshow(image.T, **default_imshow_kwargs)
     ax[0].set_position([0., 0., 1., 1.])
 
-    if any([a > b for a, b in zip(slice_indices, slice_indices[1:])]):
-        mask = slice_indices > np.roll(slice_indices, 1)
-        mask[0] = False
-        mask[-1] = False
-        prediction = np.ma.masked_where(~mask, prediction)
+    plot_pair = []
+    for _direction in (0, 1):
+        _prediction = prediction[np.argwhere(direction == _direction).ravel()]
+        _slice_indices = slice_indices[np.argwhere(direction == _direction).ravel()]
+        if _direction == 1:
+            _slice_indices = _slice_indices[::-1]
+        plot_pair.append((_slice_indices, _prediction))
+
+    # # check if the slice_indices are discontinuous
+    # if any([a > b for a, b in zip(slice_indices, slice_indices[1:])]):
+    #     mask = slice_indices > np.roll(slice_indices, 1)
+    #     mask[0] = False
+    #     mask[-1] = False
+    #     prediction = np.ma.masked_where(~mask, prediction)
 
     ax_pred_linewidth=0.3
     ax_pred = ax[1]
     ax_pred.set_axis_off()
-    ax_pred.plot(slice_indices, prediction, linewidth=ax_pred_linewidth, color='yellow')
+    ax_pred.plot(*plot_pair[0], linewidth=ax_pred_linewidth, color='yellow')
+    ax_pred.plot(*plot_pair[1], linewidth=ax_pred_linewidth, color='blue')
     ax_pred.axhline(0.5, 0, image.shape[-1], color='red', linewidth=ax_pred_linewidth)        # plot a line at 0 or 0.5
     if not vert_line is None:
         assert 0 <= vert_line < image.shape[-1], f"Wrong vert_line provided, got {vert_line}, but image shape " \
@@ -90,10 +104,11 @@ def make_marked_slice(image: np.ndarray,
     plt.close('all')
     return img_arr
 
+
 def mark_image_stacks(image_3d: Union[torch.Tensor, np.ndarray],
                       prediction: Union[np.ndarray, Iterable[float]],
                       indices: Union[np.ndarray, Iterable[int]],
-                      trim_repeats: Optional[bool] = True,
+                      direction: Union[np.ndarray, Iterable[int]],
                       verticle_lines: Optional[Iterable[int]] = None,
                       decision_point: Optional[int] = None,
                       **kwargs):
@@ -106,8 +121,6 @@ def mark_image_stacks(image_3d: Union[torch.Tensor, np.ndarray],
             A vector of prediction values.
         slice_indices (np.ndarray):
             A vector of the corresponding slices where the prediction were made.
-        trim_repeats (Optional, bool):
-            If `True`, the slice_indices is replaced by `range([slice_num])` to prevent the plot going backwards.
         **kwargs:
             See `make_marked_slice`.
 
@@ -118,11 +131,6 @@ def mark_image_stacks(image_3d: Union[torch.Tensor, np.ndarray],
         image_3d = image_3d.numpy()
     assert image_3d.ndim == 3, f"Input image_3d must be 3D, got: {image_3d.ndim}D with shape {image_3d.shape}"
 
-    if trim_repeats:
-        last_index = np.argwhere(~np.asarray([x2 > x1 for x2, x1 in zip(indices[1:], indices)])).ravel()[0]
-        prediction = prediction[:last_index + 1]
-        indices = indices[:last_index + 1]
-
     if verticle_lines is None:
         verts = range(image_3d.shape[0] - 1)
     else:
@@ -131,12 +139,41 @@ def mark_image_stacks(image_3d: Union[torch.Tensor, np.ndarray],
                   f"{len(verticle_lines)} vs {image_3d.shape}"
             raise IndexError(msg)
         verts = verticle_lines
-    out_stack = np.stack([make_marked_slice(s, p, i, v, k) for s, p, i, v, k in zip(image_3d.transpose(2, 1, 0),
-                                                                                    itertools.repeat(prediction),
-                                                                                    itertools.repeat(indices),
-                                                                                    verts,
-                                                                                    itertools.repeat(decision_point))])
+    out_stack = np.stack([make_marked_slice(s, p, i, d, v, k) for s, p, i, d, v, k
+                          in zip(image_3d.transpose(2, 1, 0),
+                                 itertools.repeat(prediction),
+                                 itertools.repeat(indices),
+                                 itertools.repeat(direction),
+                                 verts,
+                                 itertools.repeat(decision_point))])
     return out_stack
+
+def marked_stack_2_grid(marked_stack: Union[torch.Tensor, np.ndarray],
+                        out_dir: Union[Path, str] = None,
+                        nrow: Optional[int] = 5):
+    r"""This write the images marked with prediction into a gif file.
+
+    Args:
+        marked_stack (np.ndarray):
+            A stack of marked images. Should have a dimension of (S x W x H X 4)
+        out_dir (Path):
+            Where the gif will be written to.
+        nrow (Optional, int):
+            Passed to make grid.
+
+    Returns:
+        None
+    """
+    if isinstance(marked_stack, np.ndarray):
+        marked_stack = torch.as_tensor(marked_stack)
+
+    print(marked_stack.shape)
+    img_grid = make_grid(marked_stack.float().permute(0, 3, 1, 2), nrow=nrow, padding=1, normalize=True, pad_value=0)
+    print(img_grid.shape)
+    img_grid = (img_grid.numpy().copy() * 255).astype('uint8').transpose(1, 2, 0)
+    imageio.imsave(out_dir, img_grid, format='png')
+
+
 
 def marked_stack_2_gif(marked_stack: Union[torch.Tensor, np.ndarray],
                        out_dir: Union[Path, str] = None,
@@ -161,6 +198,35 @@ def marked_stack_2_gif(marked_stack: Union[torch.Tensor, np.ndarray],
 
     imageio.mimsave(out_dir, marked_stack, format='GIF', fps=fps)
 
+def unpack_json(json_file: Union[Path, str],
+                id: str):
+    r"""Unpack the json file
+
+    Args:
+        json_file (Path or str):
+            The path to the json file.
+        id (str):
+            The ID of target.
+
+    Returns:
+        pred (np.ndarray):
+            The predictions as float values.
+        direction (np.ndarray):
+            The direction if the read as integer. If 0, the predictions were generate during forward read by LSTM. If 1,
+            the predictions were generated during reverse read by LSTM.
+        sindex (np.ndarray):
+            The slice index as integers.
+
+    """
+    # check if id exist
+    json_dat = json.load(Path(json_file).open('r')) if not isinstance(json_file, dict) else json_file
+    if id not in json_dat:
+        raise KeyError(f"The specified id {id} does not exist in target json file.")
+
+    pred      = np.asarray(json_dat[id])[..., 0].ravel()
+    direction = np.asarray(json_dat[id])[... , 1].ravel()
+    sindex    = np.asarray(json_dat[id])[..., -1].ravel()
+    return pred, sindex, direction
 
 def label_images_in_dir(img_src: Union[Path, str],
                         json_file: Union[Path, str, dict],
@@ -203,8 +269,7 @@ def label_images_in_dir(img_src: Union[Path, str],
     pool = mpi.Pool(num_worker)
     for k in json_dat.keys():
         logger.info(f"Processing {k}")
-        pred = np.asarray(json_dat[k])[..., 0].ravel()
-        indi = np.asarray(json_dat[k])[..., -2].ravel()
+        pred, indi, direction = unpack_json(json_dat, k)
         try:
             # decision points
             decpt = np.asarray(json_dat[k])[..., -1].ravel()
