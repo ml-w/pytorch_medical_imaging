@@ -29,8 +29,8 @@ class rAIdiologist(nn.Module):
         # LSTM for
         # self.lstm_prefc = nn.Linear(2048, 512)
         self.lstm_prelayernorm = nn.LayerNorm(2048)
-        self.lstm_rater = LSTM_rater(2048, out_ch=out_ch, embed_ch=128, record=record,
-                                     iter_limit=iter_limit, dropout=lstm_dropout)
+        self.lstm_rater = Transformer_rater(2048, out_ch=out_ch, embed_ch=128, record=record,
+                                            iter_limit=iter_limit, dropout=lstm_dropout)
 
         # Mode
         self.register_buffer('_mode', torch.IntTensor([1]))
@@ -162,12 +162,22 @@ class rAIdiologist(nn.Module):
             o = []
 
             _o = self.lstm_rater(self.lstm_prelayernorm(x.permute(0, 2, 1).contiguous()).permute(0, 2, 1),
-                                 ~padding_mask).contiguous()
-            _o = _o.mean(dim=2) # lstm_rater is bidirection and reshaped to (B x S x 2 x C)
+                                 ~padding_mask).contiguous() # (B x S x 2 x C)
             num_ch = _o.shape[-1]
 
             for i in nonzero_slices:
-                tmp = torch.narrow(_o[i], 0, top_slices[i], 1)
+                # output of bidirectional LSTM: (B x S x 2 x C), where for 3rd dim, 0 is forward and 1 is reverse
+                # say input is [0, 1, 2, 3, 4], output is arranged:
+                #   [[0, 1, 2, 3, 4],
+                #    [4, 3, 2, 1, 0]]
+                # So if input is padded say [0, 1, 2, 3, 4, 0, 0], output is arranged:
+                #   [[0, 1, 2, 3, 4, 0, 0],
+                #    [0, 0, 4, 3, 2, 1, 0]]
+                # Therefore, for forward run, gets the element before padding, and for the reverse run, get the
+                # last element.
+                _o_forward  = torch.narrow(_o[i, : , 0], 0, top_slices[i], 1) # forward run is padded after top_slices
+                _o_backward = torch.narrow(_o[i, : , 1], 0, -1           , 1) # reverse run starts from padded
+                tmp = (_o_forward + _o_backward) / 2.
                 o.append(tmp)
 
             if self.RECORD_ON:
@@ -195,6 +205,111 @@ class rAIdiologist(nn.Module):
         else:
             return self.forward_(*args)
 
+
+class Transformer_rater(nn.Module):
+    r"""This LSTM rater receives inputs as a sequence of deep features extracted from each slice. This module has two
+    operating mode, `stage_1` and `stage_2`. In `stage_1`, the module inspect the whole stack of features and directly
+    return the output. In `stage_2`, the module will first inspect the whole stack, generating a prediction for each
+    slice together with a confidence score. Then, starts at the middle slice, it will scan either upwards or downwards
+    until the confidence score reaches a certain level for a successive number of times.
+
+    This module also offers to record the predicted score, confidence score and which slice they are deduced. The
+    playback are stored in the format:
+        [(torch.Tensor([prediction, confidence, slice_index]),  # data 1
+         (torch.Tensor([prediction, confidence, slice_index]),  # data 2
+         ...]
+
+    """
+    def __init__(self, in_ch, embed_ch=1024, out_ch=2, record=False, iter_limit=5, dropout=0.2):
+        super(Transformer_rater, self).__init__()
+        # Batch size should be 1
+        # self.lstm_reviewer = nn.LSTM(in_ch, embeded, batch_first=True, bias=True)
+
+        trans_encoder_layer = nn.TransformerEncoderLayer(d_model=in_ch, nhead=4, dim_feedforward=embed_ch, dropout=dropout)
+        self.embedding = nn.TransformerEncoder(trans_encoder_layer, num_layers=6)
+        self.pos_encoder = PositionalEncoding(d_model=in_ch)
+
+        self.dropout = nn.Dropout(p=dropout)
+        self.out_fc = nn.Linear(embed_ch, out_ch)
+        self.lstm = nn.LSTM(in_ch, embed_ch, bidirectional=True, num_layers=2, batch_first=True)
+
+        # for playback
+        self.play_back = []
+
+        # other settings
+        self.iter_limit = iter_limit
+        self._RECORD_ON = record
+        self.register_buffer('_mode', torch.IntTensor([1])) # let it save the state too
+        self.register_buffer('_embed_ch', torch.IntTensor([embed_ch]))
+
+        # self.init() # initialization
+        # if os.getenv('CUBLAS_WORKSPACE_CONFIG') not in [":16:8", ":4096:2"]:
+        #     raise AttributeError("You are invoking LSTM without properly setting the environment CUBLAS_WORKSPACE_CONFIG"
+        #                          ", which might result in non-deterministic behavior of LSTM. See "
+        #                          "https://pytorch.org/docs/stable/generated/torch.nn.LSTM.html#torch.nn.LSTM for more.")
+
+    @property
+    def RECORD_ON(self):
+        return self._record_on
+
+    @RECORD_ON.setter
+    def RECORD_ON(self, r):
+        self._RECORD_ON = r
+
+    def forward(self, *args):
+        if self._mode in (1, 2, 3, 4, 5):
+            return self.forward_(*args)
+        else:
+            raise ValueError("There are only stage `1` or `2`, when mode = [1|2], this runs in stage 1, when "
+                             "mode = [3|4], this runs in stage 2.")
+
+    def forward_(self, x: torch.Tensor, padding_mask: Optional[torch.Tensor] = None):
+        r"""
+
+
+        Args:
+            padding_mask:
+                Passed to `self.embedding` attribute `src_key_padding_mask`. The masked portion should be `True`.
+
+        Returns:
+
+        """
+        # assert x.shape[0] == 1, f"This rater can only handle one sample at a time, got input of dimension {x.shape}."
+        # required input size: (B x C x S), padding_mask: (B x S)
+        num_slice = x.shape[-1]
+
+        # embed with transformer encoder
+        # input (B x C x S), but pos_encoding request [S, B, C]
+        embed = self.embedding(self.pos_encoder(x.permute(2, 0, 1)), src_key_padding_mask=padding_mask)
+        # embeded: (S, B, C) -> (B, S, C)
+        embed = embed.permute(1, 0, 2)
+
+        # LSTM embed: (B, S, C) -> _o: (B, S, 2 x C) !!LSTM is bidirectional!!
+        # !note that LSTM reorders reverse direction run of `output` already
+        _o, (_h, _c) = self.lstm(embed)
+
+        play_back = []
+
+        # _o: (B, S, C) -> _o: (B x S x 2 x C)
+        bsize, ssize, _ = _o.shape
+        o = _o.view(bsize, ssize, 2, -1) # separate the outputs from two direction
+        o = self.out_fc(self.dropout(o))    # _o: (B x S x 2 x fc)
+
+        if self._RECORD_ON:
+            # d = direction, s = slice_indexG
+            d = torch.cat([torch.zeros(ssize), torch.ones(ssize)]).view(1, -1, 1)
+            slice_index = torch.cat([torch.arange(ssize)] * 2).view(1 ,-1, 1)
+            _o = o.view(bsize, ssize, -1).detach().cpu()
+            _o = torch.cat([_o[..., 0], _o[..., 1]], dim=1).view(bsize, -1, 1)
+            row = torch.cat([_o, d.expand_as(_o), slice_index.expand_as(_o)], dim=-1) # concat chans
+            self.play_back.append(row)
+        return o # no need to deal with up or down afterwards
+
+    def clean_playback(self):
+        self.play_back.clear()
+
+    def get_playback(self):
+        return self.play_back
 
 class LSTM_rater(nn.Module):
     r"""This LSTM rater receives inputs as a sequence of deep features extracted from each slice. This module has two
@@ -268,15 +383,9 @@ class LSTM_rater(nn.Module):
         # required input size: (B x C x S), padding_mask: (B x S)
         num_slice = x.shape[-1]
 
-        # embed with transformer encoder
-        # input (B x C x S), but pos_encoding request [S, B, C]
-        embed = self.embedding(self.pos_encoder(x.permute(2, 0, 1)), src_key_padding_mask=padding_mask)
-        # embeded: (S, B, C) -> (B, S, C)
-        embed = embed.permute(1, 0, 2)
-
-        # LSTM embed: (B, S, C) -> _o: (B, S, 2 x C) !!LSTM is bidirectional!!
+        # LSTM (B x C x S) -> (B x S x C)
         # !note that LSTM reorders reverse direction run of `output` already
-        _o, (_h, _c) = self.lstm(embed)
+        _o, (_h, _c) = self.lstm(x.permute(0, 2, 1))
 
         play_back = []
 
@@ -300,7 +409,8 @@ class LSTM_rater(nn.Module):
     def get_playback(self):
         return self.play_back
 
-class LSTM_rater_v2(LSTM_rater):
+
+class LSTM_rater_v2(Transformer_rater):
     def __init__(self, in_ch, **kwargs):
         super(LSTM_rater_v2, self).__init__(in_ch, **kwargs)
 

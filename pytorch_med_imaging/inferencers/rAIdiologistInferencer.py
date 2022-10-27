@@ -90,6 +90,7 @@ class rAIdiologistInferencer(BinaryClassificationInferencer):
 
         if self.rAI_inf_save_playbacks:
             out_path = Path(self.outdir).with_suffix('.json')
+            self.playbacks = torch.cat(self.playbacks, dim=0)
             self._logger.debug(f"playbacks: {self.playbacks}")
             self._logger.info(f"Writing playbacks to: {str(out_path)}")
             out_dict = {u: l.tolist() for u, l in zip(uids, self.playbacks)}
