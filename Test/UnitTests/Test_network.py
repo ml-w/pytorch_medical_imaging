@@ -69,19 +69,7 @@ class Test3DNetworks(unittest.TestCase):
                 self.assertEqual(2, out.dim(), "Failed for batch-size = 1.")
             except Exception as e:
                 self.fail(f"Original message: {e}")
-
-    def test_rAIdiologist_record(self):
-        net = rAIdiologist(record=True).cuda()
-        with torch.no_grad():
-            for i in range(6):
-                try:
-                    net.set_mode(i)
-                    self.assertTrue(net._mode == i)
-                    out = net(self.sample_input)
-                    self.assertEqual(2, out.dim())
-                    print(f"Mode {i} passed.")
-                except:
-                    self.fail(f"Mode {i} error.")
+            self.assertNotEqual(0, len(net.get_playback()), "Play back is empty!")
 
     def test_AttentionUNet(self):
         net = AttentionUNet(1, 2).cuda()
