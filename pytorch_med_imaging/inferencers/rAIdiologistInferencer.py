@@ -90,7 +90,10 @@ class rAIdiologistInferencer(BinaryClassificationInferencer):
 
         if self.rAI_inf_save_playbacks:
             out_path = Path(self.outdir).with_suffix('.json')
-            self.playbacks = torch.cat(self.playbacks, dim=0)
+            # playbacks could have different number of slices [(B1 x S1 x 3), (B2 x S2 x 3), ...]
+            # unpack them and join them as lists
+            self.playbacks = [_ for pb in self.playbacks for _ in list(pb)]
+            # self.playbacks = torch.cat(self.playbacks, dim=0)
             self._logger.debug(f"playbacks: {self.playbacks}")
             self._logger.info(f"Writing playbacks to: {str(out_path)}")
             out_dict = {u: l.tolist() for u, l in zip(uids, self.playbacks)}
@@ -102,9 +105,16 @@ class rAIdiologistInferencer(BinaryClassificationInferencer):
         r"""This hook gen copies the playback from rAIdiologist after each forward run"""
         def copy_playback(module, input, output):
             if isinstance(module, rAIdiologist):
+                playback = module.get_playback()
+                if len(playback) == 0:
+                    raise AttributeError("No playback is availble.")
                 self.playbacks.extend(module.get_playback())
             return
         return copy_playback
+
+    def write_out(self):
+        self.net.set_mode(-1) # make sure its in inference mode
+        super(rAIdiologistInferencer, self).write_out()
 
 def _playback_clean_hook(module, input):
     r"""This hook cleans the rAIdiologist playback list prior to running a mini-batch"""
