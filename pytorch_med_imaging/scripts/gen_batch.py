@@ -2,6 +2,7 @@ from ..Algorithms.batchgenerator import *
 import argparse
 import pandas as pd
 from mnts.mnts_logger import MNTSLogger
+from ast import literal_eval
 
 def console_entry(raw_args=None):
     parser = argparse.ArgumentParser()
@@ -14,7 +15,10 @@ def console_entry(raw_args=None):
     parser.add_argument('-t', '--validation', action='store', default=0, type=float,
                         help="Set validation percentage.")
     parser.add_argument('-m', '--num-of-folds', action='store', type=int, required=True,
-                        help="Number of folds to create. If 1, its a train-test split.")
+                        help="Number of folds to create. If 1, its a train-test split with validation as test case.")
+    parser.add_argument('--train-test-ratio', action='store', type=str, default=None,
+                        help='If number of folds is 1, define train-test-validation using this option. Specify it '
+                             'like hist [7, 2] for train:test ratio of 7:2. Default to None.')
     parser.add_argument('--stratification', action='store', type=str, default=None)
     parser.add_argument('--debug', action='store_true',
                         help="Debug mode.")
@@ -42,9 +46,15 @@ def console_entry(raw_args=None):
         else:
             raise AttributeError(f"Only able to process csv or excel files currently, got: {input_dir.suffix}.")
 
+        if a.num_of_folds == 1 and a.train_test_ratio is not None:
+            train_test_ratio = literal_eval(a.train_test_ratio)
+        else:
+            train_test_ratio = None
+
         GenerateTestBatch(table.index,
                           a.num_of_folds,
                           output_dir.__str__(),
+                          train_test_ratio=train_test_ratio,
                           stratification_class=table[a.stratification] if not a.stratification is None else None,
                           validation=int(len(table) * a.validation) if not a.validation is None else None,
                           prefix=a.prefix
