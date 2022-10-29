@@ -172,8 +172,10 @@ class rAIdiologist(nn.Module):
                 #    [0, 0, 4, 3, 2, 1, 0]]
                 # Therefore, for forward run, gets the element before padding, and for the reverse run, get the
                 # last element.
+                # !Update:
+                # Changed to use packed sequence, such that this now both forward and backward is at `top_slices`.
                 _o_forward  = torch.narrow(o[i, : , 0], 0, top_slices[i], 1) # forward run is padded after top_slices
-                _o_backward = torch.narrow(o[i, : , 1], 0, -1           , 1) # reverse run starts from padded
+                _o_backward = torch.narrow(o[i, : , 1], 0, top_slices[i], 1) # reverse run starts from padded
                 tmp = (_o_forward + _o_backward) / 2.
                 _o.append(tmp)
 
