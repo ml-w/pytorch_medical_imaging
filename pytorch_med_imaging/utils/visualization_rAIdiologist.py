@@ -66,12 +66,25 @@ def make_marked_slice(image: np.ndarray,
     ax[0].set_position([0., 0., 1., 1.])
 
     plot_pair = []
+    RED_BOX_FLAG = False
+    BLUE_BOX_FLAG = False
     for _direction in (0, 1):
         _prediction = prediction[np.argwhere(direction == _direction).ravel()]
         _slice_indices = slice_indices[np.argwhere(direction == _direction).ravel()]
+        _d_pred = np.concatenate([[0], np.diff(_prediction)])
         if _direction == 1:
             _slice_indices = _slice_indices[::-1]
+
+        if _d_pred[vert_line] > 0.5 and _prediction[vert_line] > 1.0:
+            if _direction == 0:
+                RED_BOX_FLAG = True
+            # else:
+            #     BLUE_BOX_FLAG = True
+        # plot_pair.append((_slice_indices, _d_pred))
         plot_pair.append((_slice_indices, _prediction))
+
+    if RED_BOX_FLAG or BLUE_BOX_FLAG:
+        ax[0].add_patch(plt.Rectangle((0, 0), dpi-1, dpi-1, fill=False, color='red', linewidth=2))
 
     # # check if the slice_indices are discontinuous
     # if any([a > b for a, b in zip(slice_indices, slice_indices[1:])]):
@@ -83,14 +96,18 @@ def make_marked_slice(image: np.ndarray,
     ax_pred_linewidth=0.3
     ax_pred = ax[1]
     ax_pred.set_axis_off()
-    ax_pred.plot(*plot_pair[0], linewidth=ax_pred_linewidth, color='yellow')
-    ax_pred.plot(*plot_pair[1], linewidth=ax_pred_linewidth, color='blue')
-    ax_pred.axhline(0.5, 0, image.shape[-1], color='red', linewidth=ax_pred_linewidth)        # plot a line at 0 or 0.5
+    ax_pred.axhline(0, 0, image.shape[-1], color='red', linewidth=ax_pred_linewidth, alpha=0.7) # plot a line at 0 or 0.5
     if not vert_line is None:
         assert 0 <= vert_line < image.shape[-1], f"Wrong vert_line provided, got {vert_line}, but image shape " \
                                                  f"is : {image.shape}."
-        ax_pred.axvline(x=vert_line, color='#0F0', linewidth=ax_pred_linewidth)
-    ax_pred.set_position([.80, .05, .15, .1]) # x_start, y_start, x_length, y_length
+        ax_pred.axvline(x=vert_line, color='#0F0', linewidth=ax_pred_linewidth, alpha=0.7)
+    line_forward = ax_pred.step(*plot_pair[0], linewidth=ax_pred_linewidth, color='yellow', alpha=0.7)[0]
+    add_arrow(line_forward, direction = 'right', color = 'yellow'   , size = 4, position = plot_pair[0][0][-5])
+    ax_pred_reverse = ax_pred.twinx()
+    ax_pred_reverse.set_axis_off()
+    line_reverse = ax_pred_reverse.step(*plot_pair[1], linewidth=ax_pred_linewidth, color='lightblue', alpha=0.7)[0]
+    add_arrow(line_reverse, direction = 'right', color = 'lightblue', size = 4, position = plot_pair[1][0][-5])
+    ax_pred.set_position([.70, .05, .25, .1]) # x_start, y_start, x_length, y_length
 
     # Save as numpy array
     with io.BytesIO() as im_buf:
@@ -300,4 +317,35 @@ def _wrap_mpi_mark_image_stacks(im_dir, pred, indi, outdir, kwargs):
     semaphore.release()
     del im, stack
 
+def add_arrow(line, position=None, direction='right', size=15, color=None):
+    """
+    add an arrow to a line.
+
+    line:       Line2D object
+    position:   x-position of the arrow. If None, mean of xdata is taken
+    direction:  'left' or 'right'
+    size:       size of the arrow in fontsize points
+    color:      if None, line color is taken.
+    """
+    if color is None:
+        color = line.get_color()
+
+    xdata = line.get_xdata()
+    ydata = line.get_ydata()
+
+    if position is None:
+        position = xdata.mean()
+    # find closest index
+    start_ind = np.argmin(np.absolute(xdata - position))
+    if direction == 'right':
+        end_ind = start_ind + 1
+    else:
+        end_ind = start_ind - 1
+
+    line.axes.annotate('',
+        xytext=(xdata[start_ind], ydata[start_ind]),
+        xy=(xdata[end_ind], ydata[end_ind]),
+        arrowprops=dict(arrowstyle="-|>", color=color, lw=0.1),
+        size=size
+    )
 
