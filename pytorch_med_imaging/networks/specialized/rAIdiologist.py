@@ -19,7 +19,7 @@ class rAIdiologist(nn.Module):
     interpretability as the SWRAN was already pretty good reaching accuracy of 95%. This network also has a benefit
     of not limiting the number of slices viewed such that scans with a larger field of view can also fit in.
     """
-    def __init__(self, out_ch=2, record=False, iter_limit=5, dropout=0.2, lstm_dropout=0.1):
+    def __init__(self, out_ch=2, record=False, iter_limit=5, dropout=0.2, lstm_dropout=0.1, bidirectional=False):
         super(rAIdiologist, self).__init__()
         self._RECORD_ON = None
         self.play_back = []
@@ -31,7 +31,7 @@ class rAIdiologist(nn.Module):
         # self.lstm_prefc = nn.Linear(2048, 512)
         self.lstm_prelayernorm = nn.LayerNorm(2048)
         self.lstm_rater = LSTM_rater(2048, out_ch=out_ch, embed_ch=128, record=record,
-                                     iter_limit=iter_limit, dropout=lstm_dropout)
+                                     iter_limit=iter_limit, dropout=lstm_dropout, bidirectional=False)
 
         # Mode
         self.register_buffer('_mode', torch.IntTensor([1]))
@@ -152,9 +152,7 @@ class rAIdiologist(nn.Module):
             # !!with same value when C = 1
             # !!o = F.adaptive_max_pool1d(o.permute(0, 2, 1), 1).squeeze(2)
             chan_size = o.shape[-1]
-            o_top = F.adaptive_max_pool1d(o[:, :, 0].permute(0, 2, 1).squeeze(1), 1).view(-1, chan_size)
-            o_bot = F.adaptive_max_pool1d(o[:, :, 1].permute(0, 2, 1).squeeze(1), 1).view(-1, chan_size)
-            o = (o_top + o_bot) / 2.
+            o = F.adaptive_max_pool1d(o.permute(0, 2, 1).squeeze(1), 1).view(-1, chan_size)
             # o = torch.stack([o[i,j] for i, j in zero_slices.items()], dim=0)
         elif self._mode == 3 or self._mode == 4 or self._mode == 5:
             # Loop batch
@@ -174,10 +172,8 @@ class rAIdiologist(nn.Module):
                 # last element.
                 # !Update:
                 # Changed to use packed sequence, such that this now both forward and backward is at `top_slices`.
-                _o_forward  = torch.narrow(o[i, : , 0], 0, top_slices[i], 1) # forward run is padded after top_slices
-                _o_backward = torch.narrow(o[i, : , 1], 0, top_slices[i], 1) # reverse run starts from padded
-                tmp = (_o_forward + _o_backward) / 2.
-                _o.append(tmp)
+                _o_forward  = torch.narrow(o[i, :], 0, top_slices[i], 1) # forward run is padded after top_slices
+                _o.append(_o_forward)
 
             if self.RECORD_ON:
                 self.play_back.extend(self.lstm_rater.get_playback())
@@ -328,7 +324,7 @@ class LSTM_rater(nn.Module):
          ...]
 
     """
-    def __init__(self, in_ch, embed_ch=1024, out_ch=2, record=False, iter_limit=5, dropout=0.2):
+    def __init__(self, in_ch, embed_ch=1024, out_ch=2, record=False, iter_limit=5, dropout=0.2, bidirectional=False):
         super(LSTM_rater, self).__init__()
         # Batch size should be 1
         # self.lstm_reviewer = nn.LSTM(in_ch, embeded, batch_first=True, bias=True)
@@ -339,7 +335,7 @@ class LSTM_rater(nn.Module):
             nn.ReLU(inplace=True),
             nn.Linear(embed_ch, out_ch)
         )
-        self.lstm = nn.LSTM(in_ch, embed_ch, bidirectional=True, num_layers=2, batch_first=True)
+        self.lstm = nn.LSTM(in_ch, embed_ch, bidirectional=bidirectional, num_layers=2, batch_first=True)
 
         # for playback
         self.play_back = []
@@ -349,6 +345,7 @@ class LSTM_rater(nn.Module):
         self._RECORD_ON = record
         self.register_buffer('_mode', torch.IntTensor([1])) # let it save the state too
         self.register_buffer('_embed_ch', torch.IntTensor([embed_ch]))
+        self.register_buffer('_bidirectional', torch.IntTensor([bidirectional]))
 
     @property
     def RECORD_ON(self):
@@ -391,15 +388,23 @@ class LSTM_rater(nn.Module):
 
         # _o: (B, S, C) -> _o: (B x S x 2 x C)
         bsize, ssize, _ = _o.shape
-        o = _o.view(bsize, ssize, 2, -1) # separate the outputs from two direction
+        if self._bidirectional:
+            o = _o.view(bsize, ssize, 2, -1) # separate the outputs from two direction
+        else:
+            o = _o.view(bsize, ssize, -1)
         o = self.out_fc(self.dropout(o))    # _o: (B x S x 2 x fc)
 
         if self._RECORD_ON:
-            # d = direction, s = slice_index
-            d = torch.cat([torch.zeros(ssize), torch.ones(ssize)]).view(1, -1, 1)
-            slice_index = torch.cat([torch.arange(ssize)] * 2).view(1 ,-1, 1)
-            _o = o.view(bsize, ssize, -1).detach().cpu()
-            _o = torch.cat([_o[..., 0], _o[..., 1]], dim=1).view(bsize, -1, 1)
+            if self._bidirectional:
+                # d = direction, s = slice_index
+                d = torch.cat([torch.zeros(ssize), torch.ones(ssize)]).view(1, -1, 1)
+                slice_index = torch.cat([torch.arange(ssize)] * 2).view(1 ,-1, 1)
+                _o = o.view(bsize, ssize, -1).detach().cpu()
+                _o = torch.cat([_o[..., 0], _o[..., 1]], dim=1).view(bsize, -1, 1)
+            else:
+                d = torch.zeros(ssize).view(1, -1, 1)
+                slice_index = torch.arange(ssize).view(1, -1, 1)
+                _o = o.view(bsize, ssize, -1).detach().cpu()
             row = torch.cat([_o, d.expand_as(_o), slice_index.expand_as(_o)], dim=-1) # concat chans
             self.play_back.append(row)
         return o # no need to deal with up or down afterwards
