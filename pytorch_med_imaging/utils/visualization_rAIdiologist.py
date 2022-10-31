@@ -71,10 +71,15 @@ def make_marked_slice(image: np.ndarray,
     for _direction in (0, 1):
         _prediction = prediction[np.argwhere(direction == _direction).ravel()]
         _slice_indices = slice_indices[np.argwhere(direction == _direction).ravel()]
+        if len(_prediction) == 0 or len(_slice_indices) == 0:
+            continue
         _d_pred = np.concatenate([[0], np.diff(_prediction)])
+
+        # reverse the slice_indices for backward LSTM run
         if _direction == 1:
             _slice_indices = _slice_indices[::-1]
 
+        # mark the slice if the gradient > 0.5 and the prediciton > 1.0, empirically determined
         if _d_pred[vert_line] > 0.5 and _prediction[vert_line] > 1.0:
             if _direction == 0:
                 RED_BOX_FLAG = True
@@ -84,7 +89,7 @@ def make_marked_slice(image: np.ndarray,
         plot_pair.append((_slice_indices, _prediction))
 
     if RED_BOX_FLAG or BLUE_BOX_FLAG:
-        ax[0].add_patch(plt.Rectangle((0, 0), dpi-1, dpi-1, fill=False, color='red', linewidth=2))
+        ax[0].add_patch(plt.Rectangle((0, 0), image.shape[0] -1, image.shape[1] - 1, fill=False, color='red', linewidth=2))
 
     # # check if the slice_indices are discontinuous
     # if any([a > b for a, b in zip(slice_indices, slice_indices[1:])]):
@@ -97,19 +102,28 @@ def make_marked_slice(image: np.ndarray,
     ax_pred = ax[1]
     ax_pred.set_axis_off()
     ax_pred.axhline(0, 0, image.shape[-1], color='red', linewidth=ax_pred_linewidth, alpha=0.7) # plot a line at 0 or 0.5
+
+    # plot a vertical line for the current slice position
     if not vert_line is None:
         assert 0 <= vert_line < image.shape[-1], f"Wrong vert_line provided, got {vert_line}, but image shape " \
                                                  f"is : {image.shape}."
         ax_pred.axvline(x=vert_line, color='#0F0', linewidth=ax_pred_linewidth, alpha=0.7)
+
+    # plot forward  LSTM run
     line_forward = ax_pred.step(*plot_pair[0], linewidth=ax_pred_linewidth, color='yellow', alpha=0.7)[0]
     add_arrow(line_forward, direction = 'right', color = 'yellow'   , size = 4, position = plot_pair[0][0][-5])
-    ax_pred_reverse = ax_pred.twinx()
-    ax_pred_reverse.set_axis_off()
-    line_reverse = ax_pred_reverse.step(*plot_pair[1], linewidth=ax_pred_linewidth, color='lightblue', alpha=0.7)[0]
-    add_arrow(line_reverse, direction = 'right', color = 'lightblue', size = 4, position = plot_pair[1][0][-5])
-    ax_pred.set_position([.70, .05, .25, .1]) # x_start, y_start, x_length, y_length
 
-    # Save as numpy array
+    # plot backwards LSTM run if it exists
+    if len(plot_pair) > 1: # this means the LSTM is bidirectional
+        ax_pred_reverse = ax_pred.twinx()
+        ax_pred_reverse.set_axis_off()
+        line_reverse = ax_pred_reverse.step(*plot_pair[1], linewidth=ax_pred_linewidth, color='lightblue', alpha=0.7)[0]
+        add_arrow(line_reverse, direction = 'right', color = 'lightblue', size = 4, position = plot_pair[1][0][-5])
+
+    # move the plot to the lower right
+    ax_pred.set_position([.70, .05, .25, .1]) # x_start, y_start, x_length, y_length (float number 0 to 1)
+
+    # Save the plot to a numpy array
     with io.BytesIO() as im_buf:
         fig.savefig(im_buf, format='raw', dpi=dpi)
         im_buf.seek(0)
