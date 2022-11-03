@@ -66,6 +66,7 @@ def make_marked_slice(image: np.ndarray,
     ax[0].set_position([0., 0., 1., 1.])
 
     plot_pair = []
+    AMBER_BOX_FLAG = False
     RED_BOX_FLAG = False
     BLUE_BOX_FLAG = False
     for _direction in (0, 1):
@@ -83,13 +84,25 @@ def make_marked_slice(image: np.ndarray,
         if _d_pred[vert_line] > 0.5 and _prediction[vert_line] > 1.0:
             if _direction == 0:
                 RED_BOX_FLAG = True
-            # else:
-            #     BLUE_BOX_FLAG = True
-        # plot_pair.append((_slice_indices, _d_pred))
-        plot_pair.append((_slice_indices, _prediction))
+            else:
+                BLUE_BOX_FLAG = True
+        if _d_pred[vert_line] > 0.3:
+            AMBER_BOX_FLAG = True
 
-    if RED_BOX_FLAG or BLUE_BOX_FLAG:
-        ax[0].add_patch(plt.Rectangle((0, 0), image.shape[0] -1, image.shape[1] - 1, fill=False, color='red', linewidth=2))
+        # drop zero paddings
+        i = 1
+        while np.isclose(_prediction[-i], 0, atol=3E-2):
+            i += 1
+            print(i)
+        print(_prediction)
+        plot_pair.append((_slice_indices[:-i], _prediction[:-i]))
+
+    if RED_BOX_FLAG or BLUE_BOX_FLAG or AMBER_BOX_FLAG:
+        if RED_BOX_FLAG:
+            box_color = 'red'
+        elif AMBER_BOX_FLAG:
+            box_color = '#cfba34'
+        ax[0].add_patch(plt.Rectangle((0, 0), image.shape[0] -1, image.shape[1] - 1, fill=False, color=box_color, linewidth=2))
 
     # # check if the slice_indices are discontinuous
     # if any([a > b for a, b in zip(slice_indices, slice_indices[1:])]):
