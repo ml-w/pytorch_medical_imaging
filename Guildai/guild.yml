@@ -20,9 +20,9 @@
 
 - model: pmi
   params:
-    rAI_config: "./Configs/BM_LargerStudy/BM_rAIdiologist_nyul_v2.ini"
+    rAI_config: "./Configs/BM_ISMRM/BM_rAIdiologist_nyul_v2.ini"
     rAI_focal_config: "./Configs/BM_LargerStudy/BM_rAIdiologist_focal_v2.ini"
-    swran_config: "./Configs/BM_LargerStudy/BM_rAIdiologist_stage0_v2.ini"
+    swran_config: "./Configs/BM_ISMRM/BM_rAIdiologist_stage0_v2.ini"
   operations:
     train:
       description: Train a model.
@@ -214,8 +214,8 @@
           override="(General,fold_code)=${fold_code}"
         - train_looped config=${config} epoch=50  debug=${debug} batch-size=${bs_rnn} lr=1E-4
           override="(SolverParams,rAI_fixed_mode)=1;(General,fold_code)=${fold_code}" network=${network}
-        - train_looped config=${config} epoch=50  debug=${debug} batch-size=${bs_cnn} lr=1E-4
-          override="(SolverParams,rAI_fixed_mode)=2;(General,fold_code)=${fold_code}" network=${network}
+#        - train_looped config=${config} epoch=50  debug=${debug} batch-size=${bs_cnn} lr=1E-4
+#          override="(SolverParams,rAI_fixed_mode)=2;(General,fold_code)=${fold_code}" network=${network}
         - train_looped config=${config} epoch=50 debug=${debug} batch-size=${bs_rnn} lr=1E-4
           override="(SolverParams,rAI_fixed_mode)=3;(General,fold_code)=${fold_code}" network=${network}
         - train_looped config=${config} epoch=50 debug=${debug} batch-size=${bs_cnn} lr=1E-4
