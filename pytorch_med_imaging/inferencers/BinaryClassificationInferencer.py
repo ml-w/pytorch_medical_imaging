@@ -137,6 +137,7 @@ class BinaryClassificationInferencer(ClassificationInferencer):
         row = pd.Series(BinaryClassificationInferencer._get_sum_perf([TP, FP, TN, FN]), name='Overall')
         perf = perf.append(row)
 
+        self._logger.info('\n' + subdf.to_string())
         self._logger.info('\n' + perf.to_string())
         self._logger.info("Sensitivity: %.3f Specificity: %.3f NPV: %.3f PPV: %.3f OverallACC: %.3f"%(
             perf.loc['Overall']['Sensitivity'], perf.loc['Overall']['Specificity'],
