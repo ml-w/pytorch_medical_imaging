@@ -41,6 +41,9 @@ def console_entry(raw_args=None):
                         help="Set this to true to run validation direction. This also sets --debug to true.")
     parser.add_argument('--validate-on-test-set', action='store_true',
                         help="If specified, validation after each epoch will be done on the testing set.")
+    parser.add_argument('--inference-on-validation-set', action='store_true',
+                        help="If specified, inference on the validation set instead of the testing set. Only effective"
+                             "if --inference is specified.")
     parser.add_argument('--verbose', dest='verbose', action='store_true', default=False,
                         help="Print message to stdout.")
     parser.add_argument('--fold-code', action='store', default=None,
