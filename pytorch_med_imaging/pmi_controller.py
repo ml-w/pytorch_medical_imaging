@@ -289,8 +289,12 @@ class PMIController(object):
             _tmp = self.pmi_data._run_mode
             self.pmi_data._run_mode = 'inference'
 
-        subjects = self.pmi_data.load_dataset()
-        validationSubjects = self.pmi_data_val.load_dataset() if self.validation_FLAG else (None, None)
+        if inference_mode and self.a.inference_on_validation_set:
+            self._logger.info("Inferencing on validation set")
+            subjects = self.pmi_data_val.load_dataset(exclude_augment=True) if self.validation_FLAG else (None, None)
+        else:
+            subjects = self.pmi_data.load_dataset(exclude_augment=True)
+
         # Prepare dataset
         # numcpu = int(os.environ.get('SLURM_CPUS_ON_NODE', default=torch.multiprocessing.cpu_count()))
         if self.loaderparams_pmi_loader_name is None:
@@ -302,6 +306,9 @@ class PMIController(object):
                                 drop_last   = not inference_mode,
                                 pin_memory  = False)
             if not inference_mode:
+                # TODO: Need to handle when there are no validation data
+                self.pmi_data_val._run_mode = 'inference_mode'
+                validationSubjects = self.pmi_data_val.load_dataset() if self.validation_FLAG else (None, None)
                 loader_val = DataLoader(validationSubjects,
                                         batch_size  = self.runparams_batch_size,
                                         shuffle     = False,
@@ -310,9 +317,10 @@ class PMIController(object):
                                         pin_memory  = False) if self.validation_FLAG else None
         else:
             self._logger.info("Loading custom dataloader.")
-            loader_factory = PMIBatchSamplerFactory()
-            loader = loader_factory.produce_object(trainingSet, self.config)
-            loader_val = loader_factory.produce_object(valSet, self.config) if self.validation_FLAG else None
+            raise NotImplementedError
+            # loader_factory = PMIBatchSamplerFactory()
+            # loader = loader_factory.produce_object(trainingSet, self.config)
+            # loader_val = loader_factory.produce_object(valSet, self.config) if self.validation_FLAG else None
 
         if inference_mode:
             self.pmi_data._run_mode = _tmp

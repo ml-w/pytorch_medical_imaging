@@ -52,6 +52,7 @@ class PMIDataLoaderBase(object):
         self._verbose = verbose
         self._debug = debug
         self._run_mode = run_mode
+
         if not self._check_input:
             raise AttributeError
 
@@ -123,10 +124,14 @@ class PMIDataLoaderBase(object):
         self._logger.debug(f"final_dict: {final_dict}")
         self.__dict__.update(final_dict)
 
-    def load_dataset(self):
+    def load_dataset(self, exclude_augment = None):
         r"""
         Called in solver or inferencer to load arguments for the network training or actual inference. Normally you
         would need not to inherit this but you can do so to added some custom features.
+
+        Args:
+            exclude_augment (bool, Optional):
+                Use this to pass the option to load_dataset
 
         Returns:
             (ImageDataSet or [ImageDataSet, ImageDataSet]): Depend on whether `self._run_mode` is `training` or
@@ -136,7 +141,7 @@ class PMIDataLoaderBase(object):
         """
         if re.match('(?=.*train.*)', self._run_mode):
             self._training_mode = True
-            return self._load_data_set_training()
+            return self._load_data_set_training(exclude_augment = False if exclude_augment is None else exclude_augment)
         else:
             self._training_mode = False
             return self._load_data_set_inference()
