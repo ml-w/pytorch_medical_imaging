@@ -5,6 +5,7 @@ from torch import optim
 from torch.utils.data import DataLoader, TensorDataset
 from torch.optim import lr_scheduler
 from ..loss import FocalLoss, TverskyDiceLoss
+from sklearn.metrics import confusion_matrix
 import torch
 import torch.nn as nn
 import numpy as np
@@ -27,11 +28,14 @@ class BinaryClassificationSolver(ClassificationSolver):
     def create_lossfunction(self):
         super(BinaryClassificationSolver, self).create_lossfunction()
         # Simple error check
-        if not isinstance(self.solverparams_class_weights, float) and self.solverparams_class_weights is not None:
+        if not isinstance(self.solverparams_class_weights, (float, torch.FloatTensor)) \
+                and self.solverparams_class_weights is not None:
             msg = f"Class weight for binary classifier must be a single float number. Got " \
                   f"{self.solverparams_class_weights} instead."
             raise AttributeError(msg)
+
         self.lossfunction = nn.BCEWithLogitsLoss(reduction='mean', pos_weight=self.lossfunction.weight) # Combined with sigmoid.
+        self._logger.info(f"Using BCEWithLogitLoss, pos_weight = {self.lossfunction.weight}")
 
     def validation(self):
         if self._data_loader_val is None:
@@ -44,9 +48,11 @@ class BinaryClassificationSolver(ClassificationSolver):
             validation_loss = []
             dics = []
             gts = []
+            predictions = []
+            uids = []
 
             for mb in tqdm(self._data_loader_val, desc="Validation", position=2):
-                # s: (B x num_class), g: (B x 1)
+                # s: (B x num_class), g: (B x 1)GGq
                 s, g = self._unpack_minibatch(mb, self.solverparams_unpack_keys_forward)
                 s = self._match_type_with_network(s)
                 g = self._match_type_with_network(g)
@@ -74,22 +80,30 @@ class BinaryClassificationSolver(ClassificationSolver):
                 self._logger.debug("_val_res:\n" + _df.to_string())
                 self._logger.debug("_val_step_loss: {}".format(loss.data.item()))
                 # Decision were made by checking whether value is > 0.5 after sigmoid
-                dics.append(dic.cpu())
-                gts.append(g.cpu())
+                dics.extend(dic.cpu())
+                gts.extend(g.cpu())
+                predictions.extend(res.cpu().flatten().tolist())
+                uids.extend(mb['uid'])
                 validation_loss.append(loss.item())
                 # tqdm.write(str(torch.stack([torch.stack([a, b, c]) for a, b, c, in zip(dic, torch.sigmoid(res), g)])))
                 del dic, s, g, _df
 
         acc, per_mean, res_table = self._compute_performance(dics, gts)
         validation_loss = np.mean(np.array(validation_loss).flatten())
-        self._logger.debug("_val_perfs: \n%s"%res_table.T.to_string())
+        df = {'prediction': predictions,
+              'decision': torch.cat(dics, dim=0).bool().tolist(),
+              'truth': torch.cat(gts, dim=0).bool().tolist()}
+        df = pd.DataFrame(data=df, index=uids)
+        df['correct'] = df['decision'] == df['truth']
+        self._logger.info(f"\n{df.to_string()}")
+        # self._logger.debug("_val_perfs: \n%s"%res_table.T.to_string())
         self._logger.info("Validation Result - ACC: %.05f, VAL: %.05f"%(acc, validation_loss))
         self.net = self.net.train()
         self.plotter_dict['scalars']['Loss/Validation Loss'] = validation_loss
         self.plotter_dict['scalars']['Performance/ACC'] = acc
         for param, val in per_mean.iteritems():
             self.plotter_dict['scalars']['Performance/%s'%param] = val
-
+        self.optimizer.zero_grad()
         return validation_loss
 
     @staticmethod
@@ -116,25 +130,25 @@ class BinaryClassificationSolver(ClassificationSolver):
         # Stack the decisions per batch first
         dics = torch.cat(dics, dim=0).bool()
         gts = torch.cat(gts, dim=0).bool()
-        tp = (dics * gts).sum(axis=0)
-        tn = (~dics * ~gts).sum(axis=0)
-        fp = (dics * ~gts).sum(axis=0)
-        fn = (~dics * gts).sum(axis=0)
-        accuracy = pd.Series((tp + tn) / (tp + tn + fp + fn).float(), name='Accuracy')
-        sens = pd.Series(tp / (1E-32 + (tp + fn).float()), name='Sensitivity')
-        spec = pd.Series(tn / (1E-32 + (tn + fp).float()), name='Specificity')
-        ppv = pd.Series(tp / (1E-32 + (tp + fp).float()), name='PPV')
-        npv = pd.Series(tn / (1E-32 + (tn + fn).float()), name='NPV')
+        tn, fp, fn, tp = confusion_matrix(gts.numpy().ravel(), dics.numpy().ravel(), labels=[0, 1]).ravel()
+
+        accuracy = pd.Series((tp + tn) / float(tp + tn + fp + fn), name='Accuracy')
+        sens = pd.Series(tp / (1E-32 + float(tp + fn)), name = 'Sensitivity')
+        spec = pd.Series(tn / (1E-32 + float(tn + fp)), name = 'Specificity')
+        ppv  = pd.Series(tp / (1E-32 + float(tp + fp)), name = 'PPV')
+        npv  = pd.Series(tn / (1E-32 + float(tn + fn)), name = 'NPV')
         res_table = pd.concat([accuracy, sens, spec, ppv, npv], axis=1)
         per_mean = res_table.mean()
         acc = accuracy.mean()
         return acc, per_mean, res_table
 
-    def _build_validation_df(self, g, res):
+    def _build_validation_df(self, g, res, uid=None):
         _pairs = zip(res.flatten().data.cpu().numpy(),
                      g.flatten().data.cpu().numpy(),
                      torch.sigmoid(res).flatten().data.cpu().numpy())
         _df = pd.DataFrame(_pairs, columns=['res', 'g', 'sig_res'])
+        if uid is not None:
+            _df.index = uid
 
         # model_output: (B x num_class)
         dic = torch.zeros_like(res)
