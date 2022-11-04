@@ -134,8 +134,8 @@ class PMIController(object):
             val_config = configparser.ConfigParser()
             val_config.read_dict(self.config)
             val_config.set('Filters', 're_suffix', self.filters_validation_re_suffix)
-            if a is not None: # --inference-on-test-set option
-                if a.inference_on_test_set:
+            if a is not None: # --validate-on-test-set option
+                if a.validate_on_test_set:
                     val_config.set('Filters', 'id_list', self.filters_id_list)
                     # This will trick pmi_data to load from .ini the testing row
                     val_config.set('General', 'run_mode', 'inference')
@@ -293,7 +293,7 @@ class PMIController(object):
             self._logger.info("Inferencing on validation set")
             subjects = self.pmi_data_val.load_dataset(exclude_augment=True) if self.validation_FLAG else (None, None)
         else:
-            subjects = self.pmi_data.load_dataset()
+            subjects = self.pmi_data.load_dataset(exclude_augment=True)
 
         # Prepare dataset
         # numcpu = int(os.environ.get('SLURM_CPUS_ON_NODE', default=torch.multiprocessing.cpu_count()))
