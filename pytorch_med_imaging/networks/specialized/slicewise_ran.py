@@ -7,7 +7,7 @@ from ..AttentionResidual import AttentionModule_Modified
 from ..third_party_nets.spacecutter import LogisticCumulativeLink
 
 
-__all__ = ['SlicewiseAttentionRAN', 'AttentionRAN_25D', 'OrdinalSlicewiseAttentionRAN', 'AttentionRAN_25D_MSE']
+__all__ = ['SlicewiseAttentionRAN', 'AttentionRAN_25D', 'OrdinalSlicewiseAttentionRAN', 'AttentionRAN_25D_MSE', 'RAN_25D']
 
 class SlicewiseAttentionRAN(nn.Module):
     r"""
@@ -44,7 +44,8 @@ class SlicewiseAttentionRAN(nn.Module):
                  save_weight: Optional[bool] = False,
                  exclude_fc: Optional[bool] = False,
                  sigmoid_out: Optional[bool] = False,
-                 reduce_strats: Optional[str] = 'max'):
+                 reduce_strats: Optional[str] = 'max',
+                 dropout: Optional[float] = 0.1):
 
         super(SlicewiseAttentionRAN, self).__init__()
 
@@ -58,9 +59,9 @@ class SlicewiseAttentionRAN(nn.Module):
             nn.MaxPool3d([2, 2, 1]),
             DoubleConv3d(int(first_conv_ch),
                          int(first_conv_ch * 2),
-                         kern_size=[3, 3, 1], padding=0, dropout=0.1, activation='leaky_relu'),
+                         kern_size=[3, 3, 1], padding=0, dropout=dropout, activation='leaky_relu'),
             nn.MaxPool3d([2, 2, 1]),
-            DoubleConv3d(int(first_conv_ch * 2), 1, kern_size=1, padding=0, dropout=0.1, activation='leaky_relu'),
+            DoubleConv3d(int(first_conv_ch * 2), 1, kern_size=1, padding=0, dropout=dropout, activation='leaky_relu'),
             nn.AdaptiveAvgPool3d([1, 1, None])
         )
         self.x_w = None
@@ -111,10 +112,11 @@ class SlicewiseAttentionRAN(nn.Module):
         x = self.att3(x)
 
         x = self.out_conv1(x)
-        if self.reduce_strats == 0:
-            x = F.adaptive_max_pool3d(x, [1, 1, None]).squeeze()
-        else:
-            x = F.adaptive_avg_pool3d(x, [1, 1, None]).squeeze()
+        # order of slicewise attention and max pool makes no differences because pooling is within slice
+        x = x = x * x_w.view([x.shape[0], 1, 1, 1, -1]).expand_as(x)
+        x = F.adaptive_max_pool3d(x, [1, 1, None]).squeeze()
+        # else:
+        # x = F.adaptive_avg_pool3d(x, [1, 1, None]).squeeze()
 
         if x.dim() < 3:
             x = x.unsqueeze(0)
@@ -151,6 +153,108 @@ class SlicewiseAttentionRAN(nn.Module):
         else:
             print("Attention weight was not saved!")
             return None
+
+class RAN_25D(nn.Module):
+    r"""
+
+
+    Attributes:
+        in_ch (int):
+            Number of in channels.
+        out_ch (int):
+            Number of out channels.
+        first_conv_ch (int, Optional):
+            Number of output channels of the first conv layer.
+        save_mask (bool, Optional):
+            If `True`, the attention mask of the attention modules will be saved to the CPU memory.
+            Default to `False`.
+        save_weight (bool, Optional):
+            If `True`, the slice attention would be saved for use (CPU memory). Default to `False`.
+        exclude_fc (bool, Optional):
+            If `True`, the output FC layer would be excluded.
+
+    """
+    _strats_dict = {
+        'max': 0,
+        'min': 1,
+        'mean': 2,
+        'avg': 2,
+    }
+    def __init__(self,
+                 in_ch: int,
+                 out_ch: int,
+                 first_conv_ch: Optional[int] = 64,
+                 exclude_fc: Optional[bool] = False,
+                 sigmoid_out: Optional[bool] = False,
+                 reduce_strats: Optional[str] = 'max',
+                 dropout: Optional[float] = 0.1):
+
+        super(RAN_25D, self).__init__()
+
+        self.in_conv1 = Conv3d(in_ch, first_conv_ch, kern_size=[3, 3, 1], stride=[1, 1, 1], padding=[1, 1, 0])
+        self.exclude_top = exclude_fc # Normally you don't have to use this.
+        self.sigmoid_out = sigmoid_out
+
+        # RAN
+        self.in_conv2 = ResidualBlock3d(first_conv_ch, 256)
+        self.att1 = AttentionModule_Modified(256, 256, save_mask=save_mask)
+        self.r1 = ResidualBlock3d(256, 512, p=0.1)
+        self.att2 = AttentionModule_Modified(512, 512, save_mask=save_mask)
+        self.r2 = ResidualBlock3d(512, 1024, p=0.1)
+        self.att3 = AttentionModule_Modified(1024, 1024, save_mask=save_mask)
+        self.out_conv1 = ResidualBlock3d(1024, 2048, p=0.1)
+
+        # Output layer
+        self.out_fc1 = nn.Sequential(
+            nn.Linear(2048, out_ch),
+        )
+
+        # Reduce strategy
+        if reduce_strats not in self._strats_dict:
+            raise AttributeError("Reduce strategy is incorrect.")
+        self.register_buffer('reduce_strats', torch.Tensor([self._strats_dict[reduce_strats]]))
+
+    def forward(self, x):
+        r"""Expect input (B x in_ch x H x W x S), output (B x out_ch)"""
+        B = x.shape[0]
+        while x.dim() < 5:
+            x = x.unsqueeze(0)
+        x = self.in_conv1(x)
+
+        x = F.max_pool3d(x, [2, 2, 1], stride=[2, 2, 1])
+
+        # Resume dimension
+        x = self.in_conv2(x)
+
+        x = self.att1(x)
+        x = self.r1(x)
+        x = self.att2(x)
+        x = self.r2(x)
+        x = self.att3(x)
+
+        x = self.out_conv1(x)
+
+        # order of slicewise attention and max pool makes no differences because pooling is within slice
+        x = F.adaptive_max_pool3d(x, [1, 1, None]).squeeze()
+
+        if x.dim() < 3:
+            x = x.unsqueeze(0)
+
+        if not self.exclude_top:
+            # Get best prediction across the slices
+            if self.reduce_strats == 0:
+                x = x.max(dim=-1).values
+            elif self.reduce_strats == 1:
+                x = x.min(dim=-1).values
+            elif self.reduce_strats == 2:
+                x = x.mean(dim=-1)
+
+            x = self.out_fc1(x)
+            while x.dim() < 2:
+                x = x.unsqueeze(0)
+            if self.sigmoid_out:
+                x = torch.sigmoid(x)
+        return x
 
 class AttentionRAN_25D(nn.Module):
     r"""
