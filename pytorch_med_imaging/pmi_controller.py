@@ -292,8 +292,10 @@ class PMIController(object):
         if inference_mode and self.a.inference_on_validation_set:
             self._logger.info("Inferencing on validation set")
             subjects = self.pmi_data_val.load_dataset(exclude_augment=True) if self.validation_FLAG else (None, None)
-        else:
+        elif inference_mode and self.a.validate_on_test_set:
             subjects = self.pmi_data.load_dataset(exclude_augment=True)
+        else:
+            subjects = self.pmi_data.load_dataset()
 
         # Prepare dataset
         # numcpu = int(os.environ.get('SLURM_CPUS_ON_NODE', default=torch.multiprocessing.cpu_count()))
