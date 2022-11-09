@@ -1,6 +1,6 @@
 [submodule "ThirdParty/surface-distance"]
 	path = ThirdParty/surface-distance
-	url = git@github.com:deepmind/surface-distance.git
+	url = git@github.com:alabamagan/surface-distance.git
 [submodule "ThirdParty/EROS"]
 	path = ThirdParty/EROS
 	url = git@github.com:alabamagan/EROS.git
