@@ -94,7 +94,6 @@ def make_marked_slice(image: np.ndarray,
         while np.isclose(_prediction[-i], 0, atol=3E-2):
             i += 1
             print(i)
-        print(_prediction)
         plot_pair.append((_slice_indices[:-i], _prediction[:-i]))
 
     if RED_BOX_FLAG or BLUE_BOX_FLAG or AMBER_BOX_FLAG:
