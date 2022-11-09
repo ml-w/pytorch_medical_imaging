@@ -8,6 +8,10 @@
     fold-code: ""
     network: ""
     override: ""
+    validate-on-test-set:
+      type: boolean
+      default: no
+      arg-switch: yes
 
 - config: val-flags
   flags:
@@ -201,7 +205,7 @@
       description:
         "This recipe requires two config files, one trains the SWRAN and the other train rAIdiologist."
       flags:
-        network: "rAIdiologist(1)"
+        network: "rAIdiologist(1, dropout=0.2)"
         config: "{{rAI_config}}"
         config_stage0: '{{swran_config}}'
         fold_code: "B00"
@@ -210,15 +214,15 @@
         bs_rnn: 24
         debug: no
       steps:
-        - train        config=${config_stage0} epoch=150 debug=${debug} batch-size=${bs_swran} lr=1E-4
+        - train        config=${config_stage0} epoch=100 debug=${debug} batch-size=${bs_swran} lr=1E-5
           override="(General,fold_code)=${fold_code}"
-        - train_looped config=${config} epoch=50  debug=${debug} batch-size=${bs_rnn} lr=1E-4
+        - train_looped config=${config} epoch=75  debug=${debug} batch-size=${bs_rnn} lr=1E-5
           override="(SolverParams,rAI_fixed_mode)=1;(General,fold_code)=${fold_code}" network=${network}
 #        - train_looped config=${config} epoch=50  debug=${debug} batch-size=${bs_cnn} lr=1E-4
 #          override="(SolverParams,rAI_fixed_mode)=2;(General,fold_code)=${fold_code}" network=${network}
-        - train_looped config=${config} epoch=50 debug=${debug} batch-size=${bs_rnn} lr=1E-4
+        - train_looped config=${config} epoch=75 debug=${debug} batch-size=${bs_rnn} lr=1E-5
           override="(SolverParams,rAI_fixed_mode)=3;(General,fold_code)=${fold_code}" network=${network}
-        - train_looped config=${config} epoch=50 debug=${debug} batch-size=${bs_cnn} lr=1E-4
+        - train_looped config=${config} epoch=75 debug=${debug} batch-size=${bs_cnn} lr=1E-5
           override="(SolverParams,rAI_fixed_mode)=4;(General,fold_code)=${fold_code}" network=${network}
         - validation   config=${config} debug=${debug} batch-size=${bs_cnn} override="(General,fold_code)=${fold_code}"
           network=${network}

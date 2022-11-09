@@ -34,8 +34,12 @@ class BinaryClassificationSolver(ClassificationSolver):
                   f"{self.solverparams_class_weights} instead."
             raise AttributeError(msg)
 
-        self.lossfunction = nn.BCEWithLogitsLoss(reduction='mean', pos_weight=self.lossfunction.weight) # Combined with sigmoid.
-        self._logger.info(f"Using BCEWithLogitLoss, pos_weight = {self.lossfunction.weight}")
+        try:
+            self.lossfunction = nn.BCEWithLogitsLoss(reduction='mean', pos_weight=self.solverparams_class_weights) # Combined with sigmoid.
+            self._logger.info(f"Using BCEWithLogitLoss, pos_weight = {self.solverparams_class_weights}")
+        except:
+            self.lossfunction = nn.BCEWithLogitsLoss(reduction='mean', pos_weight=self.lossfunction.weight) # Combined with sigmoid.
+            self._logger.info(f"Using BCEWithLogitLoss, pos_weight = {self.lossfunction.weight}")
 
     def validation(self):
         if self._data_loader_val is None:

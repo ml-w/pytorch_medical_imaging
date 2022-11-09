@@ -9,9 +9,9 @@ from typing import Iterable, Union, Optional
 
 from ..layers import PositionalEncoding
 from ..third_party_nets import *
-from . import SlicewiseAttentionRAN
+from . import SlicewiseAttentionRAN, RAN_25D
 
-__all__ = ['rAIdiologist' ,'rAIdiologist_v2']
+__all__ = ['rAIdiologist' ,'rAIdiologist_v2', 'rAIdiologistRAN']
 
 class rAIdiologist(nn.Module):
     r"""
@@ -52,7 +52,6 @@ class rAIdiologist(nn.Module):
 
     def load_pretrained_swran(self, directory: str):
         return self.cnn.load_state_dict(torch.load(directory), strict=False)
-
 
     def clean_playback(self):
         r"""Call this after each forward run to clean the playback. Otherwise, you need to keep track of the order
@@ -199,6 +198,11 @@ class rAIdiologist(nn.Module):
             return self.forward_swran(*args)
         else:
             return self.forward_(*args)
+
+class rAIdiologistRAN(rAIdiologist):
+    def __init__(self, *args, **kwargs):
+        super(rAIdiologistRAN, self).__init__(*args, **kwargs)
+        self.cnn = RAN_25D(1, 1, exclude_fc=True, sigmoid_out=False)
 
 
 class Transformer_rater(nn.Module):

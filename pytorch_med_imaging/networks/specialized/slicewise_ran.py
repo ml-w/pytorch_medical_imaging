@@ -50,7 +50,7 @@ class SlicewiseAttentionRAN(nn.Module):
         super(SlicewiseAttentionRAN, self).__init__()
 
         self.save_weight=save_weight
-        self.in_conv1 = Conv3d(in_ch, first_conv_ch, kern_size=[3, 3, 1], stride=[1, 1, 1], padding=[1, 1, 0])
+        self.in_conv1 = Conv3d(in_ch, first_conv_ch, kern_size=[3, 3, 1], stride=[1, 1, 1], padding=[1, 1, 1])
         self.exclude_top = exclude_fc # Normally you don't have to use this.
         self.sigmoid_out = sigmoid_out
 
@@ -94,7 +94,7 @@ class SlicewiseAttentionRAN(nn.Module):
 
 
         # Construct slice weight
-        x_w = F.softmax(self.in_sw(x).view(B, -1), dim=1)
+        x_w = self.in_sw(x).view(B, -1)
         if self.save_weight:
             self.x_w = x_w.data.cpu()
 
@@ -113,7 +113,7 @@ class SlicewiseAttentionRAN(nn.Module):
 
         x = self.out_conv1(x)
         # order of slicewise attention and max pool makes no differences because pooling is within slice
-        x = x = x * x_w.view([x.shape[0], 1, 1, 1, -1]).expand_as(x)
+        # x = x = x * x_w.view([x.shape[0], 1, 1, 1, -1]).expand_as(x)
         x = F.adaptive_max_pool3d(x, [1, 1, None]).squeeze()
         # else:
         # x = F.adaptive_avg_pool3d(x, [1, 1, None]).squeeze()
@@ -197,11 +197,11 @@ class RAN_25D(nn.Module):
 
         # RAN
         self.in_conv2 = ResidualBlock3d(first_conv_ch, 256)
-        self.att1 = AttentionModule_Modified(256, 256, save_mask=save_mask)
+        self.att1 = AttentionModule_Modified(256, 256)
         self.r1 = ResidualBlock3d(256, 512, p=0.1)
-        self.att2 = AttentionModule_Modified(512, 512, save_mask=save_mask)
+        self.att2 = AttentionModule_Modified(512, 512)
         self.r2 = ResidualBlock3d(512, 1024, p=0.1)
-        self.att3 = AttentionModule_Modified(1024, 1024, save_mask=save_mask)
+        self.att3 = AttentionModule_Modified(1024, 1024)
         self.out_conv1 = ResidualBlock3d(1024, 2048, p=0.1)
 
         # Output layer
