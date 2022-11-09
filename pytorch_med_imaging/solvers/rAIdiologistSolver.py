@@ -121,6 +121,8 @@ class rAIdiologistSolver(BinaryClassificationSolver):
         self.plotter_dict = {'scalars': {}, 'epoch_num': epoch_number}
         for step_idx, mb in enumerate(self._data_loader):
             s, g = self._unpack_minibatch(mb, self.solverparams_unpack_keys_forward)
+            # try to print uid to locate problematic data
+            self._logger.debug(f"uids: {mb['uid']}")
 
             # initiate one train step. Things should be plotted in decorator of step if needed.
             try:

@@ -220,6 +220,7 @@ class SolverBase(object):
                     self._logger.warning(f"Cannot load checkpoint from {checkpoint_dir}")
         else:
             self._logger.warning("Checkpoint specified but doesn't exist!")
+            self._logger.debug(f"{checkpoint_dir}")
 
     def create_lossfunction(self, *args, **kwargs):
         r"""
@@ -298,6 +299,8 @@ class SolverBase(object):
         """
         if self.solverparams_optimizer_type == 'Adam':
             self.optimizer = torch.optim.Adam(net_params, lr=self.solverparams_learning_rate)
+        elif self.solverparams_optimizer_type == 'AdamW':
+            self.optimizer = torch.optim.AdamW(net_params, lr=self.solverparams_learning_rate)
         elif self.solverparams_optimizer_type == 'SGD':
             self.optimizer = torch.optim.SGD(net_params, lr=self.solverparams_learning_rate,
                                              momentum=self.solverparams_momentum)

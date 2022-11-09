@@ -49,14 +49,18 @@ class ClassificationSolver(SolverBase):
         # set class weights to 0 to disable class weight for loss function
         try:
             if not self.solverparams_class_weights == 0:
-                weights = torch.as_tensor(self.solverparams_class_weights)
-                loss_init_weights = weights.cpu().float()
-                self._logger.info("Initial weight factor: " + str(weights))
+                if not isinstance(self.solverparams_class_weights, (list, tuple, torch.Tensor)) and \
+                        self.solverparams_class_weights is not None:
+                    self.solverparams_class_weights = [self.solverparams_class_weights]
+                self.solverparams_class_weights = torch.as_tensor(self.solverparams_class_weights)
+                loss_init_weights = self.solverparams_class_weights.cpu().float()
+                self._logger.info("Initial weight factor: " + str(self.solverparams_class_weights))
             else:
                 self._logger.info("Skipping class weights.")
                 loss_init_weights = None
         except Exception as e:
             self._logger.warning("Weight convertion to tensor fails. Falling back!")
+            self._logger.debug(f"Original error: {e}")
             loss_init_weights = None
 
         if self.solverparams_ordinal_class:
@@ -88,7 +92,7 @@ class ClassificationSolver(SolverBase):
         del _df
         return out
 
-    def _build_validation_df(self, g, res):
+    def _build_validation_df(self, g, res, uid=None):
         _df = pd.DataFrame.from_dict({f'res_{d}': list(res[:, d].cpu().detach().numpy())
                                       for d in range(res.shape[-1])})
         if not self.solverparams_ordinal_mse:
@@ -106,6 +110,9 @@ class ClassificationSolver(SolverBase):
             _df = pd.concat([_df, _df_gt], axis=1)
             _df['predicted'] = torch.round(res.squeeze()).cpu().detach().long().numpy()
             _df['eval'] = (_df['predicted'] == _df['gt']).replace({True: 'Correct', False: 'Wrong'})
+
+        if not uid is none:
+            _df.index = uid
         return _df, _df['predicted']
 
     def _loss_eval(self, *args):
