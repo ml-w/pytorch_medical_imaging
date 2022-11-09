@@ -389,6 +389,10 @@ class PMIController(object):
             self.config['General']['fold_code'] = a.fold_code
         if a.network not in (None, ""):
             self.config['Network']['network_type'] = a.network
+        if a.inference_on_training_set:
+            self.config['General']['force_train_data'] = 'yes'
+        if a.inference_on_validation_set:
+            self.config['General']['force_validation_data'] = 'yes'
         if not a.override == '':
             for substring in a.override.split(';'):
                 substring = substring.replace(' ', '')

@@ -44,6 +44,9 @@ def console_entry(raw_args=None):
     parser.add_argument('--inference-on-validation-set', action='store_true',
                         help="If specified, inference on the validation set instead of the testing set. Only effective"
                              "if --inference is specified.")
+    parser.add_argument('--inference-on-training-set', action='store_true',
+                        help="If specified, inference on the training set. Cannot be used with "
+                             "--inference-on-validation-set.")
     parser.add_argument('--verbose', dest='verbose', action='store_true', default=False,
                         help="Print message to stdout.")
     parser.add_argument('--fold-code', action='store', default=None,
