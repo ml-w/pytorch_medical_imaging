@@ -1,7 +1,6 @@
 import pandas as pd
-import re
-from pytorch_med_imaging.Algorithms.utils import get_unique_IDs
-from typing import Union, List, Iterable, Optional
+from pytorch_med_imaging.utils.uid_ops import get_unique_IDs
+from typing import Union, Optional
 from pathlib import Path
 
 def check_image_exist(dataids: Union[list, set],

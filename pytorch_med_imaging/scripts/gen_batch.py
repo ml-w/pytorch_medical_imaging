@@ -1,4 +1,4 @@
-from ..Algorithms.batchgenerator import *
+from pytorch_med_imaging.utils.batchgenerator import *
 import argparse
 import pandas as pd
 from mnts.mnts_logger import MNTSLogger
