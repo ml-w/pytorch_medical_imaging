@@ -38,9 +38,11 @@ import os
 scripts = [os.path.join('pytorch_med_imaging/scripts', s) for s in os.listdir('pytorch_med_imaging/scripts')]
 
 setup(
-    name='pytorch_medical_imaging',
+    name='pytorch-medical-imaging',
     version='0.1',
     packages=find_packages(),
+    include_package_data=True,
+    package_data={'pytorch-medical-imaging': ["med_img_dataset/*.txt"]},
     url='https://github.com/alabamagan/pytorch_medical_imaging',
     license='',
     author='ML, Wong',
