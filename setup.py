@@ -38,9 +38,11 @@ import os
 scripts = [os.path.join('pytorch_med_imaging/scripts', s) for s in os.listdir('pytorch_med_imaging/scripts')]
 
 setup(
-    name='pytorch_medical_imaging',
+    name='pytorch-medical-imaging',
     version='0.1',
     packages=find_packages(),
+    include_package_data=True,
+    package_data={'pytorch-medical-imaging': ["med_img_dataset/*.txt"]},
     url='https://github.com/alabamagan/pytorch_medical_imaging',
     license='',
     author='ML, Wong',
@@ -56,7 +58,8 @@ setup(
             'pmi-match_dimension = pytorch_med_imaging.scripts.match_dimension:console_entry',
             'pmi-make_masks = pytorch_med_imaging.scripts.make_masks:console_entry',
             'pmi-labels_remap = pytorch_med_imaging.scripts.preprocessing_labelmaps:remap_label',
-            'pmi-labels_statistic = pytorch_med_imaging.scripts.preprocessing_labelmaps:pmi_label_statistics'
+            'pmi-labels_statistic = pytorch_med_imaging.scripts.preprocessing_labelmaps:pmi_label_statistics',
+            'pmi-gen_batch = pytorch_med_imaging.scripts.gen_batch:console_entry'
         ]
     },
     # scripts = scripts,

@@ -1,5 +1,6 @@
 import argparse
 import shutil
+import distutils
 import time
 import gc
 
@@ -45,6 +46,10 @@ def main(raw_args=None):
                         help="Verbosity.")
     parser.add_argument('--keep-log', action='store_true',
                         help='If specified the log file will be kept as pipeline.log')
+    parser.add_argument('--save-segment', action='store_true',
+                        help="If specified, the segmentations will be saved to `output/segment_output` directory.")
+    parser.add_argument('--save-normed', action='store_true',
+                        help="If specified, the segmentations will be saved to `output/normalized_images` directory.")
     parser.add_argument('--keep-data', action='store_true',
                         help="If specified the segmentations and other images generated will be kept")
     parser.add_argument('--debug', action='store_true',
@@ -60,6 +65,10 @@ def main(raw_args=None):
         output_dir = Path(a.output)
         if not output_dir.is_dir():
             output_dir.mkdir(exist_ok=True)
+        if a.keep_data:
+            a.save_segment = True
+            a.save_normed = True
+
 
         #╔══════╗
         #║▐ I/O ║
@@ -130,19 +139,6 @@ def main(raw_args=None):
 
         # Segmentation post-processing
         # command = f"-i {str(segment_output)} -o {str(segment_output)} -v".split()
-        if a.keep_data:
-            # create a folder based on time at outputdir
-            data_out_dir = Path(output_dir.joinpath("Saved_output"))
-            shutil.rmtree(str(data_out_dir), True)
-            data_out_dir.mkdir()
-            logger.info(f"Writing data to: {str(data_out_dir)}")
-            try:
-                # Copy result to output dir
-                shutil.copytree(str(segment_output), str(data_out_dir.joinpath(segment_output.name)))
-                shutil.copytree(normalized_image_dir, str(data_out_dir.joinpath(normalized_image_dir.name)))
-            except Exception as e:
-                logger.warning("Failed to save output!")
-                logger.exception(e)
         seg_post_main(segment_output, segment_output)
 
         #╔═════════════════════╗
@@ -164,6 +160,24 @@ def main(raw_args=None):
 
         logger.info("{:=^80}".format(f" Report Gen Done (Total: {time.time() - t_start:.01f}s) "))
 
+        #╔══════════════╗
+        #║▐ Save output ║
+        #╚══════════════╝
+        if a.save_segment:
+            save_dir = output_dir.joinpath("segment_output")
+            if not save_dir.is_dir():
+                save_dir.mkdir(parents=True)
+            src_dir = segment_output
+            distutils.dir_util.copy_tree(str(src_dir), str(save_dir), preserve_mode=0)
+            logger.info(f"Saving segmentation files to {str(save_dir)}")
+
+        if a.save_normed:
+            save_dir = output_dir.joinpath("normalized_images")
+            if not save_dir.is_dir():
+                save_dir.mkdir(parents=True)
+            src_dir = normalized_dir
+            distutils.dir_util.copy_tree(str(src_dir), str(save_dir), preserve_mode=0)
+            logger.info(f"Saving normalized image files to {str(save_dir)}")
 
 def run_safety_net(dl_output_dir : Path,
                    normalized_dir: Path,

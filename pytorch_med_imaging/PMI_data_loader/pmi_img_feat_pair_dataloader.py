@@ -1,5 +1,5 @@
 from .pmi_image_dataloader import PMIImageDataLoader
-from ..med_img_dataset import DataLabel
+from ..med_img_dataset import DataLabel, DataLabelConcat
 
 from typing import Optional
 import torchio as tio
@@ -15,15 +15,23 @@ class PMIImageFeaturePair(PMIImageDataLoader):
         * Image classifications
         * Image to coordinates
 
+    Additional attributes can be set using LoaderParams.
+
     Attributes:
         regex (str, Optional):
             Filter for loading files. See :class:`ImageDataSet`
         idlist (str or list, Optional):
             Filter for loading files. See :class:`ImageDataSet`
-        augmentation (int):
-            If `_augmentation` > 0, :class:`ImageDataSetAugment` will be used instead.
-        load_by_slice (int):
-            If `_load_by_slice` > -1, images volumes are loaded slice by slice along the axis specified.
+        excel_sheetname (str, Optional):
+            Name of the sheet. Only work if input ends with xlsx. Default to None.
+        net_in_colname (str, Optional):
+            If this is specified, the feature loaded from this datasheet is input to the network as one of the
+            attribute of the :class:`torchio.Subject`. Default to None.
+        lossfunc_in_colname (str, Optional):
+            Specify this to extract a column for inputting as ground-truth in loss function. Default to None.
+
+
+
 
     Loader_Params:
         excel_sheetname (Optional):
@@ -63,7 +71,7 @@ class PMIImageFeaturePair(PMIImageDataLoader):
         default_attr = {
             'excel_sheetname': None,        # If the excel has multiple sheets
             'net_in_colname': None,         # Name(s) of the column(s) to input into the network
-            'lossfunc_in_colname': None,    # Name(s) of the column(s) to input into the loss function
+            'lossfunc_in_colname': "",    # Name(s) of the column(s) to input into the loss function
         }
         self._load_default_attr(default_attr)
 
@@ -78,14 +86,10 @@ class PMIImageFeaturePair(PMIImageDataLoader):
         img_out = self._read_image(self._input_dir)
         mask_out = self._read_image(self._mask_dir, dtype='uint8')
 
-        # Load the datasheet
-        if not self.excel_sheetname is None:
-            gt_dat = DataLabel.from_xlsx(self._target_dir, self.excel_sheetname)
-        else:
-            gt_dat = DataLabel.from_csv(self._target_dir)
+        gt_dat = self._load_gt_dat()
 
         # Load selected columns only
-        if not self.lossfunc_in_colname is None:
+        if not self.lossfunc_in_colname in (None, ""):
             self._logger.info("Selecting target column: {}".format(self.lossfunc_in_colname))
             gt_dat.set_target_column(self.lossfunc_in_colname)
         gt_dat.map_to_data(img_out)
@@ -117,12 +121,16 @@ class PMIImageFeaturePair(PMIImageDataLoader):
         data_exclude_none = {k: v for k, v in self.data.items() if v is not None}
 
         # Create subject list
-        subjects = [tio.Subject(**{k: v for k, v in zip(data_exclude_none.keys(), row)})
-                    for row in zip(*data_exclude_none.values())]
-        self._logger.debug(f"subjects: {subjects[0]}")
-        subjects = tio.SubjectsDataset(subjects=subjects, transform=self.transform)
-
+        subjects = self._pack_data_into_subjects(data_exclude_none, transform=self.transform)
         return self._create_queue(exclude_augment, subjects)
+
+    def _load_gt_dat(self):
+        # Load the datasheet
+        if not self.excel_sheetname is None:
+            gt_dat = DataLabel.from_xlsx(self._target_dir, self.excel_sheetname)
+        else:
+            gt_dat = DataLabel.from_csv(self._target_dir)
+        return gt_dat
 
     def _load_data_set_inference(self) -> tio.Queue or tio.SubjectsDataset:
         # Try to load ground-truth too
@@ -143,8 +151,31 @@ class PMIImageFeaturePair(PMIImageDataLoader):
 
             # Create subject list
             data_exclude_none = {k: v for k, v in self.data.items() if v is not None}
-            subjects = [tio.Subject(**{k: v for k, v in zip(data_exclude_none.keys(), row)})
-                        for row in zip(*data_exclude_none.values())]
-            subjects = tio.SubjectsDataset(subjects=subjects, transform=self.transform)
-
+            subjects = self._pack_data_into_subjects(data_exclude_none, transform=self.transform)
             return self._create_queue(True, subjects, training=self._training_mode)
+
+class PMIImageFeaturePairConcat(PMIImageFeaturePair):
+    r"""Basically same as the base class but change from using `DataLabel` to `DataLabelConcat`
+
+    This class is suitable for:
+    * img to sequence
+
+    """
+    def __init__(self, *args, **kwargs):
+        super(PMIImageFeaturePairConcat, self).__init__(*args, **kwargs)
+
+    def _read_params(self, config_file=None):
+        super(PMIImageFeaturePairConcat, self)._read_params(config_file)
+
+        default_params = {
+            'dtype': str
+        }
+        self._load_default_attr(default_params)
+
+    def _load_gt_dat(self):
+        # Load the datasheet
+        if not self.excel_sheetname is None:
+            gt_dat = DataLabelConcat.from_xlsx(self._target_dir, sheet_name=self.excel_sheetname, dtype=self.dtype)
+        else:
+            gt_dat = DataLabelConcat.from_csv(self._target_dir, dtype=self.dtype)
+        return gt_dat

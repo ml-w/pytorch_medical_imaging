@@ -31,6 +31,7 @@ class rAIdiologistInferencer(BinaryClassificationInferencer):
         self.net.set_mode(-1) # -1 is the inference mode, which is actually mode 4 for now.
         self.net_handles = []
         if self.rAI_inf_save_playbacks:
+            self._logger.info("Registering save playback hooks...")
             self.net.RECORD_ON = True
             self.net_handles.append(self.net.register_forward_pre_hook(_playback_clean_hook))
             self.net_handles.append(self.net.register_forward_hook(self._forward_hook_gen()))
@@ -71,8 +72,11 @@ class rAIdiologistInferencer(BinaryClassificationInferencer):
         dl = super(rAIdiologistInferencer, self)._writter(out_tensor[..., 0].view(-1, 1),
                                                           uids,
                                                           gt,
-                                                          sig_out=False)
-        dl._data_table['Conf_0'] = out_tensor[..., 1]
+                                                          sig_out=True)
+        try:
+            dl._data_table['Conf_0'] = out_tensor[..., 1]
+        except IndexError:
+            pass
         try:
             # Sorting must be done after assigning the conf vector because the order of out_tensor
             # is not indexed.
@@ -86,18 +90,31 @@ class rAIdiologistInferencer(BinaryClassificationInferencer):
 
         if self.rAI_inf_save_playbacks:
             out_path = Path(self.outdir).with_suffix('.json')
+            # playbacks could have different number of slices [(B1 x S1 x 3), (B2 x S2 x 3), ...]
+            # unpack them and join them as lists
+            self.playbacks = [_ for pb in self.playbacks for _ in list(pb)]
+            # self.playbacks = torch.cat(self.playbacks, dim=0)
+            self._logger.debug(f"playbacks: {self.playbacks}")
             self._logger.info(f"Writing playbacks to: {str(out_path)}")
             out_dict = {u: l.tolist() for u, l in zip(uids, self.playbacks)}
-            json.dump(out_dict, out_path.open('w'), sort_keys=True)
+            with out_path.open('w') as jf:
+                json.dump(out_dict, jf, sort_keys=True)
         return dl
 
     def _forward_hook_gen(self):
         r"""This hook gen copies the playback from rAIdiologist after each forward run"""
         def copy_playback(module, input, output):
             if isinstance(module, rAIdiologist):
+                playback = module.get_playback()
+                if len(playback) == 0:
+                    raise AttributeError("No playback is availble.")
                 self.playbacks.extend(module.get_playback())
             return
         return copy_playback
+
+    def write_out(self):
+        self.net.set_mode(-1) # make sure its in inference mode
+        super(rAIdiologistInferencer, self).write_out()
 
 def _playback_clean_hook(module, input):
     r"""This hook cleans the rAIdiologist playback list prior to running a mini-batch"""

@@ -5,7 +5,7 @@ import tempfile
 import shutil
 import gc
 from npc_report_gen.report_gen_pipeline import main, generate_report, run_rAIdiologist
-from npc_report_gen.img_proc import seg_post_main
+from img_proc import seg_post_main
 from pathlib import Path
 from mnts.mnts_logger import MNTSLogger
 
@@ -46,12 +46,14 @@ def main_():
         idlist = ConfigParser()
         idlist.read(Path('..').joinpath(config['Filters'].get('id_list')))
         testing_ids = idlist['FileList']['testing'].split(',')
+        training_ids = idlist['FileList']['training'].split(',')
+        valiadtion = config['Filters'].get('validation_id_list')
+        val_ids = [r.rstrip() for r in Path('..').joinpath(valiadtion).open('r').readlines()]
 
         # Read other attributes
         target_dir = Path('..').joinpath(config['Data']['target_dir'])
         input_dir  = Path('..').joinpath(config['Data']['input_dir'])
-        # input_dir  = Path('../NPC_Segmentation/0A.NIFTI_ALL/All/T2WFS_TRA')
-        input_dir = Path("/mnt/ftp_shared/NPC_screening_5_AI/Dicom data/SCR003")
+        input_dir  = Path('../NPC_Segmentation/0A.NIFTI_ALL/All/T2WFS_TRA')
         idGlobber  = config['LoaderParams']['idGlobber']
 
         # Small tumor list
@@ -89,52 +91,42 @@ def main_():
         #                           idGlobber=idGlobber, idlist=small_tumors)
 
         # Run report gen
-        po = Path('/media/storage/Data/NPC_Segmentation/70.Screening_report/Screeningoutput_v3/')
-        pof = Path('/media/storage/Data/NPC_Segmentation/70.Screening_report/Screeningoutput_v3/diag.csv')
-        main(['-i',
-              str(input_dir),
-              '-o',
-              str(po),
-              '-n',
-              '16',
-              '-f',
-              str(pof),
-              # '--idGlobber',
-              # str(idGlobber),
-              # '--idlist',
-              # _id,
-              '--verbose',
-              '--keep-data',
-              '--keep-log',
-              '--skip-exist'
-              ])
-        gc.collect()
-        # po = Path('/media/storage/Data/NPC_Segmentation/70.Screening_report/TestOutput_small_tumors_v3/')
-        # pof = Path('/media/storage/Data/NPC_Segmentation/70.Screening_report/TestOutput_small_tumors_v3/diag.csv')
-        # for _id in testing_ids:
-        #     try:
-        #         main(['-i',
-        #               str(input_dir),
-        #               '-o',
-        #               str(po),
-        #               '-n',
-        #               '16',
-        #               '-f',
-        #               str(pof),
-        #               # '--idGlobber',
-        #               # str(idGlobber),
-        #               # '--idlist',
-        #               # _id,
-        #               '--verbose',
-        #               '--keep-data',
-        #               '--keep-log',
-        #               '--skip-exist'
-        #               ])
-        #         gc.collect()
-        #     except Exception as e:
-        #         logger.exception(e)
-        #         gc.collect()
 
+
+        # po = Path('/media/storage/Data/NPC_Segmentation/70.Screening_report/TestOutput_B00TRAIN_v3/')
+        # po = Path('/media/storage/Data/NPC_Segmentation/70.Screening_report/TestOutput_B00VAL_v3/')
+        po = Path('/media/storage/Data/NPC_Segmentation/70.Screening_report/TestOutput_B00_v3/')
+        pof = po.joinpath('diag.csv')
+
+        # po = Path('/media/storage/Data/NPC_Segmentation/70.Screening_report/TestOutput_small_tumors_v4/')
+        # pof = Path('/media/storage/Data/NPC_Segmentation/70.Screening_report/TestOutput_small_tumors_v4/diag.csv')
+        errorlist = []
+        for _id in ['281']:
+            try:
+                main(['-i',
+                      str(input_dir),
+                      '-o',
+                      str(po),
+                      '-n',
+                      '16',
+                      '-f',
+                      str(pof),
+                      '--idGlobber',
+                      str(idGlobber),
+                      '--idlist',
+                      _id,
+                      '--verbose',
+                      '--keep-data',
+                      '--keep-log',
+                      '--skip-exist'
+                      ])
+                gc.collect()
+            except Exception as e:
+                logger.exception(e)
+                gc.collect()
+                errorlist.append(_id)
+        if len(errorlist) > 0:
+            logger.error(f"List of IDs that encounter errors: {', '.join(errorlist)}")
     pass
 
 if __name__ == '__main__':

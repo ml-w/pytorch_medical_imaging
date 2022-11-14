@@ -76,13 +76,16 @@ class SolverBase(object):
         self._tb_plotter             = None
         self._local_rank             = 0
         self.lr_scheduler            = None
-        self.solverparams_early_stop = None
+        self._accumulated_steps       = 0        # For gradient accumulation
 
         # external_att
         self.plotter_dict      = {}
 
         # create loss function if not specified
-        self._load_default_attr(None)   # inherit in child to default other attributes
+        default_dict = {
+            'solverparams_early_stop': None
+        }
+        self._load_default_attr(default_dict)   # inherit in child to default other attributes
         self.create_lossfunction()
         self.create_optimizer(self.net.parameters())
 
@@ -102,6 +105,7 @@ class SolverBase(object):
         r"""If the default_dict items are not specified in the hyperparameter_dict, this will
         load the hyperparameters into __dict__ and self.hyperparameter_dict
         """
+        self.__dict__.update(self.hyperparam_dict)
         if default_dict is None:
             return
 
@@ -173,9 +177,15 @@ class SolverBase(object):
             sche_class = eval('lr_scheduler.' + name)
         except AttributeError:
             sche_class = eval('pmi_lr_scheduler.' + name)
+        #TODO: If scheduler is OneCycleLR, need to recalculate the total_steps
+        if name == 'OneCycleLR':
+            if 'total_steps' in kwargs:
+                kwargs.pop('total_steps')
+            kwargs['epochs'] = self.solverparams_num_of_epochs
+            kwargs['steps_per_epoch'] = len(self._data_loader)
+        self.lr_scheduler = sche_class(self.optimizer, *args, **kwargs)
         self._logger.debug(f"Optimizer args: {args}")
         self._logger.debug(f"Optimizer kwargs: {kwargs}")
-        self.lr_scheduler = sche_class(self.optimizer, *args, **kwargs)
 
     def set_plotter(self, plotter):
         self._tb_plotter = plotter
@@ -210,6 +220,7 @@ class SolverBase(object):
                     self._logger.warning(f"Cannot load checkpoint from {checkpoint_dir}")
         else:
             self._logger.warning("Checkpoint specified but doesn't exist!")
+            self._logger.debug(f"{checkpoint_dir}")
 
     def create_lossfunction(self, *args, **kwargs):
         r"""
@@ -248,12 +259,31 @@ class SolverBase(object):
     def step(self, *args):
         out = self._feed_forward(*args)
         loss = self._loss_eval(out, *args)
-        self.optimizer.zero_grad()
-        loss.backward()
-        self.optimizer.step()
 
+        self._update_network(loss)
+
+        # if schedular is OneCycleLR
+        if isinstance(self.lr_scheduler, lr_scheduler.OneCycleLR):
+            self.lr_scheduler.step()
         self._called_time += 1
         return out, loss.cpu().data
+
+    def _update_network(self, loss):
+        # Gradient accumulation
+        if self.solverparams_accumulate_grad > 0:
+            self._accumulated_steps += 1
+            _loss = loss / float(self.solverparams_accumulate_grad)
+            _loss.backward()
+            loss.detach_()
+            if self._accumulated_steps >= self.solverparams_accumulate_grad:
+                self._logger.debug("Updating network params from accumulated loss")
+                self.optimizer.step()
+                self.optimizer.zero_grad()
+                self._accumulated_steps = 0
+        else:
+            self.optimizer.zero_grad()
+            loss.backward()
+            self.optimizer.step()
 
     def create_optimizer(self,
                          net_params
@@ -269,6 +299,8 @@ class SolverBase(object):
         """
         if self.solverparams_optimizer_type == 'Adam':
             self.optimizer = torch.optim.Adam(net_params, lr=self.solverparams_learning_rate)
+        elif self.solverparams_optimizer_type == 'AdamW':
+            self.optimizer = torch.optim.AdamW(net_params, lr=self.solverparams_learning_rate)
         elif self.solverparams_optimizer_type == 'SGD':
             self.optimizer = torch.optim.SGD(net_params, lr=self.solverparams_learning_rate,
                                              momentum=self.solverparams_momentum)
@@ -280,6 +312,9 @@ class SolverBase(object):
         if not self.lr_scheduler is None:
             if isinstance(self.lr_scheduler, (lr_scheduler.ReduceLROnPlateau)):
                 self.lr_scheduler.step(*args)
+            elif isinstance(self.lr_scheduler, lr_scheduler.OneCycleLR):
+                # Do nothing because it's supposed to be done in `step()`
+                pass
             else:
                 self.lr_scheduler.step()
         self._decayed_time += 1
@@ -370,6 +405,7 @@ class SolverBase(object):
                     'Loss/Loss'           : None,
                     'Loss/Validation Loss': None
                 }
+                self._epoch_prehook()
                 self._last_val_loss = self.validation()
 
             # Prepare values for epoch callback plots
@@ -579,16 +615,18 @@ class SolverEarlyStopScheduler(object):
         super(SolverEarlyStopScheduler, self).__init__()
         self._configs = configs
         self._logger = MNTSLogger[__class__.__name__]
-        self._last_loss = 1E-32
+        self._last_loss = 1E32
+        self._last_epoch = 0
         self._watch = 0
         self._func = None
 
-
         if configs is None:
+            self._logger.debug("Config is None.")
             self._func = None
             return
 
         if self._configs is not None:
+            self._logger.debug(f"Creating early stop scheduler with config: {configs}")
             if isinstance(configs, str):
                 _c = configs
                 if re.search("[\W]+", _c.translate(str.maketrans('', '', ". "))) is not None:
@@ -631,11 +669,11 @@ class SolverEarlyStopScheduler(object):
         Returns 1 if reaching stopping criteria, else 0.
         """
         # ignore if there are no configs
-        self._last_loss = loss
         self._last_epoch = epoch
         if self._func is None:
             return 0
         else:
+            self._logger.debug(f"Epoch {epoch:03d} Loss: {loss}")
             return self._func(loss, epoch)
 
 
@@ -659,8 +697,11 @@ class SolverEarlyStopScheduler(object):
         if epoch < warmup:
                 return 0
         else:
+            self._logger.debug(f"{loss}, {self._last_loss}")
             if loss < self._last_loss:
                 # reset if new loss is smaller than last loss
+                self._logger.debug(f"Counter reset because loss {loss:.05f} is smaller than "
+                                   f"last_loss {self._last_loss:.05f}.")
                 self._watch = 0
                 self._last_loss = loss
             else:

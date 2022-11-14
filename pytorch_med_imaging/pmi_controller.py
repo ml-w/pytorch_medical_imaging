@@ -92,13 +92,13 @@ class PMIController(object):
         if self.data_output_dir.endswith('.csv'):
             Path(self.data_output_dir).parent.mkdir(exist_ok=True)
         else:
-            Path(self.data_output_dir).mkdir(exist_ok=True)
+            Path(self.data_output_dir).mkdir(exist_ok=True, parents=True)
         # simple error check
         self._error_check()
 
         # Create net
         try:
-            if re.search("[\W]+", self.network_network_type.translate(str.maketrans('', '', "(), ="))) is not None:
+            if re.search("[\W]+", self.network_network_type.translate(str.maketrans('', '', "(), =\."))) is not None:
                 raise AttributeError(f"You net_nettype specified ({self.network_network_type}) contains illegal characters!")
             self.net = eval(self.network_network_type)
             so = re.search('.+?(?=\()', self.network_network_type)
@@ -109,6 +109,15 @@ class PMIController(object):
         except:
             raise AttributeError(f"Failed to create network from name: {self.network_network_type}")
 
+        # Try to load pretrain checkpoint if specified
+        if self.network_pretrain_cp != "":
+            self._logger.info("Loading pretrained network.")
+            try:
+                self.net.load_state_dict(torch.load(self.network_pretrain_cp))
+            except Exception as e:
+                self._logger.exception(e)
+                self._logger.warning("Pretrain network specified but cannot be loaded.")
+
         # Prepare data object
         try:
             self.pmi_factory = PMIDataFactory()
@@ -118,13 +127,20 @@ class PMIController(object):
             self._logger.error("Original error: {}".format(e))
             return
 
+        # If validation flags were set, create data loaders required for validation
         self.validation_FLAG=False
         if not self.filters_validation_id_list in (None , "") and self.general_plot_tb:
             self._logger.log_print_tqdm("Recieved validation parameters.")
             val_config = configparser.ConfigParser()
             val_config.read_dict(self.config)
             val_config.set('Filters', 're_suffix', self.filters_validation_re_suffix)
-            val_config.set('Filters', 'id_list', self.filters_validation_id_list)
+            if a is not None: # --validate-on-test-set option
+                if a.validate_on_test_set:
+                    val_config.set('Filters', 'id_list', self.filters_id_list)
+                    # This will trick pmi_data to load from .ini the testing row
+                    val_config.set('General', 'run_mode', 'inference')
+                else:
+                    val_config.set('Filters', 'id_list', self.filters_validation_id_list)
             val_config['Data']['input_dir']  = str(self.data_validation_input_dir)
             val_config['Data']['target_dir'] = str(self.data_validation_gt_dir)
             self.pmi_data_val = self.pmi_factory.produce_object(val_config)
@@ -172,25 +188,19 @@ class PMIController(object):
         self._logger.info(f"Creating solver: {self.general_run_type}")
         solver = self.create_solver(self.general_run_type)
         loader, loader_val = self.prepare_loaders()
+        # Push dataloader to solver
+        solver.set_dataloader(loader, loader_val)
 
         # Set learning rate scheduler, TODO: move this to solver
         if self.solverparams_decay_on_plateau:
             self._logger.warning("Decay on plateau option is deprecated.")
 
         if self.solverparams_lr_scheduler is not None:
-            self._logger.info(f"Creating lr_scheduler: {self.solverparams_lr_scheduler}.")
-            if isinstance(self.solverparams_lr_scheduler_args, (float, int, str)):
-                self.solverparams_lr_scheduler_args = [self.solverparams_lr_scheduler_args]
-            solver.set_lr_scheduler(self.solverparams_lr_scheduler,
-                                    *self.solverparams_lr_scheduler_args,
-                                    **self.solverparams_lr_scheduler_kwargs)
+            self.create_lr_scheduler(solver)
 
         else:
             self._logger.info("LR scheduler not specified, using default exponential.")
             solver.set_lr_decay_exp(self.solverparams_decay_rate_lr)
-
-        # Push dataloader to solver
-        solver.set_dataloader(loader, loader_val)
 
         # Read tensorboard dir from env, disable plot if it fails
         self.prepare_tensorboard_writter()
@@ -205,9 +215,21 @@ class PMIController(object):
         solver.get_net().train()
         solver.load_checkpoint(self.checkpoint_cp_load_dir)
 
+        try:
+            debug_validation = self.a.debug_validation
+        except AttributeError:
+            debug_validation = False
         solver.fit(self.checkpoint_cp_save_dir,
-                   debug_validation=self.a.debug_validation) # TODO: move checkpoint_save argument to else where
+                   debug_validation=debug_validation) # TODO: move checkpoint_save argument to else where
         self.solver = solver
+
+    def create_lr_scheduler(self, solver):
+        self._logger.info(f"Creating lr_scheduler: {self.solverparams_lr_scheduler}.")
+        if isinstance(self.solverparams_lr_scheduler_args, (float, int, str)):
+            self.solverparams_lr_scheduler_args = [self.solverparams_lr_scheduler_args]
+        solver.set_lr_scheduler(self.solverparams_lr_scheduler,
+                                *self.solverparams_lr_scheduler_args,
+                                **self.solverparams_lr_scheduler_kwargs)
 
     def prepare_tensorboard_writter(self) -> None:
         r"""Prepare the Tensorboard writer if `general_plot_tb` is set to True. The writer will be automatically
@@ -243,11 +265,6 @@ class PMIController(object):
         inferencer.set_dataloader(loader)
         inferencer.load_checkpoint(self.checkpoint_cp_load_dir)
 
-        # if self.solverparams_write_mode == 'GradCAM':
-        #     #TODO: custom grad cam layers
-        #     raise NotImplementedError("GradCAM is not implemented")
-        #     inferencer.grad_cam_write_out(['att2'])
-
         with torch.no_grad():
             # if a.inference_all_checkpoints:
             #     try:
@@ -272,8 +289,14 @@ class PMIController(object):
             _tmp = self.pmi_data._run_mode
             self.pmi_data._run_mode = 'inference'
 
-        subjects = self.pmi_data.load_dataset()
-        validationSubjects = self.pmi_data_val.load_dataset() if self.validation_FLAG else (None, None)
+        if inference_mode and self.a.inference_on_validation_set:
+            self._logger.info("Inferencing on validation set")
+            subjects = self.pmi_data_val.load_dataset(exclude_augment=True) if self.validation_FLAG else (None, None)
+        elif inference_mode and self.a.validate_on_test_set:
+            subjects = self.pmi_data.load_dataset(exclude_augment=True)
+        else:
+            subjects = self.pmi_data.load_dataset()
+
         # Prepare dataset
         # numcpu = int(os.environ.get('SLURM_CPUS_ON_NODE', default=torch.multiprocessing.cpu_count()))
         if self.loaderparams_pmi_loader_name is None:
@@ -285,6 +308,9 @@ class PMIController(object):
                                 drop_last   = not inference_mode,
                                 pin_memory  = False)
             if not inference_mode:
+                # TODO: Need to handle when there are no validation data
+                self.pmi_data_val._run_mode = 'inference_mode'
+                validationSubjects = self.pmi_data_val.load_dataset() if self.validation_FLAG else (None, None)
                 loader_val = DataLoader(validationSubjects,
                                         batch_size  = self.runparams_batch_size,
                                         shuffle     = False,
@@ -293,9 +319,10 @@ class PMIController(object):
                                         pin_memory  = False) if self.validation_FLAG else None
         else:
             self._logger.info("Loading custom dataloader.")
-            loader_factory = PMIBatchSamplerFactory()
-            loader = loader_factory.produce_object(trainingSet, self.config)
-            loader_val = loader_factory.produce_object(valSet, self.config) if self.validation_FLAG else None
+            raise NotImplementedError
+            # loader_factory = PMIBatchSamplerFactory()
+            # loader = loader_factory.produce_object(trainingSet, self.config)
+            # loader_val = loader_factory.produce_object(valSet, self.config) if self.validation_FLAG else None
 
         if inference_mode:
             self.pmi_data._run_mode = _tmp
@@ -358,6 +385,14 @@ class PMIController(object):
             self.config['General']['debug_validation'] = "yes"
         if a.debug:
             self.config['General']['debug'] = "yes"
+        if a.fold_code not in (None, ""):
+            self.config['General']['fold_code'] = a.fold_code
+        if a.network not in (None, ""):
+            self.config['Network']['network_type'] = a.network
+        if a.inference_on_training_set:
+            self.config['General']['force_train_data'] = 'yes'
+        if a.inference_on_validation_set:
+            self.config['General']['force_validation_data'] = 'yes'
         if not a.override == '':
             for substring in a.override.split(';'):
                 substring = substring.replace(' ', '')
@@ -367,6 +402,9 @@ class PMIController(object):
                 else:
                     mo_dict = mo.groupdict()
                     _section, _key, _val = [mo_dict[k] for k in ['section', 'key', 'value']]
+                    # ' and " charaters are not allowed
+                    _section = re.sub("('|\")", "", _section)
+                    _key = re.sub("('|\")", "", _key)
                     self._logger.info(f"Overrided: ({_section},{_key})={_val}")
                     if not _section in self.config:
                         self.config.add_section(_section)
@@ -396,6 +434,7 @@ class PMIController(object):
             ('SolverParams', 'learning_rate')      : float,
             ('SolverParams', 'momentum')           : float,
             ('SolverParams', 'num_of_epochs')      : int,
+            ('SolverParams', 'accumulate_grad')    : int,
             ('SolverParams', 'decay_rate_lr')      : float,
             ('SolverParams', 'lr_scheduler_dict')  : dict,
             ('SolverParams', 'lr_scheduler_kwargs'): dict,
@@ -405,7 +444,7 @@ class PMIController(object):
             ('General'     , 'plot_tb')            : bool,
             ('General'     , 'use_cuda')           : bool,
             ('General'     , 'debug')              : bool,
-            ('General'     , 'debug_validation')   : bool
+            ('General'     , 'debug_validation')   : bool,
         }
         DEFAULT_DICT = {
             ('General'     , 'run_mode')            : 'training',
@@ -420,6 +459,7 @@ class PMIController(object):
             ('Filters'     , 'validation_re_suffix'): ('Filters', 're_suffix'),
             ('RunParams'   , 'initial_weight')      : None,
             ('Network'     , 'initialization')      : None,
+            ('Network'     , 'pretrain_cp')         : "",
             ('Filters'     , 'id_list')             : "",
             ('Filters'     , 'validation_id_list')  : "",
             ('LoaderParams', 'PMI_loader_name')     : None,
@@ -434,6 +474,7 @@ class PMIController(object):
             ('General'     , 'debug_validation')    : False,
             ('SolverParams', 'decay_rate_lr')       : 0.99,
             ('SolverParams', 'lr_scheduler_args')   : ('SolverParams', 'decay_rate_lr'),
+            ('SolverParams', 'accumulate_grad')     : 0,
         }
 
         # read_dict from

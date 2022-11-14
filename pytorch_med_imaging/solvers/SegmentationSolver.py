@@ -61,7 +61,7 @@ class SegmentationSolver(SolverBase):
 
     def auto_compute_class_weights(self, gt_data, param_initWeight):
         r"""Compute the counts of each class in the ground-truth data. Use for class weights in optimizer."""
-        raise NotImplementedError
+        raise DeprecationWarning
 
         self._logger.info("Detecting number of classes...")
         valcountpair = gt_data.get_unique_values_n_counts()
@@ -158,7 +158,15 @@ class SegmentationSolver(SolverBase):
         if self.iscuda:
             g = self._force_cuda(g)
 
-        loss = self.lossfunction(out, g.squeeze().long())
+        if isinstance(self.lossfunction, (nn.BCELoss, nn.BCEWithLogitsLoss)):
+            if not g.dim() == out.dim():
+                g = g.squeeze()
+            loss = self.lossfunction(out, g.long())
+        else:
+            # For other loss function, deal with the dimension yourselves
+            if g.dim() == 5 and g.shape[1] == 1:
+                g = g.squeeze()
+            loss = self.lossfunction(out, g.long())
         return loss
 
     def decay_optimizer(self, *args):
@@ -194,16 +202,20 @@ class SegmentationSolver(SolverBase):
         super().decay_optimizer(*args)
 
         # Decay the class weight using a sigmoid curve.
-        s = self.solverparams_sigmoid_params['stretch']
-        d = self.solverparams_sigmoid_params['delay']
-        cap = self.solverparams_sigmoid_params['cap']
-        if isinstance(self.lossfunction, nn.CrossEntropyLoss):
-            self._logger.debug('Current weight: ' + str(self.lossfunction.weight))
-            offset = self._decayed_time + self.solverparams_decay_init_weight # init_weight is t_0
-            new_weight = torch.as_tensor([self.sigmoid_plus(offset, self.solverparams_class_weights[i], s, d, cap) for i in range(len(
-                self.solverparams_class_weights))])
-            self.lossfunction.weight.copy_(new_weight)
-            self._logger.debug('New weight: ' + str(self.lossfunction.weight))
+        try:
+            s = self.solverparams_sigmoid_params['stretch']
+            d = self.solverparams_sigmoid_params['delay']
+            cap = self.solverparams_sigmoid_params['cap']
+            if isinstance(self.lossfunction, nn.CrossEntropyLoss):
+                self._logger.debug('Current weight: ' + str(self.lossfunction.weight))
+                offset = self._decayed_time + self.solverparams_decay_init_weight # init_weight is t_0
+                new_weight = torch.as_tensor([self.sigmoid_plus(offset, self.solverparams_class_weights[i], s, d, cap) for i in range(len(
+                    self.solverparams_class_weights))])
+                self.lossfunction.weight.copy_(new_weight)
+                self._logger.debug('New weight: ' + str(self.lossfunction.weight))
+        except (AttributeError, KeyError):
+            msg = "Sigmoid param was not provided, skipping loss weight scheduling."
+            self._logger.warning(msg, no_repeat=True)
 
 
     @staticmethod
@@ -267,3 +279,7 @@ class SegmentationSolver(SolverBase):
 
         # delete references
         del s, g, out
+
+    def _epoch_callback(self, *args, **kwargs):
+        self.decay_optimizer()
+        super(SegmentationSolver, self)._epoch_callback(*args, **kwargs)

@@ -112,6 +112,17 @@ class TestController(unittest.TestCase):
                          self.controller.loaderparams_pmi_datatype_name)
         self.assertIsInstance(loader, DataLoader)
         self.assertIsInstance(loader_val, DataLoader)
+        self._logger.debug("Loader create passed.")
+
+        # Test unpack minibatch
+        solver = self.controller.create_solver(self.controller.general_run_type)
+        for i, mb in enumerate(loader):
+            row = solver._unpack_minibatch(mb, [('input', 'gt'), 'gt'])
+            self.assertIsInstance(row[0], tuple)
+            self.assertIsInstance(row[1], torch.Tensor)
+            self.assertEqual(2, len(row[0]))
+            break
+        self._logger.debug("Unpack minibatch passed.")
 
     def test_unpack_config(self):
         checks = {
@@ -263,13 +274,13 @@ class TestSolvers(TestController):
         early_stop = {'method'  : 'LossReference', 'warmup': 0, 'patience': 2}
         self.solver._early_stop_scheduler = SolverEarlyStopScheduler(early_stop)
         self.solver.solverparams_num_of_epochs= 15
+        self.controller.runparams_batch_size = 2
         loader, loader_val = self.controller.prepare_loaders()
         self.solver.set_dataloader(loader, loader_val)
         self.solver.fit(str(self.temp_output_path.joinpath("test.pt")),
                         False)
         self.assertTrue(self.solver._early_stop_scheduler._last_epoch < 14)
 
-    @unittest.skip("temp")
     def test_fit(self):
         self.solver._last_epoch_loss = 10
         self.solver._last_val_loss = 15
@@ -292,6 +303,21 @@ class TestSolvers(TestController):
         after = self.solver.get_last_lr()
         self.assertLess(before, after)
 
+    def test_accumulate_grad(self):
+        # manually set params
+        accumulate_grad = 4
+        self.solver.solverparams_accumulate_grad = accumulate_grad
+        self.controller.runparams_batch_size = 2
+        loader, loader_val = self.controller.prepare_loaders()
+        self.solver.set_dataloader(loader, loader_val)
+        for step_idx, mb in enumerate(self.solver._data_loader):
+            s, g = self.solver._unpack_minibatch(mb, self.solver.solverparams_unpack_keys_forward)
+            msg = f"Error at {step_idx}"
+            self.assertEqual(step_idx % self.solver.solverparams_accumulate_grad,
+                             self.solver._accumulated_steps,
+                             msg)
+            out, loss = self.solver.step(s, g)
+            del s, g, mb
 
 class TestSegmentationSolver(TestSolvers):
     def __init__(self, *args, **kwargs):
@@ -388,3 +414,15 @@ class TestBinaryClassificationInferencer(TestInferencer):
             sample_config = "./sample_data/config/sample_config_binaryclass.ini",
             **kwargs
         )
+
+class TestrAIdiologistInferencer(TestInferencer):
+    def __init__(self, *args, **kwargs):
+        super(TestrAIdiologistInferencer, self).__init__(
+            *args,
+            sample_config = "./sample_data/config/sample_config_rAIdiologist.ini",
+            **kwargs
+        )
+
+    def test_inference(self):
+        super(TestrAIdiologistInferencer, self).test_inference()
+        self.assertTrue(len(list(Path(self.temp_output_dir.name).glob("*"))) != 0)

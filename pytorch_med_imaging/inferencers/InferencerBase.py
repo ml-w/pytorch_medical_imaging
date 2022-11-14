@@ -118,13 +118,13 @@ class InferencerBase(object):
 
         # Do nothing if type is already correct.
         try:
-            if isinstance(tensor, list) or isinstance(tensor, tuple):
+            if isinstance(tensor, (list, tuple)):
                 if all([t.type() == self._net_weight_type for t in tensor]):
                     return tensor
             else:
                 if tensor.type() == self._net_weight_type:
                     return tensor
-        except:
+        except Exception as e:
             self._logger.warning(f"Can't determine if type is already followed. Input type is {type(tensor)}")
             self._logger.exception(f"Get error {e}")
 

@@ -7,7 +7,7 @@ from .PMIDataBase import PMIDataBase
 
 import pandas as pd
 import torchio as tio
-from tqdm import tqdm
+from tqdm.auto import tqdm
 import fnmatch, re
 import os
 import numpy as np
@@ -250,9 +250,9 @@ class ImageDataSet(PMIDataBase):
         #-------------
         self._itemindexes = [0] # [image index of start slice]
         for i, f in enumerate(tqdm(file_dirs, disable=not self.verbose, desc="Load Images")) \
-                if not self._debug else enumerate(tqdm.tqdm(file_dirs[:10],
-                                                            disable=not self.verbose,
-                                                            desc="Load Images")):
+                if not self._debug else enumerate(tqdm(file_dirs[:10],
+                                                       disable=not self.verbose,
+                                                       desc="Load Images")):
             if self.verbose:
                 self._logger.info("Reading from "+f)
 
@@ -285,8 +285,8 @@ class ImageDataSet(PMIDataBase):
         # Filter by filelist
         #-------------------
         if (self._filtermode == 'idlist' or self._filtermode == 'both') and \
-                self._filterargs['idlist'] not in ("", None):
-            self._logger.info("Globbing ID with globber: " + self._id_globber + " ...")
+                self._filterargs['idlist'] not in ("", None) and self._id_globber is not None:
+            self._logger.info("Globbing ID with globber: " + str(self._id_globber) + " ...")
             file_basenames = [os.path.basename(f) for f in file_dirs]
             file_ids = {f: re.search(self._id_globber, f) for f in file_basenames}
             file_ids = {f: v.group() for f, v in file_ids.items() if v is not None}

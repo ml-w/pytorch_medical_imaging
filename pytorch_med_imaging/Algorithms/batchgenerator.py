@@ -45,13 +45,14 @@ def GenerateFileList(files):
         df = df.append(tmp)
     return df[list(regex_dict.keys()) + ['None']]
 
-def GenerateTestBatch(ids: Iterable,
-                      k_fold: int,
-                      outdir: Path,
-                      prefix: Optional[str] = "Batch_",
-                      exclude_list: Optional[List] = None,
+def GenerateTestBatch(ids                 : Iterable,
+                      k_fold              : int,
+                      outdir              : Path,
+                      train_test_ratio    : Optional[List]      = None,
+                      prefix              : Optional[str]       = "Batch_",
+                      exclude_list        : Optional[List]      = None,
                       stratification_class: Optional[pd.Series] = None,
-                      validation: Optional[int] = 0) -> None:
+                      validation          : Optional[int]       = 0) -> None:
     r"""
     Seperate the `ids` into K-fold with stratification. The configurations are stored in .ini files with session
     `FileList` and attributes `testing` and `training`.
@@ -114,18 +115,35 @@ def GenerateTestBatch(ids: Iterable,
 
     # Determine if stratified sampling is used for class balances
     if stratification_class is None:
-        splitter = model_selection.KFold(n_splits=k_fold, shuffle=True)
-        get_split = lambda x: splitter.split(x)
+        if train_test_ratio is None:
+            splitter = model_selection.KFold(n_splits=k_fold, shuffle=True)
+            get_split = lambda x: splitter.split(x)
+        else:
+            tra, tes = train_test_ratio
+            tra, tes = float(tra), float(tes)
+            splitter = model_selection.train_test_split(ids, test_size = int(len(ids) * (tes / (tes + tra))))
+            get_split = lambda x: [splitter]
     else:
-        splitter = model_selection.StratifiedKFold(n_splits=k_fold, shuffle=True)
-        get_split = lambda x: splitter.split(x, stratification_class.loc[ids])
+        if train_test_ratio is None:
+            splitter = model_selection.StratifiedKFold(n_splits=k_fold, shuffle=True)
+            get_split = lambda x: splitter.split(x, stratification_class.loc[ids])
+        else:
+            tra, tes = train_test_ratio
+            tra, tes = float(tra), float(tes)
+            splitter = model_selection.train_test_split(ids, test_size = int(len(ids) * (tes / (tes + tra))),
+                                                        stratify=stratification_class.loc[ids])
+            get_split = lambda x: [splitter]
 
     # Create folder if not exist
     os.makedirs(outdir, exist_ok=True)
     # Determine train test fold split
     for i, (train_index, test_index) in enumerate(get_split(ids)):
-        train_ids = [ids[i] for i in train_index]
-        test_ids = [ids[i] for i in test_index]
+        if train_test_ratio is None:
+            train_ids = [ids[i] for i in train_index]
+            test_ids = [ids[i] for i in test_index]
+        else:
+            train_ids = train_index
+            test_ids = test_index
         train_ids.sort()
         test_ids.sort()
         train_ids = [str(x) for x in train_ids]
@@ -210,27 +228,31 @@ if __name__ == '__main__':
     from pytorch_med_imaging.med_img_dataset import ImageDataSet
     from pathlib import Path
 
-    table_dir = Path('../../NPC_Segmentation/99.Testing/Screening_Segmentation/v1_seg-datasheet.csv')
-    table = pd.read_csv(table_dir.__str__(), index_col='Study Number')
-    data_dir = Path('../../NPC_Segmentation/60.Large-Study/v1-All-Data/Normalized_2/T2WFS_TRA/01.NyulNormalized')
-    out_file_dir = Path('../../NPC_Segmentation/99.Testing/Screening_Segmentation/')
+    # table_dir = Path('../../NPC_Segmentation/99.Testing/Screening_Segmentation/v1_seg-datasheet.csv')
+    # table = pd.read_csv(table_dir.__str__(), index_col='Study Number')
+    # data_dir = Path('../../NPC_Segmentation/60.Large-Study/v1-All-Data/Normalized_2/T2WFS_TRA/01.NyulNormalized')
+    # out_file_dir = Path('../../NPC_Segmentation/99.Testing/Screening_Segmentation/')
+    # data_dir = Path("../../SCC/10.Pilot_Study/Normed_Images/NyulNormalizer")
+    # out_file_dir = Path("../../SCC/99.Testing/Pilot")
+    data_dir = Path("../../NPC_Segmentation/")
+    out_file_dir = Path("../../SCC/99.Testing/Pilot")
 
 
-    regex = r"^[a-zA-Z]{0,3}[0-9]+"
+    regex = r"^[0-9]+"
     images = ImageDataSet(data_dir.__str__(), verbose=True, idGlobber=regex)
-    im_ids =images.get_unique_IDs("^(P|T|NPC|RHO|K)?[0-9]+")
+    im_ids =images.get_unique_IDs(regex)
 
-    # Check if all images are available
-    for i in table.index:
-        if i not in im_ids:
-            print(f"Dropping: {i}")
-            table.drop(i, axis=0, inplace=True)
+    # # Check if all images are available
+    # for i in table.index:
+    #     if i not in im_ids:
+    #         print(f"Dropping: {i}")
+    #         table.drop(i, axis=0, inplace=True)
 
-    GenerateTestBatch(table.index,
-                      5,
-                      out_file_dir.__str__(),
-                      stratification_class=table['Tstage'],
-                      validation=len(table) // 10,
-                      prefix='B'
-                      )
+    # GenerateTestBatch(images.get_unique_IDs(),
+    #                   5,
+    #                   out_file_dir.__str__(),
+    #                   # stratification_class=table['Tstage'],
+    #                   validation=len(images) // 10,
+    #                   prefix='B'
+    #                   )
 

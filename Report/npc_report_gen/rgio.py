@@ -56,10 +56,11 @@ def process_input(in_dir: Union[Path, str],
                         continue
                 out_dir.joinpath(f.name).symlink_to(f.resolve())
                 json_name = out_dir.joinpath(re.sub("\.nii(\.gz)?$", ".json", str(f.name)))
-                json.dump({'0010|0010': fid,
-                           '0010|0020': fid},
-                            Path(json_name).open('w')
-                          )
+                with Path(json_name).open('w') as jf:
+                    json.dump({'0010|0010': fid,
+                               '0010|0020': fid},
+                              jf
+                              )
                 available_ids.append(fid)
     elif in_dir.is_file() and in_dir.suffix in ('.nii', '.gz'):
         # copy that to the temp dir
@@ -73,10 +74,11 @@ def process_input(in_dir: Union[Path, str],
         else:
             fid = fid.group()
         json_name = out_dir.joinpath(re.sub("\.nii(\.gz)?$", ".json", str(in_dir.name)))
-        json.dump({'0010|0010': fid,
-                   '0010|0020': fid},
-                  Path(out_dir).joinpath(json_name).open('w')
-                  )
+        with Path(out_dir).joinpath(json_name).open('w') as jf:
+            json.dump({'0010|0010': fid,
+                       '0010|0020': fid},
+                      jf
+                      )
         available_ids.append(fid)
     else:
         raise IOError(f"Input specified is incorrect, expect a directory or an nii file, got '{in_dir}' instead.")

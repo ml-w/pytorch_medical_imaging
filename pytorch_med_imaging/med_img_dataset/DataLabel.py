@@ -4,14 +4,20 @@ from pathlib import Path
 from .PMIDataBase import PMIDataBase
 
 class DataLabel(PMIDataBase):
-    def __init__(self, data_table):
+    def __init__(self, data_table, **kwargs):
         """
         Datasheet should b arrange with rows of values
         """
         super(DataLabel, self).__init__()
         if isinstance(data_table, (str, Path)):
-            data_table = pd.read_csv(str(data_table), index_col=0)
+            _p = Path(data_table)
+            if _p.suffix == '.csv':
+                data_table = pd.read_csv(str(data_table), index_col=[0], header=[0], **kwargs)
+            elif _p.suffix == '.xlsx':
+                data_table = pd.read_excel(str(data_table), index_col=[0], header=[0], **kwargs)
         assert isinstance(data_table, pd.DataFrame)
+        if not data_table.index.is_unique:
+            data_table
 
 
         # Convert to tensor
@@ -57,6 +63,7 @@ class DataLabel(PMIDataBase):
         df = pd.read_csv(fname, **kwargs, index_col=0)
         df.index = df.index.astype('str')
         datalabel = DataLabel(df)
+        print(datalabel)
         return datalabel
 
     @staticmethod
@@ -116,11 +123,16 @@ class DataLabel(PMIDataBase):
             out = self._get_table.iloc[item]
         else:
             out = self._get_table.loc[item]
+        if len(out) == 1:
+                out = out.item()
+        else:
+                out = out.to_numpy()
 
         try:
             # if multiple rows are requested, a pandas dataframe object is directly returned
             return torch.tensor(out)
         except:
+            self._logger.info(f"Failed to convert to tensor {out}")
             return out
 
 

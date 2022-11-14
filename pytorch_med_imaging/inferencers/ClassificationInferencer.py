@@ -3,6 +3,7 @@ from pathlib import Path
 from typing import Union, Optional, Iterable
 
 import numpy as np
+import pandas as pd
 import torch
 import torch.nn.functional as F
 from SimpleITK import GetImageFromArray, ReadImage, WriteImage
@@ -147,15 +148,25 @@ class ClassificationInferencer(InferencerBase):
                 s = self._unpack_minibatch(mb, self.solverparams_unpack_keys_inference)
                 s = self._match_type_with_network(s)
 
-                self._logger.debug(f"s size: {s.shape if not isinstance(s, list) else [ss.shape for ss in s]}")
+                try:
+                    self._logger.debug(f"Processing: {mb['uid']}")
+                    _msg = f"s size: {s.shape if not isinstance(s, (list, tuple)) else [ss.shape for ss in s]}"
+                    self._logger.debug(_msg)
+                except:
+                    pass
 
                 # Squeezing output directly cause problem if the output has only one output channel.
-                if isinstance(s, list):
-                    out = self.net(*s)
-                else:
-                    out = self.net(s)
-                if out.shape[-1] > 1:
-                    out = out.squeeze()
+                try:
+                    if isinstance(s, (list, tuple)):
+                        out = self.net(*s)
+                    else:
+                        out = self.net(s)
+                    if out.shape[-1] > 1:
+                        out = out.squeeze()
+                except Exception as e:
+                    if 'uid' in mb:
+                        self._logger.error(f"Error when dealing with minibatch: {mb['uid']}")
+                    raise e
 
                 while ((out.dim() < last_batch_dim) or (out.dim() < 2)) and last_batch_dim != 0:
                     out = out.unsqueeze(0)
@@ -199,7 +210,13 @@ class ClassificationInferencer(InferencerBase):
             out_decisions['Prob_Class_%s'%i] = out_tensor[:, i].data.cpu().tolist()
 
         if gt is not None:
-            out_decisions[f'Truth_{i}'] = gt.flatten().tolist()
+            # check gt dim, if dim == 2, assume (B x C)
+            if gt.dim() == 1:
+                gt = gt.unsqueeze(-1)
+
+            for j in range(gt.shape[1]):
+                out_decisions[f'Truth_{j}'] = gt[:, j].flatten().tolist()
+
             self._TARGET_DATASET_EXIST_FLAG = True
         else:
             self._TARGET_DATASET_EXIST_FLAG = False
@@ -209,6 +226,13 @@ class ClassificationInferencer(InferencerBase):
         return dl
 
     def display_summary(self):
+        dl = pd.read_csv(self.output_dir, index_col=0)
+        n = len(dl)
+        try:
+            tp = (dl['Truth_0'] == dl['Decision']).sum()
+            self._logger.info(f"ACC: {n * 100/ float(tp):.01f}%")
+        except KeyError:
+            pass
         return
 
     def _reshape_tensors(self,

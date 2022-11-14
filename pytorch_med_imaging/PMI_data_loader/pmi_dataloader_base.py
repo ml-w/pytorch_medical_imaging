@@ -1,10 +1,14 @@
 import os
 import re
 import configparser
+import pandas as pd
+import itertools
 from abc import *
 from pathlib import Path
 
+import torchio as tio
 from .augmenter_factory import create_transform_compose
+from ..med_img_dataset.PMIDataBase import PMIDataBase
 from mnts.mnts_logger import MNTSLogger
 
 class PMIDataLoaderBase(object):
@@ -48,6 +52,7 @@ class PMIDataLoaderBase(object):
         self._verbose = verbose
         self._debug = debug
         self._run_mode = run_mode
+
         if not self._check_input:
             raise AttributeError
 
@@ -119,10 +124,14 @@ class PMIDataLoaderBase(object):
         self._logger.debug(f"final_dict: {final_dict}")
         self.__dict__.update(final_dict)
 
-    def load_dataset(self):
+    def load_dataset(self, exclude_augment = None):
         r"""
         Called in solver or inferencer to load arguments for the network training or actual inference. Normally you
         would need not to inherit this but you can do so to added some custom features.
+
+        Args:
+            exclude_augment (bool, Optional):
+                Use this to pass the option to load_dataset
 
         Returns:
             (ImageDataSet or [ImageDataSet, ImageDataSet]): Depend on whether `self._run_mode` is `training` or
@@ -132,7 +141,7 @@ class PMIDataLoaderBase(object):
         """
         if re.match('(?=.*train.*)', self._run_mode):
             self._training_mode = True
-            return self._load_data_set_training()
+            return self._load_data_set_training(exclude_augment = False if exclude_augment is None else exclude_augment)
         else:
             self._training_mode = False
             return self._load_data_set_inference()
@@ -327,3 +336,31 @@ class PMIDataLoaderBase(object):
             else:
                 self._logger.warning(f"Transform file provided but could not be located! Got {str(self.augmentation)}")
         return self.transform
+
+    def _pack_data_into_subjects(self,
+                                 data_dict: dict,
+                                 transform: tio.Transform = None) -> tio.SubjectsDataset:
+        r"""Create subjects from a dictionary of data"""
+        data_exclude_none = {k: v for k, v in data_dict.items() if v is not None}
+
+        # check if all items has the same length
+        if not len(set([len(v) for v in data_exclude_none.values()])):
+            msg = f"Expect all data to have the same length, but got: "
+            msg += str({k: len(v) for k, v in data_dict.items()})
+            raise IndexError(msg)
+
+        # check if the IDs are aligned
+        ids = {k: set(_d.get_unique_IDs()) for k, _d in data_dict.items() if isinstance(_d, PMIDataBase)}
+        if not all([ids[a] == ids[b] for a, b in itertools.combinations(ids.keys(), 2)]):
+            uni = set.union(*list(ids.values()))
+            _table = pd.concat([pd.Series([index in v for index in uni], index=uni, name=k) for k, v in ids.items()], axis=1)
+            _table.sort_index(inplace=True)
+            _table = _table[[False in list(row[1]) for row in _table.iterrows()]]
+            msg = f"Expect all data to have same unique IDs, but some are not: \n"
+            msg += _table.to_string()
+            raise IndexError(msg)
+
+        subjects = [tio.Subject(**{k: v for k, v in zip(data_exclude_none.keys(), row)})
+                    for row in zip(*data_exclude_none.values())]
+        subjects = tio.SubjectsDataset(subjects=subjects, transform=transform)
+        return subjects

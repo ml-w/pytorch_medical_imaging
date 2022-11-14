@@ -76,6 +76,10 @@ class SegmentationInferencer(InferencerBase):
             raise TypeError(msg)
 
         self.pmi_data_loader = pmi_data_loader
+        try:
+            self.pmi_data_loader.inf_samples_per_vol = self.solverparams_inf_samples_per_vol
+        except:
+            pass
         # self._loader_queue = pmi_data_loader._load_data_set_inference()
         # self._inference_subjects = self._loader_queue._get_subjects_iterable()
         # self._inference_sampler = pmi_data_loader.get_sampler()
@@ -99,7 +103,6 @@ class SegmentationInferencer(InferencerBase):
         last_batch_dim = 0
         # compute size to pass to piece_patches
         in_image_data = self.pmi_data_loader.data['input']
-        self.solverparams_inf_samples_per_vol = None
 
         with torch.no_grad():
             self.net = self.net.eval()
@@ -119,7 +122,7 @@ class SegmentationInferencer(InferencerBase):
 
                 # create new sampling queue based on inf_sample_per_vol
                 _queue, _aggregator = self.pmi_data_loader.create_aggregation_queue(
-                    subject, self.solverparams_inf_samples_per_vol)
+                    subject, self.pmi_data_loader.inf_samples_per_vol)
 
                 dataloader = DataLoader(_queue, batch_size=self._data_loader.batch_size, num_workers=0)
                 ndim = subject.get_first_image()[tio.DATA].dim()  # Assume channel dim always exist even if only has 1 channel
@@ -175,8 +178,9 @@ class SegmentationInferencer(InferencerBase):
 
         arguments = ['-a',
                      '--test-data', self.output_dir,
-                     '--gt-data', self.pmi_data_loader.data['gt'].root_dir,
-                     '--idlist', str(list(set(self.pmi_data_loader.data['gt'].get_unique_IDs())))
+                     '--gt-data', self.pmi_data_loader.data['gt'].rootdir,
+                     '--idlist', str(list(set(self.pmi_data_loader.data['gt'].get_unique_IDs()))),
+                     '--id-globber', str(self.pmi_data_loader.data['gt']._id_globber)
                      ]
 
         try:

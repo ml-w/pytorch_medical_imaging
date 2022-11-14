@@ -5,19 +5,28 @@
     batch-size: 4
     lr: 1E-4
     debug: no
+    fold-code: ""
+    network: ""
     override: ""
+    validate-on-test-set:
+      type: boolean
+      default: no
+      arg-switch: yes
 
 - config: val-flags
   flags:
     batch-size: 4
     config: "./Configs/Test.ini"
+    fold-code: ""
     override: ""
+    network: ""
     debug: no
 
 - model: pmi
   params:
-    rAI_config: "./Configs/BM_LargerStudy/BM_rAIdiologist_nyul_v2.ini"
-    swran_config: "./Configs/BM_LargerStudy/BM_rAIdiologist_stage0_v2.ini"
+    rAI_config: "./Configs/BM_ISMRM/BM_rAIdiologist_nyul_v2.ini"
+    rAI_focal_config: "./Configs/BM_LargerStudy/BM_rAIdiologist_focal_v2.ini"
+    swran_config: "./Configs/BM_ISMRM/BM_rAIdiologist_stage0_v2.ini"
   operations:
     train:
       description: Train a model.
@@ -36,8 +45,35 @@
       requires:
         - default
 
-    train_looped:
-      description: Train a model in a looped fashion. Suitable when the model needs a recipe of hyperparameters.
+    train_focal:
+      decription: Traing focal model for rAIdiologist
+      main: pytorch_med_imaging.main
+      flags:
+        config: "{{rAI_focal_config}}"
+        epoch: 50
+        batch-size: 4
+        lr: 1E-4
+        debug: no
+        override: ""
+      sourcecode:
+        - exclude:
+            dir: 'Backup'
+      output-scalars:
+        training/loss: 'EpochLoss: (\value)'
+        accuracy: 'ACC: (\value)'
+        training/validation_loss: 'VAL: (\value)'
+        step: 'Epoch (\step)'
+        training/step_lr: 'LR: (\value)'
+      requires:
+        - default
+        - file: '../Backup'
+          select: 'BM_rAI_focal_pretrained_.*-vv2\.0-sv3\.pt'
+          target-path: 'Backup'
+          target-type: 'copy'
+          fail-if-empty: 'yes'
+
+    train_rAI:
+      description: Train a model.
       main: pytorch_med_imaging.main
       flags:
         $include: default-flags
@@ -50,6 +86,28 @@
         training/validation_loss: 'VAL: (\value)'
         step: 'Epoch (\step)'
         training/step_lr: 'LR: (\value)'
+      requires:
+        - default
+        - file: '../Backup'
+          select: 'BM_rAIPretrain_.*'
+          target-path: 'Backup'
+          target-type: 'copy'
+          fail-if-empty: 'yes'
+
+    train_looped:
+      description: Train a model in a looped fashion. Suitable when the model needs a recipe of hyperparameters.
+      main: pytorch_med_imaging.main
+      flags:
+        $include: default-flags
+      sourcecode:
+        - exclude:
+            dir: 'Backup'
+      output-scalars:
+        training/loss: 'EpochLoss: (\value)'
+        ACC: 'ACC: (\value)'
+        training/validation_loss: 'VAL: (\value)'
+        step: 'Epoch (\step)'
+        training/step_lr: 'LR: (\value)'
       compare:
         - lr
         - accuracy
@@ -57,7 +115,9 @@
         - default
         - operation: train
           select: 'Backup'
-          fail-if-empty: no
+          fail-if-empty: 'yes'
+#          optional: true
+          target-type: 'link'
 
     train_segment:
       description: Train a model for segmentation.
@@ -102,6 +162,7 @@
         - default
         - operation: train
           select: 'Backup'
+          target-type: 'link'
       output-scalars:
         sensitivity: 'Sensitivity: (\value)'
         specificity: 'Specificity: (\value)'
@@ -122,6 +183,7 @@
         - default
         - operation: train_segment
           select: 'Backup'
+          target-type: 'link'
       output-scalars:
         DSC: 'Avg_DICE: (\value)'
         med_DSC: 'Med_DICE: (\value)'
@@ -135,6 +197,7 @@
         - default
         - operation: train_survival
           select: 'Backup'
+          target-type: 'link'
       output-scalars:
         C-index: 'C-index: (\value)'
 
@@ -142,6 +205,7 @@
       description:
         "This recipe requires two config files, one trains the SWRAN and the other train rAIdiologist."
       flags:
+        network: "rAIdiologist(1, dropout=0.2)"
         config: "{{rAI_config}}"
         config_stage0: '{{swran_config}}'
         fold_code: "B00"
@@ -150,40 +214,40 @@
         bs_rnn: 24
         debug: no
       steps:
-        - train        config=${config_stage0} epoch=200 debug=${debug} batch-size=${bs_swran} lr=2E-5
+        - train        config=${config_stage0} epoch=100 debug=${debug} batch-size=${bs_swran} lr=1E-5
           override="(General,fold_code)=${fold_code}"
-        - train_looped config=${config} epoch=50  debug=${debug} batch-size=${bs_rnn} lr=5E-5
-          override="(SolverParams,rAI_fixed_mode)=1;(General,fold_code)=${fold_code}"
-        - train_looped config=${config} epoch=50  debug=${debug} batch-size=${bs_cnn} lr=3E-5
-          override="(SolverParams,rAI_fixed_mode)=2;(General,fold_code)=${fold_code}"
-        - train_looped config=${config} epoch=50  debug=${debug} batch-size=${bs_rnn} lr=3E-5
-          override="(SolverParams,rAI_fixed_mode)=3;(General,fold_code)=${fold_code}"
-        - train_looped config=${config} epoch=100 debug=${debug} batch-size=${bs_cnn} lr=1E-5
-          override="(SolverParams,rAI_fixed_mode)=4;(General,fold_code)=${fold_code};(SolverParams,lr_scheduler_args)
-          =[0.98,0.98,20,3];(SolverParams,lr_scheduler_kwargs)={'eta_min':1E-6,'T_mult':2}"
-        - validation   config=${config} debug=${debug} batch-size=${bs_rnn} override="(General,fold_code)=${fold_code}"
+        - train_looped config=${config} epoch=75  debug=${debug} batch-size=${bs_rnn} lr=1E-5
+          override="(SolverParams,rAI_fixed_mode)=1;(General,fold_code)=${fold_code}" network=${network}
+#        - train_looped config=${config} epoch=50  debug=${debug} batch-size=${bs_cnn} lr=1E-4
+#          override="(SolverParams,rAI_fixed_mode)=2;(General,fold_code)=${fold_code}" network=${network}
+        - train_looped config=${config} epoch=75 debug=${debug} batch-size=${bs_rnn} lr=1E-5
+          override="(SolverParams,rAI_fixed_mode)=3;(General,fold_code)=${fold_code}" network=${network}
+        - train_looped config=${config} epoch=75 debug=${debug} batch-size=${bs_cnn} lr=1E-5
+          override="(SolverParams,rAI_fixed_mode)=4;(General,fold_code)=${fold_code}" network=${network}
+        - validation   config=${config} debug=${debug} batch-size=${bs_cnn} override="(General,fold_code)=${fold_code}"
+          network=${network}
 
 
     pipeline:
       flags:
         $include: default-flags
       steps:
-        - train config=${config} epoch=${epoch} batch-size=${batch-size} lr=${lr} override=${override}
-        - validation config=${config} batch-size=${batch-size} override=${override}
+        - train config=${config} epoch=${epoch} batch-size=${batch-size} lr=${lr} override=${override} network=${network} fold-code=${fold-code}
+        - validation config=${config} batch-size=${batch-size} override=${override} network=${network} fold-code=${fold-code}
 
     pipeline_segment:
       flags:
         $include: default-flags
       steps:
-        - train_segment config=${config} epoch=${epoch} batch-size=${batch-size} lr=${lr} override=${override}
-        - validation_segment config=${config} batch-size=${batch-size} override="${override};(LoaderParams,random_patches)=75"
+        - train_segment config=${config} epoch=${epoch} batch-size=${batch-size} lr=${lr} override=${override} network=${network} fold-code=${fold-code}
+        - validation_segment config=${config} batch-size=${batch-size} override="${override};(LoaderParams,random_patches)=75" network=${network} fold-code=${fold-code}
 
     pipeline_survival:
       flags:
         $include: default-flags
       steps:
-        - train_survival config=${config} epoch=${epoch} batch-size=${batch-size} lr=${lr} override=${override}
-        - validation_survival config=${config} batch-size=${batch-size} override=${override}
+        - train_survival config=${config} epoch=${epoch} batch-size=${batch-size} lr=${lr} override=${override} network=${network} fold-code=${fold-code}
+        - validation_survival config=${config} batch-size=${batch-size} override=${override} network=${network} fold-code=${fold-code}
 
   output-scalars:
     classification:
@@ -216,9 +280,16 @@
   resources:
     default:
       - file: '../Configs'
+        target-type: 'link'
       - file: '../NPC_Segmentation'
+        target-type: 'link'
       - file: '../Sinus'
-      - file: '../Backup/Log'
+        target-type: 'link'
+      - file: '../SCC'
+        target-type: 'link'
+#      - file: '../Backup/Log'
+#        target-type: 'link'
+
     checkpoint-space:
       target-path: Backup
       target-type: link

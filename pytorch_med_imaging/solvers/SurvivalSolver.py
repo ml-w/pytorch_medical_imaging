@@ -176,23 +176,24 @@ class SurvivalSolver(SolverBase):
         return out
 
     def step(self, *args):
-        out, g = self._feed_forward(*args)
-        loss = self._loss_eval(out, g)
-
-        # Loss might be nan
-        if torch.isnan(loss):
-            self._logger.warning("Loss was nan, skipping iteration.")
-            self.optimizer.zero_grad()
-            loss.backward()
-            self._called_time += 1
-            return out, loss.cpu().data
-        else:
-            self.optimizer.zero_grad()
-            loss.backward()
-            self.optimizer.step()
-
-            self._called_time += 1
-            return out, loss.cpu().data
+        raise NotImplementedError
+        # out, g = self._feed_forward(*args)
+        # loss = self._loss_eval(out, g)
+        #
+        # # Loss might be nan
+        # if torch.isnan(loss):
+        #     self._logger.warning("Loss was nan, skipping iteration.")
+        #     self.optimizer.zero_grad()
+        #     loss.backward()
+        #     self._called_time += 1
+        #     return out, loss.cpu().data
+        # else:
+        #     self.optimizer.zero_grad()
+        #     loss.backward()
+        #     self.optimizer.step()
+        #
+        #     self._called_time += 1
+        #     return out, loss.cpu().data
 
     def solve_epoch(self, epoch_number):
         """

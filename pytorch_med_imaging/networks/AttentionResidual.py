@@ -238,7 +238,6 @@ class AttentionResidualNet_64(nn.Module):
 
         self.in_conv2 = ResidualBlock3d(64, 256)
 
-
         self.att1 = AttentionModule_Modified(256, 256, save_mask=save_mask)
         self.r1 = ResidualBlock3d(256, 512, p=0.3)
         self.att2 = AttentionModule_Modified(512, 512, save_mask=save_mask)
@@ -299,16 +298,8 @@ class AttentionResidualNet_64(nn.Module):
         x = self.att3(x)
 
         x = self.out_conv1(x)
-        x = F.avg_pool3d(x, kernel_size=[1] + list(x.shape[-2:])).squeeze()
-        # while x.dim() < 3:
-        #     x = x.unsqueeze(0)
-        # x = x.permute([1, 0, 2])
-        # x_shape = x.shape
-        # new_shape = [x_shape[0]] + [x_shape[1]*x_shape[2]]
-        # x = x.reshape(new_shape)
-        # x = x * x_w.expand_as(x)
-        # x = x.view(x_shape).permute([1, 0, 2])
-        #
+        x = F.adaptive_max_pool3d(x, kernel_size=[1, 1, 1]).squeeze()
+
         if x.dim() < 3:
             x = x.unsqueeze(0)
         x = x.permute([1, 0, 2])

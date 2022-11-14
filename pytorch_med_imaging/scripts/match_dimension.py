@@ -147,18 +147,20 @@ def console_entry(*args, **kwargs):
         assert os.path.isdir(dir)
 
     logpath = a.log
-    log = MNTSLogger(a.log, logger_name='scripts.match_dimension', verbose=a.verbose, keep_file=a.saveLog)
-    log.info("{:=^100}".format(" Matching Dimensions "))
-    sys.excepthook = log.exception_hook
-    a.log = log
 
-    match_dimension(a)
+    with MNTSLogger(a.log, logger_name='scripts.match_dimension', verbose=a.verbose,
+                    keep_file=a.saveLog, log_level='debug') as log:
+        log.info("{:=^100}".format(" Matching Dimensions "))
+        sys.excepthook = log.exception_hook
+        a.log = log
 
-    if not a.saveLog:
-        try:
-            os.remove(logpath)
-        except:
-            pass
+        match_dimension(a)
+
+        if not a.saveLog:
+            try:
+                os.remove(logpath)
+            except:
+                pass
 
 if __name__ == '__main__':
     console_entry()
