@@ -4,6 +4,9 @@
 [submodule "ThirdParty/EROS"]
 	path = ThirdParty/EROS
 	url = git@github.com:alabamagan/EROS.git
+[submodule "ThirdParty/Nyul"]
+	path = ThirdParty/Nyul
+	url = git@github.com:alabamagan/Nyul.git
 [submodule "ThirdParty/torchio"]
 	path = ThirdParty/torchio
 	url = git@github.com:alabamagan/torchio.git
