@@ -70,11 +70,9 @@ class SolverBase(object):
 
         # internal_attributes
         self._net_weight_type        = None
-        self._data_logger            = None
         self._data_loader            = None
         self._data_loader_val        = None
         self._tb_plotter             = None
-        self._local_rank             = 0
         self.lr_scheduler            = None
         self._accumulated_steps       = 0        # For gradient accumulation
 
