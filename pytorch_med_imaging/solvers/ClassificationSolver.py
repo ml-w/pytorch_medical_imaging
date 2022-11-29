@@ -111,7 +111,7 @@ class ClassificationSolver(SolverBase):
             _df['predicted'] = torch.round(res.squeeze()).cpu().detach().long().numpy()
             _df['eval'] = (_df['predicted'] == _df['gt']).replace({True: 'Correct', False: 'Wrong'})
 
-        if not uid is none:
+        if not uid is None:
             _df.index = uid
         return _df, _df['predicted']
 
