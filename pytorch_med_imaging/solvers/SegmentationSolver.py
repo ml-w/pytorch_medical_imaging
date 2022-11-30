@@ -46,8 +46,8 @@ class SegmentationSolver(SolverBase):
 
     def create_lossfunction(self):
         if self.solverparams_class_weights is None:
-            self._logger.warning("Automatic computing weigths are not supported now!")
-            raise DeprecationWarning("Automatic computing weigths are not supported now!")
+            self._logger.warning("Automatic computing weighs are not supported now!")
+            raise DeprecationWarning("Automatic computing weighs are not supported now!")
 
         # set class weights to 0 to disable class weight for loss function
         if not self.solverparams_class_weights == 0:
