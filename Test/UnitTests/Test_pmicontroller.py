@@ -13,6 +13,7 @@ from torch.utils.data import DataLoader
 
 from pytorch_med_imaging.pmi_controller import PMIController
 from pytorch_med_imaging.lr_scheduler import *
+from pytorch_med_imaging.solvers.earlystop import *
 
 class TestController(unittest.TestCase):
     def __init__(self, *args, sample_config = "./sample_data/config/sample_config_seg.ini", **kwargs):
@@ -270,9 +271,10 @@ class TestSolvers(TestController):
         self.assertTrue(len(list(self.temp_output_path.glob("*pt"))) != 0)
 
     def test_early_stop(self):
-        from pytorch_med_imaging.solvers.SolverBase import SolverEarlyStopScheduler
-        early_stop = {'method'  : 'LossReference', 'warmup': 0, 'patience': 2}
-        self.solver._early_stop_scheduler = SolverEarlyStopScheduler(early_stop)
+        from pytorch_med_imaging.solvers.earlystop import BaseEarlyStop
+        warmup = 0
+        patience = 2
+        self.solver._early_stop_scheduler = BaseEarlyStop.create_early_stop_scheduler('loss_reference', warmup, patience)
         self.solver.solverparams_num_of_epochs= 15
         self.controller.runparams_batch_size = 2
         loader, loader_val = self.controller.prepare_loaders()
