@@ -57,3 +57,100 @@ class TestLRScheduler(unittest.TestCase):
         self.assertIsInstance(solver.lr_scheduler, lr_scheduler.OneCycleLR)
 
 
+class TestPMILRScheduler(unittest.TestCase):
+    def __init__(self, *args):
+        super(TestPMILRScheduler, self).__init__(*args)
+        net = torch.nn.Linear(10, 2).train()
+        self.optimizer = torch.optim.Adam(net.parameters(), lr=1E-5)
+        self.name = None
+        self.args = []
+        self.kwargs = {}
+
+    def setUp(self):
+        if self.__class__.__name__ == 'TestPMILRScheduler':
+            raise unittest.SkipTest("Base class.")
+
+        self._logger = MNTSLogger(self.__class__.__name__, logger_name='unittest', verbose=True, keep_file=False,
+                                  log_level='debug')
+        self._logger.debug(f"args: {self.args}")
+        self._logger.debug(f"kwargs: {self.kwargs}")
+        PMILRScheduler.reset()
+        PMILRScheduler(self.name, *self.args, **self.kwargs)
+
+    # def tearDown(self):
+    #     PMILRScheduler.hard_reset()
+
+    def test_create_instance(self):
+        PMILRScheduler.set_optimizer(self.optimizer)
+
+    def test_step(self):
+        PMILRScheduler.set_optimizer(self.optimizer)
+        PMILRScheduler.step_scheduler()
+        print(PMILRScheduler.get_last_lr())
+
+
+class TestExponentialLR(TestPMILRScheduler):
+    def setUp(self):
+        self.name = 'ExponentialLR'
+        self.args = [0.9]
+        self.kwargs = {}
+        super(TestExponentialLR, self).setUp()
+
+
+class TestStepLR(TestPMILRScheduler):
+    def setUp(self):
+        self.name = 'StepLR'
+        self.args = [10] # step_size
+        self.kwargs = dict(gamma=0.5)
+        super(TestStepLR, self).setUp()
+
+class TestReduceLROnPlateau(TestPMILRScheduler):
+    def setUp(self):
+        self.name = 'ReduceLROnPlateau'
+        self.args = list()
+        self.kwargs = dict(mode='min', factor=0.8, patience=20, threshold=1E-5)
+        super(TestReduceLROnPlateau, self).setUp()
+
+    def test_step(self):
+        PMILRScheduler.set_optimizer(self.optimizer)
+        PMILRScheduler.step_scheduler(1E-4)
+        print(PMILRScheduler.get_last_lr())
+
+
+class TestMultiStepLR(TestPMILRScheduler):
+    def setUp(self):
+        self.name = 'MultiStepLR'
+        self.args = [
+            [30, 80] # milestone
+        ]
+        super(TestMultiStepLR, self).setUp()
+
+
+class TestLambdaLR(TestPMILRScheduler):
+    def setUp(self):
+        self.name = 'LambdaLR'
+        self.args = [
+            lambda x: x * 0.95 # lambda
+        ]
+        super(TestLambdaLR, self).setUp()
+
+
+class TestCosineAnnealingLR(TestPMILRScheduler):
+    def setUp(self):
+        self.name = 'CosineAnnealingLR'
+        self.args = [
+            10 # T_max
+        ]
+        super(TestCosineAnnealingLR, self).setUp()
+
+
+class TestConstantLR(TestPMILRScheduler):
+    def setUp(self):
+        self.name = 'ConstantLR'
+        super(TestConstantLR, self).setUp()
+
+
+class TestLinearLR(TestPMILRScheduler):
+    def setUp(self):
+        self.name = 'LinearLR'
+        super(TestLinearLR, self).setUp()
