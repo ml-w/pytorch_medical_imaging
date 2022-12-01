@@ -3,15 +3,16 @@ import re
 from mnts.mnts_logger import MNTSLogger
 from typing import Union, Iterable, Any
 
-
 __all__ = ['BaseEarlyStop', 'LossReferenceEarlyStop']
-
 
 
 class BaseEarlyStop(object):
     r"""This class is a scheduler similar to lr_scheduler in torch, except it monitors the loss values and decide
     when the fitting is to be terminated based on several policies. The validation loss will be examined if it is
-    available, and if its not, the training lsos will be examined.
+    available, and if its not, the training loss will be examined.
+
+    To register a policy, subclass this base class with a ``key`` attribute that will be used as the key to create
+    this base class.
 
     Currently support policies::
         loss_reference:
@@ -19,11 +20,20 @@ class BaseEarlyStop(object):
              if the value is not smaller than the previous value for a consecutive of ``patience`` after the ``warmup``,
              the call ``step()`` will return 1, signaling the termination of training, otherwise, it will return 0.
 
-    Args:
-
     Attributes:
+        _last_loss (float):
+            Store the smallest lost in previous ``step()`` calls.
+        _last_epoch (int):
+            Marks the last epoch.
 
+    Examples:
 
+        To create a loss reference early stop scheduler
+
+        >>> early_stop = BaseEarlyStop.create_early_stop_scheduler('loss_reference', 10, 15)
+        >>> for i in range(num_of_epochs):
+        >>>     ...
+        >>>     early_stop.step(val_loss, i)
     """
     policies = {}
     def __init__(self):
@@ -33,38 +43,6 @@ class BaseEarlyStop(object):
         self._last_epoch = 0
         self._watch = 0
 
-        # if policy is None:
-        #     self._logger.debug("No policies supplied is None.")
-        # else:
-        #     self._logger.debug(f"Creating early stop scheduler with policy: {policy}")
-        #     if isinstance(policy, str):
-        #         _c = policy
-        #
-        #     if not isinstance(_c, dict):
-        #         self._logger.error(f"Wrong early stopping settings, cannot eval into dict. Receive arguments: {_c}")
-        #         self._logger.warning("Ignoring early stopping options")
-        #         self._configs = None
-        #     else:
-        #         self._configs = _c
-
-        # policies = {
-        #     '(?i)loss.?reference': ('Loss Reference', self._loss_reference),
-        # }
-        # for keyregex in policies:
-        #     if self._configs.get('method', None) is None:
-        #         self._logger.info(f"No stopping policy specified")
-        #         return
-        #     if re.findall(keyregex, self._configs['method']):
-        #         name, func = policies[keyregex]
-        #         self._logger.info(f"Specified early stop policy: {name}")
-        #         self._func = func
-        #         break
-        #
-        # # if self._func is not specified at this point, configuration is incorrect, raise error
-        # if self._func == None:
-        #     msg = f"Available methods were: [{'|'.join([i for (k, i) in policies.values()])}], " \
-        #           f"but got {self._configs['method']}."
-        #     raise AttributeError(msg)
 
     @classmethod
     def __init_subclass__(cls, key, **kwargs):
@@ -73,6 +51,10 @@ class BaseEarlyStop(object):
 
     @classmethod
     def create_early_stop_scheduler(cls, policy, *args, **kwargs):
+        if policy not in cls.policies.keys:
+            msg = f'Incorrect policy ({policy}) specified. Available policies are [{"|".join(cls.policies.keys())}]'
+            raise KeyError(msg)
+
         return cls.policies[policy](*args, **kwargs)
 
     def _func(self):
@@ -93,6 +75,19 @@ class BaseEarlyStop(object):
             return self._func(loss, epoch)
 
 class LossReferenceEarlyStop(BaseEarlyStop, key='loss_reference'):
+    r"""The ealry stopping criterion that stops the program when the loss have stopped declining for a certain amount of
+    epoch specified by users
+
+    Args:
+        warmup (int):
+            Warmup before the early stop scheduler kicks in.
+        patience (int):
+            Number of epochs to tolerate before returning the stop signal.
+
+    Attributes:
+        warmup (int)
+        patience (int)
+    """
     def __init__(self,
                  warmup: int,
                  patience: int):
@@ -101,8 +96,18 @@ class LossReferenceEarlyStop(BaseEarlyStop, key='loss_reference'):
         super(LossReferenceEarlyStop, self).__init__()
 
     def _func(self, loss, epoch) -> int:
-        r"""
-        Attributes:
+        r"""This function will be called during ``step()``, comparing the new loss and the previously recorded minimum
+        loss.
+
+        Args:
+            loss (float):
+                New loss.
+            epoch (int):
+                Current epoch number.
+
+        Returns:
+            output:
+                Return 1 if stopping criteria reached, return 0 otherwise.
 
         """
         warmup   = self.warmup
