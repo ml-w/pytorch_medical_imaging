@@ -41,9 +41,9 @@ class DecayCAWR_n_EXP(lr_scheduler.SequentialLR):
     Args:
         optimizer (torch.optim.Optimizer):
             Optimizer.
-        exp_factor_dcawr (float):
+        exp_factor_dawr (float):
             The decay multiplicative factor between 0 to 1 for DecayCAWR.
-        gamma (faoat):
+        gamma (float):
             The multiplcative factor for ExponentialLR.
         T_0 (int):
             Number of iterations for the first restart.
@@ -59,12 +59,12 @@ class DecayCAWR_n_EXP(lr_scheduler.SequentialLR):
             If ``True``, prints a message to stdout for each update. Default: ``False``.
 
     """
-    def __init__(self, optimizer, exp_factor_dcawr, gamma, T_0, T_cut, **kwargs):
+    def __init__(self, optimizer, exp_factor_dawr, gamma, T_0, T_cut, **kwargs):
         if T_cut < 1:
             msg = f"Expect T_cut to be an interger > 1, but got {T_cut}"
             raise AttributeError(msg)
         T_mult = kwargs.get('T_mult', 1)
-        dcawr = DecayCAWR(optimizer, exp_factor_dcawr, T_0, **kwargs)
+        dcawr = DecayCAWR(optimizer, exp_factor_dawr, T_0, **kwargs)
         exp = lr_scheduler.ExponentialLR(optimizer, gamma=gamma)
         cut_point = np.cumsum(T_0 * T_mult ** np.arange(T_cut))[-1] + 1
         super(DecayCAWR_n_EXP, self).__init__(optimizer, [dcawr, exp], [cut_point], last_epoch=-1, verbose=kwargs.get('verbose', False))

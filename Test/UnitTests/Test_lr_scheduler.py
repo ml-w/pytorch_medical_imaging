@@ -154,3 +154,31 @@ class TestLinearLR(TestPMILRScheduler):
     def setUp(self):
         self.name = 'LinearLR'
         super(TestLinearLR, self).setUp()
+
+class TestDecayCAWR(TestPMILRScheduler):
+    def setUp(self):
+        self.name = 'DecayCAWR'
+        self.args = [
+            0.99, # exp_factor
+            10  , # T_0
+        ]
+        self.kwargs = dict(
+            T_mult=2,
+            eta_min = 1E-6
+        )
+        super(TestDecayCAWR, self).setUp()
+
+class TestDecayCAWR_n_EXP(TestPMILRScheduler):
+    def setUp(self):
+        self.name = 'DecayCAWR_n_EXP'
+        self.args = [
+            0.99, # exp_factor_dawr
+            0.95, # gamma
+            10  , # T_0
+            50  , # T_cut
+        ]
+        self.kwargs = dict(
+            T_mult=2,
+            eta_min = 1E-6
+        )
+        super(TestDecayCAWR_n_EXP, self).setUp()
