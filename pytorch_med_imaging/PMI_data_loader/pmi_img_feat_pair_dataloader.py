@@ -48,7 +48,7 @@ class PMIImageFeaturePair(PMIImageDataLoader):
         **kwargs: Please see parent class.
 
     .. note::
-        Attributes are defined in :func:`PMIImageDataLoader._read_params`, either read from a dictionary or an ini
+        Attributes are defined in :func:`PMIImageDataLoader._read_config`, either read from a dictionary or an ini
         file. The current system reads the [LoaderParams].
 
     .. hint::
@@ -64,9 +64,9 @@ class PMIImageFeaturePair(PMIImageDataLoader):
         super(PMIImageDataLoader, self).__init__(*args, **kwargs)
 
 
-    def _read_params(self, config_file=None):
+    def _read_config(self, config_file=None):
         # Image part is handled by parent class
-        super(PMIImageFeaturePair, self)._read_params(config_file)
+        super(PMIImageFeaturePair, self)._read_config(config_file)
 
         default_attr = {
             'excel_sheetname': None,        # If the excel has multiple sheets
@@ -84,7 +84,7 @@ class PMIImageFeaturePair(PMIImageDataLoader):
             raise IOError(f"Cannot load from {self._target_dir}")
 
         img_out = self._read_image(self._input_dir)
-        mask_out = self._read_image(self._mask_dir, dtype='uint8')
+        mask_out = self._read_image(self.mask_dir, dtype='uint8')
 
         gt_dat = self._load_gt_dat()
 
@@ -138,7 +138,7 @@ class PMIImageFeaturePair(PMIImageDataLoader):
             return self._load_data_set_training(True)
         except:
             img_out = self._read_image(self._input_dir)
-            mask_out = self._read_image(self._mask_dir, dtype='uint8')
+            mask_out = self._read_image(self.mask_dir, dtype='uint8')
 
             # TODO: net_in_dat was assume to be in the same excel file as target_dir, which is not correct assumption
             self.data = {'input':   img_out,
@@ -152,7 +152,7 @@ class PMIImageFeaturePair(PMIImageDataLoader):
             # Create subject list
             data_exclude_none = {k: v for k, v in self.data.items() if v is not None}
             subjects = self._pack_data_into_subjects(data_exclude_none, transform=self.transform)
-            return self._create_queue(True, subjects, training=self._training_mode)
+            return self._create_queue(True, subjects, training=self._run_mode)
 
 class PMIImageFeaturePairConcat(PMIImageFeaturePair):
     r"""Basically same as the base class but change from using `DataLabel` to `DataLabelConcat`
@@ -164,8 +164,8 @@ class PMIImageFeaturePairConcat(PMIImageFeaturePair):
     def __init__(self, *args, **kwargs):
         super(PMIImageFeaturePairConcat, self).__init__(*args, **kwargs)
 
-    def _read_params(self, config_file=None):
-        super(PMIImageFeaturePairConcat, self)._read_params(config_file)
+    def _read_config(self, config_file=None):
+        super(PMIImageFeaturePairConcat, self)._read_config(config_file)
 
         default_params = {
             'dtype': str

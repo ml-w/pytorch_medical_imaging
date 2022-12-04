@@ -200,6 +200,7 @@ class PMIController(object):
 
         else:
             self._logger.info("LR scheduler not specified, using default exponential.")
+            raise DeprecationWarning("LR scheduler must be set now")
             solver.set_lr_decay_exp(self.solverparams_decay_rate_lr)
 
         # Read tensorboard dir from env, disable plot if it fails

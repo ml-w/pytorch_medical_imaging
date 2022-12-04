@@ -1,18 +1,56 @@
 import torchio
-import inspect
-from .pmi_dataloader_base import PMIDataLoaderBase
+from .pmi_dataloader_base import PMIDataLoaderBase, PMIDataLoaderBaseCFG
 from .. import med_img_dataset
 from .lambda_tio_adaptor import CallbackQueue
-from .computations import *
-from .augmenter_factory import create_transform_compose
-from pathlib import Path
 from typing import *
 from functools import partial
 import torchio as tio
 import multiprocessing as mpi
 import re
 
-__all__ = ['PMIImageDataLoader']
+__all__ = ['PMIImageDataLoader', 'PMIImageDataLoaderCFG']
+
+class PMIImageDataLoaderCFG(PMIDataLoaderBaseCFG):
+    r"""Configuration for ``PMIImageDataLoader
+
+    Attributes:
+        data_types (iterable):
+            Data type of input and ground-truth
+        sampler (str):
+            Determine the ``tio.Sampler`` used to sample the images. Support ['weighted'|'uniform'] currently.
+        sampler_kwargs (dict):
+            The kwargs passed to ``tio.Sampler``. For 'weighted', key ``patch_size`` and ``prob_map`` is required. For
+            'uniform', only ``patch_size`` is required.
+        augmentation (str):
+            Path to the
+    """
+    data_types                    : Iterable = [float, float]
+    sampler                       : str      = 'weighted'           # 'weighted' or 'uniform'
+    sampler_kwargs                : dict     = dict()               # pass to ``tio.Sampler``
+    augmentation                  : str      = None                 # yaml file to create tio transform
+    create_new_attribute          : str      = None                 # create a new attribute in subjects for callback
+    patch_sampling_callback       : Callable = None                 # callback to generate new data
+    patch_sampling_callback_kwargs: dict     = dict()               # kwargs pass to the callback
+    inf_samples_per_vol           : int      = 1                    # number of samples per volume during inference
+    mask_dir                      : str      = None                 # Image dir used by ``tio.Sampler``
+    probmap_dir                   : str      = None                 # Image dir used by ``tio.WeightedSampler``
+    tio_queue_kwargs = dict(            # dict passed to ``tio.Queue``
+        max_length             = 15,
+        samples_per_volume     = 1,
+        num_workers            = 16,
+        shuffle_subjects       = True,
+        shuffle_patches        = True,
+        start_background       = True,
+        verbose                = False,
+    )
+
+
+    @classmethod
+    def check_types(cls):
+        type_dict = {
+
+        }
+        super().check_types(cls)
 
 class PMIImageDataLoader(PMIDataLoaderBase):
     """
@@ -45,7 +83,7 @@ class PMIImageDataLoader(PMIDataLoaderBase):
         **kwargs: Please see parent class.
 
     .. note::
-        Attributes are defined in :func:`PMIImageDataLoader._read_params`, either read from a dictionary or an ini
+        Attributes are defined in :func:`PMIImageDataLoader._read_config`, either read from a dictionary or an ini
         file. The current system reads the [LoaderParams].
 
     .. hint::
@@ -56,96 +94,69 @@ class PMIImageDataLoader(PMIDataLoaderBase):
     See Also:
         :class:`PMIDataLoaderBase`
     """
-    def __init__(self, *args, **kwargs):
-        super(PMIImageDataLoader, self).__init__(*args, **kwargs)
+    def __init__(self, cfg: PMIImageDataLoaderCFG, *args, **kwargs):
+        super(PMIImageDataLoader, self).__init__(cfg, *args, **kwargs)
 
     def _check_input(self):
         """Not implemented."""
         return True
 
-    def _read_params(self, config_file=None):
+    def _read_config(self, config_file=None):
         """
         Defines attributes. Called when object is created. Extra attributes are declared in super function,
         see the super class for more details. Params are read from `[LoaderParams]` section of the ini.
 
         Args:
-            config_file (str or dict, Optional): See :func:`PMIDataLoaderBase._read_params`.
+            config_file (str or dict, Optional): See :func:`PMIDataLoaderBase._read_config`.
 
         See Also:
             * :class:`PMIDataLoaderBase`
-            * :func:`PMIDataLoaderBase._read_params`
+            * :func:`PMIDataLoaderBase._read_config`
         """
+        super(PMIImageDataLoader, self)._read_config(config_file)
 
-        super(PMIImageDataLoader, self)._read_params(config_file)
-        self._regex = self.get_from_config('Filters', 're_suffix', None)
-        self._idlist = self.get_from_config('Filters', 'id_list', None)
-        if not self._idlist in ("", None):
-            if self._idlist.endswith('.ini'):
-                self._idlist = self.parse_ini_filelist(self._idlist, self._run_mode)
-            elif self._idlist.endswith('.txt'):
-                self._idlist = [r.rstrip() for r in open(self._idlist).readlines()]
-            else:
-                if self._idlist.find(',') >= 0:
-                    self._idlist = self._idlist.split(',')
-            self._idlist.sort()
-        else:
-            self._idlist = None
-
-        self._exclude = self.get_from_config('Filters', 'id_exclude', None)
-        if not self._exclude is None:
-            self._exclude = self._exclude.split(',')
-            for e in self._exclude:
-                if e in self._idlist:
-                    self._logger.info("Removing {} from the list as specified.".format(e))
-                    self._idlist.remove(e)
-
-        # Try to read sampling probability map
-        self._probmap_dir = self.get_from_config('Data', 'prob_map_dir', None)
-        self._mask_dir = self.get_from_config('Data', 'mask_dir', None)
-
-        # Default attributes:
-        default_attr = {
-            'data_types': 'float-float',
-            'idGlobber': "(^[a-zA-Z0-9]+)",
-            'patch_size': None,
-            'queue_kwargs': {},
-            'sampler': 'uniform',
-            'augmentation': '',
-            'create_new_attribute': "",
-            'patch_sampling_callback': "",
-            'patch_sampling_callback_kwargs': {},
-            'inf_samples_per_vol': None
-        }
-        self._load_default_attr(default_attr)
-        self._logger.info(f"Read local attributes: {[self.__getattribute__(i) for i in default_attr]}")
         # Update some kwargs with more complex default settings
-        default_queue_kwargs = {
-            'max_length': 15,
-            'samples_per_volume': 1,
-            'num_workers': 16,
-            'shuffle_subjects': True,
-            'shuffle_patches':  True,
-            'start_background': True,
-            'verbose': self._logger._verbose,
-        }
-        default_queue_kwargs.update(self.queue_kwargs)  # self.queue_kwargs is loaded by _load_default_attr
+        default_queue_kwargs = self._cfg.tio_queue_kwargs.copy()
         if default_queue_kwargs['num_workers'] > mpi.cpu_count():
             default_queue_kwargs['num_workers'] = mpi.cpu_count()
-        self.queue_kwargs = default_queue_kwargs
+        self.tio_queue_kwargs = default_queue_kwargs
 
-        if (self.sampler == 'weighted') & (self._probmap_dir is not None):
-            self.sampler = tio.WeightedSampler(patch_size=self.patch_size, probability_map='probmap')
-        elif self.patch_size != None:
-            self.sampler = tio.UniformSampler(patch_size=self.patch_size)
+        # If samplers are specified create tio queues using these samplers.
+        if (self.sampler == 'weighted') :
+            if self.probmap_dir is None:
+                msg = f"Weighted samplers requires probability map to sample patches. Specify 'probmap_dir' in cfg. "
+                raise KeyError(msg)
+            else:
+                # Default attribute for probability map is 'probmap'
+                if not 'probability_map' in self.sampler_kwargs:
+                    self.sampler_kwargs['probability_map'] = 'probmap'
+            if not set(['patch_size', 'probability_map']).issubset(set(self.sampler_kwargs.keys())):
+                msg = f"`sampler_kwargs` must contain both 'patch_size' and 'probability_map' keys for weighted" \
+                      f"samplers. Got {self.sampler_kwargs} instead."
+                raise KeyError(msg)
+            self.sampler_instance = tio.WeightedSampler(**self.sampler_kwargs)
+        elif (self.sampler == 'uniform'):
+            if not 'patch_size' in self.sampler_kwargs:
+                msg = f"Require 'patch_size' argument to use ``tio.UniformSampler``. Specify 'patch_size' in ``cfg.samp" \
+                      f"ler_kwargs' dictionary."
+                raise KeyError(msg)
+            self.sampler_instance = tio.UniformSampler(**self.sampler_kwargs)
+        elif (self.sampler == 'grid'):
+            if not 'patch_size' in self.sampler_kwargs:
+                msg = f"Require 'patch_size' argument to use ``tio.GridSampler``. Specify 'patch_size' in ``cfg.samp" \
+                      f"ler_kwargs' dictionary."
+                raise KeyError(msg)
+            if not 'patch_overlap' in self.sampler_kwargs:
+                # Automatically determine overlap if its not specified
+                overlap = [ps // 2 for ps in self.sampler_kwargs['patch_size']]
+                self.sampler_kwargs['patch_overlap'] = overlap
+            self.sampler_instance = tio.GridSampler(**self.sampler_kwargs)
         else:
-            self.sampler = None
-        self.queue_args = [self.queue_kwargs.pop(k)
+            # If sampler is not specified, assume the whole image is sampled
+            self.sampler_instance = None
+        self.queue_args = [self.tio_queue_kwargs.pop(k)
                            for k in ['max_length', 'samples_per_volume']] \
-                          + [self.sampler] # follows torchio's args arrangments
-
-        # Build transform
-        self.transform = None
-        self.data_types = self.data_types.split('-')
+                          + [self.sampler_instance] # follows torchio's args arrangments
 
     def _read_image(self, root_dir, **kwargs):
         """
@@ -170,7 +181,7 @@ class PMIImageDataLoader(PMIDataLoaderBase):
 
         self._image_class = med_img_dataset.ImageDataSet
         img_data =  self._image_class(root_dir, verbose=self._verbose, debugmode=self._debug, filtermode='both',
-                                      regex=self._regex, idlist=self._idlist, idGlobber=self.idGlobber, **kwargs)
+                                      regex=self.id_globber, idlist=self.id_list, idGlobber=self.id_globber, **kwargs)
         return img_data
 
     def _load_data_set_training(self,
@@ -178,12 +189,12 @@ class PMIImageDataLoader(PMIDataLoaderBase):
         """
         Load ImageDataSet for input and segmentation. For more see :func:`create_transform()`.
         """
-        if self._target_dir is None:
-            raise IOError(f"Cannot load from {self._target_dir}")
+        if self.target_dir is None:
+            raise IOError(f"Cannot load from {self.target_dir}")
 
-        img_out = self._read_image(self._input_dir, dtype=self.data_types[0])
-        gt_out = self._read_image(self._target_dir, dtype=self.data_types[1])
-        mask_out = self._read_image(self._mask_dir, dtype='uint8')
+        img_out = self._read_image(self.input_dir, dtype=self.data_types[0])
+        gt_out = self._read_image(self.target_dir, dtype=self.data_types[1])
+        mask_out = self._read_image(self.mask_dir, dtype='uint8')
         prob_out = self._prepare_probmap()
 
         self.data = self._prepare_data(gt_out, img_out, mask_out, prob_out)
@@ -199,14 +210,14 @@ class PMIImageDataLoader(PMIDataLoaderBase):
     def _load_data_set_inference(self) -> [tio.Queue, tio.GridSampler] or [tio.SubjectsDataset, None]:
         """Same as :func:`_load_data_set_training` in this class, except the ground-truth is
         not loaded."""
-        img_out = self._read_image(self._input_dir, dtype=self.data_types[0])
+        img_out = self._read_image(self.input_dir, dtype=self.data_types[0])
         prob_out = self._prepare_probmap()
 
-        if not self._target_dir in (None, 'None'):
+        if not self.target_dir in (None, 'None'):
             try:
-                gt_out = self._read_image(self._target_dir, dtype=self.data_types[1])
+                gt_out = self._read_image(self.target_dir, dtype=self.data_types[1])
             except:
-                self._logger.exception("Can't load from: {}".format(self._target_dir))
+                self._logger.exception("Can't load from: {}".format(self.target_dir))
                 self._logger.warning("Skipping ground-truth data loading.")
                 gt_out = None
         else:
@@ -248,12 +259,12 @@ class PMIImageDataLoader(PMIDataLoaderBase):
     def _prepare_probmap(self):
         r"""Load probability map if its specified."""
         # Load probability map if specified
-        if self._probmap_dir is not None:
-            self._logger.info(f"Loading probmap from: {self._probmap_dir}")
+        if self.probmap_dir is not None:
+            self._logger.info(f"Loading probmap from: {self.probmap_dir}")
             try:
-                prob_out = self._read_image(self._probmap_dir, dtype='uint32') # torchio requires Integer probmap
+                prob_out = self._read_image(self.probmap_dir, dtype='uint32') # torchio requires Integer probmap
             except:
-                self._logger.warning(f"Couldn't open probmap from: {self._probmap_dir}", no_repeat=True)
+                self._logger.warning(f"Couldn't open probmap from: {self.probmap_dir}", no_repeat=True)
                 prob_out = None
         else:
             prob_out = None
@@ -284,30 +295,22 @@ class PMIImageDataLoader(PMIDataLoaderBase):
         """
         # default is based on self._training_mode, read from config file
         if training is None:
-            training = self._training_mode
+            training = self._run_mode
 
-        # Return the queue
-        if not self.patch_size is None:
-            overlap = [ps // 2 for ps in self.patch_size]
-            # If no probmap, return GridSampler, otherwise, return weighted sampler
-            if self.data['probmap'] is None:
-                sampler = tio.GridSampler(patch_size=self.patch_size, patch_overlap=overlap)
-            else:
-                sampler = self.sampler
-        else:
+        if self.sampler_instance is None:
             # Set queue_args and queue_kwargs to load the whole image for each object to allow for caching
             shape_of_input = subjects[0].shape
 
             # Reset sampler
-            self.sampler = tio.UniformSampler(patch_size=shape_of_input[1:])  # first dim is batch
-            self.queue_args[-1] = self.sampler
+            self.sampler_instance = tio.UniformSampler(patch_size=shape_of_input[1:])  # first dim is batch
+            self.queue_args[-1] = self.sampler_instance
 
         # if exclude augment, don't shuffle
         if exclude_augment:
-            queue_dict = self.queue_kwargs
+            queue_dict = self.tio_queue_kwargs
             queue_dict['shuffle_subjects'] = False
         else:
-            queue_dict = self.queue_kwargs
+            queue_dict = self.tio_queue_kwargs
 
         if not training:
             # don't shuffle subject if inference
@@ -317,7 +320,7 @@ class PMIImageDataLoader(PMIDataLoaderBase):
 
         # Create queue
         # If option to use post-sampling processing was provided, use CallbackQueue instead
-        if  self.patch_sampling_callback != "":
+        if  not self.patch_sampling_callback in ("", None):
             # check if there's illegal characters in the patch_sampling_callback
             if re.search("[\W]+", self.patch_sampling_callback.translate(str.maketrans('', '', "[], "))) is not None:
                 raise AttributeError(f"You patch_sampling_callback specified ({self.patch_sampling_callback}) "
@@ -351,17 +354,17 @@ class PMIImageDataLoader(PMIDataLoaderBase):
                 msg += f"Attribute {att} missing. Have you run load_data() already?"
                 raise AttributeError(msg)
 
-        if isinstance(self.sampler, tio.GridSampler):
-            self.sampler.set_subject(subject)
-        elif isinstance(self.sampler, tio.WeightedSampler):
+        if isinstance(self.sampler_instance, tio.GridSampler):
+            self.sampler_instance.set_subject(subject)
+        elif isinstance(self.sampler_instance, tio.WeightedSampler):
             _spv = self.inf_samples_per_vol if self.inf_samples_per_vol is not None \
                 else self.queue.samples_per_volume
             self._logger.info(f"Setting the number of patches to sample to: "
                               f"{_spv}")
-            self.sampler.set_subject(subject, _spv)
+            self.sampler_instance.set_subject(subject, _spv)
             self.queue.samples_per_volume = _spv
         else:
-            msg = f"Currrently only support GridSampler and WeightedSampler, but got {type(self.sampler)}"
+            msg = f"Currrently only support GridSampler and WeightedSampler, but got {type(self.sampler_instance)}"
             raise TypeError(msg)
 
         # Replace subjects in queue and reset the queue
@@ -370,10 +373,10 @@ class PMIImageDataLoader(PMIDataLoaderBase):
         del self.queue._subjects_iterable, self.queue.sampler
         self.queue.subjects_dataset = subject
         self.queue._subjects_iterable = None
-        self.queue.sampler = self.sampler
+        self.queue.sampler = self.sampler_instance
         self.queue._initialize_subjects_iterable()
-        aggregator = tio.GridAggregator(self.sampler, 'average')
+        aggregator = tio.GridAggregator(self.sampler_instance, 'average')
         return self.queue, aggregator
 
     def get_sampler(self):
-        return self.sampler
+        return self.sampler_instance

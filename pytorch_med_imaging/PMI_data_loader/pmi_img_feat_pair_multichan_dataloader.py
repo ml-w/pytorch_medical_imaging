@@ -29,7 +29,7 @@ class PMIImageMCFeaturePair(PMIImageFeaturePair):
         **kwargs: Please see parent class.
 
     .. note::
-        Attributes are defined in :func:`PMIImageDataLoader._read_params`, either read from a dictionary or an ini
+        Attributes are defined in :func:`PMIImageDataLoader._read_config`, either read from a dictionary or an ini
         file. The current system reads the [LoaderParams].
 
     .. hint::
@@ -44,8 +44,8 @@ class PMIImageMCFeaturePair(PMIImageFeaturePair):
     def __init__(self, *args, **kwargs):
         super(PMIImageMCFeaturePair, self).__init__(*args, **kwargs)
 
-    def _read_params(self, config_file=None):
-        super(PMIImageMCFeaturePair, self)._read_params(config_file)
+    def _read_config(self, config_file=None):
+        super(PMIImageMCFeaturePair, self)._read_config(config_file)
 
         # Currently not support augmentation
         self._augmentation = 0
@@ -78,7 +78,7 @@ class PMIImageMCFeaturePair(PMIImageFeaturePair):
 
         concat_by_axis = self.get_from_loader_params_with_eval('concat_by_axis', -1)
         return self._image_class(root_dir, channel_subdirs=self._channel_subdirs, verbose=self._verbose,
-                                 debugmode=self._debug, filtermode='both', regex=self._regex, idlist=self._idlist,
+                                 debugmode=self._debug, filtermode='both', regex=self.id_globber, idlist=self.id_list,
                                  loadBySlices=self._load_by_slices, aug_factor=self._augmentation,
                                  concat_by_axis=concat_by_axis, **kwargs)
 

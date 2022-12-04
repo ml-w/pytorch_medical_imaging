@@ -11,6 +11,17 @@ from .augmenter_factory import create_transform_compose
 from ..med_img_dataset.PMIDataBase import PMIDataBase
 from mnts.mnts_logger import MNTSLogger
 
+class PMIDataLoaderBaseCFG:
+    """Config required to initialize PMIDataLoader"""
+    input_dir    : str = ""
+    target_dir   : str = ""
+    output_dir   : str = ""
+    id_list      : str = ""
+    id_exclude   : str = ""
+    id_globber   : str = "(^[a-zA-Z0-9]+)"
+    run_mode     : str = "" # 'train' or 'inference'
+
+
 class PMIDataLoaderBase(object):
     """
     This is the base class to allow automatic loading from main.py. All custom class should inherit this class such
@@ -25,7 +36,7 @@ class PMIDataLoaderBase(object):
             Root directory of input to loss function.
 
     Args:
-        prop_dict (dict or str):
+        cfg (dict or str):
             Either a dictionary of parameters or a str pointing to an .ini file that hold the required parameters.
         run_mode (str):
             {'train', 'inference'}. Decide the behavior of objects.
@@ -39,24 +50,32 @@ class PMIDataLoaderBase(object):
 
 
     .. note::
-        * The private attributes are defined in :func:`PMIDataLoaderBase._read_params`.
+        * The private attributes are defined in :func:`PMIDataLoaderBase._read_config`.
         * :obj:`prob_dict` should either be directory to an ini file or a `configparser.ConfigParser` object. This
           class read from the section `[General]`. The ini file should at least consist of attribute `run_mode`. The
           child class would read from the section `[LoaderParams]` to obtain the necessary tags.
 
 
     """
-    def __init__(self, prop_dict, run_mode='training', debug=False, verbose=True, logger=None, **kwargs):
-        self._prop_dict = prop_dict
+    def __init__(self,
+                 cfg: PMIDataLoaderBaseCFG,
+                 run_mode='training', debug=False, verbose=True, logger=None, **kwargs):
+        self._cfg = cfg
         self._logger = logger if not logger is  None else MNTSLogger[self.__class__.__name__]
         self._verbose = verbose
         self._debug = debug
         self._run_mode = run_mode
 
+        if isinstance(self._run_mode, str):
+            if re.match('(?=.*train.*)', self._run_mode):
+                self._run_mode = True
+            else:
+                self._run_mode = False
+
         if not self._check_input:
             raise AttributeError
 
-        self._read_params(prop_dict)
+        self._read_config(cfg)
 
     @abstractmethod
     def _check_input(self):
@@ -139,11 +158,9 @@ class PMIDataLoaderBase(object):
 
 
         """
-        if re.match('(?=.*train.*)', self._run_mode):
-            self._training_mode = True
+        if self._run_mode:
             return self._load_data_set_training(exclude_augment = False if exclude_augment is None else exclude_augment)
         else:
-            self._training_mode = False
             return self._load_data_set_inference()
 
     def write_log(self, msg, level=MNTSLogger.INFO):
@@ -153,7 +170,7 @@ class PMIDataLoaderBase(object):
         if self._verbose:
             print(msg)
 
-    def _read_params(self, config_file=None):
+    def _read_config(self, config_file=None):
         """
         Read params from prop_dict, adds to attribute of the object. If config file is specified, every will be
         compied to the `self._loader_params`. Attributes are added as follow:
@@ -166,20 +183,16 @@ class PMIDataLoaderBase(object):
 
         """
         # Loading basic inputs
-        try:
-            self._input_dir = self.get_from_config('Data', 'input_dir')
-            self._target_dir = self.get_from_config('Data', 'target_dir', default_value=None)
-        except IndexError as e:
-            self.write_log("Can't read {} from input config".format(e))
-            raise IndexError(e)
-
         if not config_file is None:
-            if isinstance(config_file, str):
-                config = configparser.ConfigParser()
-                config.read_file(config_file)
-                self._loader_params = dict(config['LoaderParams'])
+            if isinstance(config_file, type):
+                cls = config_file
             else:
-                self._loader_params = config_file
+                cls = config_file.__class__
+            cls_dict = { attr: getattr(cls, attr) for attr in dir(cls) }
+            self.__dict__.update(cls_dict)
+
+        # load to ``self.id_list``
+        self._read_id_configs()
 
     def get_from_config(self, section, key, default_value=None, tar_dict=None):
         """
@@ -191,7 +204,7 @@ class PMIDataLoaderBase(object):
             default_value (Optional): Value to fill in if the key is not found in `tar_dict`. Default to `None`.
             tar_dict (dict): Target dictionary. Default to `self._prop_dict`
         """
-        tar_dict = self._prop_dict if tar_dict is None else tar_dict
+        tar_dict = self._cfg if tar_dict is None else tar_dict
         try:
             out = tar_dict[section][key]
             return out
@@ -210,7 +223,7 @@ class PMIDataLoaderBase(object):
             default_value (Optional): Value to fill in if the key is not found in `tar_dict`. Default to `None`.
             tar_dict (dict): Target dictionary. Default to `self._prop_dict`
         """
-        tar_dict = self._prop_dict if tar_dict is None else tar_dict
+        tar_dict = self._cfg if tar_dict is None else tar_dict
         try:
             out = tar_dict[section][key]
             if isinstance(out, str):
@@ -232,7 +245,7 @@ class PMIDataLoaderBase(object):
             default_value (Optional): Value to fill in if the key is not found in `tar_dict`. Default to `None`.
             tar_dict (dict): Target dictionary. Default to `self._prop_dict`
         """
-        tar_dict = self._prop_dict if tar_dict is None else tar_dict
+        tar_dict = self._cfg if tar_dict is None else tar_dict
         try:
             out = tar_dict[section].getboolean(key)
             return out
@@ -251,7 +264,7 @@ class PMIDataLoaderBase(object):
             tar_dict (dict): Target dictionary. Default to `self._prop_dict`
         """
         try:
-            tar_dict = self._prop_dict['LoaderParams']
+            tar_dict = self._cfg['LoaderParams']
             out = tar_dict[key]
             return out
         except:
@@ -267,7 +280,7 @@ class PMIDataLoaderBase(object):
             tar_dict (dict): Target dictionary. Default to `self._prop_dict`
         """
         try:
-            tar_dict = self._prop_dict['LoaderParams']
+            tar_dict = self._cfg['LoaderParams']
             out = tar_dict[key]
             if isinstance(out, str):
                 try:
@@ -289,7 +302,7 @@ class PMIDataLoaderBase(object):
             tar_dict (dict): Target dictionary. Default to `self._prop_dict`
         """
         try:
-            tar_dict = self._prop_dict['LoaderParams']
+            tar_dict = self._cfg['LoaderParams']
             try:
                 out = tar_dict.getboolean(key, default_value)
             except:
@@ -325,6 +338,20 @@ class PMIDataLoaderBase(object):
         return out_dict
 
     def _create_transform(self, exclude_augment = False):
+        r"""Wrapper function of ``create_transform_compose()``. This creates a ``tio.Compose``
+
+        Args:
+            exclude_augment (bool):
+                If ``True``, only normalization transform will be built. See also :func:`create_transform_compose`.
+
+        Required attributes:
+            augmentation (str):
+                Path to the yaml file that defines the tio.Compose. If this is `None`, this function will also return
+                `None`.
+
+        Returns:
+            compose (tio.Compose):
+        """
         if isinstance(self.augmentation, str):
             if Path(self.augmentation).is_file():
                 try:
@@ -335,7 +362,10 @@ class PMIDataLoaderBase(object):
                     self.augmentation = False
             else:
                 self._logger.warning(f"Transform file provided but could not be located! Got {str(self.augmentation)}")
-        return self.transform
+            return self.transform
+        else:
+            self._logger.warning(f"`self.augmentation` was not defined!")
+            return None
 
     def _pack_data_into_subjects(self,
                                  data_dict: dict,
@@ -364,3 +394,40 @@ class PMIDataLoaderBase(object):
                     for row in zip(*data_exclude_none.values())]
         subjects = tio.SubjectsDataset(subjects=subjects, transform=transform)
         return subjects
+
+    def _read_id_configs(self):
+        r"""This function is called after reading the cfg file, this will sort out the ids to be loaded when creating
+        the dataloaders.
+
+        Required attributes:
+            id_list (str):
+                If this is an ini file, will invoke ``parse_ini_filelist()`` to get the ids. If its a .txt file, will
+                read each line in the txt file into the id_list.
+            id_exclude (str or list, Optional):
+                If this is not ``''``, will check if it is a path or a list. If it is a path, assume it is a comma
+                separated list where the elements are to be removed from ``self.id_list``. If it is already a list, will
+                directly remove these ids from ``self.id_list.
+
+        .. Note::
+            The default values of ``id_list`` and ``id_exclude`` are both empty strings ''. If they are empty strings
+            no id filtering will be executed.
+        """
+        if not self.id_list in ("", None):
+            if self.id_list.endswith('.ini'):
+                self.id_list = self.parse_ini_filelist(self.id_list, self._run_mode)
+            elif self.id_list.endswith('.txt'):
+                self.id_list = [r.rstrip() for r in open(self.id_list).readlines()]
+            else:
+                if self.id_list.find(',') >= 0:
+                    self.id_list = self.id_list.split(',')
+            self.id_list.sort()
+        else:
+            self.id_list = None
+        self.id_exclude = self._cfg.id_exclude
+        if not self.id_exclude in ("", None):
+            if isinstance(self.id_exclude, str) and isinstance(self.id_list, (list, tuple)):
+                self.id_exclude = self.id_exclude.split(',')
+                for e in self.id_exclude:
+                    if e in self.id_list:
+                        self._logger.info("Removing {} from the list as specified.".format(e))
+                        self.id_list.remove(e)
