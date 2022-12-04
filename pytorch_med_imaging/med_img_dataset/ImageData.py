@@ -340,7 +340,8 @@ class ImageDataSet(PMIDataBase):
                 # do nothing if regex is Nonw
                 self._logger.warning('Regex input is None!')
                 pass
-            elif self._filterargs['regex'][0] == '(':
+            # if find *, treat it as wild card, if find .* treat it as regex
+            elif self._filterargs['regex'].find('*') == -1 or self._filterargs['regex'].find('.*') > -1:
                 try:
                     keep = np.invert([re.match(self._filterargs['regex'], f) is None for f in file_basenames])
                 except Exception as e:
