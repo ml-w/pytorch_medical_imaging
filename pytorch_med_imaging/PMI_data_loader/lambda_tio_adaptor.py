@@ -112,6 +112,10 @@ class CallbackQueue(Queue):
         self.create_new_attribute = create_new_attribute
         self._logger = MNTSLogger[__class__.__name__]
 
+        if self.create_new_attribute is None:
+            msg = f"`create_new_attribute` is not specified!"
+            raise ArithmeticError(msg)
+
     def _fill(self):
         super(CallbackQueue, self)._fill()
         if self.callback is None or self.create_new_attribute is None:
