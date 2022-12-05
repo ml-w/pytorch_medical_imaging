@@ -412,7 +412,7 @@ class PMIDataLoaderBase(object):
             The default values of ``id_list`` and ``id_exclude`` are both empty strings ''. If they are empty strings
             no id filtering will be executed.
         """
-        if not self.id_list in ("", None):
+        if not self.id_list in ("", None) and not isinstance(self.id_list, list):
             if self.id_list.endswith('.ini'):
                 self.id_list = self.parse_ini_filelist(self.id_list, self._run_mode)
             elif self.id_list.endswith('.txt'):
@@ -420,6 +420,13 @@ class PMIDataLoaderBase(object):
             else:
                 if self.id_list.find(',') >= 0:
                     self.id_list = self.id_list.split(',')
+            self.id_list.sort()
+        elif isinstance(self.id_list, list):
+            if not all([isinstance(ll, str) for ll in self.id_list]):
+                types = [type(ll) for ll in self.id_list]
+                msg = f"Expect all components in `id_list` to be string, got: " \
+                      f"{[(a, b) for a, b in zip(self.idlist, types)]}"
+                raise TypeError(msg)
             self.id_list.sort()
         else:
             self.id_list = None
