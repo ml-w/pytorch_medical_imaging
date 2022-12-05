@@ -4,7 +4,7 @@ Networks
 
 GNNGRU
 ------
-.. autoclass:: pytorch_med_imaging.Networks.CnnRnn.CNNGRU
+.. autoclass:: pytorch_med_imaging.networks.CnnRnn.CNNGRU
     :members:
 
 UNet_p
@@ -12,8 +12,8 @@ UNet_p
 .. autoclass:: pytorch_med_imaging.Networks.UNet_p.Up
     :members:
 
-.. autoclass:: pytorch_med_imaging.Networks.UNet_p.Down
+.. autoclass:: pytorch_med_imaging.networks.UNet_p.Down
     :members:
 
-.. autoclass:: pytorch_med_imaging.Networks.UNet_p.UNet_p
+.. autoclass:: pytorch_med_imaging.networks.UNet_p.UNet_p
     :members:
