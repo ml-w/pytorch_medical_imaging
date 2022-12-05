@@ -212,17 +212,17 @@ class ImageDataSet(PMIDataBase):
         # Read all nii.gz files exist first.
         #-----------------------------------
         removed_fnames = []
-        if self._readmode is 'normal':
+        if self._readmode == 'normal':
             file_dirs = os.listdir(self.rootdir)
             file_dirs = fnmatch.filter(file_dirs, "*.nii.gz")
             file_dirs = [os.path.join(self.rootdir, f) for f in file_dirs]
-        elif self._readmode is 'explicit':
+        elif self._readmode == 'explicit':
             file_dirs = [fs.rstrip() for fs in open(self.rootdir, 'r').readlines()]
             for fs in file_dirs:
                 if not os.path.isfile(fs):
                     file_dirs.remove(fs)
                     removed_fnames.append(fs)
-        elif self._readmode is 'recursive':
+        elif self._readmode == 'recursive':
             file_dirs = []
             for root, folder, files in os.walk(self.rootdir):
                 if len(files):
