@@ -1,181 +1,122 @@
-from .pmi_image_dataloader import PMIImageDataLoader
+from .pmi_image_dataloader import PMIImageDataLoader, PMIImageDataLoaderCFG
 from ..med_img_dataset import DataLabel, DataLabelConcat
 
 from typing import Optional
 import torchio as tio
+from pathlib import Path
 
-__all__ = ['PMIImageFeaturePair']
+__all__ = ['PMIImageFeaturePairLoader', 'PMIImageFeaturePairLoaderCFG', 'PMIImageFeaturePairLoaderConcat']
 
-class PMIImageFeaturePair(PMIImageDataLoader):
+
+class PMIImageFeaturePairLoaderCFG(PMIImageDataLoaderCFG):
+    r"""Configuration for :class:`PMIImageFeaturePairLoader`.
+
+    Attributes:
+        excel_sheetname (str, Optional):
+            The name of the target excel sheet that is specified in ``target_dir``. See also :class:`PMIDataLoaderBase`.
+        target_column (str, Optional):
+            A comma seperated string that specified the columns to read for ground-truth dataset. If not specified, use
+            all columns in the first sheet of the excel file.
+        net_in_column (str, Optional):
+            Specify the column in the excel sheet that needs to go into the network. Default to ``None``.
+        net_in_label_dir (str, Optional):
+            If this is specified, an extra set of data will be loaded and input to the network. Defaul to ``None``.
+        net_in_dtype (type, Optional):
+            Force type cast for net_in_column.
     """
-    This class load :class:ImageDataSet related image data together with features written in a csv file.
+    excel_sheetname   : str = None
+    target_column     : str = None
+    net_in_column     : str = None
+    net_in_label_dir  : str = None
+    net_in_dtype      : type = None
+
+class PMIImageFeaturePairLoader(PMIImageDataLoader):
+    """
+    This class load :class:`ImageDataSet` related image data together with features written in a csv file specified
+    by ``cfg.target_dir``.
 
     This class is suitable in the following situations:
         * Image to features prediction
         * Image classifications
         * Image to coordinates
 
-    Additional attributes can be set using LoaderParams.
-
-    Attributes:
-        regex (str, Optional):
-            Filter for loading files. See :class:`ImageDataSet`
-        idlist (str or list, Optional):
-            Filter for loading files. See :class:`ImageDataSet`
-        excel_sheetname (str, Optional):
-            Name of the sheet. Only work if input ends with xlsx. Default to None.
-        net_in_colname (str, Optional):
-            If this is specified, the feature loaded from this datasheet is input to the network as one of the
-            attribute of the :class:`torchio.Subject`. Default to None.
-        lossfunc_in_colname (str, Optional):
-            Specify this to extract a column for inputting as ground-truth in loss function. Default to None.
-
-
-
-
-    Loader_Params:
-        excel_sheetname (Optional):
-            Name of excel sheet if the target is an excel file
-        column (Optional):
-            A comma seperated string that specified the columns to read for ground-truth dataset
-        net_in_label_dir (Optional):
-            If this is specified, an extra set of data will be loaded and input to the network
-        net_in_column (Optional):
-            Same as `column` but used for the extra set of data.
+    For attributes and configurations, see :class:`PMIImageFeaturePairLoaderCFG`
 
     Args:
+        cfg (PMIImageFeaturePairLoaderCFG): Config file instant/class. See :class:`PMIImageFeaturePairLoaderCFG`.
         *args: Please see parent class.
         **kwargs: Please see parent class.
-
-    .. note::
-        Attributes are defined in :func:`PMIImageDataLoader._read_config`, either read from a dictionary or an ini
-        file. The current system reads the [LoaderParams].
-
-    .. hint::
-        Users are suppose to pass arguments to the super class for handling. If in doubt, look at the docs of parent
-        class!
-
 
     See Also:
         :class:`PMIDataLoaderBase`
 
     """
-    def __init__(self, *args, **kwargs):
-        super(PMIImageDataLoader, self).__init__(*args, **kwargs)
+    def __init__(self, cfg: PMIImageFeaturePairLoaderCFG, *args, **kwargs):
+        super(PMIImageDataLoader, self).__init__(cfg, *args, **kwargs)
 
+    def _prepare_data(self) -> dict:
+        r"""Override to change behavior of data loaders. See also :func:`PMIImageFeaturePairLoader._load_gt_data`.
 
-    def _read_config(self, config_file=None):
-        # Image part is handled by parent class
-        super(PMIImageFeaturePair, self)._read_config(config_file)
-
-        default_attr = {
-            'excel_sheetname': None,        # If the excel has multiple sheets
-            'net_in_colname': None,         # Name(s) of the column(s) to input into the network
-            'lossfunc_in_colname': "",    # Name(s) of the column(s) to input into the loss function
-        }
-        self._load_default_attr(default_attr)
-
-    def _load_data_set_training(self,
-                                exclude_augment: Optional[bool] = False) -> tio.Queue or tio.SubjectsDataset:
+        Returns:
+            dict
         """
-
-        """
-        if self._target_dir is None:
-            raise IOError(f"Cannot load from {self._target_dir}")
-
-        img_out = self._read_image(self._input_dir)
-        mask_out = self._read_image(self.mask_dir, dtype='uint8')
-
-        gt_dat = self._load_gt_dat()
+        data = super(PMIImageFeaturePairLoader, self)._prepare_data()
 
         # Load selected columns only
-        if not self.lossfunc_in_colname in (None, ""):
-            self._logger.info("Selecting target column: {}".format(self.lossfunc_in_colname))
-            gt_dat.set_target_column(self.lossfunc_in_colname)
-        gt_dat.map_to_data(img_out)
+        gt_dat = data['gt']
+        if not self.target_column in (None, ""):
+            self._logger.info("Selecting target column: {}".format(self.target_column))
+            try:
+                dtype = self.data_types[1]
+            except IndexError:
+                dtype = None
+            gt_dat.set_target_column(self.target_column, dtype=dtype)
+        gt_dat.map_to_data(data['input'])
 
         # Load extra column and concat if extra column options were found
-        if not self.net_in_colname is None:
-            self._logger.info(f"Selecting extra input columns: {self.net_in_colname}")
+        if not self.net_in_column is None:
+            self._logger.info(f"Selecting extra input columns: {self.net_in_column}")
             if not self.excel_sheetname is None:
-                extra_dat = DataLabel.from_xlsx(self._target_dir, self.excel_sheetname)
+                extra_dat = DataLabel.from_xlsx(self.target_dir, self.excel_sheetname)
             else:
-                extra_dat = DataLabel.from_csv(self._target_dir)
-            extra_dat.set_target_column(self.net_incolname)
+                extra_dat = DataLabel.from_csv(self.target_dir)
+            extra_dat.set_target_column(self.net_in_colname, dtype=self.net_in_dtype)
             extra_dat.map_to_data(img_out)
             self._logger.debug(f"extradat: {extra_dat.size()}")
             self._logger.debug(f"out: {img_out}")
         else:
             extra_dat = None
 
-        self.data = {'input':   img_out,
-                     'gt':      gt_dat,
-                     'mask':    mask_out,
-                     'net_in_dat': extra_dat,
-                     'uid': img_out.get_unique_IDs()
-                     }
-        # create transform
-        self._create_transform(exclude_augment=exclude_augment)
+        # Add extra objects to self.data
+        data['net_in_dat'] = extra_dat
+        return data
 
-        # exclude where self.data items are `None`
-        data_exclude_none = {k: v for k, v in self.data.items() if v is not None}
-
-        # Create subject list
-        subjects = self._pack_data_into_subjects(data_exclude_none, transform=self.transform)
-        return self._create_queue(exclude_augment, subjects)
-
-    def _load_gt_dat(self):
+    def _load_gt_data(self):
         # Load the datasheet
-        if not self.excel_sheetname is None:
-            gt_dat = DataLabel.from_xlsx(self._target_dir, self.excel_sheetname)
-        else:
-            gt_dat = DataLabel.from_csv(self._target_dir)
+        if Path(self.target_dir).suffix == '.csv':
+            gt_dat = DataLabel.from_csv(self.target_dir)
+        elif not self.excel_sheetname is None:
+            gt_dat = DataLabel.from_xlsx(self.target_dir, self.excel_sheetname)
         return gt_dat
 
-    def _load_data_set_inference(self) -> tio.Queue or tio.SubjectsDataset:
-        # Try to load ground-truth too
-        try:
-            return self._load_data_set_training(True)
-        except:
-            img_out = self._read_image(self._input_dir)
-            mask_out = self._read_image(self.mask_dir, dtype='uint8')
 
-            # TODO: net_in_dat was assume to be in the same excel file as target_dir, which is not correct assumption
-            self.data = {'input':   img_out,
-                         'mask':    mask_out,
-                         'uid': img_out.get_unique_IDs()
-                         }
-
-            # create transform
-            self._create_transform(exclude_augment=True)
-
-            # Create subject list
-            data_exclude_none = {k: v for k, v in self.data.items() if v is not None}
-            subjects = self._pack_data_into_subjects(data_exclude_none, transform=self.transform)
-            return self._create_queue(True, subjects, training=self._run_mode)
-
-class PMIImageFeaturePairConcat(PMIImageFeaturePair):
-    r"""Basically same as the base class but change from using `DataLabel` to `DataLabelConcat`
+class PMIImageFeaturePairLoaderConcat(PMIImageFeaturePairLoader):
+    r"""Basically same as the base class but change from using `DataLabel` to `DataLabelConcat`, which is for the
+    circumstance where the one data point span across multiple rows of the target column.
 
     This class is suitable for:
     * img to sequence
-
     """
     def __init__(self, *args, **kwargs):
-        super(PMIImageFeaturePairConcat, self).__init__(*args, **kwargs)
+        super(PMIImageFeaturePairLoaderConcat, self).__init__(*args, **kwargs)
 
     def _read_config(self, config_file=None):
-        super(PMIImageFeaturePairConcat, self)._read_config(config_file)
+        super(PMIImageFeaturePairLoaderConcat, self)._read_config(config_file)
 
-        default_params = {
-            'dtype': str
-        }
-        self._load_default_attr(default_params)
-
-    def _load_gt_dat(self):
+    def _load_gt_data(self):
         # Load the datasheet
-        if not self.excel_sheetname is None:
-            gt_dat = DataLabelConcat.from_xlsx(self._target_dir, sheet_name=self.excel_sheetname, dtype=self.dtype)
-        else:
-            gt_dat = DataLabelConcat.from_csv(self._target_dir, dtype=self.dtype)
+        if Path(self.target_dir).suffix == '.xlsx':
+            gt_dat = DataLabelConcat.from_xlsx(self.target_dir, sheet_name=self.excel_sheetname)
+        elif Path(self.target_dir).suffix == '.csv':
+            gt_dat = DataLabelConcat.from_csv(self.target_dir)
         return gt_dat
