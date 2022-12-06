@@ -1,6 +1,7 @@
 import torchio
 from .pmi_dataloader_base import PMIDataLoaderBase, PMIDataLoaderBaseCFG
 from .. import med_img_dataset
+from ..med_img_dataset import ImageDataSet
 from .lambda_tio_adaptor import CallbackQueue
 from typing import *
 from functools import partial
@@ -240,10 +241,18 @@ class PMIImageDataLoader(PMIDataLoaderBase):
         # No transform for subjects
         return self._create_queue(True, subjects, return_sampler=False, training=False)
 
-    def _prepare_data(self, gt_out, img_out, mask_out, prob_out):
-        """
-        Convinient method to create data that will be loaded as subjects
+    def _prepare_data(self,
+                      gt_out  : ImageDataSet,
+                      img_out : ImageDataSet,
+                      mask_out: ImageDataSet,
+                      prob_out: ImageDataSet):
+        """Convenient method to create data that will be loaded as subjects.
 
+        Args:
+            gt_out   (ImageDataSet): Target data.
+            img_out  (ImageDataSet): Input data.
+            mask_out (ImageDataSet): Referenced by ``tio.Compose`` during transform.
+            prob_out (ImageDataSet): Referenced by ``tio.Sampler`` during sampling.
         """
         data = {'input': img_out,
                 'gt': gt_out,
