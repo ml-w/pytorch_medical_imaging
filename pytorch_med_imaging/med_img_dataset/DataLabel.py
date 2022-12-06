@@ -78,6 +78,11 @@ class DataLabel(PMIDataBase):
     def from_xlsx(fname, sheet_name=None, header_row=False):
         # Unique IDs should be recorded in
         xfile = pd.ExcelFile(fname)
+
+        # Use first sheet if sheet_name is not specified
+        if sheet_name is None:
+            sheet_name = xfile.sheet_names[0]
+
         df = pd.read_excel(xfile, sheet_name, index_col=0)
         df.index = df.index.astype('str')
         datalabel = DataLabel(df)
