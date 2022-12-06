@@ -229,6 +229,7 @@ class PMIImageDataLoader(PMIDataLoaderBase):
                               f"`inf_samples_per_vol` {self.inf_samples_per_vol}")
             self.queue_args[1] = int(self.inf_samples_per_vol)
 
+        # set ``exclude_augment`` to False
         return self._load_data_set_training(exclude_augment=True)
 
     def _prepare_data(self,
