@@ -185,12 +185,15 @@ class PMIImageDataLoader(PMIDataLoaderBase):
                                 exclude_augment: bool = False) -> tio.Queue:
         """
         Load ImageDataSet for input and segmentation. For more see :func:`create_transform()`.
+
+        Returns:
+            tio.Queue
         """
         if self.target_dir is None:
             raise IOError(f"Cannot load from {self.target_dir}")
 
         img_out = self._read_image(self.input_dir, dtype=self.data_types[0])
-        gt_out = self._read_image(self.target_dir, dtype=self.data_types[1])
+        gt_out = self._load_gt_data()
         mask_out = self._read_image(self.mask_dir, dtype='uint8')
         prob_out = self._prepare_probmap()
 
@@ -204,52 +207,39 @@ class PMIImageDataLoader(PMIDataLoaderBase):
         # Return the queue
         return self._create_queue(exclude_augment, subjects)
 
-    def _load_data_set_inference(self) -> [tio.Queue, tio.GridSampler] or [tio.SubjectsDataset, None]:
-        """Same as :func:`_load_data_set_training` in this class, except the ground-truth is
-        not loaded."""
-        img_out = self._read_image(self.input_dir, dtype=self.data_types[0])
-        mask_out = self._read_image(self.mask_dir, dtype='uint8')
-        prob_out = self._prepare_probmap()
+    def _load_gt_data(self) -> ImageDataSet or None:
+        r"""For inheritance completeness
 
-        # Also load ground-truths if target_dir is provide, used later for performance evaluation
-        if not self.target_dir in (None, 'None'):
-            try:
-                gt_out = self._read_image(self.target_dir, dtype=self.data_types[1])
-            except:
-                self._logger.exception("Can't load from: {}".format(self.target_dir))
-                self._logger.warning("Skipping ground-truth data loading.")
-                gt_out = None
+        Returns:
+            ImageDataSet or None
+        """
+        if not self.target_dir is None:
+            return self._read_image(self.target_dir, dtype=self.data_types[1])
         else:
-            gt_out = None
+            self._logger.exception("Can't load from: {}".format(self.target_dir))
+            self._logger.warning("Skipping ground-truth data loading.")
+            return None
 
+    def _load_data_set_inference(self) -> [tio.Queue, tio.GridSampler] or [tio.SubjectsDataset, None]:
+        """Same as :func:`_load_data_set_training` in this class, except the ground-truth is optional to load and
+        the transform will ignore augmentation"""
         # override the number of patches drawn for inference if this option is provided
         if self.inf_samples_per_vol is not None:
             self._logger.info(f"Override `samples_per_vol` {self.queue_args[1]} with "
                               f"`inf_samples_per_vol` {self.inf_samples_per_vol}")
             self.queue_args[1] = int(self.inf_samples_per_vol)
 
-        # Don't require mask data but give it anyway if it is supplied.
-        self.data = self._prepare_data(gt_out, img_out, mask_out, prob_out)
-        # Creat transform
-        transform = self._create_transform(exclude_augment = True)
-
-        # Create subjects & queue
-        subjects = self._pack_data_into_subjects(self.data, transform)
-
-
-
-        # No transform for subjects
-        return self._create_queue(True, subjects, return_sampler=False, training=False)
+        return self._load_data_set_training(exclude_augment=True)
 
     def _prepare_data(self,
-                      gt_out  : ImageDataSet,
+                      gt_out  : Any,
                       img_out : ImageDataSet,
                       mask_out: ImageDataSet,
                       prob_out: ImageDataSet):
         """Convenient method to create data that will be loaded as subjects.
 
         Args:
-            gt_out   (ImageDataSet): Target data.
+            gt_out   (Any)         : Target data.
             img_out  (ImageDataSet): Input data.
             mask_out (ImageDataSet): Referenced by ``tio.Compose`` during transform.
             prob_out (ImageDataSet): Referenced by ``tio.Sampler`` during sampling.
