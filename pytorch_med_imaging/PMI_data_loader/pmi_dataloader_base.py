@@ -12,14 +12,40 @@ from ..med_img_dataset.PMIDataBase import PMIDataBase
 from mnts.mnts_logger import MNTSLogger
 
 class PMIDataLoaderBaseCFG:
-    """Config required to initialize PMIDataLoader"""
+    """Config required to initialize PMIDataLoader.
+
+    Attributes:
+        input_dir (str or list):
+            Directory of input data root dir. The directory(ies) should contain all the data that are to be
+            loaded. Default to be "", which will trigger an exception if not configured.
+        target_dir (str or list, Optional):
+            Directory of target data that will be treated as the ground-truth. Usually required during training but not
+            during inference, so this was made optional. Default to "".
+        output_dir (str or list, Optional):
+            The directory to deposit the output files, if any. Usually used during inference mode.
+        id_globber (str, Optional):
+            Regex or wildcard patter to glob the ID from the file names of the data. Each data point should be uniquely
+            identified by an ID that is globbed using this pattern. The IDs are also used to match the data loaded from
+            ``input_dir`` and the labels loaded from the ``target_dir``. Default to "(^[a-zA-Z0-9]+)".
+        id_list (str or list, Optional):
+            If only part of the data are to be loaded, use this option. Either specify a .ini file with that contains
+            a section [FileList] and attributes 'training' and 'testing' with comma separated string of IDs, or a .txt
+            file with each line as an ID to be loaded. If this is a list, all element of this list should be strings
+            corresponding to the IDs desired to be loaded. Default to "".
+        id_exclude (str, Optional)
+            If you want a few IDs to be excluded for whatever reason, use this as the ultimate override. Only string is
+            supported and it should be comma separated values of IDs (no space). Default to "".
+        run_mode (str, Optional):
+            Either 'train' or 'inference'. Default to 'train'
+
+    """
     input_dir    : str = ""
     target_dir   : str = ""
     output_dir   : str = ""
     id_list      : str = ""
     id_exclude   : str = ""
     id_globber   : str = "(^[a-zA-Z0-9]+)"
-    run_mode     : str = "" # 'train' or 'inference'
+    run_mode     : str = 'train' #: ['train'|'inference']
 
 
 class PMIDataLoaderBase(object):
@@ -47,15 +73,11 @@ class PMIDataLoaderBase(object):
         logging (logging, Optional):
             Specify logger. If `None`, default logger `__main__` would be used.
 
-
-
     .. note::
         * The private attributes are defined in :func:`PMIDataLoaderBase._read_config`.
         * :obj:`prob_dict` should either be directory to an ini file or a `configparser.ConfigParser` object. This
           class read from the section `[General]`. The ini file should at least consist of attribute `run_mode`. The
           child class would read from the section `[LoaderParams]` to obtain the necessary tags.
-
-
     """
     def __init__(self,
                  cfg: PMIDataLoaderBaseCFG,
@@ -204,6 +226,7 @@ class PMIDataLoaderBase(object):
             default_value (Optional): Value to fill in if the key is not found in `tar_dict`. Default to `None`.
             tar_dict (dict): Target dictionary. Default to `self._prop_dict`
         """
+        raise PendingDeprecationWarning()
         tar_dict = self._cfg if tar_dict is None else tar_dict
         try:
             out = tar_dict[section][key]
@@ -223,6 +246,7 @@ class PMIDataLoaderBase(object):
             default_value (Optional): Value to fill in if the key is not found in `tar_dict`. Default to `None`.
             tar_dict (dict): Target dictionary. Default to `self._prop_dict`
         """
+        raise PendingDeprecationWarning()
         tar_dict = self._cfg if tar_dict is None else tar_dict
         try:
             out = tar_dict[section][key]
@@ -245,6 +269,7 @@ class PMIDataLoaderBase(object):
             default_value (Optional): Value to fill in if the key is not found in `tar_dict`. Default to `None`.
             tar_dict (dict): Target dictionary. Default to `self._prop_dict`
         """
+        raise PendingDeprecationWarning()
         tar_dict = self._cfg if tar_dict is None else tar_dict
         try:
             out = tar_dict[section].getboolean(key)
@@ -263,6 +288,7 @@ class PMIDataLoaderBase(object):
             default_value (Optional): Value to fill in if the key is not found in `tar_dict`. Default to `None`.
             tar_dict (dict): Target dictionary. Default to `self._prop_dict`
         """
+        raise PendingDeprecationWarning()
         try:
             tar_dict = self._cfg['LoaderParams']
             out = tar_dict[key]
@@ -279,6 +305,7 @@ class PMIDataLoaderBase(object):
             default_value (Optional): Value to fill in if the key is not found in `tar_dict`. Default to `None`.
             tar_dict (dict): Target dictionary. Default to `self._prop_dict`
         """
+        raise PendingDeprecationWarning()
         try:
             tar_dict = self._cfg['LoaderParams']
             out = tar_dict[key]
@@ -301,6 +328,7 @@ class PMIDataLoaderBase(object):
             default_value (Optional): Value to fill in if the key is not found in `tar_dict`. Default to `None`.
             tar_dict (dict): Target dictionary. Default to `self._prop_dict`
         """
+        raise PendingDeprecationWarning()
         try:
             tar_dict = self._cfg['LoaderParams']
             try:
@@ -360,12 +388,16 @@ class PMIDataLoaderBase(object):
                 except Exception as e:
                     self._logger.error(f"Failed to create augmentation from file: {self.augmentation}. Got {e}")
                     self.augmentation = False
+                    self.transform = None
             else:
                 self._logger.warning(f"Transform file provided but could not be located! Got {str(self.augmentation)}")
-            return self.transform
+                self.augmentation = False
+                self.transform = None
         else:
             self._logger.warning(f"`self.augmentation` was not defined!")
-            return None
+            self.augmentation = False
+            self.transform = None
+        return self.transform
 
     def _pack_data_into_subjects(self,
                                  data_dict: dict,
