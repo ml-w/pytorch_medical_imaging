@@ -38,7 +38,7 @@ class DataLabel(PMIDataBase):
         self.set_target_column(name)
         return 0
 
-    def set_target_column(self, target):
+    def set_target_column(self, target, dtype: type = None):
         if target.find(','):
             self._target_column = []
             self._logger.debug("Multiple columns specified.")
@@ -56,6 +56,13 @@ class DataLabel(PMIDataBase):
             self._target_column = target
         self._logger.debug("columns are: {}".format(self._target_column))
         self._get_table = self._data_table[self._target_column]
+
+        # type cast
+        if not dtype is None:
+            try:
+                self._get_table[self._target_column] = self._get_table[self._target_column].astype(dtype)
+            except Exception as e:
+                self._logger.warning(f"Cannot cast column {self.target_column} to type {dtype}")
         return 0
 
     @staticmethod
