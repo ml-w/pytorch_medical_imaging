@@ -207,8 +207,10 @@ class PMIImageDataLoader(PMIDataLoaderBase):
         """Same as :func:`_load_data_set_training` in this class, except the ground-truth is
         not loaded."""
         img_out = self._read_image(self.input_dir, dtype=self.data_types[0])
+        mask_out = self._read_image(self.mask_dir, dtype='uint8')
         prob_out = self._prepare_probmap()
 
+        # Also load ground-truths if target_dir is provide, used later for performance evaluation
         if not self.target_dir in (None, 'None'):
             try:
                 gt_out = self._read_image(self.target_dir, dtype=self.data_types[1])
@@ -219,18 +221,21 @@ class PMIImageDataLoader(PMIDataLoaderBase):
         else:
             gt_out = None
 
-        self.data = self._prepare_data(gt_out, img_out, None, prob_out)
+        # override the number of patches drawn for inference if this option is provided
+        if self.inf_samples_per_vol is not None:
+            self._logger.info(f"Override `samples_per_vol` {self.queue_args[1]} with "
+                              f"`inf_samples_per_vol` {self.inf_samples_per_vol}")
+            self.queue_args[1] = int(self.inf_samples_per_vol)
+
+        # Don't require mask data but give it anyway if it is supplied.
+        self.data = self._prepare_data(gt_out, img_out, mask_out, prob_out)
         # Creat transform
         transform = self._create_transform(exclude_augment = True)
 
         # Create subjects & queue
         subjects = self._pack_data_into_subjects(self.data, transform)
 
-        # override the number of patches drawn in this special case
-        if self.inf_samples_per_vol is not None:
-            self._logger.info(f"Override `samples_per_vol` {self.queue_args[1]} with "
-                              f"`inf_samples_per_vol` {self.inf_samples_per_vol}")
-            self.queue_args[1] = int(self.inf_samples_per_vol)
+
 
         # No transform for subjects
         return self._create_queue(True, subjects, return_sampler=False, training=False)
