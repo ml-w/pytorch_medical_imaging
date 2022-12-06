@@ -1,4 +1,4 @@
-from .pmi_img_feat_pair_dataloader import PMIImageFeaturePair
+from .pmi_img_feat_pair_dataloader import PMIImageFeaturePairLoader
 from .pmi_image_dataloader import PMIImageDataLoader
 from mnts.mnts_logger import MNTSLogger
 import traceback as tr
@@ -10,7 +10,7 @@ class PMIDataFactory(object):
     def __init__(self):
         self._possible_products = {
             'PMIImageDataLoader': PMIImageDataLoader,
-            'PMIImageFeaturePair': PMIImageFeaturePair,
+            'PMIImageFeaturePair': PMIImageFeaturePairLoader,
         }
 
         self._logger = MNTSLogger[__class__.__name__]

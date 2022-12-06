@@ -192,12 +192,7 @@ class PMIImageDataLoader(PMIDataLoaderBase):
         if self.target_dir is None:
             raise IOError(f"Cannot load from {self.target_dir}")
 
-        img_out = self._read_image(self.input_dir, dtype=self.data_types[0])
-        gt_out = self._load_gt_data()
-        mask_out = self._read_image(self.mask_dir, dtype='uint8')
-        prob_out = self._prepare_probmap()
-
-        self.data = self._prepare_data(gt_out, img_out, mask_out, prob_out)
+        self.data = self._prepare_data()
         # Create transform
         transform = self._create_transform(exclude_augment=exclude_augment)
 
@@ -222,7 +217,8 @@ class PMIImageDataLoader(PMIDataLoaderBase):
 
     def _load_data_set_inference(self) -> [tio.Queue, tio.GridSampler] or [tio.SubjectsDataset, None]:
         """Same as :func:`_load_data_set_training` in this class, except the ground-truth is optional to load and
-        the transform will ignore augmentation"""
+        the transform will ignore augmentation
+        """
         # override the number of patches drawn for inference if this option is provided
         if self.inf_samples_per_vol is not None:
             self._logger.info(f"Override `samples_per_vol` {self.queue_args[1]} with "
@@ -232,12 +228,14 @@ class PMIImageDataLoader(PMIDataLoaderBase):
         # set ``exclude_augment`` to False
         return self._load_data_set_training(exclude_augment=True)
 
-    def _prepare_data(self,
-                      gt_out  : Any,
-                      img_out : ImageDataSet,
-                      mask_out: ImageDataSet,
-                      prob_out: ImageDataSet):
-        """Convenient method to create data that will be loaded as subjects.
+    def _prepare_data(self) -> dict:
+        """This is an important function that will prepare the data as a dictionary. This dictionary will be passed
+        to :func:`_pack_data_into_subjects` and then :func:`_create_queue`. The queue will return a ``dict`` like
+        instance, which is characterized by the keys specified in this function.
+
+        .. hint::
+            Override this function in the child classes to alter the behavior of data loading. You might also want
+            to override :func:`_load_gt_data` and, depend on circumstances, :func:`_load_data_set_inference` too.
 
         Args:
             gt_out   (Any)         : Target data.
@@ -245,6 +243,11 @@ class PMIImageDataLoader(PMIDataLoaderBase):
             mask_out (ImageDataSet): Referenced by ``tio.Compose`` during transform.
             prob_out (ImageDataSet): Referenced by ``tio.Sampler`` during sampling.
         """
+        img_out = self._read_image(self.input_dir, dtype=self.data_types[0])
+        gt_out = self._load_gt_data()
+        mask_out = self._read_image(self.mask_dir, dtype='uint8')
+        prob_out = self._prepare_probmap()
+
         data = {'input': img_out,
                 'gt': gt_out,
                 'mask': mask_out,
