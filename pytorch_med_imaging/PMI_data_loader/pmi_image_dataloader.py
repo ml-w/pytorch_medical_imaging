@@ -17,12 +17,28 @@ class PMIImageDataLoaderCFG(PMIDataLoaderBaseCFG):
         data_types (iterable):
             Data type of input and ground-truth
         sampler (str):
-            Determine the ``tio.Sampler`` used to sample the images. Support ['weighted'|'uniform'] currently.
+            Determine the ``tio.Sampler`` used to sample the images. Support ['weighted'|'uniform'|'grid'] currently.
         sampler_kwargs (dict):
             The kwargs passed to ``tio.Sampler``. For 'weighted', key ``patch_size`` and ``prob_map`` is required. For
             'uniform', only ``patch_size`` is required.
         augmentation (str):
-            Path to the
+            Path to yaml file to create the ``tio.Compose`` transform.
+        patch_sampling_callback (Callable, str):
+            A function that is called after patch sampling to generate new data from sampled patches. For example, if
+            texture features is required after the patches are sampled, you can assign the function to compute the
+            texture features using this setting. This should be used with ``patch_sampling_callback_kwargs`` and also
+            ``create_new_attribute``. Default to ``None``.
+        patch_sampling_callback_kwargs (dict):
+            The kwargs that will be supplied to the lambda function specified by ``patch_sampling_callback``.
+            Default to empty dict.
+        create_new_attribute (str):
+            The new data created by `patch_sampling_callback` will be attached to the subject using this argument
+            as the attribute name. The new data can then be accessed by ``tio.Subject()[create_new_attribute]``.
+            Default to ``None``.
+        inf_samples_per_vol (int):
+            Sometimes inference will require more sampled patches to generate appealing results (e.g, segmentation),
+            this argument,
+
     """
     data_types                    : Iterable = [float, float]
     sampler                       : str      = 'weighted'           # 'weighted' or 'uniform'
@@ -31,7 +47,7 @@ class PMIImageDataLoaderCFG(PMIDataLoaderBaseCFG):
     create_new_attribute          : str      = None                 # create a new attribute in subjects for callback
     patch_sampling_callback       : Callable = None                 # callback to generate new data
     patch_sampling_callback_kwargs: dict     = dict()               # kwargs pass to the callback
-    inf_samples_per_vol           : int      = 1                    # number of samples per volume during inference
+    inf_samples_per_vol           : int      = None                 # number of samples per volume during inference
     mask_dir                      : str      = None                 # Image dir used by ``tio.Sampler``
     probmap_dir                   : str      = None                 # Image dir used by ``tio.WeightedSampler``
     tio_queue_kwargs = dict(            # dict passed to ``tio.Queue``
@@ -45,13 +61,6 @@ class PMIImageDataLoaderCFG(PMIDataLoaderBaseCFG):
     )
 
 
-    @classmethod
-    def check_types(cls):
-        type_dict = {
-
-        }
-        super().check_types(cls)
-
 class PMIImageDataLoader(PMIDataLoaderBase):
     """
     This class load :class:ImageDataSet related image data. Customization of loading this class should inherit this
@@ -63,20 +72,7 @@ class PMIImageDataLoader(PMIDataLoaderBase):
         * Image super-resolution
 
     Attributes:
-        regex (str, Optional):
-            Filter for loading files. See :class:`ImageDataSet`
-        idlist (str or list, Optional):
-            Filter for loading files. See :class:`ImageDataSet`
-        data_types (str, Optional):
-            Define the type of data for input and ground-truth. Default to 'float-float'.
-        patch_size (int or [int, int, int], Optional):
-            Define the patch size to draw from each image. If `None`, use the maximum 2D or 3D size depending on whether
-            attribute 'load_by_slice' >= 0. Default to None.
-        load_by_slice (int, Optional):
-            If value >= 0, images are loaded slice-by-slice, and this also specifies the slicing axis. Default to -1.
-        sampler (str, Optional):
-            ['weighted'|'uniform']. Default to 'uniform'.
-        sampler_probmap_key (str, Optional)
+        Attributes will be loaded from the supplied ``cfg`` into class
 
     Args:
         *args: Please see parent class.
@@ -286,12 +282,23 @@ class PMIImageDataLoader(PMIDataLoaderBase):
     def _create_queue(self,
                       exclude_augment: bool,
                       subjects: tio.SubjectsDataset,
-                      training: Optional[bool]=None,
+                      training: Optional[bool]=False,
                       return_sampler: Optional[bool]=False) -> [tio.Queue, tio.GridSampler] or \
                                                                 [tio.SubjectsDataset, None]:
         r"""This method build the queue from the input subjects. If the queue involves a :class:`tio.GridSampler`,
         it is generally needed by the inferencer to reconstruct it back into its original dimension. Thus, an
         optional to also return the sampler is given.
+
+        Args:
+            exclude_augment (bool):
+                If true, ignore all augmentation transform in ``self.transform``.
+            subjects (tio.SubjectsDataset):
+                Subjects to be loaded into queue.
+            training (bool, Optional):
+                ``True`` = training mode. ``False`` = inference mode.
+            return_sampler (bool, Optional):
+                If ``True``, return the ``tio.Sampler`` alongside the ``tio.Queue``. This is useful during inference
+                where you need to keep the ``tio.Sampler`` to create the aggregator that will assemble the patches.
         """
         # default is based on self._training_mode, read from config file
         if training is None:
@@ -305,13 +312,10 @@ class PMIImageDataLoader(PMIDataLoaderBase):
             self.sampler_instance = tio.UniformSampler(patch_size=shape_of_input[1:])  # first dim is batch
             self.queue_args[-1] = self.sampler_instance
 
+        queue_dict = self.tio_queue_kwargs.copy()
         # if exclude augment, don't shuffle
         if exclude_augment:
-            queue_dict = self.tio_queue_kwargs
             queue_dict['shuffle_subjects'] = False
-        else:
-            queue_dict = self.tio_queue_kwargs
-
         if not training:
             # don't shuffle subject if inference
             queue_dict['shuffle_subjects'] = False
