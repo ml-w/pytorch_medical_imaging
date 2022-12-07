@@ -160,11 +160,10 @@ class ImageDataSet(PMIDataBase):
     .. hint::
         Use ``instance[item]`` to get the data as ``torch.Tensor``.
     """
-    def __init__(self, rootdir, readmode='normal', filtermode=None, loadBySlices=-1, verbose=False, dtype=float,
+    def __init__(self, rootdir, readmode='normal', filtermode=None, verbose=False, dtype=float,
                  debugmode=False, **kwargs):
         super(ImageDataSet, self).__init__(verbose=verbose)
         assert os.path.isdir(rootdir), "Cannot access directory: {}".format(rootdir)
-        assert loadBySlices <= 2, "This class only handle 3D data!"
 
         self.rootdir            = rootdir
         self.data_source_path   = []
@@ -180,7 +179,6 @@ class ImageDataSet(PMIDataBase):
         self._readmode          = readmode
         self._id_globber        = kwargs.get('idGlobber', "(^[a-zA-Z0-9]+)")
         self._debug             = debugmode
-        self._byslices          = loadBySlices  # Depricated
 
         self._error_check()
         self._parse_root_dir()
@@ -465,18 +463,7 @@ class ImageDataSet(PMIDataBase):
             str
 
         """
-        if self._byslices >=0:
-            try:
-                return self.data_source_path[int(np.argmax(self._itemindexes > i)) - 1]
-            except IndexError:
-                # self._logger.warning("Require index {} but source path len is {}.".format(
-                #     int(np.argmax(self._itemindexes > i)) - 1,
-                #     len(self.data_source_path)
-                # ))
-                # self._logger.warning("Returning modulated result.")
-                return self.data_source_path[(int(np.argmax(self._itemindexes > i)) - 1) % len(self.data_source_path)]
-        else:
-            return self.data_source_path[i]
+        return self.data_source_path[i]
 
     def get_data_by_ID(self,
                        id: str,
@@ -567,11 +554,7 @@ class ImageDataSet(PMIDataBase):
             Iterable[float]: Spacing in mm.
         """
         i = i % len(self.metadata)
-        if self._byslices >= 0:
-            raise DeprecationWarning("Load by slice is deprecated.")
-            return [round(self.metadata[self.get_internal_index(i)]['pixdim'][j + 1], 8) for j in range(3)]
-        else:
-            return [round(self.metadata[i]['pixdim'][j + 1], 8) for j in range(3)]
+        return [round(self.metadata[i]['pixdim'][j + 1], 8) for j in range(3)]
 
     def get_origin(self, i: int) -> Iterable[float]:
         r"""Get the origin of the image. Note that the output is rounded to the third decimal
