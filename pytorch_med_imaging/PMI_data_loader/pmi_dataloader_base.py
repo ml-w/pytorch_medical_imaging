@@ -16,7 +16,7 @@ __all__ = ['PMIDataLoaderBaseCFG', 'PMIDataLoaderBase']
 class PMIDataLoaderBaseCFG:
     """Config required to initialize :class:`PMIDataLoader`.
 
-    Attributes:
+    Class Attributes:
         input_dir (str or list):
             Directory of input data root dir. The directory(ies) should contain all the data that are to be
             loaded. Default to be "", which will trigger an exception if not configured.

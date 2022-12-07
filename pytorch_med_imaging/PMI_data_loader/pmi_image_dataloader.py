@@ -14,7 +14,7 @@ __all__ = ['PMIImageDataLoader', 'PMIImageDataLoaderCFG']
 class PMIImageDataLoaderCFG(PMIDataLoaderBaseCFG):
     r"""Configuration for :class:`PMIImageDataLoader`.
 
-    Attributes:
+    Class Attributes:
         data_types (iterable):
             Data type of input and ground-truth
         sampler (str):
@@ -80,8 +80,7 @@ class PMIImageDataLoader(PMIDataLoaderBase):
         **kwargs: Please see parent class.
 
     .. note::
-        Attributes are defined in :func:`PMIImageDataLoader._read_config`, either read from a dictionary or an ini
-        file. The current system reads the [LoaderParams].
+        Attributes are defined in :class:`PMIImageDataLoaderCFG`.
 
     .. hint::
         Users are suppose to pass arguments to the super class for handling. If in doubt, look at the docs of parent

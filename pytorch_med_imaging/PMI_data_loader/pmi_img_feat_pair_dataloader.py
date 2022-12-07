@@ -11,7 +11,7 @@ __all__ = ['PMIImageFeaturePairLoader', 'PMIImageFeaturePairLoaderCFG', 'PMIImag
 class PMIImageFeaturePairLoaderCFG(PMIImageDataLoaderCFG):
     r"""Configuration for :class:`PMIImageFeaturePairLoader`.
 
-    Attributes:
+    Class Attributes:
         excel_sheetname (str, Optional):
             The name of the target excel sheet that is specified in ``target_dir``. See also :class:`PMIDataLoaderBase`.
         target_column (str, Optional):
