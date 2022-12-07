@@ -75,25 +75,22 @@ class ImageDataSet(PMIDataBase):
         metadata (list of dict):
             Meta data of the loaded images. Such as their origin, orientation and dimensions...etc.
 
-
     Args:
         rootdir (str):
             Path to the root directory for reading nifties
         readmode (str, Optional):
-            Decide image directories globbing method, whether to look into subdirectories or not. \n
+            Decide image directories globbing method, whether to look into subdirectories or not.
             Possible values:
-                * `normal` - typical loading behavior, reading all nii/nii.gz files in the directory.
+                * `normal` - [Default] typical loading behavior, reading all nii/nii.gz files in the directory.
                 * `recursive` - search all subdirectories excluding softlinks, use with causion.
                 * `explicit` - specifying directories of the files to load.
-            Default is `normal`.
         filtermode (str, Optional):
-            After grabbing file directories, they are filtered by either ID, regex or both. Corresponding att needed. \n
+            After grabbing file directories, they are filtered by either ID, regex or both. Corresponding att needed.
             Usage:
                 * `idlist`: Extract images that is on a specified list, globbed with `idGlobber`. Requires att `idlist`.
                 * `regex`: Extract images that matches one regex sepcified with att `regex`.
                 * `both': Use both `idlist` and `regex` as filtering method. Requires both att specified.
-                * None: No filter, read all .nii.gz images in the directory.
-            Default is `None`.
+                * `None`: [Default] No filter, read all .nii.gz images in the directory.
         idlist (str or list, Optional):
             If its `str`, it should be directory to a file containing IDs, one in each line, otherwise,
             an explicit list of strings. Need if filtermode is 'idlist'. Globber of id can be specified with attribute
@@ -115,10 +112,10 @@ class ImageDataSet(PMIDataBase):
         recursiveSearch (bool, Optional):
             Whether to load files recursively into subdirectories. Default is `False`
 
-
     Examples:
+    ---------
 
-        Loading images:
+        **Loading images:**
 
         1. Load all nii images in a folder:
 
@@ -142,7 +139,7 @@ class ImageDataSet(PMIDataBase):
             >>> imgset = ImageDataSet('/home/usr/loadlist.txt', readmode='explicit')
 
 
-        Geting image from object:
+        **Geting image from object:**
 
         1. Getting the first and second images:
 
@@ -159,6 +156,9 @@ class ImageDataSet(PMIDataBase):
         3. Print details of the loaded images:
 
             >>> print(imset)
+
+    .. hint::
+        Use ``instance[item]`` to get the data as ``torch.Tensor``.
     """
     def __init__(self, rootdir, readmode='normal', filtermode=None, loadBySlices=-1, verbose=False, dtype=float,
                  debugmode=False, **kwargs):
@@ -198,7 +198,7 @@ class ImageDataSet(PMIDataBase):
         assert self._filtermode in self._filterargs or self._filtermode in ['both', None], \
             'Specifying arguemnets to filter is necessary'
         if self._filtermode == 'both':
-            assert all([ k in self._filterargs for k in ['idlist', 'regex']]), 'No filter arguments.'
+            assert all([ k in self._filterargs for k in ['idlist', 'regex']]), 'No filter Args.'
 
 
     def _parse_root_dir(self):
@@ -384,12 +384,27 @@ class ImageDataSet(PMIDataBase):
         return file_dirs
 
     def get_raw_data_shape(self) -> list:
-        r"""Get shape of all files as a list (ignore load by slice option)."""
+        r"""Get shape of all files as a list (ignore load by slice option).
+
+        Returns:
+            list[tuples]
+        """
         return [self.get_size(i) for i in range(len(self.metadata))]
 
     def check_shape_identical(self, target_imset: Any) -> bool:
-        r"""Check if file shape is identical to another ImageDataSet.
-        TODO: Add spacing, origin check into this function (Hint: see match_dimension.py)"""
+        r"""Check if file shape is identical to another ImageDataSet. Convinient for checking if
+        the ground-truth and the inputs are of the same size.
+
+        .. TODO:
+            * Add spacing, origin check into this function (Hint: see match_dimension.py)
+
+        Args:
+            target_imset (ImageDataSet):
+                Target image dataset to compare with.
+
+        Returns:
+            bool
+        """
         assert isinstance(target_imset, ImageDataSet), "Target is not image dataset."
 
         self_shape = self.get_raw_data_shape()
@@ -414,7 +429,11 @@ class ImageDataSet(PMIDataBase):
         return all(truth_list)
 
     def size(self, i=None) -> Union[int, torch.Size]:
-        r"""Required by pytorch."""
+        r"""Required by pytorch dataloader.
+
+        Returns:
+            Union[int, torch.Size]
+        """
         if i is None:
             try:
                 return self.data.shape
@@ -437,7 +456,15 @@ class ImageDataSet(PMIDataBase):
             self._logger.log_traceback()
 
     def get_data_source(self, i) -> str:
-        r"""Get directory of the source of the i-th element."""
+        r"""Get directory of the source of the i-th element, sorted by filenames.
+
+        Args:
+            i (int): Index.
+
+        Returns:
+            str
+
+        """
         if self._byslices >=0:
             try:
                 return self.data_source_path[int(np.argmax(self._itemindexes > i)) - 1]
@@ -451,27 +478,26 @@ class ImageDataSet(PMIDataBase):
         else:
             return self.data_source_path[i]
 
-    def get_internal_index(self, i) -> int:
-        r"""If load by slice, get the index of the image where the slice is extracted from."""
-        if self._byslices >= 0:
-            return int(np.argmax(self._itemindexes > i)) - 1
-        else:
-            self._logger.warning("Seeking internal index when load_by_slice is off.")
-            return i
-
-    def get_internal_slice_index(self, i) -> int:
-        r"""If load by slice, get the slice number of the i-th 2D element in
-        its original image."""
-        if self._byslices >= 0:
-            return i - self._itemindexes[int(np.argmax(self._itemindexes > i)) - 1]
-        else:
-            return i
-
     def get_data_by_ID(self,
-                       id: int,
+                       id: str,
                        globber: Optional[str] = None,
                        get_all: Optional[bool] = False) -> Union[str, Iterable[str]]:
-        r"""Get data by globbing ID from the basename of files."""
+        r"""Get data by globbing ID from the basename of files.
+
+        Args:
+            id (str):
+                The ID of the desired data.
+            globber (str, Optional):
+                Regex pattern to glob ID from the loaded files. If `None`, the stored attribute
+                :attribute:`_id_globber` will be used.
+            get_all (bool, Optional):
+                If ``True``, get all the data with the same IDs if muiltiple instances were
+                identified by the same ID. Default to ``False``.
+
+        Return:
+            torch.Tensor or list
+
+        """
         if globber is None:
             globber = self._id_globber
 
@@ -490,6 +516,16 @@ class ImageDataSet(PMIDataBase):
         r"""Get all IDs globbed by the specified globber. If its None,
         default globber used. If its not None, the class globber will be
         updated to the specified one.
+
+        Args:
+            globber (str):
+                Regex pattern to glob ID from the loaded files. If `None`, the stored attribute
+                :attribute:`_id_globber` will be used.
+
+
+        Return:
+            list: A sorted list of unique IDs globbed using `globber`.
+
         """
         import re
 
@@ -508,51 +544,88 @@ class ImageDataSet(PMIDataBase):
             self._logger.warning(f"Some IDs are not unique: \n{duplicate.to_string()}")
         return outlist
 
-    def get_size(self, id: int) -> Iterable[int]:
-        r"""Get the size of the original image. Gives 3D size. If load by slices, it will look for the internal
-        index before returning the 3D size.
+    def get_size(self, i: int) -> Iterable[int]:
+        r"""Get the size of the original image. Gives 3D size.
+
+        Args:
+            i (int): Index.
+
+        Returns:
+            Iterable[int]
         """
-        if self._byslices >= 0:
-            raise DeprecationWarning("Load by slice is deprecated.")
-            return [int(self.metadata[self.get_internal_index(id)]['dim'][i + 1]) for i in range(3)]
-        else:
-            id = id % len(self.metadata)
-            return [int(self.metadata[id]['dim'][i+1]) for i in range(3)]
+        i = i % len(self.metadata)
+        return [int(self.metadata[i]['dim'][j + 1]) for j in range(3)]
 
-    def get_spacing(self, id: int) -> Iterable[float]:
+    def get_spacing(self, i: int) -> Iterable[float]:
         r"""Get the spacing of the original image. Ignores load by slice and
-        gives 3D spacing. Note that the output is rounded to 8-th decimal place"""
-        id = id % len(self.metadata)
+        gives 3D spacing. Note that the output is rounded to 8-th decimal place
+
+        Args:
+            i (int): Index.
+
+        Returns:
+            Iterable[float]: Spacing in mm.
+        """
+        i = i % len(self.metadata)
         if self._byslices >= 0:
             raise DeprecationWarning("Load by slice is deprecated.")
-            return [round(self.metadata[self.get_internal_index(id)]['pixdim'][i + 1], 8) for i in range(3)]
+            return [round(self.metadata[self.get_internal_index(i)]['pixdim'][j + 1], 8) for j in range(3)]
         else:
-            return [round(self.metadata[id]['pixdim'][i+1], 8) for i in range(3)]
+            return [round(self.metadata[i]['pixdim'][j + 1], 8) for j in range(3)]
 
-    def get_origin(self, id: int) -> Iterable[float]:
-        r"""Get the origin of the image. Note that the output is rounded to the thrid decimal
-        place"""
-        origin = [round(self.metadata[id][k], 3) for k in ['qoffset_x',
+    def get_origin(self, i: int) -> Iterable[float]:
+        r"""Get the origin of the image. Note that the output is rounded to the third decimal
+        place
+
+        Args:
+            i (int): Index.
+
+        Returns:
+            Iterable[float]: Physical coordinates extracted from q-form matrix.
+
+
+        """
+        origin = [round(self.metadata[i][k], 3) for k in ['qoffset_x',
                                                           'qoffset_y',
                                                           'qoffset_z']]
         return origin
 
-    def get_direction(self, id: int) -> Iterable[float]:
+    def get_direction(self, i: int) -> Iterable[float]:
         r"""Get the orientation of the image. Note that the output is rounded to the third
-        decimal place."""
-        direction = [round(self.metadata[id][k], 3) for k in ['quatern_b',
+        decimal place.
+
+        Args:
+            i (int): Index.
+
+        Returns:
+            Iterable[float]: Affine direction defined by quartern vector.
+
+        See Also:
+            http://learningnotes.fromosia.com/index.php/2017/03/10/image-orientation-vtk-itk/
+
+        """
+        direction = [round(self.metadata[i][k], 3) for k in ['quatern_b',
                                                              'quatern_c',
                                                              'quatern_d']]
+
+
         return direction
 
-    def get_properties(self, id: int) -> dict:
-        r"""Get the properties of the target data inlucing spacing, orientation, origin, dimension...etc"""
-        id = id % len(self.metadata)
+    def get_properties(self, i: int) -> dict:
+        r"""Get the properties of the target data inlucing spacing, orientation, origin, dimension...etc
+        
+        Args:
+            i (int): Index.
 
-        size = self.get_size(id)
-        spacing = self.get_spacing(id)
-        origin = self.get_origin(id)
-        direction = self.get_direction(id)
+        Return:
+            dict: Contains keys {'size', 'spacing', 'origin', 'direction'}.
+        """
+        i = i % len(self.metadata)
+
+        size = self.get_size(i)
+        spacing = self.get_spacing(i)
+        origin = self.get_origin(i)
+        direction = self.get_direction(i)
         return {'size': size,
                 'spacing': spacing,
                 'origin': origin,
@@ -566,6 +639,15 @@ class ImageDataSet(PMIDataBase):
             yield self.data[r]
 
     def __getitem__(self, item) -> torch.Tensor:
+        r"""Override to generate tensor.
+
+        Args:
+            item (Any):
+                ID to get the item desired.
+
+        Returns:
+            ``torch.Tensor``
+        """
         out = self.data[item][tio.DATA]
         return out
 
@@ -611,13 +693,13 @@ class ImageDataSet(PMIDataBase):
                   tensor_data: torch.Tensor,
                   outputdirectory: str,
                   prefix: Optional[str] = '') -> None:
-        r"""Write data array to the output directory accordining to the image
+        r"""Write data array to the output directory according to the image
         properties of the loaded images.
 
         Args:
             tensor_data (:obj:`torch.tensor`):
                 Data arrays to save, has to be arranged identically as the attribute self.data
-                of the object. Expect dimension (B x C x D x W x H)
+                of the object. Expect dimension :math:`(B × C × D × W × H)`
             outputdirectory (str):
                 Folder to output nii files.
             prefix (str):
@@ -636,7 +718,7 @@ class ImageDataSet(PMIDataBase):
 
         Args:
             tensor_data (torch.Tensor):
-                Data array to save, should have dimension (D x W x H)
+                Data array to save, should have dimension :math:`(D × W × H)`
             unique_id (Any):
                 If str, source image with same unique ID is loaded. If int, source image load at
                 the same index in `data_source_path` is loaded.
@@ -670,7 +752,7 @@ class ImageDataSet(PMIDataBase):
         sitk.WriteImage(out_im, out_name)
 
     def get_unique_values(self) -> Any:
-        r"""Get the tensor of all unique values in basedata. Only for integer tensors
+        r"""Get the tensor of all unique values in basedata. Only for integer tensors.
         """
         assert self[0].is_floating_point() == False, \
             "This function is for integer tensors. Current datatype is: %s"%(self[0].dtype)
@@ -679,6 +761,9 @@ class ImageDataSet(PMIDataBase):
 
     def get_unique_values_n_counts(self) -> dict:
         """Get a dictionary of unique values as key and its counts as value.
+
+        Returns:
+            dict: Key value pairs of unique values and their counts.
         """
         from torch.utils.data import DataLoader
         assert self[0].is_floating_point() == False, \

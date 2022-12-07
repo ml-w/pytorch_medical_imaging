@@ -1,3 +1,6 @@
+PMI_data_loader
+===============
+
 .. currentmodule:: pytorch_med_imaging.PMI_data_loader
 
 All Configurations
