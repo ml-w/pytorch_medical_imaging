@@ -37,7 +37,8 @@ class PMIDataLoaderBaseCFG:
             supported and it should be comma separated values of IDs (no space). Default to "".
         run_mode (str, Optional):
             Either 'train' or 'inference'. Default to 'train'
-
+        debug_mode (bool, Optional):
+            Debug mode flag, not used in this base class but can be passed to the child classes. Default to ``False``.
     """
     input_dir    : str = ""
     target_dir   : str = ""
@@ -45,7 +46,8 @@ class PMIDataLoaderBaseCFG:
     id_list      : str = ""
     id_exclude   : str = ""
     id_globber   : str = "(^[a-zA-Z0-9]+)"
-    run_mode     : str = 'train' #: ['train'|'inference']
+    run_mode     : str = 'train'
+    debug_mode   : bool = False
 
 
 class PMIDataLoaderBase(object):
@@ -81,18 +83,9 @@ class PMIDataLoaderBase(object):
     """
     def __init__(self,
                  cfg: PMIDataLoaderBaseCFG,
-                 run_mode='training', debug=False, verbose=True, logger=None, **kwargs):
+                 **kwargs):
         self._cfg = cfg
-        self._logger = logger if not logger is  None else MNTSLogger[self.__class__.__name__]
-        self._verbose = verbose
-        self._debug = debug
-        self._run_mode = run_mode
-
-        if isinstance(self._run_mode, str):
-            if re.match('(?=.*train.*)', self._run_mode):
-                self._run_mode = True
-            else:
-                self._run_mode = False
+        self._logger = MNTSLogger[self.__class__.__name__]
 
         if not self._check_input:
             raise AttributeError
@@ -180,7 +173,7 @@ class PMIDataLoaderBase(object):
 
 
         """
-        if self._run_mode:
+        if self.run_mode:
             return self._load_data_set_training(exclude_augment = False if exclude_augment is None else exclude_augment)
         else:
             return self._load_data_set_inference()
@@ -212,6 +205,12 @@ class PMIDataLoaderBase(object):
                 cls = config_file.__class__
             cls_dict = { attr: getattr(cls, attr) for attr in dir(cls) }
             self.__dict__.update(cls_dict)
+
+        if isinstance(self.run_mode, str):
+            if re.match('(?=.*train.*)', self.run_mode):
+                self.run_mode = True
+            else:
+                self.run_mode = False
 
         # load to ``self.id_list``
         self._read_id_configs()
@@ -446,7 +445,7 @@ class PMIDataLoaderBase(object):
         """
         if not self.id_list in ("", None) and not isinstance(self.id_list, list):
             if self.id_list.endswith('.ini'):
-                self.id_list = self.parse_ini_filelist(self.id_list, self._run_mode)
+                self.id_list = self.parse_ini_filelist(self.id_list, self.run_mode)
             elif self.id_list.endswith('.txt'):
                 self.id_list = [r.rstrip() for r in open(self.id_list).readlines()]
             else:
