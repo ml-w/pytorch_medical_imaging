@@ -1,27 +1,64 @@
-PMIDataLoader
-=============
+.. currentmodule:: pytorch_med_imaging.PMI_data_loader
+
+All Configurations
+------------------
+
+.. autosummary::
+    :nosignatures:
+
+    PMIDataLoaderBaseCFG
+    PMIImageDataLoaderCFG
+    PMIImageFeaturePairLoaderCFG
 
 PMIDataLoaderBase
 -----------------
-.. autoclass:: pytorch_med_imaging.PMI_data_loader.pmi_dataloader_base.PMIDataLoaderBaseCFG
+
+
+Configurations
+^^^^^^^^^^^^^^
+.. autoclass:: PMIDataLoaderBaseCFG
     :members:
 
-.. autoclass:: pytorch_med_imaging.PMI_data_loader.pmi_dataloader_base.PMIDataLoaderBase
+Class definition
+^^^^^^^^^^^^^^^^
+.. autoclass:: PMIDataLoaderBase
     :members:
-    :private-members:
 
 PMIImageDataLoader
 ------------------
-.. autoclass:: pytorch_med_imaging.PMI_data_loader.pmi_image_dataloader.PMIImageDataLoader
+
+Configurations
+^^^^^^^^^^^^^^
+.. autodata:: PMIImageDataLoaderCFG
+    :annotation:
+
+Class definition
+^^^^^^^^^^^^^^^^
+.. autoclass:: PMIImageDataLoader
     :members:
-    :private-members:
 
-PMIImagePatchesLoader
----------------------
+PMIImageFeaturePairLoader
+-------------------------
 
-PMIImageFeaturePair
----------------------
+Configurations
+^^^^^^^^^^^^^^
+.. autodata:: PMIImageFeaturePairLoaderCFG
+    :annotation:
+
+Class definition
+^^^^^^^^^^^^^^^^
+.. autoclass:: PMIImageFeaturePairLoader
+    :members:
 
 
-PMIImageMCFeaturePair
----------------------
+PMIImageFeaturePairLoaderConcat
+-------------------------------
+
+Configurations
+^^^^^^^^^^^^^^
+The configuration is the same as :class:`PMIImageFeaturePairLoaderCFG`
+
+Class definition
+^^^^^^^^^^^^^^^^
+.. autoclass:: PMIImageFeaturePairLoaderConcat
+    :members:

@@ -1,6 +1,4 @@
-Networks
-========
-
+.. py:currentmodule:: pytorch_med_imaging.networks
 
 GNNGRU
 ------
@@ -9,7 +7,7 @@ GNNGRU
 
 UNet_p
 ------
-.. autoclass:: pytorch_med_imaging.Networks.UNet_p.Up
+.. autoclass:: pytorch_med_imaging.networks.UNet_p.Up
     :members:
 
 .. autoclass:: pytorch_med_imaging.networks.UNet_p.Down

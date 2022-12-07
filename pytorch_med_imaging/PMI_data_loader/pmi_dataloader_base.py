@@ -11,8 +11,10 @@ from .augmenter_factory import create_transform_compose
 from ..med_img_dataset.PMIDataBase import PMIDataBase
 from mnts.mnts_logger import MNTSLogger
 
+__all__ = ['PMIDataLoaderBaseCFG', 'PMIDataLoaderBase']
+
 class PMIDataLoaderBaseCFG:
-    """Config required to initialize PMIDataLoader.
+    """Config required to initialize :class:`PMIDataLoader`.
 
     Attributes:
         input_dir (str or list):

@@ -12,7 +12,7 @@ import re
 __all__ = ['PMIImageDataLoader', 'PMIImageDataLoaderCFG']
 
 class PMIImageDataLoaderCFG(PMIDataLoaderBaseCFG):
-    r"""Configuration for ``PMIImageDataLoader
+    r"""Configuration for :class:`PMIImageDataLoader`.
 
     Attributes:
         data_types (iterable):
@@ -177,7 +177,7 @@ class PMIImageDataLoader(PMIDataLoaderBase):
             return None
 
         self._image_class = med_img_dataset.ImageDataSet
-        img_data =  self._image_class(root_dir, verbose=self._verbose, debugmode=self._debug, filtermode='both',
+        img_data =  self._image_class(root_dir, verbose=True, debugmode=self.debug_mode, filtermode='both',
                                       regex=self.id_globber, idlist=self.id_list, idGlobber=self.id_globber, **kwargs)
         return img_data
 
@@ -310,7 +310,7 @@ class PMIImageDataLoader(PMIDataLoaderBase):
         """
         # default is based on self._training_mode, read from config file
         if training is None:
-            training = self._run_mode
+            training = self.run_mode
 
         if self.sampler_instance is None:
             # Set queue_args and queue_kwargs to load the whole image for each object to allow for caching
