@@ -1,5 +1,4 @@
 from . import BinaryClassificationSolver
-from ..PMI_data_loader import PMIBatchZeroPadSampler
 from mnts.mnts_logger import MNTSLogger
 
 from torch import optim
