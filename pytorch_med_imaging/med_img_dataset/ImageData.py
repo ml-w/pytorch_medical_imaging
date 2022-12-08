@@ -87,18 +87,18 @@ class ImageDataSet(PMIDataBase):
         filtermode (str, Optional):
             After grabbing file directories, they are filtered by either ID, regex or both. Corresponding att needed.
             Usage:
-                * `idlist`: Extract images that is on a specified list, globbed with `idGlobber`. Requires att `idlist`.
+                * `idlist`: Extract images that is on a specified list, globbed with `id_globber`. Requires att `idlist`.
                 * `regex`: Extract images that matches one regex sepcified with att `regex`.
                 * `both': Use both `idlist` and `regex` as filtering method. Requires both att specified.
                 * `None`: [Default] No filter, read all .nii.gz images in the directory.
         idlist (str or list, Optional):
             If its `str`, it should be directory to a file containing IDs, one in each line, otherwise,
             an explicit list of strings. Need if filtermode is 'idlist'. Globber of id can be specified with attribute
-            idGlobber.
+            id_globber.
         regex (str, Optional):
             Regex that is used to match file directories. Un-matched ones are discarded. Effective when
             `filtermode='idlist'`.Must start with paranthesis. Otherwise, its treated as wild cards, e.g. `'*nii.gz'`
-        idGlobber (str, Optional):
+        id_globber (str, Optional):
             Regex string to search ID. Effective when filtermode='idlist', optional. If none specified
             the default globber is `'(^[a-ZA-Z0-9]+)`, globbing the first one matches the regex in file basename. .
         loadBySlices (int, Optional):
@@ -177,7 +177,7 @@ class ImageDataSet(PMIDataBase):
         self._filterargs        = kwargs
         self._filtermode        = filtermode
         self._readmode          = readmode
-        self._id_globber        = kwargs.get('idGlobber', "(^[a-zA-Z0-9]+)")
+        self._id_globber        = kwargs.get('id_globber', "(^[a-zA-Z0-9]+)")
         self._debug             = debugmode
 
         self._error_check()
