@@ -246,7 +246,6 @@ class ImageDataSet(PMIDataBase):
         #=============
         # Reading data
         #-------------
-        self._itemindexes = [0] # [image index of start slice]
         for i, f in enumerate(tqdm(file_dirs, disable=not self.verbose, desc="Load Images")) \
                 if not self._debug else enumerate(tqdm(file_dirs[:10],
                                                        disable=not self.verbose,
@@ -442,7 +441,7 @@ class ImageDataSet(PMIDataBase):
 
     def type(self) -> Any:
         r"""Return datatype of the elements."""
-        return self.data[0].type()
+        return self.data[0].data.type()
 
     def as_type(self, t) -> None:
         r"""Cast all elements to specified type."""

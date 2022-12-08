@@ -1,9 +1,11 @@
 from .ImageData import ImageDataSet
 from .PMIDataBase import PMIDataBase
+import torch
 from torch import cat, stack
+import torchio as tio
 import numpy as np
 import os
-
+from typing import *
 
 class ImageDataMultiChannel(PMIDataBase):
     r"""
@@ -31,35 +33,10 @@ class ImageDataMultiChannel(PMIDataBase):
         concat_by_axis (int, Optional)
             If value is >=0, the images will be concatenated at specified axis instead of the channel, 0 equals to
             th first axis after channel dimension.
-        filtermode (str, Optional):
-            After grabbing file directories, they are filtered by either ID, regex or both. Corresponding att needed. \n
-            Usage:
-                * `idlist`: Extract images that is on a specified list, globbed with `idGlobber`. Requires att `idlist`.
-                * `regex`: Extract images that matches one regex sepcified with att `regex`.
-                * `both': Use both `idlist` and `regex` as filtering method. Requires both att specified.
-                * None: No filter, read all .nii.gz images in the directory.
-            Default is `None`.
-        idlist (str or list, Optional):
-            If its `str`, it should be directory to a file containing IDs, one in each line, otherwise,
-            an explicit list of strings. Need if filtermode is 'idlist'. Globber of id can be specified with attribute
-            idGlobber.
-        regex (str, Optional):
-            Regex that is used to match file directories. Un-matched ones are discarded. Effective when
-            `filtermode='idlist'`.Must start with paranthesis. Otherwise, its treated as wild cards, e.g. `'*nii.gz'`
-        idGlobber (str, Optional):
-            Regex string to search ID. Effective when filtermode='idlist', optional. If none specified
-            the default globber is `'(^[a-ZA-Z0-9]+)`, globbing the first one matches the regex in file basename. .
-        loadBySlices (int, Optional):
-            If its < 0, images are loaded as 3D volumes. If its >= 0, the slices along i-th dimension loaded. Default is `-1`
-        verbose (bool, Optional):
-            Whether to report loading progress or not. Default to `False`.
-        dtype (str or type, Optional):
-            Cast loaded data element to the specified type. Default is `float`.
-        debugmode (bool, Optional):
-            For debug only. Default is `False`
-        recursiveSearch (bool, Optional):
-            Whether to load files recursively into subdirectories. Default is `False`
 
+    .. hint::
+        There are also other arguments required by :class:`ImageDataSet`, you must specify them correctly in order for
+        this to work.
 
     Examples:
 
@@ -85,11 +62,11 @@ class ImageDataMultiChannel(PMIDataBase):
 
             >>> from pytorch_med_imaging.med_img_dataset import ImageDataMultiChannel
             >>> rootdir = 'rootdir'
-            >>> imset = ImageDataSetMultiChannel(rootdir)
+            >>> imset = ImageDataSetMultiChannel(rootdir, channel_subdirs=['Channel_sub_dir_1', 'Channel_sub_dir_2'])
 
         3. Shape of the output from imset will be:
             >>> print(imset.shape)
-            # (N, 3, D, W, H)
+            # (N, 2, D, W, H)
 
     See Also:
         :class:`ImageDataSet`
@@ -97,20 +74,22 @@ class ImageDataMultiChannel(PMIDataBase):
 
     """
 
-    def __init__(self, *args, **kwargs):
+    def __init__(self,
+                 rootdir,
+                 channel_subdirs = None,
+                 concat_by_axis = 0,
+                 *args, **kwargs):
         super(ImageDataMultiChannel, self).__init__()
 
         # check input
-        self._rootdir = args[0]
+        self._rootdir = rootdir
         if not os.path.isdir(self._rootdir):
             self._logger.error("Root dir specified {} not found.".format(self._rootdir))
             raise AssertionError("Root dir specified {} not found.".format(self._rootdir))
 
-        self._channel_subdirs = None
-        if 'channel_subdirs' in kwargs:
-            self._logger.info("Using subdir options.")
-            self._channel_subdirs = kwargs['channel_subdirs']
-        else:
+        self._channel_subdirs = channel_subdirs
+        self._concat_by_axis = concat_by_axis
+        if self._channel_subdirs is None:
             self._logger.info("Using all sub directories in specified root directory.")
 
 
@@ -126,9 +105,9 @@ class ImageDataMultiChannel(PMIDataBase):
                     self._logger.info("Excluding non-directories in subdir: {}".format(d))
         else:
             assert all([os.path.isdir(os.path.join(self._rootdir, d)) for d in self._channel_subdirs]), \
-                    "Cannot open specified directory when loading subdirectories. {}".format(
-                        {os.path.join(self._rootdir, d): os.path.isdir(os.path.join(self._rootdir, d)) for d in self._channel_subdirs}
-                    )
+                "Cannot open specified directory when loading subdirectories. {}".format(
+                    {os.path.join(self._rootdir, d): os.path.isdir(os.path.join(self._rootdir, d)) for d in self._channel_subdirs}
+                )
 
 
         # obtain first batch of ids
@@ -136,7 +115,6 @@ class ImageDataMultiChannel(PMIDataBase):
         self._basedata.append(ImageDataSet(os.path.join(self._rootdir,
                                                         self._channel_subdirs[0]),
                                            **kwargs))
-        self._itemindexes = self._basedata[0]._itemindexes
         ids = self._basedata[0].get_unique_IDs()
         self._logger.debug("Extracted ids: {}".format(ids))
 
@@ -144,12 +122,13 @@ class ImageDataMultiChannel(PMIDataBase):
         self._logger.info("Using extracted IDs for loading remaining data in {}.".format(self._channel_subdirs[1:]))
         for i in range(1, len(self._channel_subdirs)):
             _temp_dict = dict(kwargs)
-            if _temp_dict['filtermode'] == None:
+            _filtermode = _temp_dict.get('filtermode', None)
+            if _filtermode == None:
                 _temp_dict['filtermode'] = 'idlist'
                 _temp_dict['idlist'] = ids
-            elif _temp_dict['filtermode'] == 'both':
+            elif _filtermode == 'both':
                 _temp_dict['idlist'] = ids
-            elif _temp_dict['filtermode'] == 'idlist':
+            elif _filtermode == 'idlist':
                 _temp_dict['idlist'] = ids
             else:
                 raise AttributeError("Incorrect specifications to filter.")
@@ -159,28 +138,38 @@ class ImageDataMultiChannel(PMIDataBase):
                                                             ),
                                                **_temp_dict))
 
-        # Options
-        self._concat_by_axis = kwargs.get('concat_by_axis', -1)   # concated at the specified axis if > -1
-        if self._concat_by_axis > -1:
-            self._logger.info(f"Concatenating output at axis {self._concat_by_axis} instead of channels.")
-
-        # Inherit some of the properties of the inputs
-        self._byslices = kwargs['loadBySlices']
-
         # Calculate size
-        self._size = list(self._basedata[0].size())
-        self._size[1] = len(self._basedata)
+        self._size = self._basedata[0].size()
+
 
         # Check if dtype are the same
         self._logger.info("Checking if data are all the same datatype...")
         self._UNIQUE_DTYPE = np.all([dat.type() == self._basedata[0].type() for dat in self._basedata])
         self._logger.info("{}".format(self._UNIQUE_DTYPE))
+        if not self._UNIQUE_DTYPE:
+            msg = f"Not all data are of the same datatype! {[self._basedata[0].type() for dat in self._basedata]}"
+            raise TypeError(msg)
 
-    def get_unique_IDs(self, globber=None):
+    def get_unique_IDs(self, globber: Optional[str] = None) -> Iterable[str]:
+        r"""Get all IDs globbed by the specified globber. If its None,
+        default globber used. If its not None, the class globber will be
+        updated to the specified one.
+
+        Args:
+            globber (str):
+                Regex pattern to glob ID from the loaded files. If `None`, the stored attribute
+                :attribute:`_id_globber` will be used.
+
+
+        Return:
+            list: A sorted list of unique IDs globbed using `globber`.
+
+        """
         return self._basedata[0].get_unique_IDs(globber)
 
-    def size(self, int=slice(None)):
-        return self._size[int]
+    def size(self, i = None):
+        r"""Required by pytorch dataloader."""
+        return len(self._basedata[0])
 
     def Write(self, *args):
         try:
@@ -191,27 +180,10 @@ class ImageDataMultiChannel(PMIDataBase):
             raise NotImplementedError("Base data have no Write() method")
 
     def __len__(self):
-        return self.size()[0]
+        return self.size()
 
-    def __getitem__(self, item):
-        if isinstance(item, slice):
-            start, stop, step = [item.start ,item.stop, item.step]
-            start = start if not start is None else 0
-            stop = stop if not stop is None else len(self._basedataset)
-            step = step if not step is None else 1
+    def __getitem__(self, item) -> torch.Tensor:
+        return cat([dat[item] for dat in self._basedata], dim=self._concat_by_axis)
 
-            return stack([self.__getitem__(i) for i in range(start, stop, step)])
-        else:
-            # output datatype will follow the dtype of the first constructor argument
-            if self._UNIQUE_DTYPE:
-                if self._concat_by_axis >= 0:
-                    return cat([dat[item] for dat in self._basedata], dim=self._concat_by_axis + 2)
-                else:
-                    return cat([dat[item] for dat in self._basedata])
-            else:
-                self._logger.debug("Performing type-cast for item {}.".format(item))
-                if self._concat_by_axis >= 0:
-                    cat([dat[item].type_as(self._basedata[0][item]) for dat in self._basedata],
-                        dim=self._concat_by_axis)
-                else:
-                    return cat([dat[item].type_as(self._basedata[0][item]) for dat in self._basedata])
+    def get_data_by_ID(self, *args):
+        return cat([dat.get_data_by_ID(*args) for dat in self._basedata], dim=self._concat_by_axis)

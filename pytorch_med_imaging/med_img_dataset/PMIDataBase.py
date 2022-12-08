@@ -2,6 +2,7 @@ import torch
 from mnts.mnts_logger import MNTSLogger
 from torch.utils.data import Dataset
 from abc import *
+from typing import Iterable, Union, Any
 
 class PMIDataBase(Dataset):
     def __init__(self, *args, **kwargs):
@@ -33,20 +34,26 @@ class PMIDataBase(Dataset):
         raise NotImplementedError("Unfinished class implementation.")
 
     @abstractmethod
-    def get_unique_IDs(self):
-        raise NotImplemented("Unfnished class implementation")
+    def get_unique_IDs(self) -> Iterable[str]:
+        r"""Obtain the IDs of the data.
 
-    def apply_hook(self, func):
-        r"""
-        Apply this function to all output before it is returned.
+        Returns:
+            Iterable
+        """
+        raise NotImplemented("Unfinished class implementation")
+
+    @abstractmethod
+    def get_data_by_ID(self, item: Any) -> torch.Tensor:
+        r"""Obtain the data using an identifier. In this package, the identifier is generally a string globbed from
+        somewhere (e.g., the filename). Although it is adviced that these ID should be unique, it is not compulsory.
 
         Args:
-            func (callable):
-                A function that returns a tensor or a list of tensors.
-        """
-        assert callable(func)
-        self._get_item_hook = func
+            item (Any): Index.
 
+        Returns:
+            ``torch.Tensor``
+        """
+        raise NotImplemented("Unfinished class implementation!")
 
     def batch_done_callback(self, *args):
         raise NotImplementedError("Batch done callback was not implemented in this class")
