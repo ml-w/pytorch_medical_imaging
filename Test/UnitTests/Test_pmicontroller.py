@@ -378,7 +378,7 @@ class TestInferencer(TestController):
     def test_inference_no_gt(self):
         self._logger.info(f"Crearing checkpoint: {self.controller.checkpoint_cp_load_dir}")
         with tempfile.NamedTemporaryFile(suffix=".pt", mode='w+') as tmp_checkpoint:
-            self.controller.pmi_data._target_dir = None
+            self.controller.pmi_data.target_dir = None
             self.controller.checkpoint_cp_load_dir = tmp_checkpoint.name
             torch.save(self.controller.net.state_dict(), tmp_checkpoint.name)
             self.controller.run()

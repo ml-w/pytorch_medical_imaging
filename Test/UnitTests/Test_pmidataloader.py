@@ -4,16 +4,14 @@ from pytorch_med_imaging.PMI_data_loader import *
 from mnts.mnts_logger import MNTSLogger
 
 class TestDataLoader(unittest.TestCase):
-    def setUpClass() -> None:
-        TestDataLoader.logger = MNTSLogger('.', logger_name='unittest', log_level='debug', keep_file=False)
-
-    def tearDownClass() -> None:
-        TestDataLoader.logger = MNTSLogger.cleanup()
+    def setUp(self) -> None:
+        if self.__class__.__name__ == 'TestDataLoader':
+            raise unittest.SkipTest("Base class.")
+        self._logger = MNTSLogger('.', logger_name=self.__class__.__name__, log_level='debug', keep_file=False)
 
     def __init__(self, *args, **kwargs):
         super(TestDataLoader, self).__init__(*args, **kwargs)
         self.loader: PMIDataLoaderBase = None
-        self._logger = MNTSLogger('.', logger_name=self.__class__.__name__, log_level='debug', keep_file=False)
 
     def test_load_training_data(self):
         loader = self.loader._load_data_set_training()
@@ -32,6 +30,7 @@ class TestDataLoader(unittest.TestCase):
 
 class TestImageDataLoader(TestDataLoader):
     def setUp(self):
+        super(TestImageDataLoader, self).setUp()
         self.cfg = PMIImageDataLoaderCFG
         self.cfg.input_dir    = './sample_data/img/'
         self.cfg.target_dir   = './sample_data/seg/'
@@ -71,6 +70,7 @@ class TestImageDataLoader(TestDataLoader):
 PMIImageFeaturePairLoader
 class TestImageFeaturePairLoader(TestDataLoader):
     def setUp(self):
+        super(TestImageFeaturePairLoader, self).setUp()
         self.cfg = PMIImageFeaturePairLoaderCFG
         self.cfg.input_dir   = './sample_data/img/'
         self.cfg.target_dir  = './sample_data/sample_binaryclass_gt.xlsx'
@@ -136,4 +136,37 @@ class TestImageFeaturePairLoaderConcat(TestImageFeaturePairLoader):
             msg = f"Expect integer class for ground-truth, got {type(l['gt'])} instead"
             self.assertIsInstance(l['gt'], str, msg)
             self._logger.debug(f"{l}")
+            break
+
+
+class TestPMIImageMCDataLoader(TestImageDataLoader):
+    def setUp(self):
+        super(TestPMIImageMCDataLoader, self).setUp()
+        self.cfg = PMIImageMCDataLoaderCFG # note that super() already defined parent class attributes
+        self.cfg.input_dir = './sample_data/'
+        self.cfg.target_dir = './sample_data/'
+        self.cfg.input_subdirs = ['img', 'img']
+        self.cfg.target_subdirs = ['seg', 'seg']
+        self.cfg.new_attr = ['img_new', 'seg_new']
+        self.cfg.data_types = [float, 'uint8']
+        self.loader = PMIImageMCDataLoader(self.cfg)
+
+    def test_load_training_data(self):
+        loader = super(TestImageDataLoader, self).test_load_training_data()
+        for l in loader:
+            _shape = l[self.cfg.new_attr[0]].shape
+            self.assertTupleEqual(tuple(self.cfg.sampler_kwargs['patch_size']),
+                                  tuple(_shape[1:]))
+            self.assertEqual(len(self.cfg.input_subdirs),
+                             _shape[0])
+            break
+
+    def test_load_inference_data(self):
+        loader = super(TestImageDataLoader, self).test_load_inference_data()
+        for l in loader:
+            _shape = l[self.cfg.new_attr[0]].shape
+            self.assertTupleEqual(tuple(self.cfg.sampler_kwargs['patch_size']),
+                                  tuple(_shape[1:]))
+            self.assertEqual(len(self.cfg.input_subdirs),
+                             _shape[0])
             break

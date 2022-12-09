@@ -1,10 +1,11 @@
-from .pmi_img_feat_pair_dataloader import PMIImageFeaturePair
+from .pmi_img_feat_pair_dataloader import PMIImageFeaturePairLoader
 from .. import med_img_dataset
 
-__all__ = ['PMIImageMCFeaturePair']
+__all__ = ['PMIImageMCFeaturePairLoader']
 
-class PMIImageMCFeaturePair(PMIImageFeaturePair):
-    """
+
+class PMIImageMCFeaturePairLoader(PMIImageFeaturePairLoader):
+    r"""
     This class load :class:`ImageDataMultiChannel` related image data together with features written in a csv file.
 
     This class is suitable in the following situations:
@@ -12,25 +13,12 @@ class PMIImageMCFeaturePair(PMIImageFeaturePair):
         * Image classifications
         * Image to coordinates
 
-    Attributes:
-        regex (str, Optional):
-            Filter for loading files. See :class:`ImageDataSet`
-        idlist (str or list, Optional):
-            Filter for loading files. See :class:`ImageDataSet`
-        augmentation (int):
-            If `_augmentation` > 0, :class:`ImageDataSetAugment` will be used instead.
-        load_by_slice (int):
-            If `_load_by_slice` > -1, images volumes are loaded slice by slice along the axis specified.
-        concat_by_axis (int):
-            If `concat_by_axis` > -1, images volume are concatenated at the specified axis instead of by channels.
-
     Args:
         *args: Please see parent class.
         **kwargs: Please see parent class.
 
     .. note::
-        Attributes are defined in :func:`PMIImageDataLoader._read_config`, either read from a dictionary or an ini
-        file. The current system reads the [LoaderParams].
+
 
     .. hint::
         Users are suppose to pass arguments to the super class for handling. If in doubt, look at the docs of parent
@@ -42,13 +30,10 @@ class PMIImageMCFeaturePair(PMIImageFeaturePair):
 
     """
     def __init__(self, *args, **kwargs):
-        super(PMIImageMCFeaturePair, self).__init__(*args, **kwargs)
+        super(PMIImageMCFeaturePairLoader, self).__init__(*args, **kwargs)
 
     def _read_config(self, config_file=None):
-        super(PMIImageMCFeaturePair, self)._read_config(config_file)
-
-        # Currently not support augmentation
-        self._augmentation = 0
+        super(PMIImageMCFeaturePairLoader, self)._read_config(config_file)
 
         # Load if subdirs are specified
         self._channel_subdirs = self.get_from_loader_params_with_eval('channel_subdirs', None)
@@ -78,7 +63,7 @@ class PMIImageMCFeaturePair(PMIImageFeaturePair):
 
         concat_by_axis = self.get_from_loader_params_with_eval('concat_by_axis', -1)
         return self._image_class(root_dir, channel_subdirs=self._channel_subdirs, verbose=self._verbose,
-                                 debugmode=self._debug, filtermode='both', regex=self.id_globber, idlist=self.id_list,
+                                 debugmode=self.debug_mode, filtermode='both', regex=self.id_globber, idlist=self.id_list,
                                  loadBySlices=self._load_by_slices, aug_factor=self._augmentation,
                                  concat_by_axis=concat_by_axis, **kwargs)
 

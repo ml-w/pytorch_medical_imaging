@@ -155,8 +155,7 @@ class PMIImageDataLoader(PMIDataLoaderBase):
                           + [self.sampler_instance] # follows torchio's args arrangments
 
     def _read_image(self, root_dir, **kwargs):
-        """
-        Private method for convenience.
+        """Private method for convenience.
 
         Args:
             root_dir (str): See :class:`med_img_dataset.ImageDataSet`
@@ -172,12 +171,12 @@ class PMIImageDataLoader(PMIDataLoaderBase):
             :class:`med_img_dataset.ImageDataSet`
         """
         if root_dir is None:
-            self._logger.warning("Received None for root_dir arguement.")
+            self._logger.warning("Received `None` for root_dir arguement.")
             return None
 
         self._image_class = med_img_dataset.ImageDataSet
         img_data =  self._image_class(root_dir, verbose=True, debugmode=self.debug_mode, filtermode='both',
-                                      regex=self.id_globber, idlist=self.id_list, idGlobber=self.id_globber, **kwargs)
+                                      regex=self.id_globber, idlist=self.id_list, id_globber=self.id_globber, **kwargs)
         return img_data
 
     def _load_data_set_training(self,
@@ -308,33 +307,14 @@ class PMIImageDataLoader(PMIDataLoaderBase):
                 where you need to keep the ``tio.Sampler`` to create the aggregator that will assemble the patches.
         """
         # default is based on self._training_mode, read from config file
-        if training is None:
-            training = self.run_mode
-
-        if self.sampler_instance is None:
-            # Set queue_args and queue_kwargs to load the whole image for each object to allow for caching
-            shape_of_input = subjects[0].shape
-
-            # Reset sampler
-            self.sampler_instance = tio.UniformSampler(patch_size=shape_of_input[1:])  # first dim is batch
-            self.queue_args[-1] = self.sampler_instance
-
-        queue_dict = self.tio_queue_kwargs.copy()
-        # if exclude augment, don't shuffle
-        if exclude_augment:
-            queue_dict['shuffle_subjects'] = False
-        if not training:
-            # don't shuffle subject if inference
-            queue_dict['shuffle_subjects'] = False
-            queue_dict['shuffle_patches'] = False # This might haunt you later because some inference might require
-                                                  # shuffling the patches (e.g., grid sampler)
+        queue_dict, training = self._prepare_queue_dict(exclude_augment, subjects, training)
 
         # Create queue
         # If option to use post-sampling processing was provided, use CallbackQueue instead
         if  not self.patch_sampling_callback in ("", None):
             # check if there's illegal characters in the patch_sampling_callback
             if re.search("[\W]+", self.patch_sampling_callback.translate(str.maketrans('', '', "[], "))) is not None:
-                raise AttributeError(f"You patch_sampling_callback specified ({self.patch_sampling_callback}) "
+                raise AttributeError(f"You patchr_sampling_callback specified ({self.patch_sampling_callback}) "
                                      f"contains illegal characters!")
             queue_dict['start_background'] = training # if not training, delay dataloading
             _callback_func = eval(self.patch_sampling_callback)
@@ -348,13 +328,43 @@ class PMIImageDataLoader(PMIDataLoaderBase):
             # queue_dict.pop('create_new_attribute')
             # ignore 'start_background` option for ordinary queues
             queue = tio.Queue(subjects, *self.queue_args, **queue_dict)
+
         self._logger.debug(f"Created queue: {queue}")
         self.queue = queue
 
         if return_sampler:
-            return queue, sampler
+            return queue, self.queue_args[-1]
         else:
             return queue
+
+    def _prepare_queue_dict(self, exclude_augment, subjects, training) -> [dict, bool]:
+        r"""Rearrange some of the tags to cater for differences in the need to shuffle subjects and patches.
+
+        See Also:
+            * :func:`_create_queue`
+
+        Return:
+            tuple(dict, bool)
+        """
+        if training is None:
+            training = self.run_mode
+        if self.sampler_instance is None:
+            # Set queue_args and queue_kwargs to load the whole image for each object to allow for caching
+            shape_of_input = subjects[0].shape
+
+            # Reset sampler
+            self.sampler_instance = tio.UniformSampler(patch_size=shape_of_input[1:])  # first dim is batch
+            self.queue_args[-1] = self.sampler_instance
+        queue_dict = self.tio_queue_kwargs.copy()
+        # if exclude augment, don't shuffle
+        if exclude_augment:
+            queue_dict['shuffle_subjects'] = False
+        if not training:
+            # don't shuffle subject if inference
+            queue_dict['shuffle_subjects'] = False
+            queue_dict['shuffle_patches'] = False  # This might haunt you later because some inference might require
+            # shuffling the patches (e.g., grid sampler)
+        return queue_dict, training
 
     def create_aggregation_queue(self, subject: torchio.SubjectsDataset, *args, **kwargs):
         r"""Note that this function should only be invoked during inference. Typically, you don't need the

@@ -28,15 +28,16 @@ class Test_PMIData(unittest.TestCase):
             raise unittest.SkipTest("Base class")
         self.temp_dir = tempfile.TemporaryDirectory()
         self.temp_dir_path = Path(self.temp_dir.name)
-        self._idGlobber = "MRI_\d+"
+        self._id_globber = "MRI_\d+"
         MNTSLogger('.', verbose=True, log_level='debug')
 
     def tearDown(self):
         self.temp_dir.cleanup()
 
     def test_getUniqueIDs(self):
-        ids = self.data.get_unique_IDs(self._idGlobber)
-        self.assertEqual(ids, [f"MRI_0{i+1}" for i in range(len(self.data))])
+        ids = self.data.get_unique_IDs(self._id_globber)
+        self.assertTupleEqual(tuple(ids),
+                              tuple(f"MRI_0{i+1}" for i in range(len(self.data))))
 
     def test_getDataByID(self):
         data = self.data.get_data_by_ID("MRI_02")
@@ -61,14 +62,13 @@ class Test_ImageDataSet(Test_PMIData):
         super(Test_ImageDataSet, self).setUp()
         self.data_path = Path("./sample_data/img")
         self.seg_path = Path("./sample_data/seg")
-        self.data = ImageDataSet(str(self.data_path), verbose=True, idGlobber=self._idGlobber)
-        self.data_segment = ImageDataSet(str(self.seg_path), verbose=True, idGlobber=self._idGlobber)
+        self.data = ImageDataSet(str(self.data_path), verbose=True, id_globber=self._id_globber)
+        self.data_segment = ImageDataSet(str(self.seg_path), verbose=True, id_globber=self._id_globber)
 
     def test_matchID(self):
         self._logger.debug(f"{self.data.get_unique_IDs()}")
         self._logger.debug(f"{self.data_segment.get_unique_IDs()}")
         self.assertTrue(self.data.get_unique_IDs() == self.data_segment.get_unique_IDs())
-
 
 class Test_DataLabel(Test_PMIData):
     def __init__(self, *args, **kwargs):
@@ -90,3 +90,22 @@ class Test_DataLabelConcat(Test_PMIData):
         self.data = DataLabelConcat("./sample_data/sample_concat_df.xlsx")
         pass
 
+class Test_ImageDataSetMC(Test_PMIData):
+    def __init__(self, *args, **kwargs):
+        super(Test_ImageDataSetMC, self).__init__(*args, **kwargs)
+
+    def setUp(self):
+        from pytorch_med_imaging.med_img_dataset import ImageDataMultiChannel
+        super(Test_ImageDataSetMC, self).setUp()
+        self.data_path = Path("./sample_data/img")
+        self.seg_path = Path("./sample_data/seg")
+        self.data = ImageDataMultiChannel(str(self.data_path.parent),
+                                          channel_subdirs=[self.data_path.name, self.data_path.name],
+                                          verbose=True, id_globber=self._id_globber)
+        self.data_segment = ImageDataMultiChannel(str(self.seg_path.parent),
+                                         channel_subdirs=[self.seg_path.name, self.seg_path.name],
+                                         verbose=True, id_globber=self._id_globber)
+
+    def test_get_data(self):
+        data = self.data[0]
+        self.assertEqual(data.shape[0], 2)
