@@ -26,21 +26,23 @@ class ImageDataMultiChannel(PMIDataBase):
         readmode (str, Optional):
             Decide image directories globbing method, whether to look into subdirectories or not. \n
             Possible values:
-                * `normal` - typical loading behavior, reading all nii/nii.gz files in the directory.
-                * `recursive` - search all subdirectories excluding softlinks, use with causion.
-                * `explicit` - specifying directories of the files to load.
+            * `normal` - typical loading behavior, reading all nii/nii.gz files in the directory.
+            * `recursive` - search all subdirectories excluding softlinks, use with causion.
+            * `explicit` - specifying directories of the files to load.
             Default is `normal`.
         concat_by_axis (int, Optional)
             If value is >=0, the images will be concatenated at specified axis instead of the channel, 0 equals to
             th first axis after channel dimension.
 
     .. hint::
-        There are also other arguments required by :class:`ImageDataSet`, you must specify them correctly in order for
-        this to work.
+        * There are also other arguments required by :class:`ImageDataSet`, you must specify them correctly in order for
+          this to work.
+        * If you wish to use it with the dataloader, you should consider simply using :class:`PMIImageDataMCLoader`.
 
     Examples:
 
-        1. Consider the following file structures:
+        1. Consider the following file structures::
+
             /rootdir
             └───Channel_sub_dir_1
             |  |   ID1_image.nii.gz
@@ -57,19 +59,20 @@ class ImageDataMultiChannel(PMIDataBase):
             |   ID2_image.nii.gz
             |   ...
 
-        2. If `channel_subdirs` was not set, three :class:`ImageDataSet` objects will be created, each inherits all the
-            remaining tags and options from the input arguments, with their `root_dir` set to the subdirs.
+        2. If ``channel_subdirs`` was not set, three :class:`ImageDataSet` objects will be created, each inherits all
+           the remaining tags and options from the input arguments, with their `root_dir` set to the subdirs:
 
             >>> from pytorch_med_imaging.med_img_dataset import ImageDataMultiChannel
             >>> rootdir = 'rootdir'
             >>> imset = ImageDataSetMultiChannel(rootdir, channel_subdirs=['Channel_sub_dir_1', 'Channel_sub_dir_2'])
 
         3. Shape of the output from imset will be:
+
             >>> print(imset.shape)
             # (N, 2, D, W, H)
 
     See Also:
-        :class:`ImageDataSet`
+        * :class:`ImageDataSet`
 
 
     """

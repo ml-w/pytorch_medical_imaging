@@ -65,3 +65,17 @@ Class definition
 ^^^^^^^^^^^^^^^^
 .. autoclass:: PMIImageFeaturePairLoaderConcat
     :members:
+
+
+PMIImageMCDataLoader
+-------------------------------
+
+Configurations
+^^^^^^^^^^^^^^
+.. autodata:: PMIImageMCDataLoaderCFG
+    :annotation:
+
+Class definition
+^^^^^^^^^^^^^^^^
+.. autoclass:: PMIImageMCDataLoader
+    :members:
