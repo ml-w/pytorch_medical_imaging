@@ -34,7 +34,7 @@ class rAIdiologistSolver(BinaryClassificationSolver):
         # Turn off record
         self.get_net()._RECORD_ON = False
 
-    def _load_default_attr(self, default_attr):
+    def _load_config(self, default_attr):
         _default_attr = {
             'solverparams_rai_fixed_mode': None,
             'solverparams_rai_pretrained_swran': "",
@@ -42,7 +42,7 @@ class rAIdiologistSolver(BinaryClassificationSolver):
         }
         if isinstance(default_attr, dict):
             _default_attr.update(default_attr)
-        super(rAIdiologistSolver, self)._load_default_attr(_default_attr)
+        super(rAIdiologistSolver, self)._load_config(_default_attr)
 
     def create_lossfunction(self):
         if not self.solverparams_rai_classification:
@@ -83,7 +83,7 @@ class rAIdiologistSolver(BinaryClassificationSolver):
         r"""Update mode of network"""
         super(rAIdiologistSolver, self)._epoch_prehook(*args, **kwargs)
         current_epoch = self.plotter_dict.get('epoch_num', 0)
-        total_epoch = self.solverparams_num_of_epochs
+        total_epoch = self.num_of_epochs
 
         # Schedule mode of the network and findout if new mode is needed
         if self.solverparams_rai_fixed_mode is None:
@@ -108,7 +108,7 @@ class rAIdiologistSolver(BinaryClassificationSolver):
         """
         super(rAIdiologistSolver, self)._epoch_callback(*args, **kwargs)
         current_epoch = self.plotter_dict.get('epoch_num', None)
-        total_epoch = self.solverparams_num_of_epochs
+        total_epoch = self.num_of_epochs
 
     def solve_epoch(self, epoch_number):
         """
@@ -119,7 +119,7 @@ class rAIdiologistSolver(BinaryClassificationSolver):
         # Reset dict each epoch
         self.net.train()
         self.plotter_dict = {'scalars': {}, 'epoch_num': epoch_number}
-        for step_idx, mb in enumerate(self._data_loader):
+        for step_idx, mb in enumerate(self.data_loader):
             s, g = self._unpack_minibatch(mb, self.solverparams_unpack_keys_forward)
             # try to print uid to locate problematic data
             self._logger.debug(f"uids: {mb['uid']}")
@@ -138,7 +138,7 @@ class rAIdiologistSolver(BinaryClassificationSolver):
             self._logger.info("\t[Step %04d] loss: %.010f"%(step_idx, loss.data))
 
             self._step_callback(s, g, out.cpu().float(), loss.data.cpu(),
-                                step_idx=epoch_number * len(self._data_loader) + step_idx)
+                                step_idx=epoch_number * len(self.data_loader) + step_idx)
             del s, g, out, loss, mb
             gc.collect()
 

@@ -32,7 +32,7 @@ class ClassificationSolver(SolverBase):
         """
         super(ClassificationSolver, self).__init__(net, hyperparam_dict, use_cuda)
 
-    def _load_default_attr(self, default_attr):
+    def _load_config(self, default_attr):
         r"""Inherit this to get more default hyperparameters"""
         _default_attr = {
             'solverparams_sigmoid_params'   : {'delay': 15, 'stretch': 2, 'cap': 0.3},
@@ -43,7 +43,7 @@ class ClassificationSolver(SolverBase):
         }
         if isinstance(default_attr, dict):
             _default_attr.update(default_attr)
-        super(ClassificationSolver, self)._load_default_attr(_default_attr)
+        super(ClassificationSolver, self)._load_config(_default_attr)
 
     def create_lossfunction(self):
         # set class weights to 0 to disable class weight for loss function
@@ -131,7 +131,7 @@ class ClassificationSolver(SolverBase):
         return loss
 
     def validation(self):
-        if self._data_loader_val is None:
+        if self.data_loader_val is None:
             self._logger.warning("Validation skipped because no loader is available.")
             return None
         with torch.no_grad():
@@ -139,7 +139,7 @@ class ClassificationSolver(SolverBase):
 
             decisions = []
             validation_loss = []
-            for mb in tqdm(self._data_loader_val, desc="Validation", position=2):
+            for mb in tqdm(self.data_loader_val, desc="Validation", position=2):
                 s, g = self._unpack_minibatch(mb, self.solverparams_unpack_keys_forward)
                 s = self._match_type_with_network(s)
                 g = self._match_type_with_network(g)

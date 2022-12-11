@@ -86,12 +86,12 @@ class ClassificationInferencer(InferencerBase):
         out_tensor = []
         cam_tensor = []
         last_batch_dim = 0
-        for index, samples in enumerate(tqdm(self._data_loader, desc="Steps")):
+        for index, samples in enumerate(tqdm(self.data_loader, desc="Steps")):
             s = samples
             if (isinstance(s, tuple) or isinstance(s, list)) and len(s) > 1:
                 s = [Variable(ss, requires_grad=True).float() for ss in s]
 
-            if self._data_loader:
+            if self.data_loader:
                 s = [ss.cuda() for ss in s] if isinstance(s, list) else s.cuda()
 
             torch.no_grad()

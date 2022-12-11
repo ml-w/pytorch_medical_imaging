@@ -64,7 +64,7 @@ class SurvivalSolver(SolverBase):
         super(SurvivalSolver, self).__init__(solver_configs)
 
     def validation(self):
-        if self._data_loader_val is None:
+        if self.data_loader_val is None:
             self._logger.warning("Validation skipped because no loader is available.")
             return []
 
@@ -74,7 +74,7 @@ class SurvivalSolver(SolverBase):
             net_out = []
             G = []
 
-            for s, g in tqdm(self._data_loader_val, desc="Validation", position=2):
+            for s, g in tqdm(self.data_loader_val, desc="Validation", position=2):
                 out, g = self._feed_forward(s, g)
                 while g.dim() < 2:
                     g = g.unsqueeze()
@@ -104,7 +104,7 @@ class SurvivalSolver(SolverBase):
             self.plotter_dict['scalars']['Perf/Validation C-index'] = c_index
 
     def train_set_validation(self):
-        if self._data_loader_val is None:
+        if self.data_loader_val is None:
             self._logger.warning("Validation skipped because no loader is available.")
             return []
 
@@ -114,7 +114,7 @@ class SurvivalSolver(SolverBase):
             net_out = []
             G = []
 
-            for s, g in tqdm(self._data_loader, desc="Validation", position=2):
+            for s, g in tqdm(self.data_loader, desc="Validation", position=2):
                 out, g = self._feed_forward(s, g)
                 while g.dim() < 2:
                     g = g.unsqueeze()
@@ -172,7 +172,7 @@ class SurvivalSolver(SolverBase):
         doing network forward.
         """
         out = self._feed_forward(*args)
-        self._called_time += 1
+        self._step_called_time += 1
         return out
 
     def step(self, *args):
@@ -200,7 +200,7 @@ class SurvivalSolver(SolverBase):
         Because this solver is fixed to use Cox harzard loss, the gradients only computed after
         each epoch, and this requires more memory to do.
         """
-        if self._data_loader_val is None:
+        if self.data_loader_val is None:
             self._logger.error("Dataloader not found!")
             raise AttributeError("You have not properly setup the dataloader")
 
@@ -210,7 +210,7 @@ class SurvivalSolver(SolverBase):
         self.plotter_dict = {'scalars': {}, 'epoch_num': epoch_number}
         grad_itered = 0
 
-        for step_idx, samples in enumerate(self._data_loader):
+        for step_idx, samples in enumerate(self.data_loader):
             s, g = samples
 
             # Check if all elements in the batch are censored. Last column of gt reserved for event_status

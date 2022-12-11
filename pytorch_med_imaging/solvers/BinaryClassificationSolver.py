@@ -42,7 +42,7 @@ class BinaryClassificationSolver(ClassificationSolver):
             self._logger.info(f"Using BCEWithLogitLoss, pos_weight = {self.lossfunction.weight}")
 
     def validation(self):
-        if self._data_loader_val is None:
+        if self.data_loader_val is None:
             self._logger.warning("Validation skipped because no loader is available.")
             return None
 
@@ -55,7 +55,7 @@ class BinaryClassificationSolver(ClassificationSolver):
             predictions = []
             uids = []
 
-            for mb in tqdm(self._data_loader_val, desc="Validation", position=2):
+            for mb in tqdm(self.data_loader_val, desc="Validation", position=2):
                 # s: (B x num_class), g: (B x 1)GGq
                 s, g = self._unpack_minibatch(mb, self.solverparams_unpack_keys_forward)
                 s = self._match_type_with_network(s)
@@ -192,9 +192,9 @@ class BinaryClassificationSolver(ClassificationSolver):
         self._update_network(loss)
 
         # if schedular is OneCycleLR
-        if isinstance(self.lr_scheduler, lr_scheduler.OneCycleLR):
-            self.lr_scheduler.step()
-        self._called_time += 1
+        if isinstance(self.lr_sche, lr_scheduler.OneCycleLR):
+            self.lr_sche.step()
+        self._step_called_time += 1
         return out, loss.cpu().data
 
     def _loss_eval(self, *args):

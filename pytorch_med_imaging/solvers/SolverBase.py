@@ -10,71 +10,126 @@ import torch
 import torch.nn as nn
 from torch.optim import lr_scheduler
 from tqdm import *
-from typing import Union, Iterable, Any
+from typing import Union, Iterable, Any, Optional
 from pathlib import Path
 
 import torchio as tio
-import pytorch_med_imaging.lr_scheduler as pmi_lr_scheduler
+
+from ..tb_plotter import TB_plotter
+from .. import lr_scheduler as pmi_lr_scheduler
+from ..lr_scheduler import PMILRScheduler
+from ..PMI_data_loader import PMIDataLoaderBase
+from .earlystop import BaseEarlyStop
 from ..loss import *
 
 available_lr_scheduler = list(name for name, obj in inspect.getmembers(lr_scheduler) if inspect.isclass(obj))
 available_lr_scheduler += list(name for name, obj in inspect.getmembers(pmi_lr_scheduler) if inspect.isclass(obj))
 
-class SolverBase(object):
-    """Base class for all solvers. This class must be inherited before it can work properly. The child
-    classes should inherit the abstract methods.
 
-    Args:
-        net (torch.nn.Module):
+class SolverBaseCFG:
+    r"""Configuration for initializing :class:`SolverBase` and its child classes.
+
+    Class Attributes:
+        [Required] net (torch.nn.Module):
             The network.
-        hyperparam_dict (dict):
-            This is created by the controller from all options under the section `SolverParams`.
-        use_cuda (bool):
-            Whether this solver will move the items to cuda for computation.
-
-    Attributes:
-        optimizer (nn.Module):
+        [Required] data_loader (pmi_dataloader):
+            Dataloader for training iteration
+        [Required] optimizer (nn.Module):
             Optimizer for training.
-        lossfunction (nn.Module):
-            Loss function.
-        plotter_dict (dict):
+        [Required] loss_function (nn.Module):
+            Loss function for training. Note that some child class might specify a default value in their
+            CFG, but if it doesn't, this should always be specified.
+        [Required] init_lr (float):
+            Initial learning weight.
+        [Required] num_of_epoch (int):
+            Number of epochs.
+        [Required] unpack_key_forowrad (list of str):
+            This list is used to unpack the ``tio.Subject`` (or patches) loaded by the ``data_loader``. See
+            :func:`SolverBase.solve_epoch`.
+        lr_sche (lr_scheduler._LRScheduler, Optional):
+            Dictates how the LR is changed during the course of training. Stepped after each epoch is done. Default
+            to ``lr_scheduler.ExponentialLR`` supplied by ``torch``. Some additional schedulers is also implemented
+            in the ``pmi_lr_scheduler`` module.
+        use_cuda (bool, Optional):
+            Whether this solver will move the items to cuda for computation. Default to ``True``.
+        debug (bool, Optional):
+            Whether the current session is executed with debug mode. Passed to ``data_loader`` mainly. Default to
+            ``False``.
+        dataloader_val (PMIDataLoaderBase, Optional):
+            The dataloader used during validation. If it is not provide, the validation step will be skipped and the
+            training loss will be used to identify early stopping time points. Default to ``None``.
+        early_stop (BaseEarlyStop, Optional):
+            If not ``None``, this will specify the policy for early stopping. See :class:`earlystop.BaseEarlyStop`
+        accumulate_grad (int, Optional):
+            If value > 1 specified, gradient will be calculate with loss accumulated for multiple iterations. See
+            :func:`SolverBase._update_network`.
+        plotter_dict (dict, Optional):
             This dict could be used by the child class to perform plotting after validation or in each step.
 
     """
-    def __init__(self, net: torch.nn.Module, hyperparam_dict: dict, use_cuda: bool, debug:bool = False, **kwargs):
+    # Training hyper params (must be provided for training)
+    init_lr     : float = None
+    num_of_epoch: int   = None
+
+    # I/O
+    unpack_key_forward: Iterable[str] = None
+
+    net          : torch.nn.Module       = None
+    loss_function: torch.nn              = None
+    optimizer    : torch.optim.Optimizer = None
+    dataloader   : PMIDataLoaderBase     = None
+
+    # Options with defaults
+    use_cuda        : Optional[bool]              = True
+    debug           : Optional[bool]              = False
+    dataloader_val  : Optional[PMIDataLoaderBase] = None
+    lr_sche         : Optional[PMILRScheduler]    = None # If ``None``, lr_scheduler.ExponentialLR will be used.
+    plotter_dict    : Optional[dict]              = None
+    early_stop      : Optional[BaseEarlyStop]     = None
+    accumulate_grad : Optional[int]               = 1
+
+class SolverBase(object):
+    """Base class for all solvers. This class must be inherited before it can work properly. The child
+    classes should inherit the abstract methods. The initialization is done by specifying class attributes of
+    :class:`SolverBaseCFG`.
+
+    Class Attributes:
+        cls_cfg (SolverBaseCFG):
+            The config parameters.
+
+    Attributes:
+        _step_called_time (int):
+            Number of time :func:`step` was called.
+        _decayed_time (int):
+            Number of time :func:`decay_optimizer` was called.
+    """
+    cls_cfg = SolverBaseCFG
+    def __init__(self,
+                 *args, **kwargs):
         super(SolverBase, self).__init__()
-        # error check
-        if not isinstance(net, torch.nn.Module):
-            msg += f"Expect input net is an instance of nn.Module, but got type {type(net)} input."
-            raise TypeError(msg)
-        if not isinstance(hyperparam_dict, dict):
-            msg += f"Expect hyperparam_dict to be a dictionary, but got type {type(hyperparam_dict)} input."
-            raise TypeError(msg)
-
-        self.net = net
-        self.iscuda = use_cuda
-        self.hyperparam_dict = hyperparam_dict
-        self.debug = debug
-        self.__dict__.update(hyperparam_dict)
-
-        # optional
         self._logger        = MNTSLogger[self.__class__.__name__]
+        self._load_config()   # Load config from ``cls_cfg``
 
-        # Optimizer attributies
-        self._called_time       = 0
-        self._decayed_time      = 0
+        # Define minimal requirement to kick start a ``fit()``
+        self._required_attributes = {
+            'net': torch.nn.Module,
+            'data_loader': PMIDataLoaderBase,
+            'optimizer': torch.optim.Optimizer,
+            'loss_function': torch.nn.Module,
+            'init_lr': float,
+            'epoch': int,
+            'unpack_key_forward': (tuple, list),
+        }
 
-        # Added config not used in base class
-        # if not hasattr(self, '_config'): # prevent unwanted override
-        #     self._config = kwargs.get('config', None)
+        # Optimizer attributes
+        self._step_called_time: int       = 0
+        self._decayed_time: int      = 0
 
-        # internal_attributes
+        # internal attributes
         self._net_weight_type        = None
-        self._data_loader            = None
-        self._data_loader_val        = None
         self._tb_plotter             = None
-        self.lr_scheduler            = None
-        self._accumulated_steps       = 0        # For gradient accumulation
+
+        self.lr_sche            = None
 
         # external_att
         self.plotter_dict      = {}
@@ -83,7 +138,6 @@ class SolverBase(object):
         default_dict = {
             'solverparams_early_stop': None
         }
-        self._load_default_attr(default_dict)   # inherit in child to default other attributes
         self.create_lossfunction()
         self.create_optimizer(self.net.parameters())
 
@@ -97,25 +151,43 @@ class SolverBase(object):
             self.net = self.net.cuda()
 
         # Stopping criteria
-        self._early_stop_scheduler = SolverEarlyStopScheduler(self.solverparams_early_stop)
+        # self._early_stop_scheduler = BaseEarlyStop(self.solverparams_early_stop)
 
-    def _load_default_attr(self, default_dict = None):
-        r"""If the default_dict items are not specified in the hyperparameter_dict, this will
-        load the hyperparameters into __dict__ and self.hyperparameter_dict
+    def _load_config(self, config_file = None):
+        r"""Function to load the configurations. If ``config_file`` is ``None``, load the default class
+        :class:`SolverBaseCFG` that is stored as a class attribute :attr:`cls_cfg`.
         """
-        self.__dict__.update(self.hyperparam_dict)
-        if default_dict is None:
-            return
+        # Loading basic inputs
+        if not config_file is None:
+            if isinstance(config_file, type):
+                cls = config_file
+            else:
+                cls = config_file.__class__
+        else:
+            cls = self.cls_cfg
+        cls_dict = { attr: getattr(cls, attr) for attr in dir(cls) }
+        self.__dict__.update(cls_dict)
 
-        update_dict = {}
-        for key in default_dict:
-            if not key in self.__dict__:
-                self._logger.debug(f"Loading default value for: {key}")
-                update_dict[key] = default_dict[key]
-        self.__dict__.update(update_dict)
-        self.hyperparam_dict.update(update_dict)
+    def _check_fit_ready(self) -> bool:
+        r"""Check the instance attribute specified in ``self._required_attribute`` and their types to make sure that the
+        attributes required in :func:`fit` have all been specified correctly.
 
-    def get_net(self):
+        Returns:
+             bool: ``True`` if attributes is readied for :func:`fit` to run. An exception is raised otherwise.
+        """
+        for att_name, att_type in self._required_attributes.items():
+            if not isinstance(getattr(self, att_name), att_type):
+                msg = f"Expect '{att_name}` to be type {att_type} but got {getattr(self, att_name)}."
+                raise TypeError(msg)
+                return False
+        return True
+
+    def get_net(self) -> torch.nn.Module:
+        r"""Return ``self.net`` or ``self.net.module`` if parallel network is invoked.
+
+        Returns:
+            torch.nn.module
+        """
         if torch.cuda.device_count() > 1:
             try:
                 return self.net.module
@@ -124,76 +196,93 @@ class SolverBase(object):
         else:
             return self.net
 
-    def get_optimizer(self):
+    def get_optimizer(self) -> torch.optim.Optimizer:
+        r"""Return ``self.optimizer``.
+
+        Returns:
+            torch.nn.optim.Optimizer
+        """
         return self.optimizer
 
-    def set_lr_decay(self, decay):
-        self.solverparams_decay_rate_lr = decay
+    def set_dataloader(self,
+                       dataloader: PMIDataLoaderBase,
+                       data_loader_val: PMIDataLoaderBase = None) -> None:
+        r"""Externally set the dataloaders if they were not specified in ``self.cls_cfg``.
 
-    def set_lr_decay_exp(self, decay):
-        self.solverparams_decay_rate_lr = decay
-        self.lr_scheduler = torch.optim.lr_scheduler.ExponentialLR(self.optimizer, self.solverparams_decay_rate_lr)
+        Args:
+            dataloader (PMIDataLoaderBase):
+                Replaces ``self.data_loader``.
+            dataloader_val (PMIDataLoaderBase):
+                Replaces ``self.data_loader_val``
+        """
+        if not self.data_loader is None:
+            self._logger.warning("Overriding CFG `dataloader`.")
+        if not isinstance(self.data_loader, PMIDataLoaderBase):
+            raise TypeError(f"Expect input to be ``PMIDataLoaderBase`` for ``data_loader``, "
+                            f"but got: {type(self.data_loader)}")
+        self.data_loader = dataloader
 
-    def set_lr_decay_func(self, func):
-        assert callable(func), "Insert function not callable!"
-        self.lr_decay_func = func
-        self.lr_scheduler = torch.optim.lr_scheduler.LambdaLR(self.optimizer, self.lr_decay_func)
+        if not self.data_loader_val is None and not data_loader_val is None:
+            self._logger.warning("Overriding CFG `dataloader_val`.")
+        if not isinstance(self.data_loader_val, PMIDataLoaderBase) and not data_loader_val is None:
+            raise TypeError(f"Expect input to be ``PMIDataLoaderBase`` for ``data_loader_val``, "
+                            f"but got: {type(self.data_loader_val)}")
+        self.data_loader_val = data_loader_val
 
-    def set_dataloader(self, dataloader, data_loader_val=None):
-        self._data_loader = dataloader
-        self._data_loader_val = data_loader_val
+    def set_lr_scheduler(self,
+                         scheduler: Union[str, PMILRScheduler],
+                         *args, **kwargs) -> None:
+        r"""Externally set the :attr:`lr_sche` manually.
 
-    def set_lr_decay_to_reduceOnPlateau(self, default_patience, factor, **kwargs):
-        _default_kwargs = {
-            'factor': factor,
-            'patience': int(default_patience),
-            'cooldown':2,
-            'min_lr': 1E-6,
-            'threshold':0.05,
-            'threshold_mode':'rel',
-        }
-        try:
-            _default_kwargs.update(kwargs)
-        except:
-            self._logger.warning("Extraction of parameters failed. Retreating to use default.")
+        Args:
+            scheduler (str or PMILRScheduler):
+                If a ``str`` is supplied, this will try to create the learning rate scheduler using the
+                :class:`PMILRScheduler` and store it as :attr:`lr_sche`.
+            *args:
+                Pass to PMILRScheduler if ``scheduler`` is a string.
+            **kwargs:
+                Pass to PMILRScheduler if ``scheduler`` is a string.
 
-        self._logger.debug("Set lr_scheduler to decay on plateau with params: {}.".format(_default_kwargs))
-        self.lr_scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
-            self.optimizer,
-            **_default_kwargs
-        )
 
-    def set_lr_scheduler(self, name, *args, **kwargs):
-        msg = f"Incorrect lr_scheduler ({name}) specified! Available schedulers are: [{'|'.join(available_lr_scheduler)}]"
-        assert name in available_lr_scheduler, msg
+        See Also:
+            * :class:`PMILRScheduler`
+        """
+        if not self.lr_sche is None:
+            self._logger.warning("Overriding CFG ``lr_sche``.")
 
-        if re.search("^[\W]+", name) is not None:
-            raise ArithmeticError(f"Your lr_scheduler setting ({name}) contains illegal characters!")
+        # if a string is supplied, try to creat it in PMILRScheduler.
+        if isinstance(scheduler, str):
+            self.lr_sche = pmi_lr_scheduler.PMILRScheduler(scheduler, *args, **kwargs)
+        else:
+            self.lr_sche = scheduler
+        self.lr_sche.set_optimizer(self.optimizer)
 
-        # The Pytorch Vanilla lr_schedulers and the customized scheduler I wrote
-        try:
-            sche_class = eval('lr_scheduler.' + name)
-        except AttributeError:
-            sche_class = eval('pmi_lr_scheduler.' + name)
-        #TODO: If scheduler is OneCycleLR, need to recalculate the total_steps
-        if name == 'OneCycleLR':
-            if 'total_steps' in kwargs:
-                kwargs.pop('total_steps')
-            kwargs['epochs'] = self.solverparams_num_of_epochs
-            kwargs['steps_per_epoch'] = len(self._data_loader)
-        self.lr_scheduler = sche_class(self.optimizer, *args, **kwargs)
-        self._logger.debug(f"Optimizer args: {args}")
-        self._logger.debug(f"Optimizer kwargs: {kwargs}")
+    def set_plotter(self, plotter: TB_plotter) -> None:
+        r"""Externally set :attr:`tb_plotter` manually.
 
-    def set_plotter(self, plotter):
+        Returns:
+            TB_plotter
+        """
+        if not self.tb_plotter is None:
+            self._logger.warning(f"Overriding CFG ``tb_plotter``.")
         self._tb_plotter = plotter
 
-    def net_to_parallel(self):
+    def net_to_parallel(self) -> None:
+        r"""Call to move :attr:`net` to :class:`torch.nn.DataParallel`.
+        """
         if (torch.cuda.device_count()  > 1) & self.iscuda:
             self._logger.info("Multi-GPU detected, using nn.DataParallel for distributing workload.")
             self.net = nn.DataParallel(self.net)
 
-    def set_loss_function(self, func: torch.nn.Module):
+    def set_loss_function(self, func: torch.nn.Module) -> None:
+        r"""Externally set :attr:`loss_function` manually. This will also move the loss function to GPU if
+        :attr:`is_cuda` is ``True``.
+
+        Args:
+            func (torch.nn.Module):
+                The loss function.
+
+        """
         self._logger.debug("loss functioning override.")
         if self.iscuda:
             try:
@@ -204,7 +293,15 @@ class SolverBase(object):
         del self.lossfunction
         self.lossfunction = func
 
-    def load_checkpoint(self, checkpoint_dir: str):
+    def load_checkpoint(self, checkpoint_dir: str) -> None:
+        r"""Load the stored parameters for :attr:`net`.
+
+        Args:
+            checkpoint_dir (str):
+                Directory to the stored parameters file. This file should be created using the default pytorch method
+                :func:`torch.save`.
+
+        """
         if os.path.isfile(checkpoint_dir):
             # assert os.path.isfile(checkpoint_load)
             try:
@@ -223,7 +320,11 @@ class SolverBase(object):
     def create_lossfunction(self, *args, **kwargs):
         r"""
         Try to create loss function from parameters specified by the config file.
+
+        .. warning::
+            Deprecated.
         """
+        raise DeprecationWarning("Loss function is no longer created by the solvers.")
         self._logger.info("Creating loss function from config specification.")
 
         # Follows the specification in config
@@ -255,29 +356,62 @@ class SolverBase(object):
             return None
 
     def step(self, *args):
+        r"""This function executes one step in a training loop, which includes:
+
+        1. forward run
+        2. loss computation
+        3. backwards propagation and updating the network
+
+        Customized solver can inherit this to alter the behavior of each training step with ease.
+
+        Args:
+            *args:
+                Argument passed to :func:`_feed_forward`.
+
+        .. note::
+            If the learning rate scheduler (:attr:`lr_sche`) is :class:`lr_scheduler.OneCycleLR`, this method will also
+            invoke steping the learning rate scheduler. Otherwise, the learning rate scheduler is only stepped after
+            each epoch.
+
+        .. hint::
+            Override this function in the child class to customize the training behavior.
+
+        """
         out = self._feed_forward(*args)
         loss = self._loss_eval(out, *args)
 
         self._update_network(loss)
 
         # if schedular is OneCycleLR
-        if isinstance(self.lr_scheduler, lr_scheduler.OneCycleLR):
-            self.lr_scheduler.step()
-        self._called_time += 1
+        if isinstance(self.lr_sche, lr_scheduler.OneCycleLR):
+            self.lr_sche.step()
+        self._step_called_time += 1
         return out, loss.cpu().data
 
-    def _update_network(self, loss):
+    def _update_network(self, loss: torch.Tensor):
+        r"""Perform back propagation and then updates the network parameters.
+
+        Args:
+            loss (torch.Tensor):
+                This should be a single-valued :class:`torch.Tensor` computed by the loss function. This should have
+                gradient computation hooks.
+
+        .. note::
+            If :attr:`accumulate_grad` > 1, gradient accumulation will be used, i.e., the network will be upgraded based
+            on the averaged loss over :attr:`accumulated_grad` run of :func:`step`.
+
+        """
         # Gradient accumulation
-        if self.solverparams_accumulate_grad > 0:
-            self._accumulated_steps += 1
-            _loss = loss / float(self.solverparams_accumulate_grad)
+        if self.accumulate_grad > 1:
+            self.accumulated_steps += 1
+            _loss = loss / float(self.accumulate_grad)
             _loss.backward()
             loss.detach_()
-            if self._accumulated_steps >= self.solverparams_accumulate_grad:
+            if self.accumulated_steps >= self.accumulate_grad:
                 self._logger.debug("Updating network params from accumulated loss")
                 self.optimizer.step()
                 self.optimizer.zero_grad()
-                self._accumulated_steps = 0
+                self.accumulated_steps = 0
         else:
             self.optimizer.zero_grad()
             loss.backward()
@@ -287,14 +421,11 @@ class SolverBase(object):
                          net_params
                          ) -> torch.optim:
         r"""
-        Create optimizer based on provided specifications
-        Args:
-            net_params:
-            param_optim:
-
-        Returns:
+        .. warning::
+            Deprecated
 
         """
+        raise DeprecationWarning
         if self.solverparams_optimizer_type == 'Adam':
             self.optimizer = torch.optim.Adam(net_params, lr=self.solverparams_learning_rate)
         elif self.solverparams_optimizer_type == 'AdamW':
@@ -307,23 +438,40 @@ class SolverBase(object):
         return self.optimizer
 
     def decay_optimizer(self, *args):
-        if not self.lr_scheduler is None:
-            if isinstance(self.lr_scheduler, (lr_scheduler.ReduceLROnPlateau)):
-                self.lr_scheduler.step(*args)
-            elif isinstance(self.lr_scheduler, lr_scheduler.OneCycleLR):
+        r"""Step learning rate after the optimizer has been stepped.
+
+        Args:
+            *args:
+                All arguments are passed to :func:`lr_scheduler.step`
+
+        .. note::
+            Some of the learning rate schedulers require different ``step()`` inputs. It is currently hard-coded in this
+            function which might cause some trouble. Only :class:`lr_scheduler.ReduceLROnPlateau` and
+            :class:`lr_scheduler.OneCycleLR` is implemented.
+        """
+        if not self.lr_sche is None:
+            if isinstance(self.lr_sche, (lr_scheduler.ReduceLROnPlateau)):
+                self.lr_sche.step(*args)
+            elif isinstance(self.lr_sche, lr_scheduler.OneCycleLR):
                 # Do nothing because it's supposed to be done in `step()`
                 pass
             else:
-                self.lr_scheduler.step()
+                self.lr_sche.step()
         self._decayed_time += 1
 
-        # ReduceLROnPlateau has no get_last_lr attribute
+        # ReduceLROnPlateau has no get_last_lr attribute, thus some exceptions was written in get_last_lr() to work
+        # arround this problem.
         lass_lr = self.get_last_lr()
         self._logger.debug(f"Decayed optimizer, new LR: {lass_lr}")
 
-    def get_last_lr(self):
+    def get_last_lr(self) -> float:
+        r"""Return the last training loss/validation loss processed by the optimizer.
+
+        Returns:
+            float
+        """
         try:
-            lass_lr = self.lr_scheduler.get_last_lr()[0]
+            lass_lr = self.lr_sche.get_last_lr()[0]
         except AttributeError:
             if isinstance(self.get_optimizer().param_groups, (tuple, list)):
                 lass_lr = self.get_optimizer().param_groups[0]['lr']
@@ -334,13 +482,23 @@ class SolverBase(object):
             lass_lr = "Error"
         return lass_lr
 
-    def get_last_epoch_loss(self):
+    def get_last_epoch_loss(self) -> Union[float, None]:
+        r"""Return the loss from last epoch. If it hasn't been computed, return ``None`` instead.
+
+        Returns:
+            float
+        """
         try:
             return self._last_epoch_loss
         except AttributeError:
             return None
 
-    def get_last_val_loss(self):
+    def get_last_val_loss(self) -> Union[float, None]:
+        r"""Return the loss from last validation loop. If it hasn't been computed, return ``None`` instead.
+
+        Returns:
+            float
+        """
         try:
             return self._last_val_loss
         except AttributeError:
@@ -348,21 +506,29 @@ class SolverBase(object):
 
     def test_inference(self, *args):
         r"""This function is for testing only. """
-        self._logger.warning("You should not use this method unless you know what you are doing.")
         with torch.no_grad():
             out = self.net.forward(*list(args))
         return out
 
     def solve_epoch(self, epoch_number):
-        """
-        Run this per epoch.
+        r""" Run one epoch, i.e., perform training iterating the ``data_loader`` for whole set of data.
+
+        Args:
+            epoch_number (int):
+                The number of the current epoch for calculation of various training policies e.g., LR decay.
+
+        .. hint::
+            :func:`_epoch_callback` will be executed after the epoch iteration ends, right before running
+            :func:`decay_optimizer`. In this base class, the callback only plots the results of the epoch to
+            tensorboard, but it has other potentials that can be exploited when implementing the child classes.
+
         """
         self._epoch_prehook()
         E = []
         # Reset dict each epoch
         self.net.train()
         self.plotter_dict = {'scalars': {}, 'epoch_num': epoch_number}
-        for step_idx, mb in enumerate(self._data_loader):
+        for step_idx, mb in enumerate(self.data_loader):
             s, g = self._unpack_minibatch(mb, self.solverparams_unpack_keys_forward)
 
             # initiate one train step. Things should be plotted in decorator of step if needed.
@@ -372,7 +538,7 @@ class SolverBase(object):
             self._logger.info("\t[Step %04d] loss: %.010f"%(step_idx, loss.data))
 
             self._step_callback(s, g, out.cpu().float(), loss.data.cpu(),
-                                step_idx=epoch_number * len(self._data_loader) + step_idx)
+                                step_idx=epoch_number * len(self.data_loader) + step_idx)
             del s, g, out, loss, mb
             gc.collect()
 
@@ -386,14 +552,38 @@ class SolverBase(object):
         self.decay_optimizer(epoch_loss)
 
     def fit(self, checkpoint_path, debug_validation = False):
-        # Error check
+        r"""Fit the :attr:`net` based on the parameters provided in :class:`SolverBaseCFG`.
 
+        Args:
+            checkpoint_path (str):
+                Path to the directory where checkpoint states are to be saved.
+            debug_validation (bool, Optional):
+                Convenient override to directly invoke validation without having to wait until the epoch is finished.
+                Default to ``False``.
+
+        .. hint::
+            This will be the main function you use in this API to fit various network. Ideally, you don't need to
+            look at both :func:`solve_epoch` and :func:`step`, and just invoke this function to fit the network.
+            If you are implementing your own customized solvers, chances are you only need to work with the two said
+            functions :func:`solve_epoch` and :func:`step` without having to touch this function.
+
+        See Also:
+            * :func:`solve_epoch`
+            * :func:`step`
+            * :func:`_epoch_prehook`
+            * :func:`_epoch_callback`
+            * :func:`_step_callback
+
+        """
+        # Error check
+        self._check_fit_ready()
 
         # configure checkpoints
         self.net_to_parallel()
         lastloss = 1e32
         self._logger.info("Start training...")
-        for i in range(self.solverparams_num_of_epochs):
+        self.num_of_epochs = 1
+        for i in range(self.num_of_epochs):
             # Skip if --debug-validation flag is true
             if not debug_validation:
                 self.solve_epoch(i)
@@ -403,7 +593,7 @@ class SolverBase(object):
                     'Loss/Loss'           : None,
                     'Loss/Validation Loss': None
                 }
-                self._epoch_prehook()
+                self._epoch_prehook() # carry out pre-hook since it's originally called in _solve_epoch()
                 self._last_val_loss = self.validation()
 
             # Prepare values for epoch callback plots
@@ -442,16 +632,14 @@ class SolverBase(object):
 
 
     @abstractmethod
-    def validation(self, *args, **kwargs):
-        """
-        This is called after each epoch.
+    def validation(self, *args, **kwargs) -> float:
+        r"""This is called after each epoch. This should return the validation loss as a float number.
         """
         raise NotImplementedError("Validation is not implemented in this solver.")
 
-    def _match_type_with_network(self, tensor):
-        """
-        Return a tensor with the same type as the first weight of `self._net`. This function seems to cause CUDA
-        error in pytorch 1.3.0
+    def _match_type_with_network(self, tensor: torch.Tensor) -> torch.Tensor:
+        """Return a tensor with the same type as the first weight of `self._net`. This function seems to cause CUDA
+        error in pytorch 1.3.0, so be sure to use higher version.
 
         Args:
             tensor (torch.Tensor or list): Input `torch.Tensor` or list of `torch.Tensor`
@@ -504,7 +692,13 @@ class SolverBase(object):
 
     @staticmethod
     def _force_cuda(arg):
-        r"""Deprecated"""
+        r"""
+
+        .. warning::
+            Deprecated!
+
+        """
+        raise DeprecationWarning
         return [a.float().cuda() for a in arg] if isinstance(arg, list) else arg.cuda()
 
     @abstractmethod
@@ -525,20 +719,44 @@ class SolverBase(object):
         return out
 
     @abstractmethod
-    def _loss_eval(self, *args):
+    def _loss_eval(self, *args) -> None:
+        r"""This function determines how the loss is calculated. This must be inherited.
+
+        See Also:
+            * :func:`step`
+        """
         raise NotImplementedError
 
     @abstractmethod
-    def _step_callback(self, s, g, out, loss, step_idx=None):
+    def _step_callback(self, s, g, out, loss, step_idx=None) -> None:
+        r"""This is a method called after a step is finished, when overriding this function, be sure to use the
+        standardized signature
+
+        Args:
+            s (torch.Tensor)            : The network input of the step.
+            g (torch.Tensor)            : The target label of the step.
+            out (torch.Tensor)          : The network output.
+            loss (float or torch.Tensor): The loss.
+            step_idx (int, Optional)    : The number of steps.
+
+        """
         return
 
     @abstractmethod
-    def _epoch_prehook(self, *args, **kwargs):
+    def _epoch_prehook(self, *args, **kwargs) -> None:
+        r"""This is run at the beginning of :func:`solve_epoch`. This is optional to inherit.
+
+        See Also:
+            * :func:`solve_epoch`
+        """
         pass
 
-    def _epoch_callback(self, *args, **kwargs):
-        """
-        Default callback after `solver_epoch` is done.
+    def _epoch_callback(self, *args, **kwargs) -> None:
+        """Default callback after `solver_epoch` is done. This is optional to inherit
+
+        See Also:
+            * :func:`solve_epoch`
+
         """
         scalars = self.plotter_dict.get('scalars', None)
         writer_index = self.plotter_dict.get('epoch_num', None)
@@ -555,6 +773,11 @@ class SolverBase(object):
                 self._logger.exception("Error occured in default epoch callback.")
 
     def _get_params_from_config(self, section, key, default=None, with_eval=False, with_boolean=False):
+        r"""
+        .. warning::
+            Deprecated!
+        """
+        raise DeprecationWarning
         try:
             if with_eval:
                 if with_boolean:
@@ -580,13 +803,17 @@ class SolverBase(object):
     def _get_params_from_solver_config_with_boolean(self, key, default=None):
         return self._get_params_from_config('SolverParams', key, default, True, True)
 
-    def _unpack_minibatch(self, minibatch, unpacking_keys):
-        r"""Unpack mini-batch drawn by torchio.Queue or torchio.SubjectsDataset.
+    def _unpack_minibatch(self, minibatch, unpacking_keys = None):
+        r"""Unpack mini-batch drawn by ``torchio.Queue`` or ``torchio.SubjectsDataset``.
+
         TODO: allow custom modification after unpacking, e.g. concatentation
         !!! If you chnage this you need to also change InferenceBase._unpacking_keys, I know its not ideal but I dont
         plan to open aonther class for just this function
         """
         out = []
+        if unpacking_keys is None:
+            unpacking_keys = self.unpack_key_forward
+
         for key in unpacking_keys:
             if isinstance(key, (tuple, list)):
                 _out = []
@@ -608,107 +835,3 @@ class SolverBase(object):
         return out
 
 
-class SolverEarlyStopScheduler(object):
-    def __init__(self, configs: Union[str, dict]):
-        super(SolverEarlyStopScheduler, self).__init__()
-        self._configs = configs
-        self._logger = MNTSLogger[__class__.__name__]
-        self._last_loss = 1E32
-        self._last_epoch = 0
-        self._watch = 0
-        self._func = None
-
-        if configs is None:
-            self._logger.debug("Config is None.")
-            self._func = None
-            return
-
-        if self._configs is not None:
-            self._logger.debug(f"Creating early stop scheduler with config: {configs}")
-            if isinstance(configs, str):
-                _c = configs
-                if re.search("[\W]+", _c.translate(str.maketrans('', '', ". "))) is not None:
-                    raise AttributeError(f"You requested_datatype specified ({requested_datatype}) "
-                                         f"contains illegal characters!")
-                _c = eval(_c)
-            else:
-                _c = configs
-
-            if not isinstance(_c, dict):
-                self._logger.error(f"Wrong early stopping settings, cannot eval into dict. Receive arguments: {_c}")
-                self._logger.warning("Ignoring early stopping options")
-                self._configs = None
-            else:
-                self._configs = _c
-
-        policies = {
-            '(?i)loss.?reference': ('Loss Reference', self._loss_reference),
-        }
-        for keyregex in policies:
-            if self._configs.get('method', None) is None:
-                self._logger.info(f"No stopping policy specified")
-                return
-            if re.findall(keyregex, self._configs['method']):
-                name, func = policies[keyregex]
-                self._logger.info(f"Specified early stop policy: {name}")
-                self._func = func
-                break
-
-        # if self._func is not specified at this point, configuration is incorrect, raise error
-        if self._func == None:
-            msg = f"Available methods were: [{'|'.join([i for (k, i) in policies.values()])}], " \
-                  f"but got {self._configs['method']}."
-            raise AttributeError(msg)
-
-    def step(self,
-             loss: float,
-             epoch: int):
-        r"""
-        Returns 1 if reaching stopping criteria, else 0.
-        """
-        # ignore if there are no configs
-        self._last_epoch = epoch
-        if self._func is None:
-            return 0
-        else:
-            self._logger.debug(f"Epoch {epoch:03d} Loss: {loss}")
-            return self._func(loss, epoch)
-
-
-    def _loss_reference(self, loss, epoch) -> int:
-        r"""
-        Attributes:
-
-        """
-        warmup   = self._configs.get('warmup'  , None)
-        patience = self._configs.get('patience', None)
-
-        if warmup is None:
-            raise AttributeError("Missing early stopping criteria: 'warmup'")
-        if patience is None:
-            raise AttributeError("Missing early stopping criteria: 'patience'")
-        if warmup < 0 or patience <= 0:
-            msg = f"Expect warmup < 0 or patience <= 0, but got 'warmup'={warmup} and 'patience'" \
-                  f"={patience}."
-            raise ArithmeticError(msg)
-
-        if epoch < warmup:
-                return 0
-        else:
-            self._logger.debug(f"{loss}, {self._last_loss}")
-            if loss < self._last_loss:
-                # reset if new loss is smaller than last loss
-                self._logger.debug(f"Counter reset because loss {loss:.05f} is smaller than "
-                                   f"last_loss {self._last_loss:.05f}.")
-                self._watch = 0
-                self._last_loss = loss
-            else:
-                # otherwise, add 1 to counter
-                self._watch += 1
-
-        # Stop if enough iterations show no decrease
-        if self._watch > patience:
-            self._logger.info(f"Stopping criteria reached at epoch: {epoch}")
-            return 1
-        else:
-            return 0

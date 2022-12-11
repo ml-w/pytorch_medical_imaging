@@ -77,15 +77,15 @@ class PMILRScheduler(object):
     def get_scheduler(cls):
         if not hasattr(cls.get_instance(), 'lr_scheduler'):
             raise ArithmeticError("Scheduler instance has not been created with optimizer. Run set_optimizer() first!")
-        return cls.get_instance().lr_scheduler
+        return cls.get_instance().lr_sche
 
     @classmethod
     def set_optimizer(cls, optimizer):
         args = cls.get_instance().scheduler_args
         kwargs = cls.get_instance().scheduler_kwargs
-        cls.instance.lr_scheduler =  cls.get_instance()._sche_class(optimizer, *args, **kwargs)
+        cls.instance.lr_sche =  cls.get_instance()._sche_class(optimizer, *args, **kwargs)
         cls.instance.optimizer = optimizer
-        cls.lr_scheduler = cls.instance.lr_scheduler
+        cls.lr_scheduler = cls.instance.lr_sche
         cls.optimizer = cls.instance.optimizer
 
     @classmethod

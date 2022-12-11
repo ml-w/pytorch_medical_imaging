@@ -12,7 +12,7 @@ class Img2SeqSolver(SolverBase):
         self.tokenizer = AutoTokenizer.from_pretrained("teracamo/NPC-Bert")
         self.embedder = BertModel.from_pretrained.from_pretrained("teracamo/NPC-Bert")
 
-    def _load_default_attr(self, default_dict = None):
+    def _load_config(self, default_dict = None):
         _default_attr = {
             'solverparams_blank_character': 0,
             'solverparams_': 1,
@@ -31,7 +31,7 @@ class Img2SeqSolver(SolverBase):
         # Tokenizer to convert gt to tokens/embeded vector
 
     def validation(self):
-        if self._data_loader_val is None:
+        if self.data_loader_val is None:
             self._logger.warning("Validation skipped because no loader is available.")
             return None
         # Genera

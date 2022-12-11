@@ -21,12 +21,12 @@ PMIDataLoader
 
    PMIDataLoader/PMIDataLoader.rst
 
-Utilities
+Solvers
 ---------
 .. toctree::
    :maxdepth: 2
 
-   Algorithms/Analysis.rst
+   Solvers/Solvers.rst
 
 Networks
 --------

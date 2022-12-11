@@ -60,8 +60,6 @@ class BinaryClassificationRNNSolver(BinaryClassificationSolver):
         lossfunction = lossfunction_a
         self.set_loss_function(lossfunction)
 
-
-
     def _feed_forward(self, *args):
         (s, ori_len), g = args
         try:
@@ -86,9 +84,8 @@ class BinaryClassificationRNNSolver(BinaryClassificationSolver):
         return out
 
 
-
     def validation(self):
-        if self._data_loader_val is None:
+        if self.data_loader_val is None:
             self._logger.warning("Validation skipped because no loader is available.")
             return []
 
@@ -105,7 +102,7 @@ class BinaryClassificationRNNSolver(BinaryClassificationSolver):
             decisions = None # (B x N)
             validation_loss = []
 
-            for s, g in tqdm(self._data_loader_val, desc="Validation", position=2):
+            for s, g in tqdm(self.data_loader_val, desc="Validation", position=2):
                 s, ori_len = s
 
                 #TODO: Expected 3D here, should be more general.

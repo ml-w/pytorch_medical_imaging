@@ -35,14 +35,14 @@ class SegmentationSolver(SolverBase):
         """
         super(SegmentationSolver, self).__init__(net, hyperparameters, use_cuda)
 
-    def _load_default_attr(self, _):
+    def _load_config(self, _):
         r"""Inherit this to get more default hyperparameters"""
         default_attr = {
             'solverparams_sigmoid_params'   : {'delay': 15, 'stretch': 2, 'cap': 0.3},
             'solverparams_class_weights'    : None,
             'solverparams_decay_init_weight': 0
         }
-        super(SegmentationSolver, self)._load_default_attr(default_attr)
+        super(SegmentationSolver, self)._load_config(default_attr)
 
     def create_lossfunction(self):
         if self.solverparams_class_weights is None:
@@ -89,7 +89,7 @@ class SegmentationSolver(SolverBase):
         return
 
     def validation(self) -> list:
-        if self._data_loader_val is None:
+        if self.data_loader_val is None:
             self._logger.warning("Validation skipped because no loader is available.")
             return None
 
@@ -97,7 +97,7 @@ class SegmentationSolver(SolverBase):
             validation_loss = []
             perfs = []
             self.net.eval()
-            for mb in tqdm(self._data_loader_val, desc="Validation", position=2):
+            for mb in tqdm(self.data_loader_val, desc="Validation", position=2):
                 s, g = self._unpack_minibatch(mb, self.solverparams_unpack_keys_forward)
                 s = self._match_type_with_network(s)
                 g = self._match_type_with_network(g) # no assumption but should be long in segmentation only.

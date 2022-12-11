@@ -88,7 +88,7 @@ class SegmentationInferencer(InferencerBase):
         raise DeprecationWarning("This function is deprecated")
         return
         with torch.no_grad():
-            test_in = next(iter(self._data_loader))
+            test_in = next(iter(self.data_loader))
             if self.iscuda:
                test_in = self._match_type_with_network(test_in)
 
