@@ -806,9 +806,14 @@ class SolverBase(object):
     def _unpack_minibatch(self, minibatch, unpacking_keys = None):
         r"""Unpack mini-batch drawn by ``torchio.Queue`` or ``torchio.SubjectsDataset``.
 
-        TODO: allow custom modification after unpacking, e.g. concatentation
-        !!! If you chnage this you need to also change InferenceBase._unpacking_keys, I know its not ideal but I dont
-        plan to open aonther class for just this function
+        .. note::
+            TODO:
+                * allow custom modification after unpacking, e.g. concatentation
+                * Make :class:`InferencerBase` base a child class of solver.
+
+        .. warning::
+            If you change this you need to also need to change the implementation for your :class:`InferencerBase`
+            because they uses the same tag
         """
         out = []
         if unpacking_keys is None:
