@@ -15,43 +15,57 @@ class PMIImageDataLoaderCFG(PMIDataLoaderBaseCFG):
     r"""Configuration for :class:`PMIImageDataLoader`.
 
     Class Attributes:
-        data_types (iterable):
-            Data type of input and ground-truth
-        sampler (str):
+        data_types (iterable, Optional):
+            Data type of input and ground-truth. Depending on how you use the dataloader, but generally speaking, its
+            the desired data type for input data and target data. Default to ``[float, float]``.
+        sampler (str, Optional):
             Determine the ``tio.Sampler`` used to sample the images. Support ['weighted'|'uniform'|'grid'] currently.
-        sampler_kwargs (dict):
+            Default to ``'weighted'``.
+        sampler_kwargs (dict, Optional):
             The kwargs passed to ``tio.Sampler``. For 'weighted', key ``patch_size`` and ``prob_map`` is required. For
-            'uniform', only ``patch_size`` is required.
-        augmentation (str):
-            Path to yaml file to create the ``tio.Compose`` transform.
-        patch_sampling_callback (Callable, str):
+            'uniform', only ``patch_size`` is required. Unless sampler is ``None``, this needs to be specified. Default
+            value is only a place holder.
+        augmentation (str, Optional):
+            Path to yaml file to create the ``tio.Compose`` transform. Default to ``None``.
+        patch_sampling_callback (Callable or str, Optional):
             A function that is called after patch sampling to generate new data from sampled patches. For example, if
             texture features is required after the patches are sampled, you can assign the function to compute the
             texture features using this setting. This should be used with ``patch_sampling_callback_kwargs`` and also
             ``create_new_attribute``. Default to ``None``.
-        patch_sampling_callback_kwargs (dict):
+        patch_sampling_callback_kwargs (dict, Optional):
             The kwargs that will be supplied to the lambda function specified by ``patch_sampling_callback``.
             Default to empty dict.
-        create_new_attribute (str):
+        create_new_attribute (str, Optional):
             The new data created by `patch_sampling_callback` will be attached to the subject using this argument
             as the attribute name. The new data can then be accessed by ``tio.Subject()[create_new_attribute]``.
             Default to ``None``.
-        inf_samples_per_vol (int):
+        inf_samples_per_vol (int, Optional):
             Sometimes inference will require more sampled patches to generate appealing results (e.g, segmentation),
             this argument,
 
+    .. hint::
+        Required attributes:
+        --------------------
+        * input_dir
+        * target_dir
+        * output_dir
+
+
+    See Also:
+        * :class:`PMIDataLoaderBaseCFG`
+
     """
-    data_types                    : Iterable = [float, float]
-    sampler                       : str      = 'weighted'           # 'weighted' or 'uniform'
-    sampler_kwargs                : dict     = dict()               # pass to ``tio.Sampler``
-    augmentation                  : str      = None                 # yaml file to create tio transform
-    create_new_attribute          : str      = None                 # create a new attribute in subjects for callback
-    patch_sampling_callback       : Callable = None                 # callback to generate new data
-    patch_sampling_callback_kwargs: dict     = dict()               # kwargs pass to the callback
-    inf_samples_per_vol           : int      = None                 # number of samples per volume during inference
-    mask_dir                      : str      = None                 # Image dir used by ``tio.Sampler``
-    probmap_dir                   : str      = None                 # Image dir used by ``tio.WeightedSampler``
-    tio_queue_kwargs = dict(            # dict passed to ``tio.Queue``
+    data_types                    : Optional[Iterable] = [float, float]
+    sampler                       : Optional[str]      = 'weighted'           # 'weighted' or 'uniform'
+    sampler_kwargs                : Optional[dict]     = dict()               # pass to ``tio.Sampler``
+    augmentation                  : Optional[str]      = None                 # yaml file to create tio transform
+    create_new_attribute          : Optional[str]      = None                 # create a new attribute in subjects for callback
+    patch_sampling_callback       : Optional[Callable] = None                 # callback to generate new data
+    patch_sampling_callback_kwargs: Optional[dict]     = dict()               # kwargs pass to the callback
+    inf_samples_per_vol           : Optional[int]      = None                 # number of samples per volume during inference
+    mask_dir                      : Optional[str]      = None                 # Image dir used by ``tio.Sampler``
+    probmap_dir                   : Optional[str]      = None                 # Image dir used by ``tio.WeightedSampler``
+    tio_queue_kwargs: Optional[dict] = dict(            # dict passed to ``tio.Queue``
         max_length             = 15,
         samples_per_volume     = 1,
         num_workers            = 16,

@@ -10,6 +10,7 @@ import torchio as tio
 from .augmenter_factory import create_transform_compose
 from ..med_img_dataset.PMIDataBase import PMIDataBase
 from mnts.mnts_logger import MNTSLogger
+from typing import *
 
 __all__ = ['PMIDataLoaderBaseCFG', 'PMIDataLoaderBase']
 
@@ -46,10 +47,10 @@ class PMIDataLoaderBaseCFG:
     target_dir   : str = ""
     output_dir   : str = ""
     id_list      : str = ""
-    id_exclude   : str = ""
-    id_globber   : str = "(^[a-zA-Z0-9]+)"
-    run_mode     : str = 'train'
-    debug_mode   : bool = False
+    id_exclude   : Optional[str] = ""
+    id_globber   : Optional[str] = "(^[a-zA-Z0-9]+)"
+    run_mode     : Optional[str] = 'train'
+    debug_mode   : Optional[bool] = False
 
 
 class PMIDataLoaderBase(object):
