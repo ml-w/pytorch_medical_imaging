@@ -1,7 +1,7 @@
-PMI_data_loader
+pmi_data_loader
 ===============
 
-.. currentmodule:: pytorch_med_imaging.PMI_data_loader
+.. currentmodule:: pytorch_med_imaging.pmi_data_loader
 
 All Configurations
 ------------------
@@ -19,8 +19,8 @@ PMIDataLoaderBase
 
 Configurations
 ^^^^^^^^^^^^^^
-.. autoclass:: PMIDataLoaderBaseCFG
-    :members:
+.. autodata:: PMIDataLoaderBaseCFG
+    :annotation:
 
 Class definition
 ^^^^^^^^^^^^^^^^
@@ -39,6 +39,8 @@ Class definition
 ^^^^^^^^^^^^^^^^
 .. autoclass:: PMIImageDataLoader
     :members:
+    :show-inheritance:
+    :private-members: _prepare_data, _create_queue, _read_image
 
 PMIImageFeaturePairLoader
 -------------------------
@@ -52,7 +54,7 @@ Class definition
 ^^^^^^^^^^^^^^^^
 .. autoclass:: PMIImageFeaturePairLoader
     :members:
-
+    :private-members:
 
 PMIImageFeaturePairLoaderConcat
 -------------------------------
@@ -65,7 +67,7 @@ Class definition
 ^^^^^^^^^^^^^^^^
 .. autoclass:: PMIImageFeaturePairLoaderConcat
     :members:
-
+    :private-members:
 
 PMIImageMCDataLoader
 -------------------------------
@@ -79,3 +81,4 @@ Class definition
 ^^^^^^^^^^^^^^^^
 .. autoclass:: PMIImageMCDataLoader
     :members:
+    :private-members:

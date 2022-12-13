@@ -46,9 +46,12 @@ class PMIImageDataLoaderCFG(PMIDataLoaderBaseCFG):
     .. hint::
         **Minimal required attributes:**
 
-        * :attr:`input_dir`
-        * :attr:`target_dir`
-        * :attr:`output_dir`
+        * :attr:`input_dir` - Load image to subject key `'input'`.
+        * :attr:`target_dir` - Load target to subject key `'gt'`
+
+        **Default subject packaging keys:**
+
+        * ``['input', 'gt', 'mask', 'prob_map', 'uid']``. See :func:`PMIImageDataLoader._prepare_data` for the details.
 
 
     See Also:
@@ -285,19 +288,6 @@ class PMIImageDataLoader(PMIDataLoaderBase):
         else:
             prob_out = None
         return prob_out
-
-    def _determine_patch_size(self, im_ref):
-        r"""If `load_by_slice` of :class:`ImageDataSet` is setted, this method will calculate the patch-size
-        automatically for the queue sampler."""
-        if self.patch_size is not None:
-            return
-        else:
-            ref_im_shape = list(im_ref.shape)
-            if self.load_by_slice >= 0:
-                ref_im_shape[self.load_by_slice] = 1
-                self.patch_size = ref_im_shape
-            else:
-                self.patch_size = ref_im_shape
 
     def _create_queue(self,
                       exclude_augment: bool,

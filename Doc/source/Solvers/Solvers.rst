@@ -13,3 +13,11 @@ Base
     :members:
     :private-members:
 
+Segmentation
+------------
+.. autodata:: SegmentationSolverCFG
+    :annotation:
+
+.. autoclass:: SegmentationSolver
+    :members:
+    :private-members:
