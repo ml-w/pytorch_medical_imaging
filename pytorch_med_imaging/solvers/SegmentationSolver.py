@@ -20,7 +20,13 @@ class SegmentationSolverCFG(SolverBaseCFG):
     r"""Configuration for :class:`SegmentationSolver`
 
     Class Attributes:
-        class_weights (torch.Tensor)
+        [Required] class_weights (torch.Tensor):
+            Define the class weights passed to the loss function.
+        sigmoid_params (dict, Optional):
+            By default the class weights are adjusted using a sigmoid function during training to improve the training
+            efficiency and also the segmentation performance. See :func:`decay_optimizer` for more details.
+        decay_init_epoch (int, Optional):
+            Used by the :func:`decay_optimizer` in case the solver is not starting from epoch 0. Default to 0.
 
     """
     sigmoid_params: dict = dict(
@@ -48,7 +54,7 @@ class SegmentationSolver(SolverBase):
                 If the training is not started at epoch 0, set this to continue the curve designed using
                 the :func:`sigmoid_plus`.
         """
-        super(SegmentationSolver, self).__init__(SegmentationSolverCFG, *args, **kwargs)
+        super(SegmentationSolver, self).__init__(cfg, *args, **kwargs)
 
 
     def create_lossfunction(self):
@@ -64,36 +70,62 @@ class SegmentationSolver(SolverBase):
         else:
             self._logger.info("Skipping class weights.")
             loss_init_weights = None
-        self.lossfunction = nn.CrossEntropyLoss(weight=loss_init_weights) #TODO: Allow custom loss function
 
-    def auto_compute_class_weights(self, gt_data, param_initWeight):
-        r"""Compute the counts of each class in the ground-truth data. Use for class weights in optimizer."""
+        if self.loss_function is None:
+            self.loss_function = nn.CrossEntropyLoss(weight=loss_init_weights) #TODO: Allow custom loss function
+        else:
+            # make sure the weight tensor is float
+            if not self.loss_function.weight.dtype.is_floating_point:
+                self._logger.warning(f"Loss function weight is not of type `float`, trying to re-cast it.")
+                self.loss_function.weight = self.loss_function.weight.float()
+
+    def auto_compute_class_weights(self,
+                                   gt_data: torch.Tensor,
+                                   ) -> torch.Tensor:
+        r"""Compute the counts of each class in the ground-truth data. Use for class weights in optimizer.
+
+        Class weight is computed based on the reciprocal of its counts, normalized linearly such that the class with
+        the fewest counts has a weight of 1. Note that the null class is ramped up by a fixed factor to ensure its
+        weight is not too low for training.
+
+        .. math::
+
+            \text{weight}(c) = \frac{N_{cmin}}{N_c}
+
+        Returns:
+            torch.Tensor: A tensor with the same number of element as the total number of unique class in ``gt_data``.
+
+        """
         raise DeprecationWarning
 
         self._logger.info("Detecting number of classes...")
-        valcountpair = gt_data.get_unique_values_n_counts()
-        classes = list(valcountpair.keys())
-        numOfClasses = len(classes)
+        values, counts = gt_data.unique(return_counts=True)
+        valcountpair = {k.item(): v.item() for k, v in zip(values, counts)}
+        classes = list(values())
+        classes.sort()
+        numOfClasses = len(values)
         self._logger.info("Find %i classes: %s" % (numOfClasses, classes))
 
+        if numOfClasses == 1:
+            msg = "Your first target contains no labels!"
+            raise ArithmeticError(msg)
+
         # calculate empty label ratio for updating loss function weight
-        r = []
-        for c in classes:
-            factor = float(np.prod(np.array(gt_data.size()))) / float(valcountpair[c])
-            r.append(factor)
-        r = np.array(r)
-        r = r / r.max()
-        self.solverparams_initial_weight = r
+        min_count = counts.min()
+        r = float(min_count)/counts.numpy().astype('float')
         del valcountpair  # free RAM
 
         # calculate init-factor for sigmoid weight scheduling
-        if not param_initWeight is None:
-            self.solverparams_initial_weight = self.sigmoid_plus(param_initWeight + 1, self.solverparams_initial_weight, self.sigmoid_params['stretch'],
-                                                                 self.sigmoid_params['delay'], self.sigmoid_params['cap'])
+        if not self.class_weights is None:
+            weights = self.sigmoid_plus(self.decay_init_epoch + 1,
+                                        r,
+                                        self.sigmoid_params['stretch'],
+                                        self.sigmoid_params['delay'],
+                                        self.sigmoid_params['cap'])
 
         # null class can't be too low
-        self.solverparams_initial_weight[0] = self.solverparams_initial_weight[0] * 10
-        return
+        weights[0] *= 10
+        return weights
 
     def validation(self) -> list:
         if self.data_loader_val is None:
@@ -114,7 +146,7 @@ class SegmentationSolver(SolverBase):
                 else:
                     res = self.net.forward(s)
                 res = F.log_softmax(res, dim=1)
-                loss = self.lossfunction(res, g.squeeze().long())
+                loss = self.loss_function(res, g.squeeze().long())
                 validation_loss.append(loss.detach().cpu().data.item())
                 self._logger.debug("_val_step_loss: {}".format(loss.cpu().data.item()))
 
@@ -148,27 +180,65 @@ class SegmentationSolver(SolverBase):
         else:
             g = Variable(g, requires_grad=False)
 
-        if self.iscuda:
-            g = self._force_cuda(g)
+        if self.use_cuda:
+            g = self._match_type_with_network(g)
 
-        if isinstance(self.lossfunction, (nn.BCELoss, nn.BCEWithLogitsLoss)):
+        if isinstance(self.loss_function, (nn.BCELoss, nn.BCEWithLogitsLoss)):
             if not g.dim() == out.dim():
                 g = g.squeeze()
-            loss = self.lossfunction(out, g.long())
+            loss = self.loss_function(out, g.long())
         else:
             # For other loss function, deal with the dimension yourselves
             if g.dim() == 5 and g.shape[1] == 1:
                 g = g.squeeze()
-            loss = self.lossfunction(out, g.long())
+            loss = self.loss_function(out, g.long())
         return loss
 
     def decay_optimizer(self, *args):
         r"""
         Function is called every epoch, the weight of the optimizer is fine tuned such that initially the loss
         weights are balanced by the count of each class, the weight will quickly shift towards favoring empty pixel
-        for the first dozens of epoch until the all weights slowly converge to 1.
+        for the first dozens of epoch until the all weights slowly converge to 1. See the actual function in
+        :func:`sigmoid_plus`.
 
-        The weight follows the equation:
+        Args:
+            *args:
+
+        Returns:
+
+        .. note::
+            TODO:
+                * Allow loading parameters.
+
+        .. note::
+            Currently the coefficient :math:`s` and :math:`d` are set in attribute `_sigmoid_params`
+
+        See Also:
+            * :func:`sigmoid_plus`
+
+        """
+        super().decay_optimizer(*args)
+
+        # Decay the class weight using a sigmoid curve.
+        try:
+            s = self.sigmoid_params['stretch']
+            d = self.sigmoid_params['delay']
+            cap = self.sigmoid_params['cap']
+            if isinstance(self.loss_function, nn.CrossEntropyLoss):
+                self._logger.debug('Current weight: ' + str(self.loss_function.weight))
+                offset = self._decayed_time + self.decay_init_epoch # init_weight is t_0
+                new_weight = torch.as_tensor([self.sigmoid_plus(offset, self.class_weights[i], s, d, cap) for i in range(len(
+                    self.class_weights))])
+                self.loss_function.weight.copy_(new_weight)
+                self._logger.debug('New weight: ' + str(self.loss_function.weight))
+        except (AttributeError, KeyError):
+            msg = "Sigmoid param was not provided, skipping loss weight scheduling."
+            self._logger.warning(msg, no_repeat=True)
+
+
+    @staticmethod
+    def sigmoid_plus(x, init, stretch, delay, cap) -> float:
+        r"""Sigmoid function to alter class weights
 
         .. math::
 
@@ -188,40 +258,10 @@ class SegmentationSolver(SolverBase):
         | :math:`d`    | Delay, controls which epochs starts the convergence                                          |
         +--------------+----------------------------------------------------------------------------------------------+
 
-        Args:
-            *args:
-
         Returns:
-
-        Todo:
-            * Allow loading parameters.
-
-        .. note::
-            Currently the coefficient :math:`s` and :math:`d` are set in attribute `_sigmoid_params`
+            float
 
         """
-        super().decay_optimizer(*args)
-
-        # Decay the class weight using a sigmoid curve.
-        try:
-            s = self.sigmoid_params['stretch']
-            d = self.sigmoid_params['delay']
-            cap = self.sigmoid_params['cap']
-            if isinstance(self.lossfunction, nn.CrossEntropyLoss):
-                self._logger.debug('Current weight: ' + str(self.lossfunction.weight))
-                offset = self._decayed_time + self.decay_init_epoch # init_weight is t_0
-                new_weight = torch.as_tensor([self.sigmoid_plus(offset, self.class_weights[i], s, d, cap) for i in range(len(
-                    self.class_weights))])
-                self.lossfunction.weight.copy_(new_weight)
-                self._logger.debug('New weight: ' + str(self.lossfunction.weight))
-        except (AttributeError, KeyError):
-            msg = "Sigmoid param was not provided, skipping loss weight scheduling."
-            self._logger.warning(msg, no_repeat=True)
-
-
-    @staticmethod
-    def sigmoid_plus(x, init, stretch, delay, cap):
-        r"""Sigmoid function to alter class weights"""
         # sigmoid increase to cap.
         out = (init + (cap - init) * 1. / (1 + np.exp(- x / stretch + delay * 2 / stretch)))
 
@@ -257,7 +297,17 @@ class SegmentationSolver(SolverBase):
         return TP, FP, TN, FN
 
     @staticmethod
-    def _DICE(TP, FP, TN, FN):
+    def _DICE(TP, FP, TN, FN) -> None:
+        r"""Retrun the DICE score.
+
+        .. math::
+
+            \text{DICE} = \frac{2\cdot TP}{2 * TP + FP + FN}
+
+        Returns:
+            float: Dice score :math:`\in [0, 1]`
+
+        """
         if np.isclose(2*TP+FP+FN, 0):
             return 1
         else:
@@ -265,7 +315,8 @@ class SegmentationSolver(SolverBase):
 
 
     def _step_callback(self, s, g, out, loss, step_idx=None):
-        if self._tb_plotter is None:
+        r"""Plot segmentation. Requires the presence of a ``tb_plotter`` attribute."""
+        if self.tb_plotter is None:
             self._logger.warning("There are no tb_plotter.", True)
             return
 
@@ -276,7 +327,7 @@ class SegmentationSolver(SolverBase):
 
         if step_idx % 10 == 0:
             # make sure they are not remaining in the gpu.
-            self._tb_plotter.plot_segmentation(g.cpu(), out.cpu(), s.cpu().float(), step_idx)
+            self.tb_plotter.plot_segmentation(g.cpu(), out.cpu(), s.cpu().float(), step_idx)
 
         # delete references
         del s, g, out
