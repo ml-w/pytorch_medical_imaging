@@ -20,7 +20,7 @@ class PMIImageDataLoaderCFG(PMIDataLoaderBaseCFG):
             the desired data type for input data and target data. Default to ``[float, float]``.
         sampler (str, Optional):
             Determine the ``tio.Sampler`` used to sample the images. Support ['weighted'|'uniform'|'grid'] currently.
-            Default to ``'weighted'``.
+            Default to ``'weighted'``, to disable it, set this to ``None``
         sampler_kwargs (dict, Optional):
             The kwargs passed to ``tio.Sampler``. For 'weighted', key ``patch_size`` and ``prob_map`` is required. For
             'uniform', only ``patch_size`` is required. Unless sampler is ``None``, this needs to be specified. Default
@@ -44,11 +44,11 @@ class PMIImageDataLoaderCFG(PMIDataLoaderBaseCFG):
             this argument,
 
     .. hint::
-        Required attributes:
-        --------------------
-        * input_dir
-        * target_dir
-        * output_dir
+        **Minimal required attributes:**
+
+        * :attr:`input_dir`
+        * :attr:`target_dir`
+        * :attr:`output_dir`
 
 
     See Also:
@@ -307,7 +307,8 @@ class PMIImageDataLoader(PMIDataLoaderBase):
                                                                 [tio.SubjectsDataset, None]:
         r"""This method build the queue from the input subjects. If the queue involves a :class:`tio.GridSampler`,
         it is generally needed by the inferencer to reconstruct it back into its original dimension. Thus, an
-        optional to also return the sampler is given.
+        optional to also return the sampler is given. If :attr:`sampler_instance` is ``None``, ``tio.UniformSampler``
+        will be used to sample 1 patch with the size defined by the image shape of the first subject in ``subjects``.
 
         Args:
             exclude_augment (bool):
@@ -352,7 +353,9 @@ class PMIImageDataLoader(PMIDataLoaderBase):
             return queue
 
     def _prepare_queue_dict(self, exclude_augment, subjects, training) -> [dict, bool]:
-        r"""Rearrange some of the tags to cater for differences in the need to shuffle subjects and patches.
+        r"""Rearrange some of the tags to cater for differences in the need to shuffle subjects and patches. If
+        :attr:`sampler_instance` is ``None``, ``tio.UniformSampler`` will be used to sample 1 patch with the size
+        defined by the image shape of the first subject in ``subjects``.
 
         See Also:
             * :func:`_create_queue`
@@ -363,8 +366,11 @@ class PMIImageDataLoader(PMIDataLoaderBase):
         if training is None:
             training = self.run_mode
         if self.sampler_instance is None:
+            self._logger.info("No sampler is specified, setting the sampler to uniform and patchsize to shape of "
+                              "first image.")
             # Set queue_args and queue_kwargs to load the whole image for each object to allow for caching
             shape_of_input = subjects[0].shape
+            self._logger.debug(f"Shape of first image: {shape_of_input}")
 
             # Reset sampler
             self.sampler_instance = tio.UniformSampler(patch_size=shape_of_input[1:])  # first dim is batch
