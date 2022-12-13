@@ -17,8 +17,8 @@ import torch.nn as nn
 from torch.utils.data import DataLoader
 import configparser
 import numpy as np
-from .PMI_data_loader import PMIBatchSamplerFactory, PMIDataFactory
-from .PMI_data_loader.pmi_dataloader_base import PMIDataLoaderBase
+from .pmi_data_loader import PMIBatchSamplerFactory, PMIDataFactory
+from .pmi_data_loader.pmi_dataloader_base import PMIDataLoaderBase
 from .med_img_dataset import PMITensorDataset
 
 # This package
@@ -287,8 +287,8 @@ class PMIController(object):
     def prepare_loaders(self, inference_mode = False) -> Iterable[PMIDataLoaderBase]:
         r"""This creates the loader, i.e. torchio iterables for the DataLoader"""
         if inference_mode: # switch to inference loading mode
-            _tmp = self.pmi_data._run_mode
-            self.pmi_data._run_mode = 'inference'
+            _tmp = self.pmi_data.run_mode
+            self.pmi_data.run_mode = 'inference'
 
         if inference_mode and self.a.inference_on_validation_set:
             self._logger.info("Inferencing on validation set")
@@ -310,7 +310,7 @@ class PMIController(object):
                                 pin_memory  = False)
             if not inference_mode:
                 # TODO: Need to handle when there are no validation data
-                self.pmi_data_val._run_mode = 'inference_mode'
+                self.pmi_data_val.run_mode = 'inference_mode'
                 validationSubjects = self.pmi_data_val.load_dataset() if self.validation_FLAG else (None, None)
                 loader_val = DataLoader(validationSubjects,
                                         batch_size  = self.runparams_batch_size,
@@ -326,7 +326,7 @@ class PMIController(object):
             # loader_val = loader_factory.produce_object(valSet, self.config) if self.validation_FLAG else None
 
         if inference_mode:
-            self.pmi_data._run_mode = _tmp
+            self.pmi_data.run_mode = _tmp
             return loader
         else:
             return loader, loader_val

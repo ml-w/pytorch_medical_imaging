@@ -8,18 +8,33 @@ from torch import optim
 from torch.autograd import Variable
 from torch.utils.data import TensorDataset, DataLoader
 
-from .SolverBase import SolverBase
+from .SolverBase import SolverBase, SolverBaseCFG
 from ..med_img_dataset import ImageDataSet, ImageDataMultiChannel, PMIDataBase
 from mnts.mnts_logger import MNTSLogger
 
 from tqdm import tqdm
 import torchio as tio
 
-__all__ = ['SegmentationSolver']
+
+class SegmentationSolverCFG(SolverBaseCFG):
+    r"""Configuration for :class:`SegmentationSolver`
+
+    Class Attributes:
+        class_weights (torch.Tensor)
+
+    """
+    sigmoid_params: dict = dict(
+        delay = 15,
+        stretch = 2,
+        cap = 0.3
+    )
+    class_weights = None
+    decay_init_epoch = 0
+
+
 
 class SegmentationSolver(SolverBase):
-    def __init__(self,
-                 net, hyperparameters, use_cuda):
+    def __init__(self, cfg: SegmentationSolverCFG, *args, **kwargs):
         r"""This solver trains segmentation networks. The following items n
 
         Attributes:
@@ -33,25 +48,17 @@ class SegmentationSolver(SolverBase):
                 If the training is not started at epoch 0, set this to continue the curve designed using
                 the :func:`sigmoid_plus`.
         """
-        super(SegmentationSolver, self).__init__(net, hyperparameters, use_cuda)
+        super(SegmentationSolver, self).__init__(SegmentationSolverCFG, *args, **kwargs)
 
-    def _load_config(self, _):
-        r"""Inherit this to get more default hyperparameters"""
-        default_attr = {
-            'solverparams_sigmoid_params'   : {'delay': 15, 'stretch': 2, 'cap': 0.3},
-            'solverparams_class_weights'    : None,
-            'solverparams_decay_init_weight': 0
-        }
-        super(SegmentationSolver, self)._load_config(default_attr)
 
     def create_lossfunction(self):
-        if self.solverparams_class_weights is None:
+        if self.class_weights is None:
             self._logger.warning("Automatic computing weighs are not supported now!")
             raise DeprecationWarning("Automatic computing weighs are not supported now!")
 
         # set class weights to 0 to disable class weight for loss function
-        if not self.solverparams_class_weights == 0:
-            weights = torch.as_tensor(self.solverparams_class_weights)
+        if not self.class_weights == 0:
+            weights = torch.as_tensor(self.class_weights)
             loss_init_weights = weights.cpu().float()
             self._logger.info("Initial weight factor: " + str(weights))
         else:
@@ -134,20 +141,6 @@ class SegmentationSolver(SolverBase):
         self.plotter_dict['scalars']['Perf/Validation DSC'] = dsc
         return mean_val_loss
 
-    def _feed_forward(self, *args):
-        s, g = args
-        try:
-            s = self._match_type_with_network(s)
-        except Exception as e:
-            self._logger.exception("Failed to match input to network type. Falling back.")
-            raise RuntimeError("Feed forward failure") from e
-
-        if isinstance(s, list):
-            out = self.net.forward(*s)
-        else:
-            out = self.net.forward(s)
-        return out
-
     def _loss_eval(self, *args):
         out, s, g = args
         if (isinstance(g, list) or isinstance(g, tuple)) and len(g) > 1:
@@ -170,7 +163,7 @@ class SegmentationSolver(SolverBase):
         return loss
 
     def decay_optimizer(self, *args):
-        """
+        r"""
         Function is called every epoch, the weight of the optimizer is fine tuned such that initially the loss
         weights are balanced by the count of each class, the weight will quickly shift towards favoring empty pixel
         for the first dozens of epoch until the all weights slowly converge to 1.
@@ -182,10 +175,18 @@ class SegmentationSolver(SolverBase):
             s(x;x_0, s, d) = x_0 + \frac{(1 - x_0)}{(1 + e^{-(x - 2d) / s}}
 
         Where:
-        * :math:`x` - Input weight.
-        * :math:`x_0` - Initial count, used when training is not starting from 0th epoch, say for after loading cp.
-        * :math:`s` - Stretch, controls the slope of the convergence
-        * :math:`d` - Delay, controls which epochs starts the convergence
+
+        +--------------+----------------------------------------------------------------------------------------------+
+        | Name         | Description                                                                                  |
+        +==============+==============================================================================================+
+        | :math:`x`    | Input weight.                                                                                |
+        +--------------+----------------------------------------------------------------------------------------------+
+        | :math:`x_0`  | Initial count, used when training is not starting from 0th epoch, say for after loading cp.  |
+        +--------------+----------------------------------------------------------------------------------------------+
+        | :math:`s`    | Stretch, controls the slope of the convergence                                               |
+        +--------------+----------------------------------------------------------------------------------------------+
+        | :math:`d`    | Delay, controls which epochs starts the convergence                                          |
+        +--------------+----------------------------------------------------------------------------------------------+
 
         Args:
             *args:
@@ -203,14 +204,14 @@ class SegmentationSolver(SolverBase):
 
         # Decay the class weight using a sigmoid curve.
         try:
-            s = self.solverparams_sigmoid_params['stretch']
-            d = self.solverparams_sigmoid_params['delay']
-            cap = self.solverparams_sigmoid_params['cap']
+            s = self.sigmoid_params['stretch']
+            d = self.sigmoid_params['delay']
+            cap = self.sigmoid_params['cap']
             if isinstance(self.lossfunction, nn.CrossEntropyLoss):
                 self._logger.debug('Current weight: ' + str(self.lossfunction.weight))
-                offset = self._decayed_time + self.solverparams_decay_init_weight # init_weight is t_0
-                new_weight = torch.as_tensor([self.sigmoid_plus(offset, self.solverparams_class_weights[i], s, d, cap) for i in range(len(
-                    self.solverparams_class_weights))])
+                offset = self._decayed_time + self.decay_init_epoch # init_weight is t_0
+                new_weight = torch.as_tensor([self.sigmoid_plus(offset, self.class_weights[i], s, d, cap) for i in range(len(
+                    self.class_weights))])
                 self.lossfunction.weight.copy_(new_weight)
                 self._logger.debug('New weight: ' + str(self.lossfunction.weight))
         except (AttributeError, KeyError):

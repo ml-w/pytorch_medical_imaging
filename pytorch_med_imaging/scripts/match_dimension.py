@@ -22,10 +22,10 @@ def match_dimension(a):
     log = a.log
 
     if not ids is None:
-        imsetA = ImageDataSet(a.dirA, verbose=a.verbose, dtype='uint8', debugmode=a.debug, filtermode='idlist',
+        imsetA = ImageDataSet(a.dirA, verbose=a.verbose, dtype='uint8', debugmode=a.debug_mode, filtermode='idlist',
                               idlist=ids)
     else:
-        imsetA = ImageDataSet(a.dirA, verbose=a.verbose, dtype='uint8', debugmode=a.debug)
+        imsetA = ImageDataSet(a.dirA, verbose=a.verbose, dtype='uint8', debugmode=a.debug_mode)
     ida = imsetA.get_unique_IDs(a.globber)
 
     imsetB = ImageDataSet(a.dirB, verbose=a.verbose, dtype='uint8', filtermode='idlist', idlist=ida)
@@ -35,7 +35,7 @@ def match_dimension(a):
     for sa in ida:
         if not sa in idb:
             missing.append(sa)
-    log.debug(f"{missing}")
+    log.debug_mode(f"{missing}")
 
     # check if the two sets contains same number of elements
     if len(imsetA) != len(imsetB):

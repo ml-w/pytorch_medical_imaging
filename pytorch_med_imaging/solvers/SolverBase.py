@@ -18,7 +18,7 @@ import torchio as tio
 from ..tb_plotter import TB_plotter
 from .. import lr_scheduler as pmi_lr_scheduler
 from ..lr_scheduler import PMILRScheduler
-from ..PMI_data_loader import PMIDataLoaderBase
+from ..pmi_data_loader import PMIDataLoaderBase
 from .earlystop import BaseEarlyStop
 from ..loss import *
 
@@ -34,8 +34,8 @@ class SolverBaseCFG:
             The network.
         [Required] data_loader (pmi_dataloader):
             Dataloader for training iteration
-        [Required] optimizer (nn.Module):
-            Optimizer for training.
+        [Required] optimizer (nn.Module or str):
+            Optimizer for training. A string can be used to create the optimizer. See :func:`create_optimizer`.
         [Required] loss_function (nn.Module):
             Loss function for training. Note that some child class might specify a default value in their
             CFG, but if it doesn't, this should always be specified.
@@ -46,6 +46,8 @@ class SolverBaseCFG:
         [Required] unpack_key_forowrad (list of str):
             This list is used to unpack the ``tio.Subject`` (or patches) loaded by the ``data_loader``. See
             :func:`SolverBase.solve_epoch`.
+        init_mom (float, Optional):
+            Initial momentum. Ignored for some of the optimizers.
         lr_sche (lr_scheduler._LRScheduler, Optional):
             Dictates how the LR is changed during the course of training. Stepped after each epoch is done. Default
             to ``lr_scheduler.ExponentialLR`` supplied by ``torch``. Some additional schedulers is also implemented
@@ -87,6 +89,7 @@ class SolverBaseCFG:
     plotter_dict    : Optional[dict]              = None
     early_stop      : Optional[BaseEarlyStop]     = None
     accumulate_grad : Optional[int]               = 1
+    init_mom    : Optional[float] = None
 
 class SolverBase(object):
     """Base class for all solvers. This class must be inherited before it can work properly. The child
@@ -104,11 +107,11 @@ class SolverBase(object):
             Number of time :func:`decay_optimizer` was called.
     """
     cls_cfg = SolverBaseCFG
-    def __init__(self,
+    def __init__(self, cfg: SolverBaseCFG,
                  *args, **kwargs):
         super(SolverBase, self).__init__()
         self._logger        = MNTSLogger[self.__class__.__name__]
-        self._load_config()   # Load config from ``cls_cfg``
+        self._load_config(cfg)   # Load config from ``cls_cfg``
 
         # Define minimal requirement to kick start a ``fit()``
         self._required_attributes = {
@@ -167,6 +170,7 @@ class SolverBase(object):
             cls = self.cls_cfg
         cls_dict = { attr: getattr(cls, attr) for attr in dir(cls) }
         self.__dict__.update(cls_dict)
+        self.__class__.cls_cfg = cls
 
     def _check_fit_ready(self) -> bool:
         r"""Check the instance attribute specified in ``self._required_attribute`` and their types to make sure that the
@@ -418,23 +422,53 @@ class SolverBase(object):
             self.optimizer.step()
 
     def create_optimizer(self,
-                         net_params
-                         ) -> torch.optim:
-        r"""
-        .. warning::
-            Deprecated
+                         net: torch.nn.Module = None,
+                         optimizer: Union[str, torch.optim.Optimizer] = None) -> torch.optim.Optimizer:
+        r"""Create the optimizer from string or set the network params into the optimizer if a class is provided.
 
+        Args:
+            net (torch.nn.Module, Optional):
+                If not ``None``, replace that specified in the CFG. Default to ``None``.
+            optimizer (str or torch.optim.Optimizer or class):
+                If not ``None``, this method will replace the optimizer set by using the CFG class. If a string is
+                provided, the value should be one of ['Adam'|'SGD'|'AdamW'], which will create the optimizer with
+                respect to :attr:`init_lr` and :attr:`init_mom` depending on the type of optimizer. If a
+                ``torch.optim.Optimizer`` instance is provided in the CFG, do nothing and assume the network parameters
+                have already been set to the optimizer. Default to ``None``.
+
+        Returns:
+            torch.optim.Optimizer
         """
-        raise DeprecationWarning
-        if self.solverparams_optimizer_type == 'Adam':
-            self.optimizer = torch.optim.Adam(net_params, lr=self.solverparams_learning_rate)
-        elif self.solverparams_optimizer_type == 'AdamW':
-            self.optimizer = torch.optim.AdamW(net_params, lr=self.solverparams_learning_rate)
-        elif self.solverparams_optimizer_type == 'SGD':
-            self.optimizer = torch.optim.SGD(net_params, lr=self.solverparams_learning_rate,
-                                             momentum=self.solverparams_momentum)
+        if not net is None:
+            msg = f"Overriding network when creating optimizer. If you didn't inherit the function create_optimizer, " \
+                  f"something might have gone wrong!"
+            self._logger.warning(msg)
+            self.net = net
+
+        if not optimizer is None:
+            msg = f"Overriding optimizer defined in CFG. If you didn't inherit the function create_optimizer, something" \
+                  f"might have gone wrong!"
+            self._logger.warning(msg)
+            self.optimizer = optimizer
+
+        if isinstance(self.optimizer, str):
+            net_params = self.net.parameters()
+            if self.optimizer == 'Adam':
+                self.optimizer = torch.optim.Adam(net_params, lr=self.init_lr)
+            elif self.optimizer == 'AdamW':
+                self.optimizer = torch.optim.AdamW(net_params, lr=self.init_lr)
+            elif self.optimizer == 'SGD':
+                self.optimizer = torch.optim.SGD(net_params, lr=self.init_lr,
+                                             momentum=self.init_mom)
+            else:
+                raise AttributeError(f"Expecting optimzer to be one of ['Adam'|'SGD'|'AdamW']")
+        elif not isinstance(self.optimizer, torch.topim.Optimizer):
+            msg = f"Expect optimizer to be either a string or a torch optimizer, but got {type(self.optimizer)} " \
+                  f"instead. Check your settings in the CFG class"
+            raise TypeError(msg)
         else:
-            raise AttributeError(f"Expecting optimzer to be one of ['Adam'|'SGD']")
+            # Do nothing if everything is fine. Assume the optimizer already knows the network parameters.
+            pass
         return self.optimizer
 
     def decay_optimizer(self, *args):

@@ -31,7 +31,7 @@ def dicom2nii(a, logger):
                                     input = a.input,
                                     idlist = ids,
                                     prefix = a.prefix,
-                                    debug = a.debug,
+                                    debug = a.debug_mode,
                                     dump_meta_data = a.dump_dicom_tags)
 
 def console_entry(raw_args=None):

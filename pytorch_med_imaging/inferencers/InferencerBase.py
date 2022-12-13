@@ -2,7 +2,7 @@ import os
 from abc import abstractmethod
 from mnts.mnts_logger import MNTSLogger
 from ..networks import *
-from ..PMI_data_loader.pmi_dataloader_base import PMIDataLoaderBase
+from ..pmi_data_loader.pmi_dataloader_base import PMIDataLoaderBase
 
 import torch
 import torchio as tio

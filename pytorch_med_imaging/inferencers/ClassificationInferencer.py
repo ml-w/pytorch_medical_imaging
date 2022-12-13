@@ -14,7 +14,7 @@ from tqdm import *
 
 from .InferencerBase import InferencerBase
 from ..utils.visualization import draw_overlay_heatmap
-from ..PMI_data_loader.pmi_dataloader_base import PMIDataLoaderBase
+from ..pmi_data_loader.pmi_dataloader_base import PMIDataLoaderBase
 from ..med_img_dataset import DataLabel
 from ..networks.GradCAM import *
 

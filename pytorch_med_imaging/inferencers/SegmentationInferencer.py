@@ -1,8 +1,8 @@
 import os
 
 from ..med_img_dataset import ImageDataSet
-from ..PMI_data_loader.pmi_dataloader_base import PMIDataLoaderBase
-from ..PMI_data_loader import PMIImageDataLoader
+from ..pmi_data_loader.pmi_dataloader_base import PMIDataLoaderBase
+from ..pmi_data_loader import PMIImageDataLoader
 from .InferencerBase import InferencerBase
 from torch.utils.data import DataLoader
 import torch

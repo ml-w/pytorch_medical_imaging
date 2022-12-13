@@ -42,6 +42,10 @@ class PMIDataLoaderBaseCFG:
             Either 'train' or 'inference'. Default to 'train'
         debug_mode (bool, Optional):
             Debug mode flag, not used in this base class but can be passed to the child classes. Default to ``False``.
+
+    .. hint::
+        Inherit this base class to define more attributes to be used by the solvers.
+
     """
     input_dir    : str = ""
     target_dir   : str = ""
