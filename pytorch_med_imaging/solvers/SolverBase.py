@@ -124,7 +124,7 @@ class SolverBase(object):
             'optimizer': torch.optim.Optimizer,
             'loss_function': torch.nn.Module,
             'init_lr': float,
-            'epoch': int,
+            'num_of_epoch': int,
             'unpack_key_forward': (tuple, list),
             'batch_size': int
         }
@@ -282,9 +282,10 @@ class SolverBase(object):
         self.tb_plotter = plotter
 
     def net_to_parallel(self) -> None:
-        r"""Call to move :attr:`net` to :class:`torch.nn.DataParallel`.
+        r"""Call to move :attr:`net` to :class:`torch.nn.DataParallel`. Sometimes the network used is special and
+        you can override this for those exceptions.
         """
-        if (torch.cuda.device_count()  > 1) & self.iscuda:
+        if (torch.cuda.device_count()  > 1) & self.use_cuda:
             self._logger.info("Multi-GPU detected, using nn.DataParallel for distributing workload.")
             self.net = nn.DataParallel(self.net)
 
