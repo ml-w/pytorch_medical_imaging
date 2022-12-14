@@ -21,7 +21,7 @@ class SegmentationSolverCFG(SolverBaseCFG):
 
     Class Attributes:
         [Required] class_weights (torch.Tensor):
-            Define the class weights passed to the loss function.
+            Define the class weights passed to the loss function. If set to 0, no weigths will be used.
         sigmoid_params (dict, Optional):
             By default the class weights are adjusted using a sigmoid function during training to improve the training
             efficiency and also the segmentation performance. See :func:`decay_optimizer` for more details.
@@ -41,18 +41,18 @@ class SegmentationSolverCFG(SolverBaseCFG):
 
 class SegmentationSolver(SolverBase):
     def __init__(self, cfg: SegmentationSolverCFG, *args, **kwargs):
-        r"""This solver trains segmentation networks. The following items n
+        r"""This solver trains segmentation networks, but can also be used for image2image networks if you work with
+        the loss function yourself. For attributes and settings, see :class:`SegmentationSolverCFG`.
 
-        Attributes:
-            solverparams_sigmoid_params (dict):
-                Default to {'delay': 15, 'stretch': 2, 'cap': 0.3}.
-            solverparams_init_weight (int):
-                Default to 0.
-            solverparams_class_weights (float):
-                Weight of each class used in lossfunction. Default to None.
-            solverparams_decay_init_weight (float):
-                If the training is not started at epoch 0, set this to continue the curve designed using
-                the :func:`sigmoid_plus`.
+        Args:
+            cfg (SegmentationSolverCFG):
+                Configurations.
+
+        See Also:
+            * :class:`SegmentationSolverCFG`
+            * :class:`SolverBaseCFG`
+
+
         """
         super(SegmentationSolver, self).__init__(cfg, *args, **kwargs)
 
@@ -72,8 +72,10 @@ class SegmentationSolver(SolverBase):
             loss_init_weights = None
 
         if self.loss_function is None:
-            self.loss_function = nn.CrossEntropyLoss(weight=loss_init_weights) #TODO: Allow custom loss function
+            self.loss_function = nn.CrossEntropyLoss(weight=loss_init_weights)
         else:
+            self._logger.warning("Loss function is already created.")
+
             # make sure the weight tensor is float
             if not self.loss_function.weight.dtype.is_floating_point:
                 self._logger.warning(f"Loss function weight is not of type `float`, trying to re-cast it.")
@@ -92,12 +94,15 @@ class SegmentationSolver(SolverBase):
 
             \text{weight}(c) = \frac{N_{cmin}}{N_c}
 
+        .. note::
+            This is not the best way to calculate the class weights, normally you want to calculate it based on all
+            the labels rather than just one data point. It is therefore recommended to set your own weights always.
+
+
         Returns:
             torch.Tensor: A tensor with the same number of element as the total number of unique class in ``gt_data``.
 
         """
-        raise DeprecationWarning
-
         self._logger.info("Detecting number of classes...")
         values, counts = gt_data.unique(return_counts=True)
         valcountpair = {k.item(): v.item() for k, v in zip(values, counts)}

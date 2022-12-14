@@ -2,6 +2,7 @@ import ast
 import inspect
 import re
 import os
+import time
 from abc import abstractmethod
 
 import gc
@@ -43,7 +44,7 @@ class SolverBaseCFG:
             Initial learning weight.
         [Required] batch_size (int):
             Mini-batch size.
-        [Required] num_of_epoch (int):
+        [Required] num_of_epochs (int):
             Number of epochs.
         [Required] unpack_key_forowrad (list of str):
             This list is used to unpack the ``tio.Subject`` (or patches) loaded by the ``data_loader``. See
@@ -72,9 +73,9 @@ class SolverBaseCFG:
 
     """
     # Training hyper params (must be provided for training)
-    init_lr     : float = None
-    num_of_epoch: int   = None
-    batch_size  : int   = None
+    init_lr      : float = None
+    num_of_epochs: int   = None
+    batch_size   : int   = None
 
     # I/O
     unpack_key_forward: Iterable[str] = None
@@ -120,11 +121,11 @@ class SolverBase(object):
         # Define minimal requirement to kick start a ``fit()``
         self._required_attributes = {
             'net': torch.nn.Module,
-            'data_loader': PMIDataLoaderBase,
+            'data_loader': (PMIDataLoaderBase, torch.utils.data.DataLoader),
             'optimizer': torch.optim.Optimizer,
             'loss_function': torch.nn.Module,
             'init_lr': float,
-            'num_of_epoch': int,
+            'num_of_epochs': int,
             'unpack_key_forward': (tuple, list),
             'batch_size': int
         }
@@ -230,7 +231,7 @@ class SolverBase(object):
         if not isinstance(data_loader, PMIDataLoaderBase):
             raise TypeError(f"Expect input to be ``PMIDataLoaderBase`` for ``data_loader``, "
                             f"but got: {type(data_loader)}")
-        self.data_loader = data_loader
+        self.data_loader = data_loader.get_torch_data_loader(self.batch_size)
 
         # Do the same for data_loader_val
         if not hasattr(self, 'data_loader_val'):
@@ -238,10 +239,10 @@ class SolverBase(object):
 
         if not self.data_loader_val is None and not data_loader_val is None:
             self._logger.warning("Overriding CFG `dataloader_val`.")
-        if not isinstance(data_loader_val, PMIDataLoaderBase) and not data_loader_val is None:
-            raise TypeError(f"Expect input to be ``PMIDataLoaderBase`` for ``data_loader_val``, "
-                            f"but got: {type(data_loader_val)}")
-        self.data_loader_val = data_loader_val
+            if not isinstance(data_loader_val, PMIDataLoaderBase):
+                raise TypeError(f"Expect input to be ``PMIDataLoaderBase`` for ``data_loader_val``, "
+                                f"but got: {type(data_loader_val)}")
+            self.data_loader_val = data_loader_val.get_torch_data_loader(self.batch_size, exclude_augment=True)
 
     def set_lr_scheduler(self,
                          scheduler: Union[str, PMILRScheduler],
@@ -527,7 +528,7 @@ class SolverBase(object):
             lass_lr = "Error"
         return lass_lr
 
-    def get_last_epoch_loss(self) -> Union[float, None]:
+    def get_last_train_loss(self) -> Union[float, None]:
         r"""Return the loss from last epoch. If it hasn't been computed, return ``None`` instead.
 
         Returns:
@@ -568,12 +569,16 @@ class SolverBase(object):
             tensorboard, but it has other potentials that can be exploited when implementing the child classes.
 
         """
+        self.current_epoch = epoch_number
         self._epoch_prehook()
         E = []
         # Reset dict each epoch
         self.net.train()
         self.plotter_dict = {'scalars': {}, 'epoch_num': epoch_number}
-        for step_idx, mb in enumerate(self.data_loader):
+
+        data_loader = self.data_loader.get_torch_data_loader(self.batch_size) \
+            if isinstance(self.data_loader, PMIDataLoaderBase) else self.data_loader
+        for step_idx, mb in enumerate(data_loader):
             s, g = self._unpack_minibatch(mb, self.unpack_key_forward)
 
             # initiate one train step. Things should be plotted in decorator of step if needed.
@@ -583,7 +588,7 @@ class SolverBase(object):
             self._logger.info("\t[Step %04d] loss: %.010f"%(step_idx, loss.data))
 
             self._step_callback(s, g, out.cpu().float(), loss.data.cpu(),
-                                step_idx=epoch_number * len(self.data_loader) + step_idx)
+                                step_idx=epoch_number * len(data_loader) + step_idx)
             del s, g, out, loss, mb
             gc.collect()
 
@@ -596,12 +601,15 @@ class SolverBase(object):
         self._epoch_callback()
         self.decay_optimizer(epoch_loss)
 
-    def fit(self, checkpoint_path, debug_validation = False):
+    def fit(self,
+            checkpoint_path: Optional[Union[str, Path]] = None,
+            debug_validation: Optional[bool] = False):
         r"""Fit the :attr:`net` based on the parameters provided in :class:`SolverBaseCFG`.
 
         Args:
-            checkpoint_path (str):
-                Path to the directory where checkpoint states are to be saved.
+            checkpoint_path (str, Optional):
+                Path to the directory where checkpoint states are to be saved. Should end with suffix `.pt`. If ``None``
+                this method will try to read output from attribute :attr:`cp_save_dir`.
             debug_validation (bool, Optional):
                 Convenient override to directly invoke validation without having to wait until the epoch is finished.
                 Default to ``False``.
@@ -620,15 +628,25 @@ class SolverBase(object):
             * :func:`_step_callback
 
         """
+        if checkpoint_path is None:
+            if not hasattr(self, 'cp_save_dir'):
+                msg = "Checkpoint save path must be specified. Either supply an argument to the `fit()` method or " \
+                      "specify the attribute 'cp_point_dir' in the cfg."
+                raise AttributeError(msg)
+
         # Error check
         self._check_fit_ready()
 
         # configure checkpoints
+        self.EARLY_STOP_FLAG = False
         self.net_to_parallel()
         lastloss = 1e32
         self._logger.info("Start training...")
-        self.num_of_epochs = 1
+
+        # time fit
+        time_start_fit = time.time()
         for i in range(self.num_of_epochs):
+            time_start_epoch = time.time()
             # Skip if --debug-validation flag is true
             if not debug_validation:
                 self.solve_epoch(i)
@@ -641,20 +659,16 @@ class SolverBase(object):
                 self._epoch_prehook() # carry out pre-hook since it's originally called in _solve_epoch()
                 self._last_val_loss = self.validation()
 
-            # Prepare values for epoch callback plots
-            epoch_loss = self.get_last_epoch_loss()
-            val_loss   = self.get_last_val_loss()
-
-            # use validation loss as epoch loss if it exist
-            measure_loss = val_loss if val_loss is not None else epoch_loss
-            if measure_loss <= lastloss:
-                self._logger.info("New loss ({:.03f}) is smaller than previous loss ({:.03f})".format(measure_loss, lastloss))
+            # Save the checkpoint if the validation loss is lower then historical records.
+            epoch_loss = self.get_epoch_loss()
+            if epoch_loss <= lastloss:
+                self._logger.info("New loss ({:.03f}) is smaller than previous loss ({:.03f})".format(epoch_loss, lastloss))
                 self._logger.info("Saving new checkpoint to: {}".format(checkpoint_path))
                 self._logger.info("Iteration number is: {}".format(i))
                 if not Path(checkpoint_path).parent.is_dir():
                     Path(checkpoint_path).parent.mkdir(parents=True)
                 torch.save(self.get_net().state_dict(), checkpoint_path)
-                lastloss = measure_loss
+                lastloss = epoch_loss
                 self._logger.info("Update benchmark loss.")
             else:
                 torch.save(self.get_net().state_dict(), checkpoint_path.replace('.pt', '_temp.pt'))
@@ -667,14 +681,32 @@ class SolverBase(object):
                 current_lr = next(self.get_optimizer().param_groups)['lr']
             except:
                 current_lr = self.get_optimizer().param_groups[0]['lr']
-            self._logger.info("[Epoch %04d] EpochLoss: %s LR: %s}"
+            self._logger.info("[Epoch %04d] Train Loss: %s Vaildation Loss: %s LR: %s}"
                               %(i,
-                                f'{epoch_loss:.010f}' if epoch_loss is not None else 'None',
+                                f'{self.get_last_train_loss():.010f}',
+                                f'{self.get_last_val_loss():.010f}' if self.get_last_val_loss() is not None else 'None',
                                 f'{current_lr:.010f}' if current_lr is not None else 'None',))
-            if self._early_stop_scheduler.step(measure_loss, i) != 0:
-                self._logger.info("Early stopped.")
-                break
 
+            epoch_time = time.time() - time_start_epoch # time for one epoch + validation.
+            self._logger.info("{:-^80}".format(f" Epoch elapsed time : {epoch_time/60.:.02f} min"))
+            if self.EARLY_STOP_FLAG:
+                break
+        fit_time = time.time() - time_start_fit # fit time in second
+        self._logger.info("{:=^80}".format(f" Fit elapsed time: {fit_time / 60.:.02f} min "))
+
+    def get_epoch_loss(self):
+        r"""Return the epoch_loss, which is the training loss if validation loop is not enabled.
+
+
+        Returns:
+
+        """
+        # Prepare values for epoch callback plots
+        train_loss = self.get_last_train_loss()
+        val_loss = self.get_last_val_loss()
+        # use validation loss as epoch loss if it exist
+        measure_loss = val_loss if val_loss is not None else train_loss
+        return measure_loss
 
     @abstractmethod
     def validation(self, *args, **kwargs) -> float:
@@ -799,13 +831,23 @@ class SolverBase(object):
     def _epoch_callback(self, *args, **kwargs) -> None:
         """Default callback after `solver_epoch` is done. This is optional to inherit
 
+        Callback steps
+        ^^^^^^^^^^^^^^
+        1. Step early stop scheduler
+        2. Plot scalars to tensorboard if :attr:`tb_plotter` is available.
+
         See Also:
             * :func:`solve_epoch`
 
         """
+        # Step early stopper if it exists
+        if not self.early_stop is None:
+            if self.early_stop.step(self.get_epoch_loss(), self.current_epoch):
+                self.EARLY_STOP_FLAG
+
+        # Plot data to tensorboardX
         scalars = self.plotter_dict.get('scalars', None)
         writer_index = self.plotter_dict.get('epoch_num', None)
-
         if scalars is None:
             return
         elif self.tb_plotter is None:
@@ -816,37 +858,6 @@ class SolverBase(object):
                 self.tb_plotter.plot_weight_histogram(self.net, writer_index)
             except:
                 self._logger.exception("Error occured in default epoch callback.")
-
-    def _get_params_from_config(self, section, key, default=None, with_eval=False, with_boolean=False):
-        r"""
-        .. warning::
-            Deprecated!
-        """
-        raise DeprecationWarning
-        try:
-            if with_eval:
-                if with_boolean:
-                    out = self._config[section].getboolean(key, default)
-                    return out
-                else:
-                    out = self._config[section].get(key, default)
-                    return ast.literal_eval(out) if isinstance(out,str) else out
-            else:
-                return self._config[section].get(key, default)
-        except AttributeError as e:
-            self._logger.warning(f"Key absent in config: ({section},{key})")
-            self._logger.exception(e)
-            return default
-        except Exception as e:
-            self._logger.error(f"Unexpected error when reading params with key: ({section}, {key})")
-            self._logger.exception(e)
-            return default
-
-    def _get_params_from_solver_config(self, key, default=None, with_eval=False):
-        return self._get_params_from_config('SolverParams', key, default, with_eval)
-
-    def _get_params_from_solver_config_with_boolean(self, key, default=None):
-        return self._get_params_from_config('SolverParams', key, default, True, True)
 
     def _unpack_minibatch(self, minibatch, unpacking_keys = None):
         r"""Unpack mini-batch drawn by ``torchio.Queue`` or ``torchio.SubjectsDataset``.
@@ -887,3 +898,4 @@ class SolverBase(object):
     @property
     def is_cuda(self):
         return self.use_cuda
+
