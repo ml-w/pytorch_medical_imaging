@@ -41,6 +41,8 @@ class SolverBaseCFG:
             CFG, but if it doesn't, this should always be specified.
         [Required] init_lr (float):
             Initial learning weight.
+        [Required] batch_size (int):
+            Mini-batch size.
         [Required] num_of_epoch (int):
             Number of epochs.
         [Required] unpack_key_forowrad (list of str):
@@ -72,6 +74,7 @@ class SolverBaseCFG:
     # Training hyper params (must be provided for training)
     init_lr     : float = None
     num_of_epoch: int   = None
+    batch_size  : int   = None
 
     # I/O
     unpack_key_forward: Iterable[str] = None
@@ -82,14 +85,15 @@ class SolverBaseCFG:
     dataloader   : PMIDataLoaderBase     = None
 
     # Options with defaults
-    use_cuda        : Optional[bool]              = True
-    debug           : Optional[bool]              = False
-    dataloader_val  : Optional[PMIDataLoaderBase] = None
-    lr_sche         : Optional[PMILRScheduler]    = None # If ``None``, lr_scheduler.ExponentialLR will be used.
-    plotter_dict    : Optional[dict]              = None
-    early_stop      : Optional[BaseEarlyStop]     = None
-    accumulate_grad : Optional[int]               = 1
-    init_mom    : Optional[float] = None
+    use_cuda       : Optional[bool]              = True
+    debug          : Optional[bool]              = False
+    dataloader_val : Optional[PMIDataLoaderBase] = None
+    lr_sche        : Optional[PMILRScheduler]    = None # If ``None``, lr_scheduler.ExponentialLR will be used.
+    plotter_dict   : Optional[dict]              = None
+    early_stop     : Optional[BaseEarlyStop]     = None
+    accumulate_grad: Optional[int]               = 1
+    init_mom       : Optional[float]             = None
+    tb_plotter     : Optional[TB_plotter]        = None
 
 class SolverBase(object):
     """Base class for all solvers. This class must be inherited before it can work properly. The child
@@ -122,35 +126,30 @@ class SolverBase(object):
             'init_lr': float,
             'epoch': int,
             'unpack_key_forward': (tuple, list),
+            'batch_size': int
         }
 
         # Optimizer attributes
-        self._step_called_time: int       = 0
-        self._decayed_time: int      = 0
+        self._step_called_time: int = 0
+        self._decayed_time    : int = 0
 
         # internal attributes
-        self._net_weight_type        = None
-        self._tb_plotter             = None
-
-        self.lr_sche            = None
+        self.tb_plotter             = None
 
         # external_att
         self.plotter_dict      = {}
 
         # create loss function if not specified
-        default_dict = {
-            'solverparams_early_stop': None
-        }
         self.create_lossfunction()
-        self.create_optimizer(self.net.parameters())
+        self.create_optimizer()
 
-        self._logger.info("Solver were configured with options: {}".format(self.hyperparam_dict))
+        self._logger.info("Solver were configured with options: {}".format(self.__dict__))
         if  len(kwargs):
             self._logger.warning("Some solver configs were not used: {}".format(kwargs))
 
-        if self.iscuda:
+        if self.use_cuda:
             self._logger.info("Moving lossfunction and network to GPU.")
-            self.lossfunction = self.lossfunction.cuda()
+            self.loss_function = self.loss_function.cuda()
             self.net = self.net.cuda()
 
         # Stopping criteria
@@ -208,29 +207,40 @@ class SolverBase(object):
         """
         return self.optimizer
 
-    def set_dataloader(self,
-                       dataloader: PMIDataLoaderBase,
-                       data_loader_val: PMIDataLoaderBase = None) -> None:
+    def set_data_loader(self,
+                        data_loader: PMIDataLoaderBase,
+                        data_loader_val: PMIDataLoaderBase = None) -> None:
         r"""Externally set the dataloaders if they were not specified in ``self.cls_cfg``.
 
         Args:
-            dataloader (PMIDataLoaderBase):
+            data_loader (PMIDataLoaderBase):
                 Replaces ``self.data_loader``.
             dataloader_val (PMIDataLoaderBase):
                 Replaces ``self.data_loader_val``
         """
+        # If self.data_loader was never configured, make it `None`.
+        if not hasattr(self, 'data_loader'):
+            self.data_loader = None
+
+        # If self.data_loader is not None, its an overriding event.
         if not self.data_loader is None:
             self._logger.warning("Overriding CFG `dataloader`.")
-        if not isinstance(self.data_loader, PMIDataLoaderBase):
+
+        # Check input type
+        if not isinstance(data_loader, PMIDataLoaderBase):
             raise TypeError(f"Expect input to be ``PMIDataLoaderBase`` for ``data_loader``, "
-                            f"but got: {type(self.data_loader)}")
-        self.data_loader = dataloader
+                            f"but got: {type(data_loader)}")
+        self.data_loader = data_loader
+
+        # Do the same for data_loader_val
+        if not hasattr(self, 'data_loader_val'):
+            self.data_loader_val = None
 
         if not self.data_loader_val is None and not data_loader_val is None:
             self._logger.warning("Overriding CFG `dataloader_val`.")
-        if not isinstance(self.data_loader_val, PMIDataLoaderBase) and not data_loader_val is None:
+        if not isinstance(data_loader_val, PMIDataLoaderBase) and not data_loader_val is None:
             raise TypeError(f"Expect input to be ``PMIDataLoaderBase`` for ``data_loader_val``, "
-                            f"but got: {type(self.data_loader_val)}")
+                            f"but got: {type(data_loader_val)}")
         self.data_loader_val = data_loader_val
 
     def set_lr_scheduler(self,
@@ -269,7 +279,7 @@ class SolverBase(object):
         """
         if not self.tb_plotter is None:
             self._logger.warning(f"Overriding CFG ``tb_plotter``.")
-        self._tb_plotter = plotter
+        self.tb_plotter = plotter
 
     def net_to_parallel(self) -> None:
         r"""Call to move :attr:`net` to :class:`torch.nn.DataParallel`.
@@ -280,7 +290,7 @@ class SolverBase(object):
 
     def set_loss_function(self, func: torch.nn.Module) -> None:
         r"""Externally set :attr:`loss_function` manually. This will also move the loss function to GPU if
-        :attr:`is_cuda` is ``True``.
+        :attr:`use_cuda` is ``True``.
 
         Args:
             func (torch.nn.Module):
@@ -288,14 +298,14 @@ class SolverBase(object):
 
         """
         self._logger.debug("loss functioning override.")
-        if self.iscuda:
+        if self.use_cuda:
             try:
                 func = func.cuda()
             except:
                 self._logger.warning("Failed to move loss function to GPU")
                 pass
-        del self.lossfunction
-        self.lossfunction = func
+        del self.loss_function
+        self.loss_function = func
 
     def load_checkpoint(self, checkpoint_dir: str) -> None:
         r"""Load the stored parameters for :attr:`net`.
@@ -353,8 +363,8 @@ class SolverBase(object):
 
         # Create loss function accordingly
         if not _lossfunction is None and issubclass(_lossfunction, nn.Module):
-            self.lossfunction = _lossfunction(**_loss_params)
-            return self.lossfunction
+            self.loss_function = _lossfunction(**_loss_params)
+            return self.loss_function
         else:
             self._logger.warning(f"Cannot create loss function using: {_lossfunction}")
             return None
@@ -563,7 +573,7 @@ class SolverBase(object):
         self.net.train()
         self.plotter_dict = {'scalars': {}, 'epoch_num': epoch_number}
         for step_idx, mb in enumerate(self.data_loader):
-            s, g = self._unpack_minibatch(mb, self.solverparams_unpack_keys_forward)
+            s, g = self._unpack_minibatch(mb, self.unpack_key_forward)
 
             # initiate one train step. Things should be plotted in decorator of step if needed.
             out, loss = self.step(s, g)
@@ -797,12 +807,12 @@ class SolverBase(object):
 
         if scalars is None:
             return
-        elif self._tb_plotter is None:
+        elif self.tb_plotter is None:
             return
         else:
             try:
-                self._tb_plotter.plot_scalars(writer_index, scalars)
-                self._tb_plotter.plot_weight_histogram(self.net, writer_index)
+                self.tb_plotter.plot_scalars(writer_index, scalars)
+                self.tb_plotter.plot_weight_histogram(self.net, writer_index)
             except:
                 self._logger.exception("Error occured in default epoch callback.")
 
@@ -873,4 +883,6 @@ class SolverBase(object):
                     self._logger.exception(f"Receive unknown exception during minibactch unpacking for: {key}")
         return out
 
-
+    @property
+    def is_cuda(self):
+        return self.use_cuda
