@@ -694,12 +694,12 @@ class SolverBase(object):
         fit_time = time.time() - time_start_fit # fit time in second
         self._logger.info("{:=^80}".format(f" Fit elapsed time: {fit_time / 60.:.02f} min "))
 
-    def get_epoch_loss(self):
-        r"""Return the epoch_loss, which is the training loss if validation loop is not enabled.
-
+    def get_epoch_loss(self) -> float:
+        r"""Return the epoch_loss, which is the training loss if validation loop is not enabled. Used for early stop
+        and also to decide if the checkpoint should be saved.
 
         Returns:
-
+            float: Validation loss if data is supplied. Otherwise, return the average training loss in the training set.
         """
         # Prepare values for epoch callback plots
         train_loss = self.get_last_train_loss()
@@ -766,17 +766,6 @@ class SolverBase(object):
         else:
             out = tensor.type(self._net_weight_type)
         return out
-
-    @staticmethod
-    def _force_cuda(arg):
-        r"""
-
-        .. warning::
-            Deprecated!
-
-        """
-        raise DeprecationWarning
-        return [a.float().cuda() for a in arg] if isinstance(arg, list) else arg.cuda()
 
     @abstractmethod
     def _feed_forward(self, *args):
