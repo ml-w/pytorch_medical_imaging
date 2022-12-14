@@ -1,6 +1,6 @@
 import unittest
-from pytorch_med_imaging.PMI_data_loader.pmi_dataloader_base import *
-from pytorch_med_imaging.PMI_data_loader import *
+from pytorch_med_imaging.pmi_data_loader.pmi_dataloader_base import *
+from pytorch_med_imaging.pmi_data_loader import *
 from mnts.mnts_logger import MNTSLogger
 
 class TestDataLoader(unittest.TestCase):
@@ -31,12 +31,13 @@ class TestDataLoader(unittest.TestCase):
 class TestImageDataLoader(TestDataLoader):
     def setUp(self):
         super(TestImageDataLoader, self).setUp()
-        self.cfg = PMIImageDataLoaderCFG
+        self.cfg = PMIImageDataLoaderCFG()
         self.cfg.input_dir    = './sample_data/img/'
         self.cfg.target_dir   = './sample_data/seg/'
         self.cfg.mask_dir     = './sample_data/seg/'
         self.cfg.probmap_dir  = './sample_data/seg/'
         self.cfg.augmentation = './sample_data/config/sample_transform.yaml'
+        self.cfg.data_types   = [float, 'uint8']
         self.cfg.id_globber   = "^\w+_\d+"
         self.cfg.id_list     = ['MRI_01', 'MRI_02']
         self.cfg.sampler     = 'weighted'
@@ -67,11 +68,10 @@ class TestImageDataLoader(TestDataLoader):
                                   tuple(l.shape[1:]))
             break
 
-PMIImageFeaturePairLoader
 class TestImageFeaturePairLoader(TestDataLoader):
     def setUp(self):
         super(TestImageFeaturePairLoader, self).setUp()
-        self.cfg = PMIImageFeaturePairLoaderCFG
+        self.cfg = PMIImageFeaturePairLoaderCFG()
         self.cfg.input_dir   = './sample_data/img/'
         self.cfg.target_dir  = './sample_data/sample_binaryclass_gt.xlsx'
         self.cfg.mask_dir    = './sample_data/seg/'
@@ -142,13 +142,22 @@ class TestImageFeaturePairLoaderConcat(TestImageFeaturePairLoader):
 class TestPMIImageMCDataLoader(TestImageDataLoader):
     def setUp(self):
         super(TestPMIImageMCDataLoader, self).setUp()
-        self.cfg = PMIImageMCDataLoaderCFG # note that super() already defined parent class attributes
-        self.cfg.input_dir = './sample_data/'
-        self.cfg.target_dir = './sample_data/'
-        self.cfg.input_subdirs = ['img', 'img']
-        self.cfg.target_subdirs = ['seg', 'seg']
-        self.cfg.new_attr = ['img_new', 'seg_new']
-        self.cfg.data_types = [float, 'uint8']
+        self.cfg = PMIImageMCDataLoaderCFG( # instance attribute can be defined like this too
+            mask_dir    = './sample_data/seg/',
+            probmap_dir = './sample_data/seg/',
+            id_globber = "^\w+_\d+"
+        ) # note that super() already defined parent class attributes
+        self.cfg.input_dir      = './sample_data/'
+        self.cfg.target_dir     = './sample_data/'
+        self.cfg.input_subdirs  = ['img'    , 'img']
+        self.cfg.target_subdirs = ['seg'    , 'seg']
+        self.cfg.new_attr       = ['img_new', 'seg_new']
+        self.cfg.data_types     = [float    , 'uint8']
+        self.cfg.id_list     = ['MRI_01', 'MRI_02']
+        self.cfg.sampler     = 'weighted'
+        self.cfg.sampler_kwargs['patch_size']           = [32, 32, 3]
+        self.cfg.tio_queue_kwargs['samples_per_volume'] = 2
+        self.cfg.inf_samples_per_vol                    = 5
         self.loader = PMIImageMCDataLoader(self.cfg)
 
     def test_load_training_data(self):

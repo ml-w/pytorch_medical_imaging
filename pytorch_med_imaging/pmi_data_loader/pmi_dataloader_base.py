@@ -3,8 +3,10 @@ import re
 import configparser
 import pandas as pd
 import itertools
+from dataclasses import dataclass
 from abc import *
 from pathlib import Path
+from torch.utils.data import DataLoader
 
 import torchio as tio
 from .augmenter_factory import create_transform_compose
@@ -14,6 +16,7 @@ from typing import *
 
 __all__ = ['PMIDataLoaderBaseCFG', 'PMIDataLoaderBase']
 
+@dataclass
 class PMIDataLoaderBaseCFG:
     """Config required to initialize :class:`PMIDataLoader`.
 
@@ -55,6 +58,18 @@ class PMIDataLoaderBaseCFG:
     id_globber   : Optional[str] = "(^[a-zA-Z0-9]+)"
     run_mode     : Optional[str] = 'train'
     debug_mode   : Optional[bool] = False
+
+    def __init__(self, **kwargs):
+        # load class attributes as default values of the instance attributes
+        cls = self.__class__
+        cls_dict = { attr: getattr(cls, attr) for attr in dir(cls) }
+        self.__dict__.update(cls_dict)
+
+        # replace instance attributes
+        if len(kwargs):
+            for key, value in kwargs.items():
+                self.__dict__[key] = value
+
 
 
 class PMIDataLoaderBase(object):
@@ -105,14 +120,14 @@ class PMIDataLoaderBase(object):
         raise NotImplementedError
 
     @abstractmethod
-    def _load_data_set_training(self):
+    def _load_data_set_training(self) -> tio.Queue:
         """Inherit in child class. Private method called for training mode. Returns whatever goes into the network
         as list. Validation set loading should have identical settings
         """
         raise NotImplementedError
 
     @abstractmethod
-    def _load_data_set_inference(self):
+    def _load_data_set_inference(self) -> tio.Queue:
         """Inherit in child class. Private method called to load data for inference mode."""
         raise NotImplementedError
 
@@ -149,22 +164,6 @@ class PMIDataLoaderBase(object):
         else:
             return fparser['FileList'].get('testing').split(',')
 
-    def _load_default_attr(self, default_dict):
-        r"""
-        Load default dictionary as attr from loader params
-        """
-        final_dict = {}
-        for key in default_dict:
-            val = default_dict[key]
-            if isinstance(val, bool):
-                final_dict[key] = self.get_from_loader_params_with_boolean(key, default_dict[key])
-            elif isinstance(val, str):
-                final_dict[key] = self.get_from_loader_params(key, default_dict[key])
-            else:
-                final_dict[key] = self.get_from_loader_params_with_eval(key, default_dict[key])
-        self._logger.debug(f"final_dict: {final_dict}")
-        self.__dict__.update(final_dict)
-
     def load_dataset(self, exclude_augment = None):
         r"""
         Called in solver or inferencer to load arguments for the network training or actual inference. Normally you
@@ -184,6 +183,36 @@ class PMIDataLoaderBase(object):
             return self._load_data_set_training(exclude_augment = False if exclude_augment is None else exclude_augment)
         else:
             return self._load_data_set_inference()
+
+    def get_torch_data_loader(self,
+                              batch_size: int,
+                              exclude_augment: bool = False):
+        r"""Use this function to obtain the dataloader based on the recommend torchio settings.
+
+        Args:
+            batch_size (int):
+                Batch size.
+            exclude_augment (bool, Optional):
+                Pass to :func:`_load_data_set_training` or :func:`_load_data_set_inference`
+
+        Returns:
+            torch.utils.DataLoader
+        """
+        if self.run_mode: # training
+            out_loader = DataLoader(self._load_data_set_training(exclude_augment),
+                                    batch_size  = batch_size,
+                                    shuffle     = True,
+                                    num_workers = 0,
+                                    drop_last   = True,
+                                    pin_memory  = False)
+        else:
+            out_loader = DataLoader(self._load_data_set_inference(),
+                                    batch_size  = batch_size,
+                                    shuffle     = False,
+                                    num_workers = 0,
+                                    drop_last   = False,
+                                    pin_memory  = False)
+        return out_loader
 
     def write_log(self, msg, level=MNTSLogger.INFO):
         """Write log to logger if there's one"""
@@ -206,10 +235,11 @@ class PMIDataLoaderBase(object):
         """
         # Loading basic inputs
         if not config_file is None:
-            if isinstance(config_file, type):
-                cls = config_file
-            else:
-                cls = config_file.__class__
+            # if isinstance(config_file, type):
+            #     cls = config_file
+            # else:
+            #     cls = config_file.__class__
+            cls = config_file
             cls_dict = { attr: getattr(cls, attr) for attr in dir(cls) }
             self.__dict__.update(cls_dict)
 

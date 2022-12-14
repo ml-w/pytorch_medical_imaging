@@ -5,6 +5,7 @@ from ..med_img_dataset import ImageDataSet
 from .lambda_tio_adaptor import CallbackQueue
 from typing import *
 from functools import partial
+from dataclasses import dataclass
 import torchio as tio
 import multiprocessing as mpi
 import re
@@ -292,7 +293,7 @@ class PMIImageDataLoader(PMIDataLoaderBase):
     def _create_queue(self,
                       exclude_augment: bool,
                       subjects: tio.SubjectsDataset,
-                      training: Optional[bool]=False,
+                      training: Optional[bool]=None,
                       return_sampler: Optional[bool]=False) -> [tio.Queue, tio.GridSampler] or \
                                                                 [tio.SubjectsDataset, None]:
         r"""This method build the queue from the input subjects. If the queue involves a :class:`tio.GridSampler`,
@@ -306,12 +307,14 @@ class PMIImageDataLoader(PMIDataLoaderBase):
             subjects (tio.SubjectsDataset):
                 Subjects to be loaded into queue.
             training (bool, Optional):
-                ``True`` = training mode. ``False`` = inference mode.
+                ``True`` = training mode. ``False`` = inference mode. If ``None``, respect ``self.run_mode``.
             return_sampler (bool, Optional):
                 If ``True``, return the ``tio.Sampler`` alongside the ``tio.Queue``. This is useful during inference
                 where you need to keep the ``tio.Sampler`` to create the aggregator that will assemble the patches.
         """
         # default is based on self._training_mode, read from config file
+        if training is None:
+            training = self.run_mode
         queue_dict, training = self._prepare_queue_dict(exclude_augment, subjects, training)
 
         # Create queue
