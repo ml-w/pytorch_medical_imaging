@@ -38,7 +38,7 @@ class BaseEarlyStop(object):
     policies = {}
     def __init__(self):
         super(BaseEarlyStop, self).__init__()
-        self._logger = MNTSLogger[__class__.__name__]
+        self._logger = MNTSLogger[self.__class__.__name__]
         self._last_loss = 1E32
         self._last_epoch = 0
         self._watch = 0
