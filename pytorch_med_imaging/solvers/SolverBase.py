@@ -245,10 +245,11 @@ class SolverBase(object):
 
         if not self.data_loader_val is None and not data_loader_val is None:
             self._logger.warning("Overriding CFG `dataloader_val`.")
-            if not isinstance(data_loader_val, PMIDataLoaderBase):
-                raise TypeError(f"Expect input to be ``PMIDataLoaderBase`` for ``data_loader_val``, "
-                                f"but got: {type(data_loader_val)}")
-            self.data_loader_val = data_loader_val.get_torch_data_loader(self.batch_size, exclude_augment=True)
+
+        if not isinstance(data_loader_val, PMIDataLoaderBase):
+            raise TypeError(f"Expect input to be ``PMIDataLoaderBase`` for ``data_loader_val``, "
+                            f"but got: {type(data_loader_val)}")
+        self.data_loader_val = data_loader_val.get_torch_data_loader(self.batch_size, exclude_augment=True)
 
     def set_lr_scheduler(self,
                          scheduler: Union[str, PMILRScheduler],
