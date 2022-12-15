@@ -2,6 +2,7 @@ import unittest
 from pytorch_med_imaging.pmi_data_loader.pmi_dataloader_base import *
 from pytorch_med_imaging.pmi_data_loader import *
 from mnts.mnts_logger import MNTSLogger
+import torchio as tio
 
 class TestDataLoader(unittest.TestCase):
     def setUp(self) -> None:
@@ -78,9 +79,9 @@ class TestImageDataLoader(TestDataLoader):
     def test_no_sampler(self):
         self.cfg.sampler = None
         loader = PMIImageDataLoader(self.cfg)
-        for l in loader._load_data_set_training():
-            print(l)
-            print(l.shape)
+        for l in loader.get_torch_data_loader(2):
+            self.assertTupleEqual(tuple(l['input'][tio.DATA].shape),
+                                  (2, 1, 250, 250, 15)) # Size specified in sample_transform.yaml
             break
 
 class TestImageFeaturePairLoader(TestDataLoader):
