@@ -562,6 +562,10 @@ class SolverBase(object):
             :func:`decay_optimizer`. In this base class, the callback only plots the results of the epoch to
             tensorboard, but it has other potentials that can be exploited when implementing the child classes.
 
+        .. caution::
+            If you inherit this, remember to align the definition of :attr:`_last_val_loss` and
+            :attr:`_lass_epoch_loss`. Otherwise, checkpoint saving and early stopping schedulers migth break.
+
         """
         self.current_epoch = epoch_number
         self._epoch_prehook()
