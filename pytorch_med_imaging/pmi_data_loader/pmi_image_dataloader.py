@@ -315,32 +315,38 @@ class PMIImageDataLoader(PMIDataLoaderBase):
         # default is based on self._training_mode, read from config file
         if training is None:
             training = self.run_mode
-        queue_dict, training = self._prepare_queue_dict(exclude_augment, subjects, training)
 
-        # Create queue
-        # If option to use post-sampling processing was provided, use CallbackQueue instead
-        if  not self.patch_sampling_callback in ("", None):
-            # check if there's illegal characters in the patch_sampling_callback
-            if re.search("[\W]+", self.patch_sampling_callback.translate(str.maketrans('', '', "[], "))) is not None:
-                raise AttributeError(f"You patchr_sampling_callback specified ({self.patch_sampling_callback}) "
-                                     f"contains illegal characters!")
-            queue_dict['start_background'] = training # if not training, delay dataloading
-            _callback_func = eval(self.patch_sampling_callback)
-            _callback_func = partial(_callback_func, **self.patch_sampling_callback_kwargs)
-            queue = CallbackQueue(subjects, *self.queue_args,
-                                  patch_sampling_callback=_callback_func,
-                                  create_new_attribute = self.create_new_attribute,
-                                  **queue_dict)
-        else: # Else use the normal queue
-            # queue_dict.pop('patch_sampling_callback')
-            # queue_dict.pop('create_new_attribute')
-            # ignore 'start_background` option for ordinary queues
-            queue = tio.Queue(subjects, *self.queue_args, **queue_dict)
+        if self.sampler is not None:
+            queue_dict, training = self._prepare_queue_dict(exclude_augment, subjects, training)
 
-        self._logger.debug(f"Created queue: {queue}")
-        self.queue = queue
+            # Create queue
+            # If option to use post-sampling processing was provided, use CallbackQueue instead
+            if  not self.patch_sampling_callback in ("", None):
+                # check if there's illegal characters in the patch_sampling_callback
+                if re.search("[\W]+", self.patch_sampling_callback.translate(str.maketrans('', '', "[], "))) is not None:
+                    raise AttributeError(f"You patch_sampling_callback specified ({self.patch_sampling_callback}) "
+                                         f"contains illegal characters!")
+                queue_dict['start_background'] = training # if not training, delay dataloading
+                _callback_func = eval(self.patch_sampling_callback)
+                _callback_func = partial(_callback_func, **self.patch_sampling_callback_kwargs)
+                queue = CallbackQueue(subjects, *self.queue_args,
+                                      patch_sampling_callback=_callback_func,
+                                      create_new_attribute = self.create_new_attribute,
+                                      **queue_dict)
+            else: # Else use the normal queue
+                # queue_dict.pop('patch_sampling_callback')
+                # queue_dict.pop('create_new_attribute')
+                # ignore 'start_background` option for ordinary queues
+                queue = tio.Queue(subjects, *self.queue_args, **queue_dict)
 
-        if return_sampler:
+            self._logger.debug(f"Created queue: {queue}")
+            self.queue = queue
+        else:
+            # if there are no sampler, simply return the subjects, in this case the dataloader need to perform
+            # shuffling during training.
+            queue = subjects
+
+        if return_sampler and self.sampler is not None:
             return queue, self.queue_args[-1]
         else:
             return queue

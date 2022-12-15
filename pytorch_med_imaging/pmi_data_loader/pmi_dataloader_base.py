@@ -102,6 +102,27 @@ class PMIDataLoaderBase(object):
         * :obj:`prob_dict` should either be directory to an ini file or a `configparser.ConfigParser` object. This
           class read from the section `[General]`. The ini file should at least consist of attribute `run_mode`. The
           child class would read from the section `[LoaderParams]` to obtain the necessary tags.
+
+    .. hint::
+        The loaders can be created using both the CFG class and CFG instance. If you are unsure what their differences
+        are, it is recommend to always using CFG() to create a configuration instance.
+
+    Example
+    ^^^^^^^
+
+    **Changing the default values**
+
+    >>> from pytorch_med_imaging.pmi_data_loader import PMIDataLoaderBaseCFG as BCFG
+    >>> BCFG.input_dir = '/new/default'
+    >>> cfg = BCFG()
+    >>> loader = LoaderClass(cfg)
+
+    **Override default values**
+
+    >>> cfg = BCFG(input_dir='/override/dir')
+    >>> loader = LoaderClass(cfg)
+
+
     """
     def __init__(self,
                  cfg: PMIDataLoaderBaseCFG,

@@ -75,6 +75,14 @@ class TestImageDataLoader(TestDataLoader):
         self.assertTupleEqual(tuple(new_loader.id_list),
                               ('MRI_02', 'MRI_03'))
 
+    def test_no_sampler(self):
+        self.cfg.sampler = None
+        loader = PMIImageDataLoader(self.cfg)
+        for l in loader._load_data_set_training():
+            print(l)
+            print(l.shape)
+            break
+
 class TestImageFeaturePairLoader(TestDataLoader):
     def setUp(self):
         super(TestImageFeaturePairLoader, self).setUp()
