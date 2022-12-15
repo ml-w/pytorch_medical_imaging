@@ -14,7 +14,7 @@ from mnts.mnts_logger import MNTSLogger
 
 from tqdm import tqdm
 import torchio as tio
-
+from typing import Optional, Union, Iterable, Any
 
 class SegmentationSolverCFG(SolverBaseCFG):
     r"""Configuration for :class:`SegmentationSolver`
@@ -29,13 +29,13 @@ class SegmentationSolverCFG(SolverBaseCFG):
             Used by the :func:`decay_optimizer` in case the solver is not starting from epoch 0. Default to 0.
 
     """
-    sigmoid_params: dict = dict(
+    class_weights : Iterable[float] = None
+    sigmoid_params: Optional[dict]  = dict(
         delay = 15,
         stretch = 2,
         cap = 0.3
     )
-    class_weights = None
-    decay_init_epoch = 0
+    decay_init_epoch: Optional[int] = 0
 
 
 
