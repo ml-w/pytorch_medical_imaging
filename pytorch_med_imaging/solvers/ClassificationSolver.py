@@ -13,8 +13,6 @@ from typing import Optional, Union, Iterable, Any
 
 import pandas as pd
 
-__all__ = ['ClassificationSolver']
-
 
 class ClassificationSolverCFG(SolverBaseCFG):
     r"""Configuration file for initializing :class:`ClassificationSolver`.
@@ -94,7 +92,7 @@ class ClassificationSolver(SolverBase):
         """
         out, s, g = args
 
-        if self.iscuda:
+        if self.use_cuda:
             s = self._match_type_with_network(s)
             g = self._match_type_with_network(g)
 
@@ -102,19 +100,22 @@ class ClassificationSolver(SolverBase):
 
         # If ordinal_mse mode, assume loss function is SmoothL1Loss
         if g.squeeze().dim() == 1 and not self.ordinal_mse:
-            if not isinstance(self.loss_function, nn.SmoothL1Loss):
-                msg = f"For oridinal_mse mode, expects `SmoothL1Loss` as the loss function, got " \
-                      f"{type(self.loss_function)} instead."
-                raise AttributeError(msg)
             g = g.squeeze().long()
-        elif self.ordinal_class:
+
+        if self.ordinal_class:
             if not isinstance(self.loss_function, CumulativeLinkLoss):
                 msg = f"For oridinal_class mode, expects `CumulativeLinkLoss` as the loss function, got " \
                       f"{type(self.loss_function)} instead."
                 raise AttributeError(msg)
+
+        if self.ordinal_mse and not isinstance(self.loss_function, nn.SmoothL1Loss):
+                msg = f"For oridinal_mse mode, expects `SmoothL1Loss` as the loss function, got " \
+                      f"{type(self.loss_function)} instead."
+                raise AttributeError(msg)
+
         self._logger.debug(f"Output size out: {out.shape} g: {g.shape}")
         # Cross entropy does not need any processing, just give the raw output
-        loss = self.lossfunction(out, g)
+        loss = self.loss_function(out, g)
         return loss
 
     def validation(self):
