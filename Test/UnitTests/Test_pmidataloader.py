@@ -31,19 +31,20 @@ class TestDataLoader(unittest.TestCase):
 class TestImageDataLoader(TestDataLoader):
     def setUp(self):
         super(TestImageDataLoader, self).setUp()
+        # Setting class attributes make these values the new defaults when creating the cfg instances
+        PMIImageDataLoaderCFG.input_dir    = './sample_data/img/'
+        PMIImageDataLoaderCFG.target_dir   = './sample_data/seg/'
+        PMIImageDataLoaderCFG.mask_dir     = './sample_data/seg/'
+        PMIImageDataLoaderCFG.probmap_dir  = './sample_data/seg/'
+        PMIImageDataLoaderCFG.augmentation = './sample_data/config/sample_transform.yaml'
+        PMIImageDataLoaderCFG.data_types   = [float, 'uint8']
+        PMIImageDataLoaderCFG.id_globber   = "^\w+_\d+"
+        PMIImageDataLoaderCFG.id_list     = ['MRI_01', 'MRI_02']
+        PMIImageDataLoaderCFG.sampler     = 'weighted'
+        PMIImageDataLoaderCFG.sampler_kwargs['patch_size']           = [32, 32, 3]
+        PMIImageDataLoaderCFG.tio_queue_kwargs['samples_per_volume'] = 2
+        PMIImageDataLoaderCFG.inf_samples_per_vol                    = 5
         self.cfg = PMIImageDataLoaderCFG()
-        self.cfg.input_dir    = './sample_data/img/'
-        self.cfg.target_dir   = './sample_data/seg/'
-        self.cfg.mask_dir     = './sample_data/seg/'
-        self.cfg.probmap_dir  = './sample_data/seg/'
-        self.cfg.augmentation = './sample_data/config/sample_transform.yaml'
-        self.cfg.data_types   = [float, 'uint8']
-        self.cfg.id_globber   = "^\w+_\d+"
-        self.cfg.id_list     = ['MRI_01', 'MRI_02']
-        self.cfg.sampler     = 'weighted'
-        self.cfg.sampler_kwargs['patch_size']           = [32, 32, 3]
-        self.cfg.tio_queue_kwargs['samples_per_volume'] = 2
-        self.cfg.inf_samples_per_vol                    = 5
 
         # expected variables
         self.num_subjects = len(self.cfg.id_list)
@@ -67,6 +68,12 @@ class TestImageDataLoader(TestDataLoader):
             self.assertTupleEqual(tuple(self.cfg.sampler_kwargs['patch_size']),
                                   tuple(l.shape[1:]))
             break
+
+    def test_additional_instance(self):
+        new_cfg = PMIImageDataLoaderCFG(id_list=['MRI_02', 'MRI_03'])
+        new_loader = PMIImageDataLoader(new_cfg)
+        self.assertTupleEqual(tuple(new_loader.id_list),
+                              ('MRI_02', 'MRI_03'))
 
 class TestImageFeaturePairLoader(TestDataLoader):
     def setUp(self):
@@ -153,8 +160,8 @@ class TestPMIImageMCDataLoader(TestImageDataLoader):
         self.cfg.target_subdirs = ['seg'    , 'seg']
         self.cfg.new_attr       = ['img_new', 'seg_new']
         self.cfg.data_types     = [float    , 'uint8']
-        self.cfg.id_list     = ['MRI_01', 'MRI_02']
-        self.cfg.sampler     = 'weighted'
+        self.cfg.id_list        = ['MRI_01' , 'MRI_02']
+        self.cfg.sampler        = 'weighted'
         self.cfg.sampler_kwargs['patch_size']           = [32, 32, 3]
         self.cfg.tio_queue_kwargs['samples_per_volume'] = 2
         self.cfg.inf_samples_per_vol                    = 5
