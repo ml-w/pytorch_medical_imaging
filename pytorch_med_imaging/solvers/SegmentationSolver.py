@@ -142,7 +142,7 @@ class SegmentationSolver(SolverBase):
             perfs = []
             self.net.eval()
             for mb in tqdm(self.data_loader_val, desc="Validation", position=2):
-                s, g = self._unpack_minibatch(mb, self.solverparams_unpack_keys_forward)
+                s, g = self._unpack_minibatch(mb, self.unpack_key_forward)
                 s = self._match_type_with_network(s)
                 g = self._match_type_with_network(g) # no assumption but should be long in segmentation only.
 
@@ -207,7 +207,7 @@ class SegmentationSolver(SolverBase):
         :func:`sigmoid_plus`.
 
         Args:
-            *args:
+            *args: Pass to superclass method
 
         Returns:
 
@@ -232,8 +232,8 @@ class SegmentationSolver(SolverBase):
             if isinstance(self.loss_function, nn.CrossEntropyLoss):
                 self._logger.debug('Current weight: ' + str(self.loss_function.weight))
                 offset = self._decayed_time + self.decay_init_epoch # init_weight is t_0
-                new_weight = torch.as_tensor([self.sigmoid_plus(offset, self.class_weights[i], s, d, cap) for i in range(len(
-                    self.class_weights))])
+                new_weight = torch.as_tensor([self.sigmoid_plus(offset, self.class_weights[i], s, d, cap) \
+                                              for i in range(len(self.class_weights))])
                 self.loss_function.weight.copy_(new_weight)
                 self._logger.debug('New weight: ' + str(self.loss_function.weight))
         except (AttributeError, KeyError):
