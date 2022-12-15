@@ -85,7 +85,7 @@ class AutoEncoderSolver(SolverBase):
         if self.iscuda:
             g = self._force_cuda(g)
 
-        loss = self.lossfunction(out, g)
+        loss = self.loss_function(out, g)
         return loss
 
 

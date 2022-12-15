@@ -21,7 +21,7 @@ class Img2SeqSolver(SolverBase):
         }
         pass
 
-    def create_lossfunction(self, *args, **kwargs):
+    def prepare_lossfunction(self, *args, **kwargs):
         self.lossfunction = nn.CTCLoss(blank=self.solverparams_blank_character)
 
     def solve_epoch(self, epoch_number):

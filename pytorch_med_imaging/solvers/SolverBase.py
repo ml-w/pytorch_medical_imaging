@@ -147,7 +147,7 @@ class SolverBase(object):
         self.plotter_dict      = {}
 
         # create loss function if not specified
-        self.create_lossfunction()
+        self.prepare_lossfunction()
         self.create_optimizer()
 
         self._logger.info("Solver were configured with options: {}".format(self.__dict__))
@@ -246,10 +246,11 @@ class SolverBase(object):
         if not self.data_loader_val is None and not data_loader_val is None:
             self._logger.warning("Overriding CFG `dataloader_val`.")
 
-        if not isinstance(data_loader_val, PMIDataLoaderBase):
-            raise TypeError(f"Expect input to be ``PMIDataLoaderBase`` for ``data_loader_val``, "
-                            f"but got: {type(data_loader_val)}")
-        self.data_loader_val = data_loader_val.get_torch_data_loader(self.batch_size, exclude_augment=True)
+        if not data_loader_val is None:
+            if not isinstance(data_loader_val, PMIDataLoaderBase) and not data_loader_val is None:
+                raise TypeError(f"Expect input to be ``PMIDataLoaderBase`` for ``data_loader_val``, "
+                                f"but got: {type(data_loader_val)}")
+            self.data_loader_val = data_loader_val.get_torch_data_loader(self.batch_size, exclude_augment=True)
 
     def set_lr_scheduler(self,
                          scheduler: Union[str, PMILRScheduler],
@@ -340,43 +341,29 @@ class SolverBase(object):
             self._logger.warning("Checkpoint specified but doesn't exist!")
             self._logger.debug(f"{checkpoint_dir}")
 
-    def create_lossfunction(self, *args, **kwargs):
-        r"""
-        Try to create loss function from parameters specified by the config file.
-
-        .. warning::
-            Deprecated.
+    def prepare_lossfunction(self) -> None:
+        r"""This method is the default way of preparing the loss function, basically sets :attr:`class_weights` into
+        :attr:`loss_function.weight`. This allow us to port the class weights as fine-tunable hyperparameters.
         """
-        raise DeprecationWarning("Loss function is no longer created by the solvers.")
-        self._logger.info("Creating loss function from config specification.")
+        if self.loss_function is None:
+            raise AttributeError("Loss function must be defined!")
 
-        # Follows the specification in config
-        _lossfunction = eval(self._get_params_from_solver_config('loss_func', None))
+        if self.class_weights is None and self.loss_function.weight is None:
+            msg = "No class weights specified. It is strongly recommend to use class weights for training."
+            self._logger.warning(msg)
+            return
+        elif self.class_weights is not None and self.loss_function.weight is not None:
+            # warn if weight is being override
+            msg = f"Overwriting class weights using CFG inputs: {self.loss_function.weight} -> {self.class_weights}"
+            self._logger.warning(msg)
+            self.loss_function.weight.copy_(torch.as_tensor(self.class_weights).float())
+        elif self.class_weights is not None and self.loss_function.weight is None:
+            self.loss_function.weight = torch.as_tensor(self.class_weights).float()
 
-        # Extract parameters
-        try:
-            _loss_params = dict(self._config['LossParams'])
-        except KeyError:
-            _loss_params = {}
-        except Exception as e:
-            self._logger.exception("Unknown error when creating loss function.")
-            raise RuntimeError("Can't proceed.")
+        # make sure the weights are float
+        if not self.loss_function.weight is None:
+            self.loss_function.weight = self.loss_function.weight.float()
 
-        # Try to eval all of the arguments
-        for keys in _loss_params:
-            try:
-                _loss_params[keys] = ast.literal_eval(_loss_params[keys])
-            except:
-                self._logger.exception(f"Failed to eval key: {keys}")
-
-
-        # Create loss function accordingly
-        if not _lossfunction is None and issubclass(_lossfunction, nn.Module):
-            self.loss_function = _lossfunction(**_loss_params)
-            return self.loss_function
-        else:
-            self._logger.warning(f"Cannot create loss function using: {_lossfunction}")
-            return None
 
     def step(self, *args):
         r"""This function executes one step in a training loop, which includes:

@@ -189,7 +189,7 @@ class PMIController(object):
         solver = self.create_solver(self.general_run_type)
         loader, loader_val = self.prepare_loaders()
         # Push dataloader to solver
-        solver.set_dataloader(loader, loader_val)
+        solver.set_data_loader(loader, loader_val)
 
         # Set learning rate scheduler, TODO: move this to solver
         if self.solverparams_decay_on_plateau:
@@ -263,7 +263,7 @@ class PMIController(object):
         self._logger.log_print_tqdm("Starting evaluation...")
         loader = self.prepare_loaders(inference_mode=True)
         inferencer = self.create_inferencer(self.general_run_type)
-        inferencer.set_dataloader(loader)
+        inferencer.set_data_loader(loader)
         inferencer.load_checkpoint(self.checkpoint_cp_load_dir)
 
         with torch.no_grad():

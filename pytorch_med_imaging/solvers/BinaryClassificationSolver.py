@@ -25,8 +25,8 @@ class BinaryClassificationSolver(ClassificationSolver):
         """
         super(ClassificationSolver, self).__init__(net, hyperparam_dict, use_cuda)
 
-    def create_lossfunction(self):
-        super(BinaryClassificationSolver, self).create_lossfunction()
+    def prepare_lossfunction(self):
+        super(BinaryClassificationSolver, self).prepare_lossfunction()
         # Simple error check
         if not isinstance(self.solverparams_class_weights, (float, torch.FloatTensor)) \
                 and self.solverparams_class_weights is not None:

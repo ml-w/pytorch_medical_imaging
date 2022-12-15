@@ -1,4 +1,4 @@
-from .SolverBase import SolverBase
+from .SolverBase import SolverBase, SolverBaseCFG
 from mnts.mnts_logger import MNTSLogger
 
 
@@ -9,10 +9,35 @@ import torch.nn as nn
 import numpy as np
 from tqdm import *
 from ..loss import CumulativeLinkLoss
+from typing import Optional, Union, Iterable, Any
 
 import pandas as pd
 
 __all__ = ['ClassificationSolver']
+
+
+class ClassificationSolverCFG(SolverBaseCFG):
+    r"""Configuration file for initializing :class:`ClassificationSolver`.
+
+    Class Attributes:
+        [Required] class_weights (torch.Tensor):
+            Define the class weights passed to the loss function. If set to 0, no weigths will be used.
+        sigmoid_params (dict, Optional):
+            By default the class weights are adjusted using a sigmoid function during training to improve the training
+            efficiency and also the segmentation performance. See :func:`decay_optimizer` for more details.
+        decay_init_epoch (int, Optional):
+            Used by the :func:`decay_optimizer` in case the solver is not starting from epoch 0. Default to 0.
+
+    """
+    class_weights : Iterable[float] = None
+    sigmoid_params: Optional[dict]  = dict(
+        delay = 15,
+        stretch = 2,
+        cap = 0.3
+    )
+    decay_init_epoch: Optional[int]  = 0
+    ordinal_class   : Optional[bool] = False
+    ordinal_mse     : Optional[bool] = False
 
 class ClassificationSolver(SolverBase):
     def __init__(self, net, hyperparam_dict, use_cuda):
@@ -32,20 +57,7 @@ class ClassificationSolver(SolverBase):
         """
         super(ClassificationSolver, self).__init__(net, hyperparam_dict, use_cuda)
 
-    def _load_config(self, default_attr):
-        r"""Inherit this to get more default hyperparameters"""
-        _default_attr = {
-            'solverparams_sigmoid_params'   : {'delay': 15, 'stretch': 2, 'cap': 0.3},
-            'solverparams_class_weights'    : None,
-            'solverparams_decay_init_weight': 0,
-            'solverparams_ordinal_class'    : False,
-            'solverparams_ordinal_mse'      : False
-        }
-        if isinstance(default_attr, dict):
-            _default_attr.update(default_attr)
-        super(ClassificationSolver, self)._load_config(_default_attr)
-
-    def create_lossfunction(self):
+    def prepare_lossfunction(self):
         # set class weights to 0 to disable class weight for loss function
         try:
             if not self.solverparams_class_weights == 0:

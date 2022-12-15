@@ -44,11 +44,11 @@ class rAIdiologistSolver(BinaryClassificationSolver):
             _default_attr.update(default_attr)
         super(rAIdiologistSolver, self)._load_config(_default_attr)
 
-    def create_lossfunction(self):
+    def prepare_lossfunction(self):
         if not self.solverparams_rai_classification:
-            super(rAIdiologistSolver, self).create_lossfunction()
+            super(rAIdiologistSolver, self).prepare_lossfunction()
         else:
-            super(BinaryClassificationSolver, self).create_lossfunction()
+            super(BinaryClassificationSolver, self).prepare_lossfunction()
 
     def _build_validation_df(self, g, res):
         r"""Tailored for rAIdiologist, model output were of shape (B x 3), where the first element is

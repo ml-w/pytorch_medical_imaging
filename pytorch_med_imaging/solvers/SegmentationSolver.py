@@ -57,29 +57,29 @@ class SegmentationSolver(SolverBase):
         super(SegmentationSolver, self).__init__(cfg, *args, **kwargs)
 
 
-    def create_lossfunction(self):
-        if self.class_weights is None:
-            self._logger.warning("Automatic computing weighs are not supported now!")
-            raise DeprecationWarning("Automatic computing weighs are not supported now!")
-
-        # set class weights to 0 to disable class weight for loss function
-        if not self.class_weights == 0:
-            weights = torch.as_tensor(self.class_weights)
-            loss_init_weights = weights.cpu().float()
-            self._logger.info("Initial weight factor: " + str(weights))
-        else:
-            self._logger.info("Skipping class weights.")
-            loss_init_weights = None
-
-        if self.loss_function is None:
-            self.loss_function = nn.CrossEntropyLoss(weight=loss_init_weights)
-        else:
-            self._logger.warning("Loss function is already created.")
-
-            # make sure the weight tensor is float
-            if not self.loss_function.weight.dtype.is_floating_point:
-                self._logger.warning(f"Loss function weight is not of type `float`, trying to re-cast it.")
-                self.loss_function.weight = self.loss_function.weight.float()
+    # def prepare_lossfunction(self):
+    #     if self.class_weights is None:
+    #         self._logger.warning("Automatic computing weighs are not supported now!")
+    #         raise DeprecationWarning("Automatic computing weighs are not supported now!")
+    #
+    #     # set class weights to 0 to disable class weight for loss function
+    #     if not self.class_weights == 0:
+    #         weights = torch.as_tensor(self.class_weights)
+    #         loss_init_weights = weights.cpu().float()
+    #         self._logger.info("Initial weight factor: " + str(weights))
+    #     else:
+    #         self._logger.info("Skipping class weights.")
+    #         loss_init_weights = None
+    #
+    #     if self.loss_function is None:
+    #         self.loss_function = nn.CrossEntropyLoss(weight=loss_init_weights)
+    #     else:
+    #         self._logger.warning("Loss function is already created.")
+    #
+    #         # make sure the weight tensor is float
+    #         if not self.loss_function.weight.dtype.is_floating_point:
+    #             self._logger.warning(f"Loss function weight is not of type `float`, trying to re-cast it.")
+    #             self.loss_function.weight = self.loss_function.weight.float()
 
     def auto_compute_class_weights(self,
                                    gt_data: torch.Tensor,
