@@ -4,6 +4,7 @@ import re
 import os
 import time
 from abc import abstractmethod
+from dataclasses import dataclass
 
 import gc
 import numpy as np
@@ -26,7 +27,7 @@ from ..loss import *
 available_lr_scheduler = list(name for name, obj in inspect.getmembers(lr_scheduler) if inspect.isclass(obj))
 available_lr_scheduler += list(name for name, obj in inspect.getmembers(pmi_lr_scheduler) if inspect.isclass(obj))
 
-
+@dataclass
 class SolverBaseCFG:
     r"""Configuration for initializing :class:`SolverBase` and its child classes.
 
@@ -71,6 +72,10 @@ class SolverBaseCFG:
         plotter_dict (dict, Optional):
             This dict could be used by the child class to perform plotting after validation or in each step.
 
+    .. hint::
+        Different from :class:`PMIDataBaseLoaderCFG`, you should only create one solver at a time. Therefore, the CFG
+        is uniquely defined. Although the implementation is not a singleton, there is no option for you to create two
+        simultaneously existing CFG instance with different attributes.
     """
     # Training hyper params (must be provided for training)
     init_lr      : float = None
@@ -95,6 +100,7 @@ class SolverBaseCFG:
     accumulate_grad: Optional[int]               = 1
     init_mom       : Optional[float]             = None
     tb_plotter     : Optional[TB_plotter]        = None
+
 
 class SolverBase(object):
     """Base class for all solvers. This class must be inherited before it can work properly. The child
