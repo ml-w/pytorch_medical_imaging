@@ -34,6 +34,7 @@ class BinaryClassificationSolver(ClassificationSolver):
 
     def _validation_step_callback(self, g: torch.Tensor, res: torch.Tensor, loss: Union[torch.Tensor, float],
                                   uids=None) -> None:
+        r"""Uses :attr:`perf` to store the dictionary of various data."""
         self.validation_losses.append(loss.item())
         if len(self.perfs) == 0:
             self.perfs.append({
@@ -54,6 +55,7 @@ class BinaryClassificationSolver(ClassificationSolver):
             store_dict['uids'].extend(uids)
 
     def _validation_callback(self) -> None:
+        r"""Compute performance and put the performance into tensorboard for plotting."""
         store_dict  = self.perfs[0]
         dics        = store_dict['dics']
         gts         = store_dict['gts']
