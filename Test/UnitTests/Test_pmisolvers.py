@@ -134,9 +134,6 @@ class TestSegmentationSolver(TestSolver):
 
 
 class TestClassificationSolver(TestSolver):
-    def setUp(self):
-        super(TestClassificationSolver, self).setUp()
-
     def _prepare_cfg(self):
         self.data_loader_cfg = SampleClsLoaderCFG()
         self.data_loader_cfg_cls = SampleClsLoaderCFG
@@ -151,4 +148,14 @@ class TestClassificationSolver(TestSolver):
         self.solver = ClassificationSolver(self.solver_cfg)
         self.solver_cls = ClassificationSolver
 
-    #
+class TestBinaryClassificationSolver(TestClassificationSolver):
+    def _prepare_cfg(self):
+        super(TestBinaryClassificationSolver, self)._prepare_cfg()
+        self.data_loader_cfg.target_dir = './sample_data/sample_binaryclass_gt.xlsx'
+        self.data_loader_cfg_cls.target_dir = './sample_data/sample_binaryclass_gt.xlsx'
+        self.solver_cfg = SampleBinClsSolverCFG
+        self.solver_cfg.debug = True
+
+    def _prepare_solver(self):
+        self.solver = BinaryClassificationSolver(self.solver_cfg)
+        self.solver_cls = BinaryClassificationSolver

@@ -93,9 +93,10 @@ class PMIImageFeaturePairLoader(PMIImageDataLoader):
 
     def _load_gt_data(self):
         # Load the datasheet
-        if Path(self.target_dir).suffix == '.csv':
+        tar_dir = Path(self.target_dir)
+        if tar_dir.suffix == '.csv':
             gt_dat = DataLabel.from_csv(self.target_dir)
-        elif not self.excel_sheetname is None:
+        elif tar_dir.suffix == '.xlsx':
             gt_dat = DataLabel.from_xlsx(self.target_dir, self.excel_sheetname)
         return gt_dat
 

@@ -634,7 +634,8 @@ class SolverBase(object):
                 loss = self._loss_eval(res, s, g.squeeze().long())
                 self._logger.debug("_val_step_loss: {}".format(loss.cpu().data.item()))
 
-                self._validation_step_callback(g.detach().cpu(), res.detach().cpu(), loss.detach().cpu())
+                uids = mb.get('uid', None)
+                self._validation_step_callback(g.detach().cpu(), res.detach().cpu(), loss.detach().cpu(), uids)
                 del mb, s, g, loss
                 gc.collect()
 
@@ -861,10 +862,8 @@ class SolverBase(object):
         pass
 
     @abstractmethod
-    def _validation_step_callback(self,
-                                  g: torch.Tensor,
-                                  res: torch.Tensor,
-                                  loss: Union[torch.Tensor, float]) -> None:
+    def _validation_step_callback(self, g: torch.Tensor, res: torch.Tensor, loss: Union[torch.Tensor, float],
+                                  uids=None) -> None:
         r"""This is a method that is called after each step of validation. Normally, this stores the items that are
         useful for evaluating performance for :func:`_validation_callback` to compute. Typically attributes
         :attr:`validation_losses` and :attr:`perfs` are defined.
@@ -876,12 +875,15 @@ class SolverBase(object):
                 List storing data need to calculated the performance.
 
         Args:
+            uids:
             g (torch.Tensor):
                 Label tensor.
             res (torch.Tensor):
                 Network output tensor.
             loss (torch.Tensor or float):
                 Loss of the step.
+            uids (Iterable[str], optional):
+                UIDs default to ``None``.
 
         """
         raise NotImplementedError

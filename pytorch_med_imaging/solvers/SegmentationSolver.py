@@ -137,7 +137,7 @@ class SegmentationSolver(SolverBase):
         self.plotter_dict['scalars']['Loss/Validation Loss'] = mean_val_loss
         self.plotter_dict['scalars']['Perf/Validation DSC'] = dsc
 
-    def _validation_step_callback(self, g, res, loss):
+    def _validation_step_callback(self, g, res, loss, uids=None):
         r"""Count the FP, TN, FP and FN.
 
         Attributes:
@@ -147,6 +147,7 @@ class SegmentationSolver(SolverBase):
                 List storing data need to calculated the performance.
 
         Args:
+            uids:
             g (torch.Tensor):
                 Label tensor.
             res (torch.Tensor):

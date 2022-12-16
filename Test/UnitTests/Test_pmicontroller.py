@@ -254,7 +254,7 @@ class TestSolvers(TestController):
                 self.fail(f"Fail when creating lr_schedule {key} from config.")
 
     def test_create_lossfunction(self):
-        self.solver.create_lossfunction()
+        self.solver.prepare_lossfunction()
 
     def test_create_optimizer(self):
         self.solver.create_optimizer(self.solver.net.parameters())
@@ -263,9 +263,9 @@ class TestSolvers(TestController):
     def test_validation(self):
         self.solver._last_epoch_loss = 10
         self.solver._last_val_loss = 15
-        self.solver.solverparams_num_of_epochs = 2
+        self.solver.num_of_epochs = 2
         loader, loader_val = self.controller.prepare_loaders()
-        self.solver.set_dataloader(loader, loader_val)
+        self.solver.set_data_loader(loader, loader_val)
         self.solver.fit(str(self.temp_output_path.joinpath("test.pt")),
                         True)
         self.assertTrue(len(list(self.temp_output_path.glob("*pt"))) != 0)
@@ -274,21 +274,21 @@ class TestSolvers(TestController):
         from pytorch_med_imaging.solvers.earlystop import BaseEarlyStop
         warmup = 0
         patience = 2
-        self.solver._early_stop_scheduler = BaseEarlyStop.create_early_stop_scheduler('loss_reference', warmup, patience)
-        self.solver.solverparams_num_of_epochs= 15
+        self.solver.early_stop = BaseEarlyStop.create_early_stop_scheduler('loss_reference', warmup, patience)
+        self.solver.num_of_epochs= 15
         self.controller.runparams_batch_size = 2
         loader, loader_val = self.controller.prepare_loaders()
-        self.solver.set_dataloader(loader, loader_val)
+        self.solver.set_data_loader(loader, loader_val)
         self.solver.fit(str(self.temp_output_path.joinpath("test.pt")),
                         False)
-        self.assertTrue(self.solver._early_stop_scheduler._last_epoch < 14)
+        self.assertTrue(self.solver.early_stop._last_epoch < 14)
 
     def test_fit(self):
         self.solver._last_epoch_loss = 10
         self.solver._last_val_loss = 15
-        self.solver.solverparams_num_of_epochs = 2
+        self.solver.num_of_epochs = 2
         loader, loader_val = self.controller.prepare_loaders()
-        self.solver.set_dataloader(loader, loader_val)
+        self.solver.set_data_loader(loader, loader_val)
         self.solver.set_lr_scheduler('LinearLR', *[], **{'start_factor': 0.5,'end_factor': 1})
         self.solver.fit(str(self.temp_output_path.joinpath("test.pt")),
                         False)
@@ -308,15 +308,15 @@ class TestSolvers(TestController):
     def test_accumulate_grad(self):
         # manually set params
         accumulate_grad = 4
-        self.solver.solverparams_accumulate_grad = accumulate_grad
+        self.solver.accumulate_grad = accumulate_grad
         self.controller.runparams_batch_size = 2
         loader, loader_val = self.controller.prepare_loaders()
-        self.solver.set_dataloader(loader, loader_val)
-        for step_idx, mb in enumerate(self.solver._data_loader):
+        self.solver.set_data_loader(loader, loader_val)
+        for step_idx, mb in enumerate(self.solver.data_loader):
             s, g = self.solver._unpack_minibatch(mb, self.solver.solverparams_unpack_keys_forward)
             msg = f"Error at {step_idx}"
-            self.assertEqual(step_idx % self.solver.solverparams_accumulate_grad,
-                             self.solver._accumulated_steps,
+            self.assertEqual(step_idx % self.solver.accumulate_grad,
+                             self.solver.accumulated_steps,
                              msg)
             out, loss = self.solver.step(s, g)
             del s, g, mb

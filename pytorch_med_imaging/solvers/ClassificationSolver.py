@@ -138,11 +138,12 @@ class ClassificationSolver(SolverBase):
             g = g.squeeze().long()
         return g, res
 
-    def _validation_step_callback(self,
-                                  g: torch.Tensor,
-                                  res: torch.Tensor,
-                                  loss: Union[torch.Tensor, float]) -> None:
+    def _validation_step_callback(self, g: torch.Tensor, res: torch.Tensor, loss: Union[torch.Tensor, float],
+                                  uids=None) -> None:
         r"""Stores decision, step loss and performance.
+
+        Args:
+            uids:
         """
         # when ordinal_mse mode, the decision is based on rounding the probability to the nearest class.
         if not self.ordinal_mse:
