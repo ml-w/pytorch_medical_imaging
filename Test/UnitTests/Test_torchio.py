@@ -2,7 +2,7 @@ import unittest
 import tempfile
 import yaml
 import torchio as tio
-from pytorch_med_imaging.PMI_data_loader.augmenter_factory import create_transform_compose
+from pytorch_med_imaging.pmi_data_loader.augmenter_factory import create_transform_compose
 
 
 class TestTorchIO(unittest.TestCase):

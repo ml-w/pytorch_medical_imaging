@@ -52,9 +52,9 @@ class TestLRScheduler(unittest.TestCase):
         controller = PMIController(self.temp_config.name, a=None)
         solver = controller.create_solver(controller.general_run_type)
         loader, loader_val = controller.prepare_loaders()
-        solver.set_dataloader(loader, loader_val)
+        solver.set_data_loader(loader, loader_val)
         controller.create_lr_scheduler(solver)
-        self.assertIsInstance(solver.lr_scheduler, lr_scheduler.OneCycleLR)
+        self.assertIsInstance(solver.lr_sche, lr_scheduler.OneCycleLR)
 
 
 class TestPMILRScheduler(unittest.TestCase):
