@@ -92,9 +92,8 @@ class ClassificationSolver(SolverBase):
         """
         out, s, g = args
 
-        if self.use_cuda:
-            s = self._match_type_with_network(s)
-            g = self._match_type_with_network(g)
+        s = self._match_type_with_network(s)
+        g = self._match_type_with_network(g)
 
         out = out.squeeze() # Expect (B x C) where C is same as number of classes
 
