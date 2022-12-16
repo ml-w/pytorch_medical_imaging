@@ -4,17 +4,11 @@ import numpy as np
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from torch import optim
-from torch.autograd import Variable
-from torch.utils.data import TensorDataset, DataLoader
 
 from .SolverBase import SolverBase, SolverBaseCFG
-from ..med_img_dataset import ImageDataSet, ImageDataMultiChannel, PMIDataBase
-from mnts.mnts_logger import MNTSLogger
 
-from tqdm import tqdm
-import torchio as tio
-from typing import Optional, Union, Iterable, Any
+from typing import Optional, Iterable
+
 
 class SegmentationSolverCFG(SolverBaseCFG):
     r"""Configuration for :class:`SegmentationSolver`
@@ -132,63 +126,52 @@ class SegmentationSolver(SolverBase):
         weights[0] *= 10
         return weights
 
-    def validation(self) -> list:
-        if self.data_loader_val is None:
-            self._logger.warning("Validation skipped because no loader is available.")
-            return None
-
-        with torch.no_grad():
-            validation_loss = []
-            perfs = []
-            self.net.eval()
-            for mb in tqdm(self.data_loader_val, desc="Validation", position=2):
-                s, g = self._unpack_minibatch(mb, self.unpack_key_forward)
-                s = self._match_type_with_network(s)
-                g = self._match_type_with_network(g) # no assumption but should be long in segmentation only.
-
-                if isinstance(s, list):
-                    res = self.net.forward(*s)
-                else:
-                    res = self.net.forward(s)
-                res = F.log_softmax(res, dim=1)
-                loss = self.loss_function(res, g.squeeze().long())
-                validation_loss.append(loss.detach().cpu().data.item())
-                self._logger.debug("_val_step_loss: {}".format(loss.cpu().data.item()))
-
-                # Compute hit and misses
-                res_b = res.argmax(dim=1)
-                res_b = res_b.bool().flatten().detach().cpu()
-                fg = g.bool().flatten().detach().cpu()
-
-                tp = (res_b * fg).int().sum().float().cpu().item()
-                tn = (~res_b * ~fg).int().sum().float().cpu().item()
-                fp = (res_b * ~fg).int().sum().float().cpu().item()
-                fn = (~res_b * fg).int().sum().float().cpu().item()
-                perfs.append([tp, tn, fp, fn])
-                del mb, s, g, res_b, fg, tp, tn, fp, fn, loss
-                gc.collect()
-
-            tps, tns, fps, fns = torch.tensor(perfs).sum(dim=0)
-            dsc = self._DICE(tps, fps, tns, fns)
-            mean_val_loss = np.mean(np.array(validation_loss).flatten())
-            self._logger.info("Validation Result VAL: %.05f DSC: %.05f"%(mean_val_loss, dsc))
-        self.net = self.net.train()
-
+    def _validation_callback(self):
+        r"""Compute the DICE of the validation loop. Also put stuff into :attr:`plotter_dict` for plotting to
+        tensorboard.
+        """
+        tps, tns, fps, fns = torch.tensor(self.perfs).sum(dim=0)
+        dsc = self._DICE(tps, fps, tns, fns)
+        mean_val_loss = np.mean(np.array(self.validation_losses).flatten())
+        self._logger.info("Validation Result VAL: %.05f DSC: %.05f" % (mean_val_loss, dsc))
         self.plotter_dict['scalars']['Loss/Validation Loss'] = mean_val_loss
         self.plotter_dict['scalars']['Perf/Validation DSC'] = dsc
-        return mean_val_loss
+
+    def _validation_step_callback(self, g, res, loss):
+        r"""Count the FP, TN, FP and FN.
+
+        Attributes:
+            validation_losses (Iterable[float]):
+                List storing the losses of each step.
+            perf (Iterable[Any]):
+                List storing data need to calculated the performance.
+
+        Args:
+            g (torch.Tensor):
+                Label tensor.
+            res (torch.Tensor):
+                Network output tensor.
+            loss (torch.Tensor or float):
+                Loss of the step.
+        """
+        self.validation_losses.append(loss.detach().cpu().data.item())
+        # Compute hit and misses
+        res_b = res.argmax(dim=1)
+        res_b = res_b.bool().flatten().detach().cpu()
+        fg = g.bool().flatten().detach().cpu()
+        tp = (res_b * fg).int().sum().float().cpu().item()
+        tn = (~res_b * ~fg).int().sum().float().cpu().item()
+        fp = (res_b * ~fg).int().sum().float().cpu().item()
+        fn = (~res_b * fg).int().sum().float().cpu().item()
+        self.perfs.append([tp, tn, fp, fn])
 
     def _loss_eval(self, *args):
         out, s, g = args
-        if (isinstance(g, list) or isinstance(g, tuple)) and len(g) > 1:
-            g = [Variable(gg, requires_grad=False) for gg in g]
-        else:
-            g = Variable(g, requires_grad=False)
-
-        if self.use_cuda:
-            g = self._match_type_with_network(g)
+        g   = self._match_type_with_network(g)
+        out = self._match_type_with_network(out)
 
         if isinstance(self.loss_function, (nn.BCELoss, nn.BCEWithLogitsLoss)):
+            out = F.log_softmax(out, dim=1)
             if not g.dim() == out.dim():
                 g = g.squeeze()
             loss = self.loss_function(out, g.long())

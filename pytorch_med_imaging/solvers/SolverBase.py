@@ -16,6 +16,7 @@ from typing import Union, Iterable, Any, Optional
 from pathlib import Path
 
 import torchio as tio
+from tqdm import tqdm
 
 from ..tb_plotter import TB_plotter
 from .. import lr_scheduler as pmi_lr_scheduler
@@ -599,6 +600,50 @@ class SolverBase(object):
         self._epoch_callback()
         self.decay_optimizer(epoch_loss)
 
+    def validation(self) -> list:
+        r"""Default pipeline for running the validation. This introduce two class attribute lists
+        :attr:`validation_losses` and :attr:`perfs`. They are to be used in :func:`_validation_step_callback` and also
+        :func:`_validation_callback`.
+
+        .. hint::
+            You can inherit :func:`_validation_step_callback` and :func:`_validation_callback` to compute the step
+            performance and validation performance. The key is that loss has to be stored during the step callback for
+            calculation of the validation average loss.
+
+        See Also:
+            * :func:`_validation_step_callback`
+            * :func:`_validation_callback
+        """
+        if self.data_loader_val is None:
+            self._logger.warning("Validation skipped because no loader is available.")
+            return None
+
+        with torch.no_grad():
+            self.validation_losses = []
+            self.perfs = []
+            self.net.eval()
+            for mb in tqdm(self.data_loader_val, desc="Validation", position=2):
+                s, g = self._unpack_minibatch(mb, self.unpack_key_forward)
+                s = self._match_type_with_network(s)
+                g = self._match_type_with_network(g) # no assumption but should be long in segmentation only.
+
+                if isinstance(s, list):
+                    res = self.net.forward(*s)
+                else:
+                    res = self.net.forward(s)
+                loss = self._loss_eval(res, s, g.squeeze().long())
+                self._logger.debug("_val_step_loss: {}".format(loss.cpu().data.item()))
+
+                self._validation_step_callback(g.detach().cpu(), res.detach().cpu(), loss.detach().cpu())
+                del mb, s, g, loss
+                gc.collect()
+
+            self._validation_callback()
+
+        self.net = self.net.train()
+        mean_val_loss = np.mean(np.array(self.validation_losses).flatten())
+        return mean_val_loss
+
     def fit(self,
             checkpoint_path: Optional[Union[str, Path]] = None,
             debug_validation: Optional[bool] = False):
@@ -706,11 +751,11 @@ class SolverBase(object):
         measure_loss = val_loss if val_loss is not None else train_loss
         return measure_loss
 
-    @abstractmethod
-    def validation(self, *args, **kwargs) -> float:
-        r"""This is called after each epoch. This should return the validation loss as a float number.
-        """
-        raise NotImplementedError("Validation is not implemented in this solver.")
+    # @abstractmethod
+    # def validation(self, *args, **kwargs) -> float:
+    #     r"""This is called after each epoch. This should return the validation loss as a float number.
+    #     """
+    #     raise NotImplementedError("Validation is not implemented in this solver.")
 
     def _match_type_with_network(self, tensor: torch.Tensor) -> torch.Tensor:
         """Return a tensor with the same type as the first weight of `self._net`. This function seems to cause CUDA
@@ -814,6 +859,40 @@ class SolverBase(object):
             * :func:`solve_epoch`
         """
         pass
+
+    @abstractmethod
+    def _validation_step_callback(self,
+                                  g: torch.Tensor,
+                                  res: torch.Tensor,
+                                  loss: Union[torch.Tensor, float]) -> None:
+        r"""This is a method that is called after each step of validation. Normally, this stores the items that are
+        useful for evaluating performance for :func:`_validation_callback` to compute. Typically attributes
+        :attr:`validation_losses` and :attr:`perfs` are defined.
+
+        Attributes:
+            validation_losses (Iterable[float]):
+                List storing the losses of each step.
+            perf (Iterable[Any]):
+                List storing data need to calculated the performance.
+
+        Args:
+            g (torch.Tensor):
+                Label tensor.
+            res (torch.Tensor):
+                Network output tensor.
+            loss (torch.Tensor or float):
+                Loss of the step.
+
+        """
+        raise NotImplementedError
+
+    @abstractmethod
+    def _validation_callback(self) -> None:
+        r"""This is a method that is called after the whole batch of data is evaluated for validation. Typically, the
+        performance of the network is computed and plotted. You can use
+
+
+        """
 
     def _epoch_callback(self, *args, **kwargs) -> None:
         """Default callback after `solver_epoch` is done. This is optional to inherit
