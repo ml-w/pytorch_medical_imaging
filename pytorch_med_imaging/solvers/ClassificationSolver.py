@@ -95,11 +95,7 @@ class ClassificationSolver(SolverBase):
         s = self._match_type_with_network(s)
         g = self._match_type_with_network(g)
 
-        out = out.squeeze() # Expect (B x C) where C is same as number of classes
-
-        # If ordinal_mse mode, assume loss function is SmoothL1Loss
-        if g.squeeze().dim() == 1 and not self.ordinal_mse:
-            g = g.squeeze().long()
+        g, out = self._align_g_res_size(g, out)
 
         if self.ordinal_class:
             if not isinstance(self.loss_function, CumulativeLinkLoss):
@@ -117,50 +113,54 @@ class ClassificationSolver(SolverBase):
         loss = self.loss_function(out, g)
         return loss
 
-    def validation(self):
-        r"""Validation for classification problems.
+    def _align_g_res_size(self, g, res):
+        """For ordinary classification, expects network output `res` and target labels `g` dimension to be
+        :math:`(B × C)` and :math:`(B × 1)` where :math:`C` is the number of classes in label. For binary classification
+        here, we allow users to ask more than one binary questions such that the network output and the labels should
+        both have a dimension of :math:`(B × C)` where :math:`C` is the number of questions asked.
+
+        Generally speaking, it is common to have :math:`C = 1`, but the dimension 1 poses trouble because it gets
+        squeezed by calling `torch.Tensor.squeeze`.
+
+        Args:
+            g (torch.Tensor):
+                The target label tensor. Should have a dimension of :math:`(B)`, but if not, it gets reshaped.
+            res (torch.Tensor):
+                The network output tensor. Should have a dimension of :math:`(B × C)`.
 
         Returns:
-            float: Validation loss.
+            torch.Tensor: The reshaped target label. The reshaped output tensor.
+
         """
-        if self.data_loader_val is None:
-            self._logger.warning("Validation skipped because no loader is available.")
-            return None
-        with torch.no_grad():
-            self.net.eval()
+        res = res.squeeze()  # Expect (B x C) where C is same as number of classes
+        # If ordinal_mse mode, assume loss function is SmoothL1Loss
+        if g.squeeze().dim() == 1 and not self.ordinal_mse:
+            g = g.squeeze().long()
+        return g, res
 
-            decisions = []
-            validation_loss = []
-            for mb in tqdm(self.data_loader_val, desc="Validation", position=2):
-                s, g = self._unpack_minibatch(mb, self.unpack_key_forward)
-                s = self._match_type_with_network(s)
-                g = self._match_type_with_network(g)
+    def _validation_step_callback(self,
+                                  g: torch.Tensor,
+                                  res: torch.Tensor,
+                                  loss: Union[torch.Tensor, float]) -> None:
+        r"""Stores decision, step loss and performance.
+        """
+        # when ordinal_mse mode, the decision is based on rounding the probability to the nearest class.
+        if not self.ordinal_mse:
+            dic = torch.argmax(torch.softmax(res, dim=1), dim=1)
+        else:
+            dic = torch.round(res).long()
+        self.perfs.extend([guess == truth for guess, truth in zip(dic.tolist(), g.tolist())])
+        self.validation_losses.append(loss.item())
 
-                if isinstance(s, list):
-                    res = self.net(*s)
-                else:
-                    res = self.net(s)
-                # res = torch.(res, dim=1)
-                while res.dim() < 2:
-                    res = res.unsqueeze(0)
-
-                # when ordinal_mse mode, the decision is based on rounding the probability to the nearest class.
-                if not self.ordinal_mse:
-                    dic = torch.argmax(torch.softmax(res, dim=1), dim=1)
-                else:
-                    dic = torch.round(res).long()
-                decisions.extend([guess == truth for guess, truth in zip(dic.tolist(), g.tolist())])
-                loss = self._loss_eval(res, s, g)
-                validation_loss.append(loss.item())
-
-            # Compute accuracies
-            acc = float(decisions.count(True)) / float(len(decisions))
-            validation_loss = np.mean(np.array(validation_loss).flatten())
-            self._logger.info("Validation Result - ACC: %.05f, VAL: %.05f"%(acc, validation_loss))
-
-        self.plotter_dict['scalars']['Loss/Validation Loss'] = validation_loss
+    def _validation_callback(self) -> None:
+        r"""Calculate accuracy of classification.
+        """
+        # Compute accuracies
+        acc = float(self.perfs.count(True)) / float(len(self.perfs))
+        self.validation_losses = np.mean(np.array(self.validation_losses).flatten())
+        self._logger.info("Validation Result - ACC: %.05f, VAL: %.05f"%(acc, self.validation_losses))
+        self.plotter_dict['scalars']['Loss/Validation Loss'] = self.validation_losses
         self.plotter_dict['scalars']['Performance/ACC'] = acc
-        return validation_loss
 
     def _step_callback(self, s, g, out, loss, step_idx=None) -> None:
         r"""Build and print a table summarizing the prediction of the step.
