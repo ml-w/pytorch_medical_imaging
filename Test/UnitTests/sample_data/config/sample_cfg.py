@@ -69,6 +69,7 @@ class SampleClsLoaderCFG(PMIImageFeaturePairLoaderCFG):
     # This is how you change only one attribute of a default dict
     PMIImageFeaturePairLoaderCFG.tio_queue_kwargs['samples_per_volume'] = 5
 
+
 class SampleClsSolverCFG(ClassificationSolverCFG):
     r"""import this class to define these variable. Beware not to import any other configs, otherwise the attributes
     will be replaced."""
@@ -98,6 +99,7 @@ class SampleClsSolverCFG(ClassificationSolverCFG):
     use_cuda        : Optional[bool]              = True
     debug           : Optional[bool]              = False
     accumulate_grad : Optional[int]               = 1
+
 
 class SampleBinClsSolverCFG(SampleClsSolverCFG):
     class_weights  = [1.5]
