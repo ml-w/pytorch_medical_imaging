@@ -3,6 +3,7 @@ import inspect
 import re
 import os
 import time
+import pprint
 from abc import abstractmethod
 from dataclasses import dataclass
 
@@ -101,6 +102,22 @@ class SolverBaseCFG:
     accumulate_grad: Optional[int]               = 1
     init_mom       : Optional[float]             = None
     tb_plotter     : Optional[TB_plotter]        = None
+
+    def __init__(self, **kwargs):
+        # load class attributes as default values of the instance attributes
+        cls = self.__class__
+        cls_dict = { attr: getattr(cls, attr) for attr in dir(cls) }
+        self.__dict__.update(cls_dict)
+
+        # replace instance attributes
+        if len(kwargs):
+            for key, value in kwargs.items():
+                self.__dict__[key] = value
+
+    def __str__(self):
+        _d = {k: v for k, v in self.__dict__.items() if k[0] != '_'}
+        _d['net'] = self.net._get_name()
+        return pprint.pformat(_d, indent=2)
 
 
 class SolverBase(object):

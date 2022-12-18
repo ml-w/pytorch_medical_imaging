@@ -2,6 +2,7 @@ import os
 import re
 import configparser
 import pandas as pd
+import pprint
 import itertools
 from dataclasses import dataclass
 from abc import *
@@ -70,6 +71,9 @@ class PMIDataLoaderBaseCFG:
             for key, value in kwargs.items():
                 self.__dict__[key] = value
 
+    def __str__(self):
+        _d = {k: v for k, v in self.__dict__.items() if k[0] != '_'}
+        return pprint.pformat(_d, indent=2)
 
 
 class PMIDataLoaderBase(object):
