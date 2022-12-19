@@ -1,3 +1,6 @@
+Networks
+========
+
 .. py:currentmodule:: pytorch_med_imaging.networks
 
 GNNGRU
