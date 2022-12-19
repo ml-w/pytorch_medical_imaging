@@ -90,12 +90,12 @@ class SolverBaseCFG:
     net          : torch.nn.Module       = None
     loss_function: torch.nn              = None
     optimizer    : torch.optim.Optimizer = None
-    dataloader   : PMIDataLoaderBase     = None
+    data_loader  : PMIDataLoaderBase     = None
 
     # Options with defaults
     use_cuda       : Optional[bool]              = True
     debug          : Optional[bool]              = False
-    dataloader_val : Optional[PMIDataLoaderBase] = None
+    data_loader_val: Optional[PMIDataLoaderBase] = None
     lr_sche        : Optional[PMILRScheduler]    = None # If ``None``, lr_scheduler.ExponentialLR will be used.
     plotter_dict   : Optional[dict]              = None
     early_stop     : Optional[BaseEarlyStop]     = None
@@ -168,7 +168,7 @@ class SolverBase(object):
         self.prepare_lossfunction()
         self.create_optimizer()
 
-        self._logger.info("Solver were configured with options: {}".format(self.__dict__))
+        self._logger.info("Solver was configured with options: {}".format(str(cfg)))
         if  len(kwargs):
             self._logger.warning("Some solver configs were not used: {}".format(kwargs))
 

@@ -26,6 +26,7 @@ Class definition
 ^^^^^^^^^^^^^^^^
 .. autoclass:: PMIDataLoaderBase
     :members:
+    :private-members: _load_data_set_training, _load_data_set_inference, _read_config, _pack_data_into_subjects
 
 PMIImageDataLoader
 ------------------

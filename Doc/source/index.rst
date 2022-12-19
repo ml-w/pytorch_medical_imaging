@@ -28,6 +28,13 @@ Solvers
 
    Solvers/Solvers.rst
 
+Inferencers
+-----------
+.. toctree::
+   :maxdepth: 2
+
+   Inferencers/Inferencers.rst
+
 Networks
 --------
 .. toctree::

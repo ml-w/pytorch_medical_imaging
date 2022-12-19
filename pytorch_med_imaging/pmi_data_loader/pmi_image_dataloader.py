@@ -385,9 +385,14 @@ class PMIImageDataLoader(PMIDataLoaderBase):
             # shuffling the patches (e.g., grid sampler)
         return queue_dict, training
 
-    def create_aggregation_queue(self, subject: torchio.SubjectsDataset, *args, **kwargs):
+    def create_aggregation_queue(self, subjects: torchio.SubjectsDataset, *args, **kwargs):
         r"""Note that this function should only be invoked during inference. Typically, you don't need the
-        aggregator anywhere else."""
+        aggregator anywhere else.
+
+        Args:
+            subjects (SubjectDataset):
+
+        """
         required_att = ('sampler', 'data', 'queue')
         for att in required_att:
             if not hasattr(self, att):
@@ -395,23 +400,23 @@ class PMIImageDataLoader(PMIDataLoaderBase):
                 raise AttributeError(msg)
 
         if isinstance(self.sampler_instance, tio.GridSampler):
-            self.sampler_instance.set_subject(subject)
+            self.sampler_instance.set_subject(subjects)
         elif isinstance(self.sampler_instance, tio.WeightedSampler):
             _spv = self.inf_samples_per_vol if self.inf_samples_per_vol is not None \
                 else self.queue.samples_per_volume
             self._logger.info(f"Setting the number of patches to sample to: "
                               f"{_spv}")
-            self.sampler_instance.set_subject(subject, _spv)
+            self.sampler_instance.set_subject(subjects, _spv)
             self.queue.samples_per_volume = _spv
         else:
             msg = f"Currrently only support GridSampler and WeightedSampler, but got {type(self.sampler_instance)}"
             raise TypeError(msg)
 
         # Replace subjects in queue and reset the queue
-        if isinstance(subject, tio.Subject):
-            subject = tio.SubjectsDataset([subject])
+        if isinstance(subjects, tio.Subject):
+            subjects = tio.SubjectsDataset([subjects])
         del self.queue._subjects_iterable, self.queue.sampler
-        self.queue.subjects_dataset = subject
+        self.queue.subjects_dataset = subjects
         self.queue._subjects_iterable = None
         self.queue.sampler = self.sampler_instance
         self.queue._initialize_subjects_iterable()
@@ -420,3 +425,18 @@ class PMIImageDataLoader(PMIDataLoaderBase):
 
     def get_sampler(self):
         return self.sampler_instance
+
+    def get_inf_samples_per_vol(self):
+        r"""Sometimes you want more samples per volume for weighted samplers. You can directly do it by accessing the
+        attribute :attr:`inf_samples_per_vol`, but it is unsafe as it is not always defined. This method is a safe
+        method to get that information.
+
+        Returns:
+            int: Samples per volume for inference
+        """
+        f = getattr(self, 'inf_samples_per_vol', None)
+        if f is None:
+            f = getattr(self.queue, 'samples_per_volume', None)
+        if f is None:
+            msg = "Cannot get inf_samples_per_volume."
+            raise AttributeError(msg)

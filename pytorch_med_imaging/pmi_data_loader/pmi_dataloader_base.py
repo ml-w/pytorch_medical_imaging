@@ -116,7 +116,7 @@ class PMIDataLoaderBase(object):
 
     **Changing the default values**
 
-    >>> from pytorch_med_imaging.pmi_data_loader import PMIDataLoaderBaseCFG as BCFG
+    >>> from pytorch_med_imaging.data_loader import PMIDataLoaderBaseCFG as BCFG
     >>> BCFG.input_dir = '/new/default'
     >>> cfg = BCFG()
     >>> loader = LoaderClass(cfg)
@@ -218,7 +218,7 @@ class PMIDataLoaderBase(object):
             batch_size (int):
                 Batch size.
             exclude_augment (bool, Optional):
-                Pass to :func:`_load_data_set_training` or :func:`_load_data_set_inference`
+                Pass to :meth:`._load_data_set_training` or :meth:`._load_data_set_inference`
 
         Returns:
             torch.utils.DataLoader
