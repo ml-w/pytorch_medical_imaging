@@ -50,14 +50,20 @@ class InferencerBase(object):
         self._logger        = MNTSLogger[self.__class__.__name__]
         self._load_config(cfg)   # Load config from ``cls_cfg``
 
-        self._logger.info("Inferencer was configured with options: {}".format(str(sfg)))
+        self._logger.info("Inferencer was configured with options: {}".format(str(cfg())))
 
         if self.use_cuda:
             self._logger.info("Moving network to GPU.")
             self.net = self.net.cuda()
 
+        # Flags
+        self.CP_LOADED = False # whether `load_checkpoint` have been called
+
     def set_data_loader(self, data_loader: PMIDataLoaderBase):
-        SolverBase.set_data_loader(self, data_loader, None)
+        # SolverBase.set_data_loader(self, data_loader, None)
+        self.data_loader = data_loader
+        self.data_loader.run_mode = 0 # Automatically set run_mode to inference
+        self.data_loader.load_dataset(exclude_augment=True)
 
     def _input_check(self):
         assert os.path.isfile(self.net_state_dict), f"Cannot open network checkpoint at {self.net_state_dict}"
@@ -83,6 +89,7 @@ class InferencerBase(object):
 
         self._logger.info("Loading checkpoint " + str(checkpoint_path))
         self.get_net().load_state_dict(torch.load(str(checkpoint_path)), strict=False)
+        self.CP_LOADED = True
 
     @abstractmethod
     def _prepare_data(self):
@@ -92,8 +99,17 @@ class InferencerBase(object):
     def display_summary(self):
         raise NotImplementedError
 
-    @abstractmethod
     def write_out(self):
+        r"""This is the called to perform inference. This will invoke :meth:`._write_out` with a bit of error check.
+        """
+        if not self.CP_LOADED:
+            msg = "Checkpoint state of the network was never loaded. Have you called `load_checkpoint()`?"
+            raise ArithmeticError(msg)
+        else:
+            self._write_out()
+
+    @abstractmethod
+    def _write_out(self):
         raise NotImplementedError("This method must be implemented by the child class")
 
     def _load_config(self, cfg: SolverBaseCFG = None) -> None:
@@ -111,3 +127,7 @@ class InferencerBase(object):
     def _check_write_out_ready(self):
         r"""See :func:`SolverBase._check_write_out_ready`."""
         return SolverBase._check_fit_ready(self)
+
+    def get_net(self):
+        r"""See :func:`SolverBase.get_net<pytorch_med_imaging.solvers.SolverBase.get_net>`."""
+        return SolverBase.get_net(self)

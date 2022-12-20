@@ -70,7 +70,7 @@ class SegmentationInferencer(InferencerBase):
             assert os.path.isdir(self.output_dir), f"Cannot open output directory: {self.output_dir}"
         return 0
 
-    def write_out(self, output_dir = None):
+    def _write_out(self, output_dir = None):
         r"""Write the segmentation. You can call :func:`.display_summary` to produce a summary of the performance.
 
         Args:
