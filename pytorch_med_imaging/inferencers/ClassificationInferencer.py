@@ -13,6 +13,7 @@ from torchvision.utils import make_grid
 from tqdm import *
 
 from .InferencerBase import InferencerBase
+from ..solvers import ClassificationSolverCFG
 from ..utils.visualization import draw_overlay_heatmap
 from ..pmi_data_loader.pmi_dataloader_base import PMIDataLoaderBase
 from ..med_img_dataset import DataLabel
@@ -22,32 +23,15 @@ __all__ = ['ClassificationInferencer']
 
 class ClassificationInferencer(InferencerBase):
     def __init__(self,
-                 net: torch.nn.Module,
-                 output_dir: Union[str, Path],
-                 hyperparam_dict: dict,
-                 use_cuda: bool,
-                 pmi_data_loader: PMIDataLoaderBase,
-                 **kwargs):
-        super(ClassificationInferencer, self).__init__(net, output_dir, hyperparam_dict,
-                                                       use_cuda, pmi_data_loader, **kwargs)
-
-    def _load_default_attr(self, default_dict = None):
-        default = {
-            'solverparams_sig_out': True
-        }
-        if not default_dict is None:
-            default.update(default_dict)
-        super(ClassificationInferencer, self)._load_default_attr(default)
-
-    def _input_check(self):
-        assert isinstance(self.pmi_data_loader, PMIDataLoaderBase), "The pmi_data_loader was not configured correctly."
-        if not os.path.isdir(self.output_dir):
-            # Try to make dir first
-            os.makedirs(self.output_dir, exist_ok=True)
-            assert os.path.isdir(self.output_dir), f"Cannot open output directory: {self.output_dir}"
-        return 0
+                 cfg: ClassificationSolverCFG,
+                 *args, **kwargs):
+        super(ClassificationInferencer, self).__init__(cfg, *args, **kwargs)
 
     def attention_write_out(self, attention_list):
+        r"""
+        .. deprecated::
+            - v0.1
+        """
         raise DeprecationWarning("Don't use this function!")
         attention_outdir = os.path.dirname(self.output_dir)
         id_lists = self._in_dataset.get_unique_IDs()
@@ -80,6 +64,11 @@ class ClassificationInferencer(InferencerBase):
         pass
 
     def grad_cam_write_out(self, target_layer):
+        r"""
+        .. deprecated::
+            - v0.1
+
+        """
         raise DeprecationWarning("Don't use this function!")
         gradcam = GradCam(self.net, target_layer)
 
@@ -143,9 +132,10 @@ class ClassificationInferencer(InferencerBase):
         with torch.no_grad():
             self.net = self.net.eval()
             # dataloader = DataLoader(self._inference_subjects, batch_size=self.batch_size, shuffle=False)
-            dataloader = self._data_loader
-            for index, mb in enumerate(tqdm(dataloader, desc="Steps")):
-                s = self._unpack_minibatch(mb, self.solverparams_unpack_keys_inference)
+            dataloader = self.data_loader
+            for index, mb in enumerate(tqdm(dataloader.get_torch_data_loader(self.batch_size, exclude_augment=True),
+                                            desc="Steps")):
+                s = self._unpack_minibatch(mb, self.unpack_key_inference)
                 s = self._match_type_with_network(s)
 
                 try:
@@ -188,19 +178,43 @@ class ClassificationInferencer(InferencerBase):
                  out_tensor: torch.IntTensor,
                  uids: Iterable[Union[str, int]],
                  gt: Optional[torch.IntTensor] = None,
-                 sig_out=True):
+                 sig_out: Optional[bool] = None) -> DataLabel:
+        r"""Introduced for classification problem, write conver the raw results into a data label (i.e. DataFrame).
+
+        Args:
+            out_tensor (torch.Tensor):
+                Integer decision tensor predicted by the network.
+            uids (Iterable[Union[str, int]]):
+                Uids of the predictions.
+            gt (torch.Tensor, Optional):
+                Integer decision tensor. If this is provided, the inferencer will also try to compute the performance
+                of the inference run. Default to ``None``.
+            sig_out (bool, Optional):
+                Override instance attribute :attr:`sig_out` if not ``None``. See :class:`.ClassificationSolverCFG`
+
+        Returns:
+            DataLabel
+
+        See Also:
+            * :class:`.ClassificationSolverCFG`
+
+        """
         out_decisions = {}
         out_decision = torch.argmax(out_tensor, dim=1)
         out_tensor = torch.sigmoid(out_tensor) if sig_out else out_tensor
         out_tensor = F.softmax(out_tensor, dim=1)
 
         if os.path.isdir(self.output_dir):
+            # if specified output dir is a directory, use the default name `class_inf.csv`
             self.output_dir = os.path.join(self.output_dir, 'class_inf.csv')
         if not self.output_dir.endswith('.csv'):
+            # if it is not a directory, add .csv to it.
             self.output_dir += '.csv'
         if os.path.isfile(self.output_dir):
+            # if there's already a file there, warn users about it.
             self._logger.log_print_tqdm("Overwriting file %s!" % self.output_dir, 30)
         if not os.path.isdir(os.path.dirname(self.output_dir)):
+            # if the specified directory does not exist it, quietly create it.
             os.makedirs(os.path.dirname(self.output_dir), exist_ok=True)
 
         # Write decision

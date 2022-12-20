@@ -16,9 +16,9 @@ class SampleSegLoaderCFG(PMIImageDataLoaderCFG):
     id_globber:str = '^MRI_\d+'
 
     data_types                    : Iterable = [float, 'uint8']
-    sampler                       : str      = 'uniform'
+    sampler                       : str      = 'weighted'
     sampler_kwargs                : dict     = dict(patch_size=[32, 32, 1])
-    augmentation                  : str      = './sample_data/config/sample_transform.yaml'
+    augmentation                  : str      = './sample_data/config/sample_transform_seg.yaml'
 
 
 class SampleSegSolverCFG(SegmentationSolverCFG):
@@ -40,6 +40,7 @@ class SampleSegSolverCFG(SegmentationSolverCFG):
 
     # I/O
     unpack_key_forward: Iterable[str] = ['input', 'gt']
+    unpack_key_forward: Iterable[str] = ['input']
 
     net          : torch.nn.Module   = UNet_p(1, 2, layers=2)
     loss_function: torch.nn          = nn.CrossEntropyLoss(weight = torch.as_tensor(class_weights))
@@ -89,6 +90,7 @@ class SampleClsSolverCFG(ClassificationSolverCFG):
 
     # I/O
     unpack_key_forward: Iterable[str] = ['input', 'gt']
+    unpack_key_forward: Iterable[str] = ['input']
 
     net          : torch.nn.Module   = LiNet3d(1, 3, use_layer_norm=True)
     loss_function: torch.nn          = nn.CrossEntropyLoss(weight = torch.as_tensor(class_weights))
