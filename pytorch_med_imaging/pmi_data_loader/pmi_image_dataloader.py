@@ -386,12 +386,21 @@ class PMIImageDataLoader(PMIDataLoaderBase):
         return queue_dict, training
 
     def create_aggregation_queue(self, subjects: torchio.SubjectsDataset, *args, **kwargs):
-        r"""Note that this function should only be invoked during inference. Typically, you don't need the
-        aggregator anywhere else.
+        r"""This method samples from the input subjects and return the queue and also the aggregator. The sampled
+        patches is obtained by iterating the updated ``self.queue``, which are supposed to be processed by the network.
+        The processed output should have the same dimension as the input (except for channel), and are fed into the
+        aggregator produced by this method.
+
+        .. important::
+            Note that this function should only be invoked during inference. Typically, you don't need the
+            aggregator anywhere else.
 
         Args:
             subjects (SubjectDataset):
+                The target subject to sample from using the configured sampler.
 
+        Returns:
+            [torchio.Queue, torchio.GridAggregator]
         """
         required_att = ('sampler', 'data', 'queue')
         for att in required_att:
@@ -440,3 +449,28 @@ class PMIImageDataLoader(PMIDataLoaderBase):
         if f is None:
             msg = "Cannot get inf_samples_per_volume."
             raise AttributeError(msg)
+
+    @property
+    def patch_size(self):
+        r"""Return the patch_size passed to tio_queue_kwargs"""
+        if hasattr(self.sampler_kwargs, 'patch_size'):
+            if self.sampler_instance is None:
+                msg = f"Trying to fetch patch_size before sampler instance creation. This might lead to the deviation "\
+                      f"of the actual sample patch_size and the value returned by this function."
+                self._logger.warning(msg)
+            return self.sampler_kwargs.patch_size
+        else:
+            msg = "Trying to fetch patch_size but it was not defined."
+            self._logger.warning(msg)
+            return None
+
+    @patch_size.setter
+    def patch_size(self, patch_size):
+        r"""Convinient method to set :attr:`.patch_size`
+
+        Args:
+            patch_size (Iterable[int]):
+                Desired patch size for sampler. Only works when :attr:`.sampler_instance` is created. The input should
+                be in the order :math:`(W × H × D)`.
+        """
+        self.sampler_kwargs['patch_size'] = patch_size
