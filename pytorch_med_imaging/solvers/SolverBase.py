@@ -51,7 +51,16 @@ class SolverBaseCFG:
             Number of epochs.
         [Required] unpack_key_forowrad (list of str):
             This list is used to unpack the ``tio.Subject`` (or patches) loaded by the ``data_loader``. See
-            :func:`SolverBase.solve_epoch`.
+            :func:`.solve_epoch`.
+        cp_save_dir (str, Optional):
+            Specify the file directory to write the network parameters when criteria reached. If ``None``, you will
+            need to call the :func:`.fit` with the `checkpoint_path` argument. Default to ``None``.
+        cp_load_dir (str, Optional):
+            Specify the direcotry where the checkpoint is to be loaded. If not ``None``, the checkpoint is loaded before
+            calling :func:`.fit`.
+        unpack_key_inference (Iterable[str], Optional):
+            If this is specified, the inferencer will be default to use this, otherwise, it will try to use
+            :attr:`unpack_key_forward`, but this is not always correct. Default to ``None``.
         init_mom (float, Optional):
             Initial momentum. Ignored for some of the optimizers.
         lr_sche (lr_scheduler._LRScheduler, Optional):
@@ -85,7 +94,10 @@ class SolverBaseCFG:
     batch_size   : int   = None
 
     # I/O
-    unpack_key_forward: Iterable[str] = None
+    unpack_key_forward  : Iterable[str]           = None
+    unpack_key_inference: Optional[Iterable[str]] = None
+    cp_save_dir         : Optional[str]           = None
+    cp_load_dir         : Optional[str]           = None
 
     net          : torch.nn.Module       = None
     loss_function: torch.nn              = None
@@ -682,18 +694,24 @@ class SolverBase(object):
             functions :func:`solve_epoch` and :func:`step` without having to touch this function.
 
         See Also:
-            * :func:`solve_epoch`
-            * :func:`step`
-            * :func:`_epoch_prehook`
-            * :func:`_epoch_callback`
-            * :func:`_step_callback
+            * :func:`.solve_epoch`
+            * :func:`.step`
+            * :func:`._epoch_prehook`
+            * :func:`._epoch_callback`
+            * :func:`._step_callback
 
         """
         if checkpoint_path is None:
-            if not hasattr(self, 'cp_save_dir'):
+            if not hasattr(self, 'cp_save_dir') or getattr(self, 'cp_save_dir', None):
                 msg = "Checkpoint save path must be specified. Either supply an argument to the `fit()` method or " \
                       "specify the attribute 'cp_point_dir' in the cfg."
                 raise AttributeError(msg)
+        else:
+            if not getattr(self, 'cp_save_dir', None):
+                msg = f"Checkpoint save dir was already specified as {self.cp_save_dir}, but is overrided to be " \
+                      f"{checkpoint_path} now."
+                self._logger.warning(msg)
+                self.cp_save_dir = checkpoint_path
 
         # Error check
         self._check_fit_ready()
