@@ -1,29 +1,33 @@
 # Introduction
 
-This repository aims to be a pipeline that uses Pytorch to train and inference deep learning model for medical imaging data. 
+This repository aims to be a pipeline that uses Pytorch to train and inference deep learning model for medical imaging data.
 
-# Requirements
+# Installation
 
-## Packages
+## TLDR;
 
-* guildai
-* torchio
-
-## Third Party Packages
-
-### Guild.ai
-
-Guildai was selected as the pipeline manager of this repository. However, our reliance on guild is minimal. We use guild as an experiment manager, the Guild yml file was written to be general to a few applications including segmentation and classification. 
-
-#### Install
-
-To install guild.ai, use the following command:
+Getting the source code:
 
 ```bash
-pip install guildai
+git clone --recursive https://github.com/alabamagan/pytorch_medical_imaging
+git clone https://github.com/alabamagan/mri_normalization_tools
 ```
 
-!! Please don't confuse it with the package `guild`. 
+Install custom repos that are pre-requisits:
+
+```bash
+pip install ./mri_normalization_tools
+pip install pytorch_medical_imaging/ThirdParty/torchio # forked version refined for this package
+pip install pytorch_medical_imaging/ThirdParty/surface-distance # for in-built system to evalute performance
+```
+
+Install the main package locally:
+
+```bash
+pip install pytorch_medical_imaging
+```
+
+## Third Party Packages (customized forks)
 
 ### Torchio
 
@@ -37,7 +41,7 @@ pip install git+https://github.com/alabamagan/torchio
 
 ### MRI image normalization tools
 
-This package uses the logger from MNTS. To 
+This package uses the logger from MNTS, which is the normalization tool I wrote for convinience and reproducibility.
 
 To install:
 
@@ -45,18 +49,14 @@ To install:
 pip install git+https://github.com/alabamagan/mri_normalization_tools
 ```
 
-
-
 # Specification
 
-`pmi` is implemented with 4 main units which interacts for training and inference: 
+`pmi` is implemented with 4 main units which interacts for training and inference:
 
 1. `main`
 2. `pmi_data_loader`
 3. `pmi_solver`
 4. `pmi_inferencer`
-
-
 
 ## Model training
 
@@ -85,8 +85,6 @@ sequenceDiagram
 
 ```
 
-
-
 ## Model inference
 
 ```mermaid
@@ -111,3 +109,21 @@ sequenceDiagram
 
 ```
 
+## Call hierachy
+
+```mermaid
+%%{ init : { "theme" : "dark", "flowchart" : { "curve" : "linear"}}}%%
+flowchart TD
+
+	subgraph configs TD
+		sc(Solver cfg)
+		lc(Data loader cfg)
+		sc & lc --> pmic(Controller cfg)
+	end
+	N[Network] --> sc
+	pmic --> |populate|B[PMI Controller]
+	B --> |create|dl[Data loader] --> Solver["Solver/Inferencer"]
+	B --> |create|Solver
+	Solver --> |call|fit[/"fit()/write_out()"/]
+
+```
