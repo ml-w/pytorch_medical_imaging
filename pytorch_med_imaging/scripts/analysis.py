@@ -433,15 +433,16 @@ def segmentation_analysis(raw_args=None):
     r"""Script to evaluate the performance for segmentation.
 
     Available metrics currently are:
-    * GCE:
-    * JAC - Jaccard
-    * DSC - Dice similarity score
-    * VD - volume difference
-    * Spec - Specificity
-    * CR - Corresponding ratio
-    * Volume - Volume of predicted and ground-truth label
-    * Sens - Sensitivity
-    * ASD - Average surface distance
+
+    * GCE   - Global
+    * JAC   - Jaccard
+    * DSC   - Dice similarity score
+    * VD    - volume difference
+    * Spec  - Specificity
+    * CR    - Corresponding ratio
+    * Volume- Volume of predicted and ground-truth label
+    * Sens  - Sensitivity
+    * ASD   - Average surface distance
 
     Returns:
         pd.DataFrame
