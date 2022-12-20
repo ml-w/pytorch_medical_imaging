@@ -342,7 +342,7 @@ def EVAL(seg: ImageDataSet,
                 i)))
             data = pd.DataFrame([[os.path.basename(seg.get_data_source(i)),
                                   'Not Found',
-                                  gt.get_internal_slice_index(i),
+                                  i,
                                   int(segindexes[i])] + [np.nan] * len(vars)],
                             columns=['Filename', 'TestParentDirectory',
                                      'ImageIndex',
@@ -416,7 +416,7 @@ def EVAL(seg: ImageDataSet,
                                               seg.get_data_source(i))
                                       ),
                                   seg._filterargs['regex'],
-                                  gt.get_internal_slice_index(i),
+                                  i,
                                   ] + values],
                                 columns=['Filename', 'TestParentDirectory',
                                          'TestFilter', 'ImageInternalIndex'] +
@@ -430,26 +430,48 @@ def EVAL(seg: ImageDataSet,
     return df
 
 def segmentation_analysis(raw_args=None):
+    r"""Script to evaluate the performance for segmentation.
+
+    Available metrics currently are:
+    * GCE:
+    * JAC - Jaccard
+    * DSC - Dice similarity score
+    * VD - volume difference
+    * Spec - Specificity
+    * CR - Corresponding ratio
+    * Volume - Volume of predicted and ground-truth label
+    * Sens - Sensitivity
+    * ASD - Average surface distance
+
+    Returns:
+        pd.DataFrame
+
+    See Also:
+        * :func:`GCE`
+        * :func:`JAC`
+        * :func:`DSC`
+        * :func:`VD`
+        * :func:`Spec`
+        * :func:`CR`
+        * :func:`Sens`
+        * :func:`ASD`
+
+    """
+    available_metrics = {'GCE': GCE,
+                         'JAC': JAC,
+                         'DSC': DICE,
+                         'VD': VD,
+                         'Spec': Specificity,
+                         'CR': CorrespondenceRatio,
+                         'Volume-Predict': GrossVolume_Test,
+                         'Volume-Target': GrossVolume_Seg,
+                         'Sens': Sensitivity,
+                         'ASD': ASD}
+
     parse = argparse.ArgumentParser()
-    parse.add_argument('-d', '--DICE', action='store_true', default=False, dest='dice', help="add DICE to analysis.")
-    parse.add_argument('-p', '--PM', action='store_true', default=False, dest='pm',
-                       help='add percentage match to analysis.')
-    parse.add_argument('-j', '--JAC', action='store_true', default=False, dest='jac',
-                       help='add percentage match to analysis.')
-    parse.add_argument('-v', '--VR', action='store_true', default=False, dest='vr',
-                       help='add percentage match to analysis.')
-    parse.add_argument('-r', '--PR', action='store_true', default=False, dest='pr',
-                       help='add percentage match to analysis.')
-    parse.add_argument('-vd', '--VD', action='store_true', default=False, dest='vd',
-                       help='add volume difference to analysis.')
-    parse.add_argument('-g', '--GCE', action='store_true', default=False, dest='gce',
-                       help='add global consistency error to analysis.')
-    parse.add_argument('-c', '--CR', action='store_true', default=False, dest='cr',
-                       help='add corresponding ratio to analysis.')
-    parse.add_argument('--volume', action='store_true', dest='volume',
-                       help='Compute volume of the data.')
-    parse.add_argument('--asd', action='store_true', default=False, dest='asd',
-                       help='add average surface distance to analysis.')
+    for key, func in available_metrics.items():
+        parse.add_argument(f'--{key.lower()}', action='store_true',
+                            help=f"Add computation of {func.__name__} into the list.")
     parse.add_argument('-a', '--all', action='store_true', default=False, dest='all', help='use all available analysis.')
     parse.add_argument('--idlist', action='store', default=None, dest='idlist', help='Read id from a txt file.')
     parse.add_argument('--append', action='store_true', default=False, dest='append', help='append datalist on save.')
@@ -473,37 +495,13 @@ def segmentation_analysis(raw_args=None):
 
     logger = MNTSLogger('./Analysis.log', 'main', verbose=args.verbose)
 
-    vars = {}
-    if args.dice:
-        vars['DSC'] = DICE
-    if args.jac:
-        vars['JAC'] = JAC
-    if args.pm:
-        vars['PPV'] = Specificity
-    if args.vr:
-        vars['VR'] = Volume
-    if args.pr:
-        vars['Sens'] = Sensitivity
-    if args.gce:
-        vars['GCE'] = GCE
-    if args.cr:
-        vars['CR'] = CorrespondenceRatio
-    if args.asd:
-        vars['ASD'] = ASD
-    if args.asd:
-        vars['Volume-Predict'] = GrossVolume_Test
-        vars['Volume-Target'] = GrossVolume_Seg
+    exec = {}
+    for key, func in available_metrics.items():
+        if getattr(args, key.replace('-', '_').lower()):
+            exec[key] = exec[func]
+
     if args.all:
-        vars = {'GCE': GCE,
-                'JAC': JAC,
-                'DSC': DICE,
-                'VD': VD,
-                'Spec': Specificity,
-                'CR': CorrespondenceRatio,
-                'Volume-Predict': GrossVolume_Test,
-                'Volume-Target': GrossVolume_Seg,
-                'Sens': Sensitivity,
-                'ASD': ASD}
+        exec = available_metrics
 
     if not args.idlist is None:
         try:
@@ -529,7 +527,7 @@ def segmentation_analysis(raw_args=None):
                          regex=args.gtfilter, idlist=imset.get_unique_IDs(),
                          verbose=True, debugmode=args.debug, dtype='uint8')
 
-    results = EVAL(imset, gtset, vars)
+    results = EVAL(imset, gtset, exec)
     try:
         results = results.sort_index(0, 'index')
         results.index = results.index.astype(str)
@@ -540,9 +538,9 @@ def segmentation_analysis(raw_args=None):
     if args.verbose:
         MNTSLogger['main'].info("\n" + results.to_string())
         MNTSLogger['main'].info("{:-^50}".format('Mean'))
-        MNTSLogger['main'].info("\n" + results[vars.keys()].groupby('Class').mean().to_string())
+        MNTSLogger['main'].info("\n" + results[exec.keys()].groupby('Class').mean().to_string())
         MNTSLogger['main'].info("{:-^50}".format('Median'))
-        MNTSLogger['main'].info("\n" + results[vars.keys()].groupby('Class').median().to_string())
+        MNTSLogger['main'].info("\n" + results[exec.keys()].groupby('Class').median().to_string())
 
 
     if not args.label is None:
@@ -561,8 +559,8 @@ def segmentation_analysis(raw_args=None):
                     with pd.ExcelWriter(args.save) as writer:
                         results.to_excel(writer, sheet_name='Segmentation Results')
                         # also write the mean and median results
-                        results[vars.keys()].groupby('Class').mean().to_excel(writer, sheet_name='Mean')
-                        results[vars.keys()].groupby('Class').median().to_excel(writer, sheet_name='Median')
+                        results[exec.keys()].groupby('Class').mean().to_excel(writer, sheet_name='Mean')
+                        results[exec.keys()].groupby('Class').median().to_excel(writer, sheet_name='Median')
 
                         writer.save()
                 else:
