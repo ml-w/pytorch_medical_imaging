@@ -49,6 +49,13 @@ Loss Functions
 
    Loss/Loss.rst
 
+Metrics
+-------
+.. toctree::
+   :maxdepth: 2
+
+   Metrics/segmentation_metrics.rst
+
 Indices and tables
 ==================
 
