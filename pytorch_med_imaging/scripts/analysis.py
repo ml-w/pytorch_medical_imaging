@@ -380,7 +380,7 @@ def segmentation_analysis(raw_args=None):
     parse.add_argument('--gt-data', action='store', type=str, dest='gtset', required=True)
     parse.add_argument('--gt-filter', action='store', type=str,
                        dest='gtfilter', default=None, help='Filter for ground truth data.')
-    parse.add_argument('--id-globber', action='store', type=str, default=None, dest='idGlobber',
+    parse.add_argument('--id-globber', action='store', type=str, default=None, dest='id_globber',
                        help="Specify globber for ImageDataSet")
     parse.add_argument('--added-label', action='store', type=str, dest='label',
                        help='Additional label that will be marked under the column "Note"')
@@ -439,13 +439,13 @@ def segmentation_analysis(raw_args=None):
 
     if not idlist is None:
         imset = ImageDataSet(args.testset, readmode='recursive',
-                             filtermode='both', regex=args.testfilter, idlist=idlist, idGlobber=args.idGlobber,
+                             filtermode='both', regex=args.testfilter, idlist=idlist, id_globber=args.id_globber,
                              verbose=True, debugmode=args.debug, dtype='uint8')
     else:
         imset = ImageDataSet(args.testset, readmode='recursive',
-                             filtermode='regex', regex=args.testfilter, idGlobber=args.idGlobber,
+                             filtermode='regex', regex=args.testfilter, id_globber=args.id_globber,
                              verbose=True, debugmode=args.debug, dtype='uint8')
-    gtset = ImageDataSet(args.gtset, filtermode='both', readmode='recursive', idGlobber=args.idGlobber,
+    gtset = ImageDataSet(args.gtset, filtermode='both', readmode='recursive', id_globber=args.id_globber,
                          regex=args.gtfilter, idlist=imset.get_unique_IDs(),
                          verbose=True, debugmode=args.debug, dtype='uint8')
 
