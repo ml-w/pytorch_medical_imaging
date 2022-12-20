@@ -1,5 +1,7 @@
 import os
 
+import pandas as pd
+
 from ..med_img_dataset import ImageDataSet
 from ..pmi_data_loader.pmi_dataloader_base import PMIDataLoaderBase
 from ..pmi_data_loader import PMIImageDataLoader
@@ -65,16 +67,32 @@ class SegmentationInferencer(InferencerBase):
         ]
 
     def _input_check(self):
+        r"""
+        .. deprecated::
+            This function have no use now.
+        Returns:
+
+        """
         if not os.path.isdir(self.output_dir):
             # Try to make dir first
             os.makedirs(self.output_dir, exist_ok=True)
             assert os.path.isdir(self.output_dir), f"Cannot open output directory: {self.output_dir}"
         return 0
 
-    def write_out(self):
+    def write_out(self, output_dir = None):
         last_batch_dim = 0
         # The output segmentation should have the same image meta data as the input
-        in_image_data = self.pmi_data_loader.data['input']
+        in_image_data = self.data_loader.data['input']
+
+        if not output_dir is None:
+            if getattr(self, 'output_dir', None) is not None:
+                self._logger.warning(f"Overriding original output_dir '{self.output_dir}' with {output_dir}")
+            self.output_dir = output_dir
+
+        if getattr(self, 'output_dir', None) is None:
+            msg = f"Output directory is not specified. You can specify this by supplying argument to `write_out` " \
+                  f"method or add this atribute to the CFG."
+            raise AttributeError(msg)
 
         with torch.no_grad():
             # make sure net is at eval mode
@@ -103,10 +121,10 @@ class SegmentationInferencer(InferencerBase):
                     _queue, _aggregator = self.data_loader.create_aggregation_queue(
                         subject, self.data_loader.inf_samples_per_vol)
 
-                    dataloader = DataLoader(_queue, batch_size=self._data_loader.batch_size, num_workers=0)
+                    dataloader = DataLoader(_queue, batch_size=self.batch_size, num_workers=0)
                     ndim = subject.get_first_image()[tio.DATA].dim()  # Assume channel dim always exist even if only has 1 channel
                     for i, mb in enumerate(tqdm(dataloader, desc="Patch", position=1)):
-                        s = self._unpack_minibatch(mb, self.solverparams_unpack_keys_inference)
+                        s = self._unpack_minibatch(mb, self.unpack_key_inference)
                         s = self._match_type_with_network(s)
 
                         if isinstance(s, list):
@@ -170,7 +188,7 @@ class SegmentationInferencer(InferencerBase):
             self._logger.info("\n{}".format(out.to_string()))
             self._logger.info("Avg_DICE: {}".format(out['DSC'].mean()))
             self._logger.info("Med_DICE: {}".format(out['DSC'].median()))
-            self._logger.info("Summary:\n {}".format(out.describe(include='all').to_string()))
+            self._logger.info("Summary:\n {}".format(out.describe(exclude=['object']).to_string()))
         except:
             self._logger.exception("Error calling analysis.py. This is intended.")
             return
