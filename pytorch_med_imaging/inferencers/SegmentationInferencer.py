@@ -5,7 +5,7 @@ import pandas as pd
 from ..med_img_dataset import ImageDataSet
 from ..pmi_data_loader.pmi_dataloader_base import PMIDataLoaderBase
 from ..pmi_data_loader import PMIImageDataLoader
-from ..solvers import SegmentationSolver
+from ..solvers import SegmentationSolver, SegmentationSolverCFG
 from .InferencerBase import InferencerBase
 from torch.utils.data import DataLoader
 import torch
@@ -37,29 +37,20 @@ class SegmentationInferencer(InferencerBase):
     def __init__(self,cfg,
                  *args,
                  **kwargs):
-        r"""
-        Use for segmentation inference.
+        r"""Use for segmentation inference.
 
         Attributes:
-            unpack_keys_forward (list of str):
+            unpack_keys_inference (list of str):
                 String to unpack the data for input forward.
-            gt_keys (list of str):
-                String to unpack target.
+            batch_size (int):
+                Number of cases in a mini-batch
+            output_dir (str):
+                Directory to write the results.
 
         Args:
-            batch_size (int):
-                Mini-batch size.
-            net (nn.Module or str):
-                The network. If str, `ast.literal_eval` will be used to convert it into a network.
-            checkpoint_dir (str):
-                Where the torch state dict is located.
-            output_dir (str):
-                Where the output products are placed
-            use_cuda (bool):
-                Whether to use GPU or not.
-            pmi_data_loader (PMIDataLoaderBase):
-                Required to load the
-            **kwargs:
+            cfg (SegmentationSolverCFG):
+                Configuration.
+
         """
         super(SegmentationInferencer, self).__init__(cfg)
         self.required_attributes = [
@@ -80,7 +71,12 @@ class SegmentationInferencer(InferencerBase):
         return 0
 
     def write_out(self, output_dir = None):
-        last_batch_dim = 0
+        r"""Write the segmentation. You can call :func:`.display_summary` to produce a summary of the performance.
+
+        Args:
+            output_dir (str or Path):
+                The directory to write the segmentation product to.
+        """
         # The output segmentation should have the same image meta data as the input
         in_image_data = self.data_loader.data['input']
 
@@ -102,6 +98,8 @@ class SegmentationInferencer(InferencerBase):
             if self.data_loader.sampler is not None:
                 self.patch_size = self.data_loader.patch_size
                 self._logger.info(f"Operating in patch-based mode with patch-size: {self.patch_size}")
+
+                # Loop through the data subject-by-subject
                 for index, subject in enumerate(tqdm(self.data_loader.queue._get_subjects_iterable(), desc="Steps", position=0)):
                     # sample and inference
                     self._logger.info(f"Processing subject: {subject}")
@@ -121,8 +119,11 @@ class SegmentationInferencer(InferencerBase):
                     _queue, _aggregator = self.data_loader.create_aggregation_queue(
                         subject, self.data_loader.inf_samples_per_vol)
 
+                    # create dataloader for the queue
                     dataloader = DataLoader(_queue, batch_size=self.batch_size, num_workers=0)
-                    ndim = subject.get_first_image()[tio.DATA].dim()  # Assume channel dim always exist even if only has 1 channel
+                    ndim = subject.get_first_image()[tio.DATA].dim()  # Assume channel dim always exist even
+                                                                      # if only has 1 channel
+                    # sample patches from the subject and perform inference.
                     for i, mb in enumerate(tqdm(dataloader, desc="Patch", position=1)):
                         s = self._unpack_minibatch(mb, self.unpack_key_inference)
                         s = self._match_type_with_network(s)
@@ -158,7 +159,7 @@ class SegmentationInferencer(InferencerBase):
 
                     in_image_data.write_uid(out, index, self.output_dir)
             else:
-                pass
+                raise NotImplementedError("For segmentation, it is expected that a sampler must be specified.")
 
 
     def display_summary(self):
