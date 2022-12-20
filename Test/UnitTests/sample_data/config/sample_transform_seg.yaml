@@ -1,0 +1,13 @@
+ToCanonical:
+  {}
+RandomAffine:
+  scales: [0.9, 1.1]
+  degrees: 10
+RandomFlip:
+  - 'lr'
+RandomNoise:
+  std: [0, 8]
+CropOrPad:
+  - [250, 250, 15]
+  - mask_name: mask
+  - padding_mode: minimum
