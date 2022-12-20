@@ -183,12 +183,13 @@ class ClassificationInferencer(InferencerBase):
 
         Args:
             out_tensor (torch.Tensor):
-                Integer decision tensor predicted by the network.
+                Integer decision tensor predicted by the network. Should have a dimension of :math:`(B × C)` where
+                :math:`C` is the total number of classes.
             uids (Iterable[Union[str, int]]):
-                Uids of the predictions.
+                Uids of the predictions. Should have a len of :math:`B`.
             gt (torch.Tensor, Optional):
                 Integer decision tensor. If this is provided, the inferencer will also try to compute the performance
-                of the inference run. Default to ``None``.
+                of the inference run. Default to ``None``. Expect dimension :math:`(B × 1)` or just :math:`(B)`
             sig_out (bool, Optional):
                 Override instance attribute :attr:`sig_out` if not ``None``. See :class:`.ClassificationSolverCFG`
 
@@ -199,10 +200,6 @@ class ClassificationInferencer(InferencerBase):
             * :class:`.ClassificationSolverCFG`
 
         """
-        out_decisions = {}
-        out_decision = torch.argmax(out_tensor, dim=1)
-        out_tensor = torch.sigmoid(out_tensor) if sig_out else out_tensor
-        out_tensor = F.softmax(out_tensor, dim=1)
 
         if os.path.isdir(self.output_dir):
             # if specified output dir is a directory, use the default name `class_inf.csv`
@@ -217,12 +214,30 @@ class ClassificationInferencer(InferencerBase):
             # if the specified directory does not exist it, quietly create it.
             os.makedirs(os.path.dirname(self.output_dir), exist_ok=True)
 
+        out_decisions = self._prepare_output_dict(gt, out_tensor, sig_out, uids)
+
+        dl = DataLabel.from_dict(out_decisions)
+        dl.write(self.output_dir)
+        return dl
+
+    def _prepare_output_dict(self, gt, out_tensor, sig_out, uids) -> dict:
+        r"""This method pack the network output into ``out_decisions`` while computing the correct format to display.
+
+        For arguments, see :func:`._writter`.
+
+        Returns:
+            dict
+        """
+
         # Write decision
+        out_decisions = {}
+        out_decision = torch.argmax(out_tensor, dim=1) # expect to be (B x 1)
+        out_tensor = torch.sigmoid(out_tensor) if sig_out else out_tensor # (B x C), where C is total # classes
+        out_tensor = F.softmax(out_tensor, dim=1)
         out_decisions['IDs'] = uids
         # For each channel, write down the probability
         for i in range(out_tensor.shape[1]):
-            out_decisions['Prob_Class_%s'%i] = out_tensor[:, i].data.cpu().tolist()
-
+            out_decisions['Prob_Class_%s' % i] = out_tensor[:, i].data.cpu().tolist()
         if gt is not None:
             # check gt dim, if dim == 2, assume (B x C)
             if gt.dim() == 1:
@@ -235,11 +250,10 @@ class ClassificationInferencer(InferencerBase):
         else:
             self._TARGET_DATASET_EXIST_FLAG = False
         out_decisions['Decision'] = out_decision.tolist()
-        dl = DataLabel.from_dict(out_decisions)
-        dl.write(self.output_dir)
-        return dl
+        return out_decisions
 
-    def display_summary(self):
+    def display_summary(self) -> None:
+        r"""This simply displays the dataframe. If ground-truth is provided, this will try to calculate the ACC."""
         dl = pd.read_csv(self.output_dir, index_col=0)
         n = len(dl)
         try:

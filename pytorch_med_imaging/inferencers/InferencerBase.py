@@ -92,10 +92,6 @@ class InferencerBase(object):
         self.CP_LOADED = True
 
     @abstractmethod
-    def _prepare_data(self):
-        raise NotImplementedError
-
-    @abstractmethod
     def display_summary(self):
         raise NotImplementedError
 

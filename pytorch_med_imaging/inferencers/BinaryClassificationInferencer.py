@@ -13,25 +13,32 @@ __all__ = ['BinaryClassificationInferencer']
 
 
 class BinaryClassificationInferencer(ClassificationInferencer):
+    r"""Binary classification is similar to classification, except in classification problem, we expect one question
+    answered by multiple possible classes. Whereas in binary classification, we expect the possibility of multiple
+    binary questions asked.
+
+
+    """
     def __init__(self, *args, **kwargs):
         super(BinaryClassificationInferencer, self).__init__(*args, **kwargs)
 
     def _prepare_data(self):
+        r"""Try to load in training mode first to include the ground-truth but ignoring the augmentation."""
         try:
-            self._inference_subjects = self.pmi_data_loader._load_data_set_training(True)
+            self._inference_subjects = self.data_loader._load_data_set_training(True)
         except:
-            self._inference_subjects = self.pmi_data_loader._load_data_set_inference()
+            self._inference_subjects = self.data_loader._load_data_set_inference()
 
     def _reshape_tensors(self,
                          out_list: Iterable[torch.FloatTensor],
                          gt_list: Iterable[torch.FloatTensor]):
-        r"""Align shape before putting them into _writter
+        r"""Align shape before putting them into :meth:`._writter`
 
         Args:
-            out_list:
-                List of tensors with dimension (1 x C)
+            out_list (list):
+                List of tensors with dimension :math:`(1 × C)`
             gt_list:
-                List of tensors with either dimensino (1 x 1) or (1)
+                List of tensors with either dimension :math:`(1 × 1)` or just :math:`(1)`
 
         Returns:
             out_tensor: (B x C)
@@ -41,47 +48,21 @@ class BinaryClassificationInferencer(ClassificationInferencer):
         gt_tensor = torch.cat(gt_list, dim=0).reshape_as(out_tensor) if len(gt_list) > 0 else None
         return out_tensor, gt_tensor
 
-    def _writter(self,
-                 out_tensor: torch.IntTensor,
-                 uids: Iterable[Union[str, int]],
-                 gt: Optional[torch.IntTensor] = None,
-                 sig_out=True):
-        r"""Convert the output into a table
+    def _prepare_output_dict(self, gt, out_tensor, sig_out, uids) -> dict:
+        r"""Override the behavior of :class:`.ClassificationInferencer`. The output of the network
 
-        Args:
-            out_tensor (torch.IntTensor):
-                Tensor with dimension (B x C) where C is the number of classes.
-            uids (iterable):
-                Iterable with the same length as `out_tensor`.
-            gt (Optional, torch.IntTensor):
-                Tensor with dimension (B x 1).
-            sig_out (Optional, bool):
-                If the output is required to go through the sigmoid function.
-
-        Returns:
-            out: DataLabel
+        For arguments, please see parent class function :func:`ClassificationInferencer._prepare_output_dict<pytorch_med
+        _imaging.inferencers.ClassificationInferencer._prepare_output_dict.
         """
         out_decisions = {}
-        out_tensor = torch.sigmoid(out_tensor) if sig_out else out_tensor
-        out_decision = (out_tensor > .5).int()
-        self._num_out_out_class = int(out_tensor.shape[1])
-        if os.path.isdir(self.output_dir):
-            self.outdir = os.path.join(self.output_dir, 'class_inf.csv')
-        if not self.outdir.endswith('.csv'):
-            self.outdir += '.csv'
-        if os.path.isfile(self.outdir):
-            self._logger.log_print_tqdm("Overwriting file %s!"%self.outdir, 30)
-        if not os.path.isdir(os.path.dirname(self.outdir)):
-            os.makedirs(os.path.dirname(self.outdir), exist_ok=True)
-
-        # Write decision
+        out_tensor = torch.sigmoid(out_tensor) if sig_out else out_tensor # expect to be (B x C), where C is # questions
+        out_decision = (out_tensor > .5).int() # natural cut off when using BCE loss.
         out_decisions['IDs'] = uids
         for i in range(out_tensor.shape[1]):
             out_decisions[f'Prob_Class_{i}'] = out_tensor[:, i].data.cpu().tolist()
             out_decisions[f'Decision_{i}'] = out_decision[:, i].tolist()
             if gt is not None:
                 # if gt is one single column vector with same shape as out_decision
-                self._logger.error(f"fucking gt: {gt}")
                 if gt.shape[1] == out_tensor.shape[1]:
                     out_decisions[f'Truth_{i}'] = gt[:, i].tolist()
                 else:
@@ -90,12 +71,7 @@ class BinaryClassificationInferencer(ClassificationInferencer):
             else:
                 self._TARGET_DATASET_EXIST_FLAG = False
 
-        import pprint
-        self._logger.debug(f"out_decision: {pprint.pformat(out_decisions)}")
-        dl = DataLabel.from_dict(out_decisions)
-        dl.write(self.outdir)
-        self._dl = dl
-        return dl
+        return out_decisions
 
     def display_summary(self):
         """
