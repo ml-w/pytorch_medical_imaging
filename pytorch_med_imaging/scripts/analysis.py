@@ -40,9 +40,8 @@ def GrossVolume_Seg(gt, test, spacing):
 
 def SSIM(x: np.ndarray,
          y: np.ndarray,
-         axis=None):
-    r"""
-    Calculate the structual similarity of the two image patches using the following
+         axis=None) -> np.ndarray:
+    r"""Calculate the structual similarity of the two image patches using the following
     equation:
 
     .. math::
@@ -68,7 +67,7 @@ def SSIM(x: np.ndarray,
             If not none, reduce output to 1D, otherwise, reduce along the provided dimensions
 
     Return:
-        np.ndarray
+        np.ndarray: SSIM :math:`\in [0, 1]`
 
     """
 
@@ -204,9 +203,21 @@ def perf_measure(y_actual, y_guess):
     return TP, FP, TN, FN
 
 def JAC(TP, FP, TN, FN):
+    r"""Return the Jaccard score.
+
+    .. math::
+
+        \text{JAC} = \frac{TP}{TP + FP + FN}
+
+    """
     return TP / (TP + FP + FN)
 
 def GCE(TP, FP, TN, FN):
+    r"""This is not very useful and will be removed in the coming versions.
+
+    .. deprecated::
+        This performance metric will be removed soon.
+    """
     n = float(np.sum(TP + FP + TN + FN))
 
     val = np.min([FN * (FN + 2*TP) / (TP + FN) + FP * (FP + 2*TN)/(TN+FP),
@@ -215,23 +226,74 @@ def GCE(TP, FP, TN, FN):
     #     print TP, FP, TN, FN, np.sum(actual) == 0, np.sum(guess) == 0
     return val
 
-def DICE(TP, FP, TN, FN):
+def DICE(TP: int, FP: int, TN: int, FN: int) -> float:
+    r"""Return the Dice similarity score from the perf measures.
+
+    .. math::
+
+        \text{DICE} = \frac{2 \cdot TP}{2 \cdot TP + FP + FN}
+
+    Returns:
+         float
+    """
+
     if np.isclose(2*TP+FP+FN, 0):
         return 1
     else:
         return 2*TP / (2*TP+FP+FN)
 
-def VS(TP, FP, TN, FN):
+def VS(TP: int, FP: int, TN: int, FN: int) -> float:
+    r"""Volume overlap.
+
+    .. math::
+
+        \text{VS} = 1 - \frac{|FN - FP|}{2 \cdot TP + FP + FN}
+
+    Returns:
+        float: Score :math:`\in [0, 1]`
+
+    """
 
     return 1 - abs(FN - FP) / (2*TP + FP + FN)
 
-def VD(TP, FP, TN, FN):
+def VD(TP: int, FP: int, TN: int, FN: int) -> float:
+    r"""Volume difference.
+
+    .. math::
+
+        \text{VD} = 1 - \text{VS}
+
+    Returns:
+        float: Score :math:`\in [0, 1]`
+
+    """
     return 1 - VS(TP, FP, TN, FN)
 
-def PercentMatch(TP, FP, TN, FN):
+def Sensitivity(TP: int, FP: int, TN: int, FN: int) -> float:
+    r"""Return the sensitivity.
+
+    .. math::
+
+        \text{Sens} = \frac{TP}{TP + FN}
+
+    Returns:
+        float: Sensitivty :math:`\in [0, 1]`. The higher the better.
+
+    """
+
     return TP / float(TP+FN)
 
-def PrecisionRate(TP, FP, TN, FN):
+def Specificity(TP: int, FP: int, TN: int, FN: int) -> float:
+    r"""Return the Specificity
+
+    .. math::
+
+        \text{Spec}
+
+    Returns:
+        float: Sensitivty :math:`\in [0, 1]`. The higher the better.
+
+    """
     return TP / float(TP+FP)
 
 def CorrespondenceRatio(TP, FP, TN, FN):
@@ -240,11 +302,29 @@ def CorrespondenceRatio(TP, FP, TN, FN):
 def Volume(TP, FP, TN, FN):
     return (TP + FN)
 
-def EVAL(seg, gt, vars):
+def EVAL(seg: ImageDataSet,
+         gt: ImageDataSet,
+         vars: dict):
+    r"""Perform evaluation comparing between the predicted `seg` and the ground-truth labels `gt`.
+
+    Args:
+        seg:
+        gt:
+        vars:
+
+    Returns:
+
+    """
     # df = pd.DataFrame(columns=['Filename','ImageIndex'] + list(vars.keys()))
     df = pd.DataFrame()
     logger = MNTSLogger['EVAL']
 
+    # check if shape is identical
+    if not gt.check_shape_identical(seg):
+        msg = "Input prediction does not have the same shape as the target ground-truth. "
+        raise ArithmeticError(gt)
+
+    # check if the IDs are the same
     gtindexes = gt.get_unique_IDs()
     segindexes = seg.get_unique_IDs()
 
@@ -399,11 +479,11 @@ def segmentation_analysis(raw_args=None):
     if args.jac:
         vars['JAC'] = JAC
     if args.pm:
-        vars['PPV'] = PrecisionRate
+        vars['PPV'] = Specificity
     if args.vr:
         vars['VR'] = Volume
     if args.pr:
-        vars['PM'] = PercentMatch
+        vars['Sens'] = Sensitivity
     if args.gce:
         vars['GCE'] = GCE
     if args.cr:
@@ -418,11 +498,11 @@ def segmentation_analysis(raw_args=None):
                 'JAC': JAC,
                 'DSC': DICE,
                 'VD': VD,
-                'PPV': PrecisionRate,
+                'Spec': Specificity,
                 'CR': CorrespondenceRatio,
                 'Volume-Predict': GrossVolume_Test,
                 'Volume-Target': GrossVolume_Seg,
-                'PM': PercentMatch,
+                'Sens': Sensitivity,
                 'ASD': ASD}
 
     if not args.idlist is None:
