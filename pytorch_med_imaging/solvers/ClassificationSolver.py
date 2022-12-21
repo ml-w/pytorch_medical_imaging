@@ -31,6 +31,8 @@ class ClassificationSolverCFG(SolverBaseCFG):
         ordinal_mse (bool, Optional):
             This option is for special loss function that improves cardinal classification. Behavior is slightly
             changed due to syntax requirements if this is set to ``True``. Default to ``False``.
+        sig_out (bool, Optional):
+            This option is for telling if sigmoid is required for processing network output. Default to ``False``.
 
     """
     class_weights : Iterable[float] = None
@@ -42,6 +44,7 @@ class ClassificationSolverCFG(SolverBaseCFG):
     decay_init_epoch: Optional[int]  = 0
     ordinal_class   : Optional[bool] = False
     ordinal_mse     : Optional[bool] = False
+    sig_out         : Optional[bool] = False
 
 class ClassificationSolver(SolverBase):
     def __init__(self, cfg, *args, **kwargs):

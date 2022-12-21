@@ -258,7 +258,7 @@ class ClassificationInferencer(InferencerBase):
         n = len(dl)
         try:
             tp = (dl['Truth_0'] == dl['Decision']).sum()
-            self._logger.info(f"ACC: {n * 100/ float(tp):.01f}%")
+            self._logger.info(f"ACC: {float(tp) * 100/ float(n):.01f}%")
         except KeyError:
             pass
         return

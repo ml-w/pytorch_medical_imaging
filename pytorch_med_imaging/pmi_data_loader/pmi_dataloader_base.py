@@ -69,7 +69,7 @@ class PMIDataLoaderBaseCFG:
         # replace instance attributes
         if len(kwargs):
             for key, value in kwargs.items():
-                self.__dict__[key] = value
+                setattr(self, key, value)
 
     def __str__(self):
         _d = {k: v for k, v in self.__dict__.items() if k[0] != '_'}

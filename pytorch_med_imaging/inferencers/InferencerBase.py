@@ -50,7 +50,7 @@ class InferencerBase(object):
         self._logger        = MNTSLogger[self.__class__.__name__]
         self._load_config(cfg)   # Load config from ``cls_cfg``
 
-        self._logger.info("Inferencer was configured with options: {}".format(str(cfg())))
+        self._logger.info("Inferencer was configured with options: {}".format(str(cfg)))
 
         if self.use_cuda:
             self._logger.info("Moving network to GPU.")

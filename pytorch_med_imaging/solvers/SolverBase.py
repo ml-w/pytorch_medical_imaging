@@ -83,10 +83,6 @@ class SolverBaseCFG:
         plotter_dict (dict, Optional):
             This dict could be used by the child class to perform plotting after validation or in each step.
 
-    .. hint::
-        Different from :class:`PMIDataBaseLoaderCFG`, you should only create one solver at a time. Therefore, the CFG
-        is uniquely defined. Although the implementation is not a singleton, there is no option for you to create two
-        simultaneously existing CFG instance with different attributes.
     """
     # Training hyper params (must be provided for training)
     init_lr      : float = None
@@ -119,12 +115,14 @@ class SolverBaseCFG:
         # load class attributes as default values of the instance attributes
         cls = self.__class__
         cls_dict = { attr: getattr(cls, attr) for attr in dir(cls) }
-        self.__dict__.update(cls_dict)
+        for key, value in cls_dict.items():
+            if not key[0] == '_':
+                setattr(self, key, value)
 
         # replace instance attributes
         if len(kwargs):
             for key, value in kwargs.items():
-                self.__dict__[key] = value
+                setattr(self, key, value)
 
     def __str__(self):
         _d = {k: v for k, v in self.__dict__.items() if k[0] != '_'}
@@ -198,15 +196,12 @@ class SolverBase(object):
         """
         # Loading basic inputs
         if not config_file is None:
-            if isinstance(config_file, type):
-                cls = config_file
-            else:
-                cls = config_file.__class__
+            cls = config_file
+            cls_dict = { attr: getattr(cls, attr) for attr in dir(cls) }
+            self.__dict__.update(cls_dict)
+            self.__class__.cls_cfg = cls
         else:
-            cls = self.cls_cfg
-        cls_dict = { attr: getattr(cls, attr) for attr in dir(cls) }
-        self.__dict__.update(cls_dict)
-        self.__class__.cls_cfg = cls
+            self._logger.warning("_load_config called without arguments.")
 
     def _check_fit_ready(self) -> bool:
         r"""Check the instance attribute specified in ``self._required_attribute`` and their types to make sure that the
