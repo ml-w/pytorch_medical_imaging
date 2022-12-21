@@ -40,7 +40,7 @@ class SampleSegSolverCFG(SegmentationSolverCFG):
 
     # I/O
     unpack_key_forward: Iterable[str] = ['input', 'gt']
-    unpack_key_forward: Iterable[str] = ['input']
+    unpack_key_inference: Iterable[str] = ['input']
 
     net          : torch.nn.Module   = UNet_p(1, 2, layers=2)
     loss_function: torch.nn          = nn.CrossEntropyLoss(weight = torch.as_tensor(class_weights))
@@ -90,7 +90,7 @@ class SampleClsSolverCFG(ClassificationSolverCFG):
 
     # I/O
     unpack_key_forward: Iterable[str] = ['input', 'gt']
-    unpack_key_forward: Iterable[str] = ['input']
+    unpack_key_inference: Iterable[str] = ['input']
 
     net          : torch.nn.Module   = LiNet3d(1, 3, use_layer_norm=True)
     loss_function: torch.nn          = nn.CrossEntropyLoss(weight = torch.as_tensor(class_weights))

@@ -9,7 +9,7 @@ from pytorch_med_imaging.pmi_data_loader import PMIDataLoaderBase, PMIDataLoader
 
 
 class TestInferencer(unittest.TestCase):
-    r"""Unittest for solvers.
+    r"""Unittest for inferencers.
 
     Attributes:
         data_loader_cls (type):
@@ -32,7 +32,7 @@ class TestInferencer(unittest.TestCase):
         cls._logger = MNTSLogger(".", logger_name='unittest', keep_file=False, log_level='debug', verbose=True)
 
     def setUp(self):
-        if self.__class__.__name__ == 'TestSolver':
+        if self.__class__.__name__ == 'TestInferencer':
             self.skipTest('Base test class')
 
         # create a temp folder to host the outputs
@@ -112,9 +112,8 @@ class TestClassificationInferencer(TestInferencer):
     def _prepare_cfg(self):
         self.data_loader_cfg = SampleClsLoaderCFG(run_mode='inference')
         self.data_loader_cfg_cls = SampleClsLoaderCFG
-        self.inferencer_cfg = SampleClsSolverCFG
-        self.inferencer_cfg.output_dir = self.temp_output_dir.name
-        self.inferencer_cfg.debug = True
+        self.inferencer_cfg = SampleClsSolverCFG(output_dir = self.temp_output_dir.name,
+                                                 debug = True)
 
     def _prepare_loader(self):
         self.data_loader = PMIImageFeaturePairLoader(self.data_loader_cfg)
@@ -126,11 +125,12 @@ class TestClassificationInferencer(TestInferencer):
 
 class TestBinaryClassificationInferencer(TestClassificationInferencer):
     def _prepare_cfg(self):
-        super(TestBinaryClassificationSolver, self)._prepare_cfg()
+        super(TestBinaryClassificationInferencer, self)._prepare_cfg()
+        self.data_loader_cfg = SampleClsLoaderCFG(run_mode='inference')
         self.data_loader_cfg.target_dir = './sample_data/sample_binaryclass_gt.xlsx'
         self.data_loader_cfg_cls.target_dir = './sample_data/sample_binaryclass_gt.xlsx'
-        self.inferencer_cfg = SampleBinClsSolverCFG
-        self.inferencer_cfg.debug = True
+        self.inferencer_cfg = SampleBinClsSolverCFG(output_dir = self.temp_output_dir.name,
+                                                    debug=True)
 
     def _prepare_inferencer(self):
         self.inferencer = BinaryClassificationInferencer(self.inferencer_cfg)
