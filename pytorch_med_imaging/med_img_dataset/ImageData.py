@@ -1,3 +1,4 @@
+import ast
 from typing import Any, Iterable, Optional, Union
 
 import torch
@@ -94,7 +95,7 @@ class ImageDataSet(PMIDataBase):
         idlist (str or list, Optional):
             If its `str`, it should be directory to a file containing IDs, one in each line, otherwise,
             an explicit list of strings. Need if filtermode is 'idlist'. Globber of id can be specified with attribute
-            id_globber.
+            id_globber. See formats in notes.
         regex (str, Optional):
             Regex that is used to match file directories. Un-matched ones are discarded. Effective when
             `filtermode='idlist'`.Must start with paranthesis. Otherwise, its treated as wild cards, e.g. `'*nii.gz'`
@@ -159,6 +160,14 @@ class ImageDataSet(PMIDataBase):
 
     .. hint::
         Use ``instance[item]`` to get the data as ``torch.Tensor``.
+
+    .. note::
+        The format of argument ``idlist`` should be one of
+        * ``str``: if it is a string, it should either be a directory to a txt/ini file or a plaintext list of comma
+        separated values, which also needed to be wrapped with square brackets. ``ast.litera_eval()`` will be used to
+        convert the string into a list.
+        * ``list``: if it is a list, the list will be copied directly as the targeted ids
+        * ``tuple``: same as `list` inputs.
     """
     def __init__(self, rootdir, readmode='normal', filtermode=None, verbose=False, dtype=float,
                  debugmode=False, **kwargs):
@@ -281,8 +290,9 @@ class ImageDataSet(PMIDataBase):
         r"""Filter the `file_dirs` using the specified attributions. Used in `parse_root_dir`."""
         # Filter by filelist
         #-------------------
+        target_idlist = self._filterargs['idlist'] # required id list from arguments
         if (self._filtermode == 'idlist' or self._filtermode == 'both') and \
-                self._filterargs['idlist'] not in ("", None) and self._id_globber is not None:
+                target_idlist not in ("", None) and self._id_globber is not None:
             self._logger.info("Globbing ID with globber: " + str(self._id_globber) + " ...")
             file_basenames = [os.path.basename(f) for f in file_dirs]
             file_ids = {f: re.search(self._id_globber, f) for f in file_basenames}
@@ -295,22 +305,31 @@ class ImageDataSet(PMIDataBase):
             # Don't sort otherwise the order of file_ids and file_dirs will become different.
             file_ids = list(file_ids.values())
 
-            if isinstance(self._filterargs['idlist'], str) and not self._filterargs['idlist'] == "":
-                # If its a file directory
-                self._idlist = [r.strip() for r in open(self._filterargs['idlist'], 'r').readlines()]
-            elif isinstance(self._filterargs['idlist'], (list, tuple)):
+            if isinstance(target_idlist, str) and not target_idlist == "":
+                mo = re.match('\[(?P<content>.*)\]', target_idlist)
+                if mo is not None:
+                    self._logger.debug(f"Globbed: {mo.groupdict()}")
+                    self._logger.info(f"Detect input as a list string, splitting at the commas.")
+                    self._idlist = mo.groupdict()['content'].split(',')
+                else:
+                    # If its a file directory
+                    self._logger.info(f"Reading idlist from: {target_idlist}")
+                    self._idlist = [r.strip() for r in open(target_idlist, 'r').readlines()]
+            elif isinstance(target_idlist, (list, tuple)):
                 # If its a list of IDs
-                self._idlist = self._filterargs['idlist']
-            elif self._filterargs['idlist'] in (None, ""):
+                self._logger.info(f"Input idlist is already a list, directly using this list: "
+                                  f"{target_idlist}")
+                self._idlist = target_idlist
+            elif target_idlist in (None, ""):
                 # If None specified, glob ids from filenames instead
                 self._logger.warning('Idlist input is None!')
                 self._idlist = file_ids
             else:
                 raise TypeError(f"ID list is not correclty spefified. Expect str, list or None, got "
-                                f"{self._filterargs['idlist']} instead")
+                                f"{target_idlist} instead")
 
             self._logger.debug(f'Target IDs: {self._idlist}')
-            self._logger.debug(f'All IDs: {file_ids}')
+            self._logger.debug(f'All globbed IDs: {file_ids}')
             self._logger.debug(f"Missing ID(s): {set(self._idlist) - set(file_ids)}")
             tmp_file_dirs = np.array(file_dirs)
             keep = [id in self._idlist for id in file_ids]  # error near this could be because nothing is grabed
@@ -725,8 +744,10 @@ class ImageDataSet(PMIDataBase):
         out_im = sitk.GetImageFromArray(tensor_data.squeeze().numpy())
 
         # Check if size equal
-        assert src_im.GetSize() == out_im.GetSize(), f"Source image and target image has different sizes: " \
-                                                     f"\tsource: {src_im.GetSize()}\ttarget: {out_im.GetSize()}"
+        if src_im.GetSize() != out_im.GetSize():
+            msg = f"Source image and target image has different sizes: "\
+                  f"\tsource: {src_im.GetSize()}\ttarget: {out_im.GetSize()}.\n" \
+                  f"Make sure that patch sampling is not overlapped with transform `crop_or_pad` function."
 
         out_im.CopyInformation(src_im)
         out_name = outputdirectory +'/' + prefix + os.path.basename(self.data_source_path[index])

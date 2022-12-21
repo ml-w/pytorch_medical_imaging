@@ -96,9 +96,6 @@ class SegmentationInferencer(InferencerBase):
 
             # Do inference subject by subject if sampler is not ``None``
             if self.data_loader.sampler is not None:
-                self.patch_size = self.data_loader.patch_size
-                self._logger.info(f"Operating in patch-based mode with patch-size: {self.patch_size}")
-
                 # Loop through the data subject-by-subject
                 for index, subject in enumerate(tqdm(self.data_loader.queue._get_subjects_iterable(), desc="Steps", position=0)):
                     # sample and inference
@@ -179,7 +176,7 @@ class SegmentationInferencer(InferencerBase):
         arguments = ['-a',
                      '--test-data', self.output_dir,
                      '--gt-data', self.data_loader.data['gt'].rootdir,
-                     '--idlist', str(list(set(self.data_loader.data['gt'].get_unique_IDs()))),
+                     '--idlist', '[{}]'.format(','.join(set(self.data_loader.data['gt'].get_unique_IDs()))),
                      '--id-globber', str(self.data_loader.data['gt']._id_globber)
                      ]
 

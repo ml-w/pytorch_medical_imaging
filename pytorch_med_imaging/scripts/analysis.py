@@ -505,20 +505,8 @@ def segmentation_analysis(raw_args=None):
         exec = available_metrics
 
     if not args.idlist is None:
-        try:
-            if os.path.isfile(args.idlist):
-                idlist = [r.rstrip() for r in open(args.idlist, 'r').readlines()]
-            else:
-                idlist = args.idlist.split(',')
-        except:
-            print("Can't read idlist properly.")
-            idlist = None
-    else:
-        idlist=None
-
-    if not idlist is None:
         imset = ImageDataSet(args.testset, readmode='recursive',
-                             filtermode='both', regex=args.testfilter, idlist=idlist, id_globber=args.id_globber,
+                             filtermode='both', regex=args.testfilter, idlist=args.idlist, id_globber=args.id_globber,
                              verbose=True, debugmode=args.debug, dtype='uint8')
     else:
         imset = ImageDataSet(args.testset, readmode='recursive',
