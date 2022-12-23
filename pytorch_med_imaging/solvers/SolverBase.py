@@ -29,7 +29,6 @@ from ..loss import *
 available_lr_scheduler = list(name for name, obj in inspect.getmembers(lr_scheduler) if inspect.isclass(obj))
 available_lr_scheduler += list(name for name, obj in inspect.getmembers(pmi_lr_scheduler) if inspect.isclass(obj))
 
-@dataclass
 class SolverBaseCFG:
     r"""Configuration for initializing :class:`SolverBase` and its child classes.
 
@@ -129,6 +128,19 @@ class SolverBaseCFG:
         _d['net'] = self.net._get_name()
         return pprint.pformat(_d, indent=2)
 
+    def _as_dict(self):
+        r"""This function is not supposed to be private, but it needs the private tag to be spared by :func:`.__init__`
+        """
+        return self.__dict__
+
+    def __iter__(self):
+        cls_dict = self._get_dict()
+        for k, v in cls_dict.items():
+            yield k, v
+
+    @property
+    def solver_cls(self) -> type:
+        return ast.literal_eval(self.__class__.__name__.replace('CFG', ''))
 
 class SolverBase(object):
     """Base class for all solvers. This class must be inherited before it can work properly. The child
@@ -177,6 +189,8 @@ class SolverBase(object):
         # create loss function if not specified
         self.prepare_lossfunction()
         self.create_optimizer()
+        if isinstance(self.lr_sche, str):
+            self.set_lr_scheduler(self.lr_sche)
 
         self._logger.info("Solver was configured with options: {}".format(str(cfg)))
         if  len(kwargs):
@@ -295,7 +309,7 @@ class SolverBase(object):
         See Also:
             * :class:`PMILRScheduler`
         """
-        if not self.lr_sche is None:
+        if not self.lr_sche is None and not isinstance():
             self._logger.warning("Overriding CFG ``lr_sche``.")
 
         # if a string is supplied, try to creat it in PMILRScheduler.
@@ -305,7 +319,7 @@ class SolverBase(object):
             self.lr_sche = scheduler
         self.lr_sche.set_optimizer(self.optimizer)
 
-    def set_plotter(self, plotter: TB_plotter) -> None:
+    def set_plotter(self, plotter: Union[TB_plotter, str]) -> None:
         r"""Externally set :attr:`tb_plotter` manually.
 
         Returns:
@@ -389,7 +403,6 @@ class SolverBase(object):
         if not self.loss_function.weight is None:
             self.loss_function.weight = self.loss_function.weight.float()
 
-
     def step(self, *args):
         r"""This function executes one step in a training loop, which includes:
 
@@ -472,11 +485,11 @@ class SolverBase(object):
         """
         if not net is None:
             msg = f"Overriding network when creating optimizer. If you didn't inherit the function create_optimizer, " \
-                  f"something might have gone wrong!"
+                  f"something might have gone wrong becuase network should have already been created!"
             self._logger.warning(msg)
             self.net = net
 
-        if not optimizer is None:
+        if not optimizer is None and not self.optimizer is None and not isinstance(self.optimizer) is str:
             msg = f"Overriding optimizer defined in CFG. If you didn't inherit the function create_optimizer, something" \
                   f"might have gone wrong!"
             self._logger.warning(msg)
@@ -781,12 +794,6 @@ class SolverBase(object):
         # use validation loss as epoch loss if it exist
         measure_loss = val_loss if val_loss is not None else train_loss
         return measure_loss
-
-    # @abstractmethod
-    # def validation(self, *args, **kwargs) -> float:
-    #     r"""This is called after each epoch. This should return the validation loss as a float number.
-    #     """
-    #     raise NotImplementedError("Validation is not implemented in this solver.")
 
     def _match_type_with_network(self, tensor: torch.Tensor) -> torch.Tensor:
         """Return a tensor with the same type as the first weight of `self._net`. This function seems to cause CUDA

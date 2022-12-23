@@ -17,7 +17,6 @@ from typing import *
 
 __all__ = ['PMIDataLoaderBaseCFG', 'PMIDataLoaderBase']
 
-@dataclass
 class PMIDataLoaderBaseCFG:
     """Config required to initialize :class:`PMIDataLoader`.
 
@@ -63,7 +62,7 @@ class PMIDataLoaderBaseCFG:
     def __init__(self, **kwargs):
         # load class attributes as default values of the instance attributes
         cls = self.__class__
-        cls_dict = { attr: getattr(cls, attr) for attr in dir(cls) }
+        cls_dict = {attr: getattr(cls, attr) for attr in dir(cls)}
         self.__dict__.update(cls_dict)
 
         # replace instance attributes
@@ -71,9 +70,16 @@ class PMIDataLoaderBaseCFG:
             for key, value in kwargs.items():
                 setattr(self, key, value)
 
+    def _as_dict(self):
+        r"""This function is not supposed to be private, but it needs the private tag to be spared by :func:`.__init__`
+        """
+        return self.__dict__
+
     def __str__(self):
         _d = {k: v for k, v in self.__dict__.items() if k[0] != '_'}
         return pprint.pformat(_d, indent=2)
+
+
 
 
 class PMIDataLoaderBase(object):
