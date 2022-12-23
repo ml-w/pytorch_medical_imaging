@@ -954,8 +954,10 @@ class SolverBase(object):
             try:
                 self.tb_plotter.plot_scalars(writer_index, scalars)
                 self.tb_plotter.plot_weight_histogram(self.net, writer_index)
-            except:
-                self._logger.exception("Error occured in default epoch callback.")
+            except Exception as e:
+                self._logger.warning("Error when plotting to tensorboard.")
+                if self._logger.log_level == 10: # debug
+                    self._logger.exception(e)
 
     def _unpack_minibatch(self, minibatch, unpacking_keys = None):
         r"""Unpack mini-batch drawn by ``torchio.Queue`` or ``torchio.SubjectsDataset``.
