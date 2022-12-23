@@ -66,6 +66,10 @@ class SolverBaseCFG:
             Dictates how the LR is changed during the course of training. Stepped after each epoch is done. Default
             to ``lr_scheduler.ExponentialLR`` supplied by ``torch``. Some additional schedulers is also implemented
             in the ``pmi_lr_scheduler`` module.
+        lr_sche_args (list, Optional):
+            Some schedulers require supplying arguments. Do it through this attribute. Default to empty list ``[]``.
+        lr_sche_kwargs (dict, Optional):
+            Some schedulers require supplying key word arguments. Do it through this attribute. Defaul to ``{}``.
         use_cuda (bool, Optional):
             Whether this solver will move the items to cuda for computation. Default to ``True``.
         debug (bool, Optional):
@@ -104,6 +108,8 @@ class SolverBaseCFG:
     debug          : Optional[bool]              = False
     data_loader_val: Optional[PMIDataLoaderBase] = None
     lr_sche        : Optional[PMILRScheduler]    = None # If ``None``, lr_scheduler.ExponentialLR will be used.
+    lr_sche_args   : Optional[list]              = []
+    lr_sche_kwargs : Optional[dict]              = {}
     plotter_dict   : Optional[dict]              = None
     early_stop     : Optional[BaseEarlyStop]     = None
     accumulate_grad: Optional[int]               = 1
@@ -314,6 +320,10 @@ class SolverBase(object):
 
         # if a string is supplied, try to creat it in PMILRScheduler.
         if isinstance(scheduler, str):
+            if len(args) == 0:
+                args = self.lr_sche_args
+            if len(kwargs) == 0:
+                kwargs = self.lr_sche_kwargs
             self.lr_sche = pmi_lr_scheduler.PMILRScheduler(scheduler, *args, **kwargs)
         else:
             self.lr_sche = scheduler
