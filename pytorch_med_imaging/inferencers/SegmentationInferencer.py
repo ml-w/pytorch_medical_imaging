@@ -17,9 +17,9 @@ import SimpleITK as sitk
 from tqdm import *
 from configparser import ConfigParser
 from typing import Union, Optional, Any, Iterable
+from pathlib import Path
 
 __all__ = ['SegmentationInferencer']
-
 
 class SegmentationInferencer(InferencerBase):
     r"""The inferencer for segmentation problems.
@@ -72,6 +72,7 @@ class SegmentationInferencer(InferencerBase):
 
     def _write_out(self, output_dir = None):
         r"""Write the segmentation. You can call :func:`.display_summary` to produce a summary of the performance.
+        This method will also tries to create the ``output_dir`` specified if it does not exist.
 
         Args:
             output_dir (str or Path):
@@ -89,6 +90,11 @@ class SegmentationInferencer(InferencerBase):
             msg = f"Output directory is not specified. You can specify this by supplying argument to `write_out` " \
                   f"method or add this atribute to the CFG."
             raise AttributeError(msg)
+
+        # create the output dir if not exist
+        if not Path(self.output_dir).is_dir():
+            self._logger.info(f"Specified output directory does not exist, trying to create {self.output_dir}.")
+            Path(self.output_dir).mkdir(parents=True)
 
         with torch.no_grad():
             # make sure net is at eval mode

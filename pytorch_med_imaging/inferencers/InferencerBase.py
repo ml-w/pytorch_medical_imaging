@@ -106,6 +106,16 @@ class InferencerBase(object):
 
     @abstractmethod
     def _write_out(self):
+        r"""When inheriting the inferencer class, implement this method.
+
+        .. note::
+            The method has access to attribute :attr:`output_dir` but it is not necessary a valid path. No path checking
+            was implemented up until this point because different inferencer might require different output formats.
+            For instance, segmentation output will generate multiple images to a same folder, whereas classification
+            appends all the outputs into the same data table. Therefore, when overriding this method, be sure to perform
+            path check and create the path necessary for your program to work.
+
+        """
         raise NotImplementedError("This method must be implemented by the child class")
 
     def _load_config(self, cfg: SolverBaseCFG = None) -> None:

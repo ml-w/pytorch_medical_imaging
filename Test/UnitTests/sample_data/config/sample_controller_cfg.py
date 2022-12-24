@@ -10,7 +10,10 @@ class SampleControllerCFG(PMIControllerCFG):
     run_mode = 'training'
     id_list = str(Path(__file__).parent.joinpath('sample_id_setting.ini').absolute())
     id_list_val = str(Path(__file__).parent.joinpath('sample_id_setting.txt').absolute())
-    # output_dir is specified in testing script because its a runtime created temp folder
+    # The followings are specified in runtime because a temp folder was created to hold outputs
+    # * output_dir
+    # * cp_save_dir
+    # * cp_load_dir
 
 class SampleSegControllerCFG(SampleControllerCFG):
     data_loader_cfg = SampleSegLoaderCFG()

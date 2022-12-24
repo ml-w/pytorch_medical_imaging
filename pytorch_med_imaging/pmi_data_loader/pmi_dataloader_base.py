@@ -49,6 +49,10 @@ class PMIDataLoaderBaseCFG:
     .. hint::
         Inherit this base class to define more attributes to be used by the solvers.
 
+    .. note::
+        Please note that when using data classes with controller, the controller `id_list` attribute will override the
+        :attr:`PMIDataLoaderBaseCFG.id_list` of this class.
+
     """
     input_dir    : str = ""
     target_dir   : str = ""

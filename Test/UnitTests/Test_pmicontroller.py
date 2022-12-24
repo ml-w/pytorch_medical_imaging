@@ -53,7 +53,6 @@ class TestController(unittest.TestCase):
 
         self._prepare_controller()
 
-
     def override_config(self):
         return
 
@@ -93,6 +92,26 @@ class TestController(unittest.TestCase):
 
     def test_s4_inference(self):
         self.controller.inference()
+
+    def test_s5_kfold(self):
+        self.controller.cfg.id_list = 'sample_data/config/sample_3_fold/{fold_code}.ini'
+        self.controller.cp_save_dir = str(self._checkpoint_path.joinpath('checkpoint_{fold_code}.pt'))
+        self.controller.cp_load_dir = str(self._checkpoint_path.joinpath('checkpoint_{fold_code}.pt'))
+        self.controller.output_dir = str(self.temp_output_path.joinpath('output_{fold_code}'))
+
+        # normally called during exec() but we are calling train/inference() directly, so call _pre_process_flags()
+        # manually first to override 'fold_code' tags
+        self.controller._pre_process_flags()
+
+        # check the checkpoint is saved correctly
+        self.controller.train()
+        self.assertTrue(self._checkpoint_path.joinpath(f'checkpoint_{self.controller.cfg.fold_code}.pt').is_file())
+        
+        # check the inference output is written to correct place
+        self.controller.inference()
+        inf_output_dir = self.temp_output_path.joinpath(f'output_{self.controller.cfg.fold_code}')
+        self.assertTrue(inf_output_dir.is_dir())
+        self.assertGreater(len(list(inf_output_dir.iterdir())), 0, "No output found!")
 
 class TestSegController(TestController):
     def _prepare_cfg(self):

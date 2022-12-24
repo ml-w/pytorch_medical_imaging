@@ -234,17 +234,18 @@ class PMIController(object):
         if not self.fold_code is None:
             # rebuild data loader id lists
             replace_target = [
-                (self.data_loader_cfg    , 'id_list'),
-                (self.data_loader_val_cfg, 'id_list'),
-                # (self.data_loader_cfg    , 'output_dir'), # output_dir is overrided by controller CFG
-                # (self.data_loader_val_cfg, 'output_dir'), # output_dir is overrided by controller CFG
-                (self.solver_cfg         , 'cp_load_dir'),
-                (self.solver_cfg         , 'cp_save_dir'),
-                # (self.solver_cfg         , 'output_dir'), # output_dir is overrided by controller CFG
-                (self                    , 'log_dir'),
-                (self                    , 'cp_load_dir'),
-                (self                    , 'cp_save_dir'),
-                (self                    , 'output_dir')
+                # (self.data_loader_cfg    , 'id_list')      # id_list for both loaders
+                # (self.data_loader_val_cfg, 'id_list'),
+                # (self.data_loader_cfg    , 'output_dir')   # output_dir is overrided by controller CFG
+                # (self.data_loader_val_cfg, 'output_dir')   # output_dir is overrided by controller CFG
+                (self.solver_cfg           , 'cp_load_dir'),
+                (self.solver_cfg           , 'cp_save_dir'),
+                # (self.solver_cfg         , 'output_dir') , # output_dir is overrided by controller CFG
+                (self                      , 'log_dir'),
+                (self                      , 'cp_load_dir'),
+                (self                      , 'cp_save_dir'),
+                (self                      , 'output_dir'),
+                (self                      , 'id_list')
             ]
             for inst, attr in replace_target:
                 _old = getattr(inst, attr, None)
