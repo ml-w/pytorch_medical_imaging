@@ -3,7 +3,6 @@ import unittest
 from sample_data.config.sample_cfg import *
 
 from mnts.mnts_logger import MNTSLogger
-from sample_data.config.sample_cfg import *
 from pytorch_med_imaging.inferencers import *
 from pytorch_med_imaging.pmi_data_loader import PMIDataLoaderBase, PMIDataLoaderBaseCFG
 

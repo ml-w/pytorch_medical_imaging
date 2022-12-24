@@ -305,7 +305,7 @@ class SegmentationSolver(SolverBase):
 
     def _step_callback(self, s, g, out, loss, step_idx=None):
         r"""Plot segmentation. Requires the presence of a ``tb_plotter`` attribute."""
-        if self.tb_plotter is None:
+        if self._tb_plotter is None:
             self._logger.warning("There are no tb_plotter.", True)
             return
 
@@ -316,7 +316,7 @@ class SegmentationSolver(SolverBase):
 
         if step_idx % 10 == 0:
             # make sure they are not remaining in the gpu.
-            self.tb_plotter.plot_segmentation(g.cpu(), out.cpu(), s.cpu().float(), step_idx)
+            self._tb_plotter.plot_segmentation(g.cpu(), out.cpu(), s.cpu().float(), step_idx)
 
         # delete references
         del s, g, out

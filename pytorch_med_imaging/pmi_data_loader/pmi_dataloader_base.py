@@ -356,7 +356,7 @@ class PMIDataLoaderBase(object):
             id_exclude (str or list, Optional):
                 If this is not ``''``, will check if it is a path or a list. If it is a path, assume it is a comma
                 separated list where the elements are to be removed from ``self.id_list``. If it is already a list, will
-                directly remove these ids from ``self.id_list.
+                directly remove these ids from ``self.id_list``.
 
         .. Note::
             The default values of ``id_list`` and ``id_exclude`` are both empty strings ''. If they are empty strings

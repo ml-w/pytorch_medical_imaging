@@ -9,6 +9,7 @@ import inspect
 import configparser
 from typing import Optional, Iterable, Union, Any
 from pathlib import Path
+from dataclasses import dataclass
 
 # Propietary
 from functools import partial
@@ -62,6 +63,13 @@ class backward_compatibility(object):
         self.lsuffix = lsuffix
         self.loadbyfilelist = loadbyfilelist
 
+
+@dataclass
+class PMIControllerCFG:
+    solver_cfg = None
+    data_loader_cfg = None
+    data_loader_val_cfg = None
+    run_mode = None
 
 class PMIController(object):
     r"""This controller is the backbone of the package. To initiate training or inference, you will need to

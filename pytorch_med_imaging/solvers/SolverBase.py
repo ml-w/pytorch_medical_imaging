@@ -57,6 +57,8 @@ class SolverBaseCFG:
         cp_load_dir (str, Optional):
             Specify the direcotry where the checkpoint is to be loaded. If not ``None``, the checkpoint is loaded before
             calling :func:`.fit`.
+        output_dir (str, Optional):
+            Required for :class:`.InferencerBase` to decide where the outputs are written to. Default to ``None``.
         unpack_key_inference (Iterable[str], Optional):
             If this is specified, the inferencer will be default to use this, otherwise, it will try to use
             :attr:`unpack_key_forward`, but this is not always correct. Default to ``None``.
@@ -85,6 +87,8 @@ class SolverBaseCFG:
             :func:`SolverBase._update_network`.
         plotter_dict (dict, Optional):
             This dict could be used by the child class to perform plotting after validation or in each step.
+        plot_to_tb (bool, Optional):
+            If try, the solver will try to create a :class:`TB_plotter` for plotting the intermediate results.
 
     """
     # Training hyper params (must be provided for training)
@@ -97,6 +101,7 @@ class SolverBaseCFG:
     unpack_key_inference: Optional[Iterable[str]] = None
     cp_save_dir         : Optional[str]           = None
     cp_load_dir         : Optional[str]           = None
+    output_dir          : Optional[str]           = None
 
     net          : torch.nn.Module       = None
     loss_function: torch.nn              = None
@@ -114,15 +119,22 @@ class SolverBaseCFG:
     early_stop     : Optional[BaseEarlyStop]     = None
     accumulate_grad: Optional[int]               = 1
     init_mom       : Optional[float]             = None
-    tb_plotter     : Optional[TB_plotter]        = None
+    plot_to_tb     : Optional[bool]              = False
 
     def __init__(self, **kwargs):
         # load class attributes as default values of the instance attributes
         cls = self.__class__
         cls_dict = { attr: getattr(cls, attr) for attr in dir(cls) }
         for key, value in cls_dict.items():
+            if key in ('solver_cls', 'inferencer_cls'):
+                continue
+
             if not key[0] == '_':
-                setattr(self, key, value)
+                try:
+                    setattr(self, key, value)
+                except:
+                    msg = f"Error when initializing: {key}: {value}"
+                    raise AttributeError(msg)
 
         # replace instance attributes
         if len(kwargs):
@@ -148,6 +160,11 @@ class SolverBaseCFG:
     def solver_cls(self) -> type:
         return ast.literal_eval(self.__class__.__name__.replace('CFG', ''))
 
+    @property
+    def inferencer_cls(self) -> type:
+        return ast.literal_eval(self.__class__.__name__.replace('SolverCFG', 'Inferencer'))
+
+
 class SolverBase(object):
     """Base class for all solvers. This class must be inherited before it can work properly. The child
     classes should inherit the abstract methods. The initialization is done by specifying class attributes of
@@ -162,6 +179,9 @@ class SolverBase(object):
             Number of time :func:`step` was called.
         _decayed_time (int):
             Number of time :func:`decay_optimizer` was called.
+        _tb_plotter (TB_plotter):
+            Tensor board summary writter.
+
     """
     cls_cfg = SolverBaseCFG
     def __init__(self, cfg: SolverBaseCFG,
@@ -187,7 +207,7 @@ class SolverBase(object):
         self._decayed_time    : int = 0
 
         # internal attributes
-        self.tb_plotter             = None
+        self._tb_plotter = None
 
         # external_att
         self.plotter_dict      = {}
@@ -207,6 +227,11 @@ class SolverBase(object):
             self.loss_function = self.loss_function.cuda()
             self.net = self.net.cuda()
 
+        if self.plot_to_tb:
+            self.create_plotter()
+
+        if self.cp_load_dir is not None:
+            self.load_checkpoint(self.cp_load_dir)
         # Stopping criteria
         # self._early_stop_scheduler = BaseEarlyStop(self.solverparams_early_stop)
 
@@ -216,10 +241,9 @@ class SolverBase(object):
         """
         # Loading basic inputs
         if not config_file is None:
-            cls = config_file
-            cls_dict = { attr: getattr(cls, attr) for attr in dir(cls) }
-            self.__dict__.update(cls_dict)
-            self.__class__.cls_cfg = cls
+            # cls_dict = { attr: getattr(cls, attr) for attr in dir(cls)}
+            self.__dict__.update(config_file.__dict__)
+            self.__class__.cls_cfg = config_file
         else:
             self._logger.warning("_load_config called without arguments.")
 
@@ -335,9 +359,41 @@ class SolverBase(object):
         Returns:
             TB_plotter
         """
-        if not self.tb_plotter is None:
+        if not self._tb_plotter is None:
             self._logger.warning(f"Overriding CFG ``tb_plotter``.")
-        self.tb_plotter = plotter
+        self._tb_plotter = plotter
+
+    def create_plotter(self):
+        r"""Create the tensorboard plotter."""
+        try:
+            # for legacy purpose, this has always been specified by global env variable.
+            tensorboard_rootdir =  Path(os.environ.get('TENSORBOARD_LOGDIR', '/media/storage/PytorchRuns'))
+            if not tensorboard_rootdir.is_dir():
+                self._logger.warning("Cannot read from TENORBOARD_LOGDIR, retreating to default path...")
+                tensorboard_rootdir = Path("/media/storage/PytorchRuns")
+
+            # Strip the parenthesis and comma from the net name to avoid conflicts with system
+            net_name = self.solver.net.get_name().translate(str.maketrans('(),','[]-'," "))
+            self._logger.info("Creating TB writer, writing to directory: {}".format(tensorboard_rootdir))
+
+            # check if the target exist
+            dirs_num = [int(re.search(f"{net_name}-(?P<number>\d+)", d.name).groupdict()['number'])
+                        for d in tensorboard_rootdir.glob(f"{net_name}-*")]
+            if len(dirs_num) > 0:
+                next_num = max(dir_num) + 1
+            else:
+                next_num = 0
+
+            writer = SummaryWriter(str(tensorboard_rootdir.joinpath(
+                "{}{}".format(net_name,
+                              f'-{next_num}' if next_num > 0 else ''
+            ))))
+
+            self._tb_plotter = TB_plotter(writer)
+        except Exception as e:
+            self._logger.warning("Tensorboard writter creation encounters failure, falling back to no writer.")
+            self._logger.exception(e)
+            self._tb_plotter = None
 
     def net_to_parallel(self) -> None:
         r"""Call to move :attr:`net` to :class:`torch.nn.DataParallel`. Sometimes the network used is special and
@@ -965,12 +1021,12 @@ class SolverBase(object):
         writer_index = self.plotter_dict.get('epoch_num', None)
         if scalars is None:
             return
-        elif self.tb_plotter is None:
+        elif self._tb_plotter is None:
             return
         else:
             try:
-                self.tb_plotter.plot_scalars(writer_index, scalars)
-                self.tb_plotter.plot_weight_histogram(self.net, writer_index)
+                self._tb_plotter.plot_scalars(writer_index, scalars)
+                self._tb_plotter.plot_weight_histogram(self.net, writer_index)
             except Exception as e:
                 self._logger.warning("Error when plotting to tensorboard.")
                 if self._logger.log_level == 10: # debug
