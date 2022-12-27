@@ -26,6 +26,7 @@ class TestController(unittest.TestCase):
     def setUpClass(cls):
         MNTSLogger('.',logger_name='unittest', verbose=True, keep_file=False, log_level='debug')
         cls._logger = MNTSLogger['unittest']
+        cls._logger.debug(f"Class logger setup for {cls.__name__}")
         cls._checkpoint_dir = tempfile.TemporaryDirectory()
         cls._checkpoint_path = Path(cls._checkpoint_dir.name)
 
@@ -66,11 +67,10 @@ class TestController(unittest.TestCase):
         """
         raise NotImplementedError
 
-    @abstractmethod
     def _prepare_controller(self):
         r"""Use the prepared controller to create the controller instance. Store the controller instance to
         :attr:`controller`."""
-        raise NotImplementedError
+        self.controller = PMIController(self.cfg)
 
     def test_s1_create(self):
         pass
@@ -113,10 +113,17 @@ class TestController(unittest.TestCase):
         self.assertTrue(inf_output_dir.is_dir())
         self.assertGreater(len(list(inf_output_dir.iterdir())), 0, "No output found!")
 
+    def test_s6_override(self):
+        import yaml
+        test_override_yaml = 'sample_data/config/sample_override/sample_override_setting_1.yaml'
+        self.controller.override_cfg(test_override_yaml)
+
+        _override = yaml.safe_load(open(test_override_yaml, 'r'))
+        if 'solver_cfg' in _override:
+            for key, v in _override['solver_cfg'].items():
+                msg = f"Expect key {key} overrided to be {v} but got {getattr(self.controller.solver_cfg, key)}."
+                self.assertEqual(getattr(self.controller.solver_cfg, key), v, msg)
+
 class TestSegController(TestController):
     def _prepare_cfg(self):
         self.cfg = SampleSegControllerCFG()
-
-    def _prepare_controller(self):
-        self.controller = PMIController(self.cfg)
-

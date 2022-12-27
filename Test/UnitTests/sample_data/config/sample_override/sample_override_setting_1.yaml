@@ -1,0 +1,5 @@
+solver_cfg:
+  batch_size: 4
+  num_of_epoch: 2
+  init_lr: 1E-3
+
