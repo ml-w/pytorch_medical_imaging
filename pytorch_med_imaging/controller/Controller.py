@@ -89,6 +89,10 @@ class PMIControllerCFG:
     inference_all_checkpoints  : Optional[bool] = False
     plot_tb                    : Optional[bool] = True # if false no plots
 
+    # log related
+    log_dir : Optional[str]  = 'Backup/Log/'
+    keep_log: Optional[bool] = True
+    verbose : Optional[bool] = True
 
     # Configurations
     data_loader_cfg    : PMIDataLoaderBaseCFG           = None
@@ -141,10 +145,17 @@ class PMIController(object):
     """
     def __init__(self, cfg):
         self._cfg = cfg
-        self._logger = MNTSLogger[self.__class__.__name__]
 
+        # if global logger is already created, its configurations are not controlled by this controller
+        if isinstance(MNTSLogger.global_logger, MNTSLogger):
+            self._logger = MNTSLogger[self.__class__.__name__]
         # Load configs
         self._load_config(cfg)
+
+        # otherwise, create the logger based on controller configs
+        if not isinstance(MNTSLogger.global_logger, MNTSLogger):
+            self._logger = MNTSLogger(self.log_dir, logger_name='pmi_controller', keep_file=self.keep_log,
+                                      verbose=self.verbose)
 
         # This is the root that dictates the behavior of the controller.
         if re.match('(?=.*train.*)', self.run_mode):
@@ -170,7 +181,8 @@ class PMIController(object):
             self.__class__.cls_cfg = cls
             self.cfg = config_file
         else:
-            self._logger.warning("_load_config called without arguments.")
+            if hasattr(self, '_logger'):
+                self._logger.warning("_load_config called without arguments.")
 
     def check_flags_sanity(self):
         _check = [
@@ -209,7 +221,7 @@ class PMIController(object):
             raise FileNotFoundError(msg)
 
         if override_file.suffix in ('.yml', '.yaml'):
-            override_dict = yaml.load(override_file)
+            override_dict = yaml.safe_load(override_file.open('r'))
         else:
             msg = f"Suffix of the override file should be align with guildai's definitions. Currently only '.ini', " \
                   f"'.yaml' and '.json' were implemented. Got {override_file.name} instead."
@@ -238,10 +250,10 @@ class PMIController(object):
                 # (self.data_loader_val_cfg, 'id_list'),
                 # (self.data_loader_cfg    , 'output_dir')   # output_dir is overrided by controller CFG
                 # (self.data_loader_val_cfg, 'output_dir')   # output_dir is overrided by controller CFG
-                (self.solver_cfg           , 'cp_load_dir'),
-                (self.solver_cfg           , 'cp_save_dir'),
+                # (self.solver_cfg           , 'cp_load_dir'),
+                # (self.solver_cfg           , 'cp_save_dir'),
                 # (self.solver_cfg         , 'output_dir') , # output_dir is overrided by controller CFG
-                (self                      , 'log_dir'),
+                # (self                      , 'log_dir'),
                 (self                      , 'cp_load_dir'),
                 (self                      , 'cp_save_dir'),
                 (self                      , 'output_dir'),
@@ -331,8 +343,8 @@ class PMIController(object):
                 The target cfg to override.
 
         """
-        if not _is_dataclass_instance(target_cfg):
-            msg = f"Expect input `target_cfg` to be a dataclass instance, got {type(cfg)} instead."
+        if not isinstance(target_cfg, (PMIDataLoaderBaseCFG, SolverBaseCFG, PMIControllerCFG)):
+            msg = f"Expect input `target_cfg` to be a dataclass instance, got {type(target_cfg)} instead."
             raise TypeError(msg)
 
         for  k, v in new_value_dict.items():
