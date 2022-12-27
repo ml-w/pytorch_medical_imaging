@@ -166,12 +166,21 @@ class PMIController(object):
             self.run_mode = False
 
         self._required_attributes_train = [
-            ''
+            'cp_save_dir'
+        ]
+
+        self._required_attributes_inference = [
+            'cp_load_dir'
         ]
 
     def _load_config(self, config_file = None):
         r"""Function to load the configurations. If ``config_file`` is ``None``, load the default class
         :class:`SolverBaseCFG` that is stored as a class attribute :attr:`cls_cfg`.
+
+        Args:
+            config_file (PMIControllerCFG):
+                The configuration instance.
+
         """
         # Loading basic inputs
         if not config_file is None:
@@ -196,8 +205,6 @@ class PMIController(object):
                 msg = f"Expect attribute {k.__name__} to be {v}, got {type(k)} instead."
                 raise TypeError
 
-        pass
-
     def override_cfg(self, override_file: PathLike) -> None:
         r"""This method is the key method to control the pipeline execution with the AI experimental manager `guild`.
 
@@ -207,12 +214,27 @@ class PMIController(object):
 
         Example:
 
-            example_override.ini
+            example_override.yaml
 
-            ```{ini}
+            .. code-block:: yaml
 
-            ```
+                controller_cfg:
+                    fold_code: 'B00'
+                    id_list: './sample_id_list/{fold_code}.ini'
+                    id_list_val: './sample_id_list/validation.txt'
 
+                solver_cfg:
+                    batch_size: 4
+                    init_lr: 1E-5
+                    num_of_epoch: 200
+
+            This yaml will override the corresponding attributes of the ``controller`` and the ``solver`` before these
+            instances were initialized
+
+        .. important::
+            * There are no checking implemented for this override function and the controller will not work if you
+              override important attributes such as 'solver' and 'data_loader'. Don't override any attributes that is
+              suppose to be an object/instance.
 
         """
         override_file = Path(override_file)
@@ -228,6 +250,7 @@ class PMIController(object):
             raise ArithmeticError(msg)
 
         # Override template setting with flags
+        controller_override = override_dict.get('controller_cfg', None)
         solver_override = override_dict.get('solver_cfg', None)
         data_loader_override = override_dict.get('data_loader_cfg', None)
         data_loader_val_override = override_dict.get('data_loader_val_cfg', None)
@@ -240,24 +263,27 @@ class PMIController(object):
 
     def _pre_process_flags(self) -> None:
         r"""The flags defined in :class:`PMIControllerCFG` might need to further change the CFGs of the solver and the
-        data loader. This method implements this.
+        data loader. This method implements this. Essentially, the first part of this method replaces the key tag
+        ``'{fold_code}'`` in several attributes with the value stored in :attr:`self.fold_code`. This allows users to
+        define K-fold data split and train various folds without having to copy the configuration in each fold. Second,
+        this method deals with the special options
+
+        Special options:
+
+        * ``validate_on_test_set``
+        * ``inference_on_training_set``
+        * ``inference_on_validation_set``
+
         """
         # Fold code replace filelist and checkpoints
         if not self.fold_code is None:
             # rebuild data loader id lists
             replace_target = [
-                # (self.data_loader_cfg    , 'id_list')      # id_list for both loaders
-                # (self.data_loader_val_cfg, 'id_list'),
-                # (self.data_loader_cfg    , 'output_dir')   # output_dir is overrided by controller CFG
-                # (self.data_loader_val_cfg, 'output_dir')   # output_dir is overrided by controller CFG
-                # (self.solver_cfg           , 'cp_load_dir'),
-                # (self.solver_cfg           , 'cp_save_dir'),
-                # (self.solver_cfg         , 'output_dir') , # output_dir is overrided by controller CFG
-                # (self                      , 'log_dir'),
-                (self                      , 'cp_load_dir'),
-                (self                      , 'cp_save_dir'),
-                (self                      , 'output_dir'),
-                (self                      , 'id_list')
+                (self, 'log_dir'),
+                (self, 'cp_load_dir'),
+                (self, 'cp_save_dir'),
+                (self, 'output_dir'),
+                (self, 'id_list')
             ]
             for inst, attr in replace_target:
                 _old = getattr(inst, attr, None)
@@ -365,6 +391,9 @@ class PMIController(object):
         return self.cfg.solver_cfg
 
     def exec(self):
+        r"""This method executes the training or inference pipeline according to the configuration. It will invoke
+        :meth:`.train` or :meth:`inference` based on the flag `run_mode`.
+        """
         self._pre_process_flags()
 
         # Run train or inference

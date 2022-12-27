@@ -14,6 +14,13 @@ Module List
 
    MedImgDataset.rst
 
+Controller
+----------
+.. toctree::
+   :maxdepth: 2
+
+   controller.rst
+
 PMIDataLoader
 -------------
 .. toctree::
