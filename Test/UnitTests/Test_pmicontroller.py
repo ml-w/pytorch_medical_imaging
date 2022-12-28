@@ -118,7 +118,8 @@ class TestController(unittest.TestCase):
         test_override_yaml = 'sample_data/config/sample_override/sample_override_setting_1.yaml'
         self.controller.override_cfg(test_override_yaml)
 
-        _override = yaml.safe_load(open(test_override_yaml, 'r'))
+        with open(test_override_yaml, 'r') as f:
+            _override = yaml.safe_load(f)
         if 'solver_cfg' in _override:
             for key, v in _override['solver_cfg'].items():
                 msg = f"Expect key {key} overrided to be {v} but got {getattr(self.controller.solver_cfg, key)}."

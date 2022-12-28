@@ -2,7 +2,7 @@ from ..pmi_data_loader import PMIDataLoaderBase
 from ..solvers import SolverBase
 from ..inferencers import InferencerBase
 from ..tb_plotter import TB_plotter
-from dataclasses import dataclass, fields, _is_dataclass_instance, asdict
+from dataclasses import dataclass, fields
 from pathlib import Path
 from typing import Any, IO, Union, Optional
 
@@ -243,7 +243,8 @@ class PMIController(object):
             raise FileNotFoundError(msg)
 
         if override_file.suffix in ('.yml', '.yaml'):
-            override_dict = yaml.safe_load(override_file.open('r'))
+            with override_file.open('r') as f:
+                override_dict = yaml.safe_load(f)
         else:
             msg = f"Suffix of the override file should be align with guildai's definitions. Currently only '.ini', " \
                   f"'.yaml' and '.json' were implemented. Got {override_file.name} instead."
