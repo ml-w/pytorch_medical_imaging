@@ -37,7 +37,8 @@ extensions = [
     'sphinx.ext.napoleon',
     'sphinx.ext.autosummary',
     'sphinx.ext.mathjax',
-    'sphinx_rtd_theme'
+    'sphinx_rtd_theme',
+    'sphinxcontrib.mermaid'
     # 'pytorch_med_imaging'
 ]
 

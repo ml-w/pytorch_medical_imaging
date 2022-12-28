@@ -170,6 +170,34 @@ class SolverBase(object):
     classes should inherit the abstract methods. The initialization is done by specifying class attributes of
     :class:`SolverBaseCFG`.
 
+    Method call sequence
+    ^^^^^^^^^^^^^^^^^^^^
+
+    .. mermaid::
+
+        sequenceDiagram
+            autonumber
+            participant fit()
+            participant solve_epoch()
+            participant step()
+            participant validation()
+            fit() ->> fit(): _epoch_prehook()
+            fit() ->>+ solve_epoch(): call
+            solve_epoch() ->>+ step(): call
+            step() ->> step(): Process one mini-batch
+            step() ->>- solve_epoch(): Return loss
+            solve_epoch() ->> solve_epoch(): _step_callback()
+            opt has data_loader_val
+                solve_epoch() ->>+ validation(): call
+                Note over validation(): After each validation mini-batch
+                validation() ->> validation(): _validation_step_callback()
+                Note over validation(): After validate who set of data
+                validation() ->> validation(): _validation_callback()
+                validation() ->>- solve_epoch(): Return validation loss
+            end
+            solve_epoch() ->> solve_epoch(): Save network state
+            solve_epoch() ->>- fit(): Finish
+
     Class Attributes:
         cls_cfg (SolverBaseCFG):
             The config parameters.
@@ -181,6 +209,12 @@ class SolverBase(object):
             Number of time :func:`decay_optimizer` was called.
         _tb_plotter (TB_plotter):
             Tensor board summary writter.
+
+    .. hint::
+        When implementing a child class solver, you should pay attention to implementing the two methods including
+        :func:`._validation_step_callback` and :func:`._validation_callback`. The step callback allows you to store the
+        results of each step in the validation, the callback allows you to compute the performance of this epoch. Using
+        these results, you can decide in the :func:`.solve_epoch` the criteria for saving the state of the network.
 
     """
     cls_cfg = SolverBaseCFG

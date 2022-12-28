@@ -88,7 +88,7 @@ class CallbackQueue(Queue):
         import torch.multiprocessing
         torch.multiprocessing.set_sharing_strategy('file_system')
 
-    The call back functions should be written in PMI_data_loader.computations, symbols should be exported from the
+    The call back functions should be written in pmi_data_loader.computations, symbols should be exported from the
     __init__.py file.
 
     .. warning::
