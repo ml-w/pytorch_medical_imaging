@@ -176,12 +176,14 @@ class SolverBase(object):
 
         sequenceDiagram
             autonumber
+            actor user
             participant fit()
             participant solve_epoch()
             participant step()
             participant validation()
-            fit() ->> fit(): _epoch_prehook()
+            user ->>+ fit(): call
             fit() ->>+ solve_epoch(): call
+            solve_epoch() ->> solve_epoch(): _epoch_prehook()
             solve_epoch() ->>+ step(): call
             step() ->> step(): Process one mini-batch
             step() ->>- solve_epoch(): Return loss
@@ -194,8 +196,15 @@ class SolverBase(object):
                 validation() ->> validation(): _validation_callback()
                 validation() ->>- solve_epoch(): Return validation loss
             end
-            solve_epoch() ->> solve_epoch(): Save network state
-            solve_epoch() ->>- fit(): Finish
+            solve_epoch() ->> solve_epoch(): _epoch_callback()
+            Note right of solve_epoch(): Plot to tensorboard
+            Note right of solve_epoch(): Step early stopper if exist
+            solve_epoch() ->>- fit(): Return train/validation loss
+            opt if loss < last_min_loss
+                fit() ->> fit(): Save network state
+                Note right of fit(): Update `last_min_loss`
+            end
+            fit() ->>- user: Finish
 
     Class Attributes:
         cls_cfg (SolverBaseCFG):
