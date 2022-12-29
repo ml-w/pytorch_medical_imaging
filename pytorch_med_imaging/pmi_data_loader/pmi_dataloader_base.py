@@ -4,7 +4,6 @@ import configparser
 import pandas as pd
 import pprint
 import itertools
-from dataclasses import dataclass
 from abc import *
 from pathlib import Path
 from torch.utils.data import DataLoader
@@ -83,6 +82,11 @@ class PMIDataLoaderBaseCFG:
         _d = {k: v for k, v in self.__dict__.items() if k[0] != '_'}
         return pprint.pformat(_d, indent=2)
 
+    def __copy__(self):
+        cls = self.__class__
+        new_obj = cls.__new__(cls)
+        new_obj.__dict__.update(self.__dict__)
+        return new_obj
 
 
 
@@ -248,13 +252,6 @@ class PMIDataLoaderBase(object):
                                     drop_last   = False,
                                     pin_memory  = False)
         return out_loader
-
-    def write_log(self, msg, level=MNTSLogger.INFO):
-        """Write log to logger if there's one"""
-        if not self._logger is None and isinstance(self._logger, MNTSLogger):
-            self._logger.log(self.__class__.__name__ + ": " + msg, level)
-        if self._verbose:
-            print(msg)
 
     def _read_config(self, config_file=None):
         """
