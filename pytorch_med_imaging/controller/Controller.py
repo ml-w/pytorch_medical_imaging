@@ -56,19 +56,25 @@ class PMIControllerCFG:
             Specify the path to the ID list '.txt' file that specify the validation data. Note that this does
             accept '.ini' file.
         debug (bool, Optional):
-            Default to ``False``
+            Default to ``False``.
         debug_validation (bool, Optional):
-            Default to ``False``
+            Default to ``False``.
         validate_on_test_set (bool, Optional):
-            Default to ``False``
+            Default to ``False``.
         inference_on_training_set (bool, Optional):
-            Default to ``False``
+            Default to ``False``.
         inference_on_validation_set (bool, Optional):
-            Default to ``False``
+            Default to ``False``.
         inference_all_checkpoints (bool, Optional):
-            Default to ``False``
+            Default to ``False``.
         plot_tb (bool, Optional):
-            Default to ``True``
+            Default to ``True``.
+        log_dir (str, Optional):
+            Default directory for outputting the log file. Default to ``'./Backup/Log'``.
+        keep_log (bool, Optional):
+            Default to ``True``.
+        verbose (bool, Optional):
+            Defaul to ``True``.
 
     .. note::
         Don't confuse the `id_list` in this CFG with that in :class:`SolverBase`, the later is more flexible and can
@@ -89,7 +95,7 @@ class PMIControllerCFG:
     plot_tb                    : Optional[bool] = True # if false no plots
 
     # log related
-    log_dir : Optional[str]  = 'Backup/Log/'
+    log_dir : Optional[str]  = './Backup/Log/'
     keep_log: Optional[bool] = True
     verbose : Optional[bool] = True
 
@@ -153,7 +159,23 @@ class PMIController(object):
 
         # otherwise, create the logger based on controller configs
         if not isinstance(MNTSLogger.global_logger, MNTSLogger):
-            self._logger = MNTSLogger(self.log_dir, logger_name='pmi_controller', keep_file=self.keep_log,
+
+            log_dir = Path(self.log_dir)
+            if isinstance(self.net, torch.nn.Module):
+                log_fname = self.net._get_name()
+            elif isinstance(self.net, str):
+                log_fname = self.net.translate(str.maketrans('(),','[]-'," "))
+            else:
+                log_fname = 'default'
+            log_dir = log_dir.joinpath(log_fname)
+            existing_logs_indices = [int(re.search(f"{log_fname}-(?P<num_log>\d+)\.log", l.name))
+                                     for l in log_dir.parent.glob(f'{log_fname}-*.log')]
+            if len(existing_log_indices) > 0:
+                new_log_index = max(existing_log_indices) + 1
+                log_dir = log_dir.with_name(f'{log_fname}-{new_log_index}.log')
+            else:
+                log_dir = log_dir.with_suffix('.log')
+            self._logger = MNTSLogger(log_dir, logger_name='pmi_controller', keep_file=self.keep_log,
                                       verbose=self.verbose)
 
         # This is the root that dictates the behavior of the controller.
