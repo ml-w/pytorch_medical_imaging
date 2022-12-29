@@ -21,7 +21,7 @@ class PMIImageDataLoaderCFG(PMIDataLoaderBaseCFG):
             the desired data type for input data and target data. Default to ``[float, float]``.
         sampler (str, Optional):
             Determine the ``tio.Sampler`` used to sample the images. Support ['weighted'|'uniform'|'grid'] currently.
-            Default to ``'weighted'``, to disable it, set this to ``None``
+            Default to ``None``, which means no sampler is used (i.e., the whole image is loaded).
         sampler_kwargs (dict, Optional):
             The kwargs passed to ``tio.Sampler``. For 'weighted', key ``patch_size`` and ``prob_map`` is required. For
             'uniform', only ``patch_size`` is required. Unless sampler is ``None``, this needs to be specified. Default
@@ -60,7 +60,7 @@ class PMIImageDataLoaderCFG(PMIDataLoaderBaseCFG):
 
     """
     data_types                    : Optional[Iterable] = [float, float]
-    sampler                       : Optional[str]      = 'weighted'           # 'weighted' or 'uniform'
+    sampler                       : Optional[str]      = None                 # 'weighted' or 'uniform'
     sampler_kwargs                : Optional[dict]     = dict()               # pass to ``tio.Sampler``
     augmentation                  : Optional[str]      = None                 # yaml file to create tio transform
     create_new_attribute          : Optional[str]      = None                 # create a new attribute in subjects for callback

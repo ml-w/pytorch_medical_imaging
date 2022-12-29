@@ -62,6 +62,7 @@ class TestImageDataLoader(TestDataLoader):
             self.assertTupleEqual(tuple(self.cfg.sampler_kwargs['patch_size']),
                                   tuple(l.shape[1:]))
             break
+        return loader
 
     def test_load_inference_data(self):
         loader = super(TestImageDataLoader, self).test_load_inference_data()
@@ -69,22 +70,24 @@ class TestImageDataLoader(TestDataLoader):
             self.assertTupleEqual(tuple(self.cfg.sampler_kwargs['patch_size']),
                                   tuple(l.shape[1:]))
             break
+        return loader
 
     def test_additional_instance(self):
-        new_cfg = PMIImageDataLoaderCFG(id_list=['MRI_02', 'MRI_03'])
-        new_loader = PMIImageDataLoader(new_cfg)
+        new_cfg = self.cfg.__class__(id_list=['MRI_02', 'MRI_03'])
+        new_loader = self.loader.__class__(new_cfg)
         self.assertTupleEqual(tuple(new_loader.id_list),
                               ('MRI_02', 'MRI_03'))
 
     def test_no_sampler(self):
         self.cfg.sampler = None
-        loader = PMIImageDataLoader(self.cfg)
+        loader = self.loader.__class__(self.cfg)
         for l in loader.get_torch_data_loader(2):
+            msg = self._logger.debug(f"MB keys: {l.keys()}")
             self.assertTupleEqual(tuple(l['input'][tio.DATA].shape),
                                   (2, 1, 250, 250, 15)) # Size specified in sample_transform.yaml
             break
 
-class TestImageFeaturePairLoader(TestDataLoader):
+class TestImageFeaturePairLoader(TestImageDataLoader):
     def setUp(self):
         super(TestImageFeaturePairLoader, self).setUp()
         self.cfg = PMIImageFeaturePairLoaderCFG()
@@ -195,3 +198,13 @@ class TestPMIImageMCDataLoader(TestImageDataLoader):
             self.assertEqual(len(self.cfg.input_subdirs),
                              _shape[0])
             break
+
+    def test_no_sampler(self):
+        self.cfg.sampler = None
+        loader = self.loader.__class__(self.cfg)
+        for l in loader.get_torch_data_loader(2):
+            msg = self._logger.debug(f"MB keys: {l.keys()}")
+            self.assertTupleEqual(tuple(l['img_new'][tio.DATA].shape),
+                                  (2, 2, 250, 250, 15)) # Size specified in sample_transform.yaml
+            break
+

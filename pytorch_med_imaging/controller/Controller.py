@@ -2,7 +2,6 @@ from ..pmi_data_loader import PMIDataLoaderBase
 from ..solvers import SolverBase
 from ..inferencers import InferencerBase
 from ..tb_plotter import TB_plotter
-from dataclasses import dataclass, fields
 from pathlib import Path
 from typing import Any, IO, Union, Optional
 
@@ -294,6 +293,13 @@ class PMIController(object):
                 self._logger.debug(f"Replace {_old} with {_new}")
                 setattr(inst, attr, _new)
 
+        # if `id_list_val` is defined but `data_loader_val` isn't, try to create it from the `data_loader`
+        if getattr(self, 'id_list_val', None) is not None:
+            if getattr(self, 'data_loader_val_cfg', None) is None:
+                from copy import copy
+                self.data_loader_val_cfg = copy(self.data_loader_cfg)
+                self.data_loader_val_cls = self.data_loader_cls
+
         # Read the id lists, note that ``controller.id_list`` and ``data_loader.id_list`` are different in nature
         try:
             if not self.id_list is None:
@@ -383,13 +389,28 @@ class PMIController(object):
     def data_loader_cfg(self):
         return self.cfg.data_loader_cfg
 
+    @data_loader_cfg.setter
+    def data_loader_cfg(self, x):
+        self._logger.warning("Overriding `data_loader_cfg` with {x}.")
+        self.cfg.data_loader_cfg = x
+
     @property
     def data_loader_val_cfg(self):
         return self.cfg.data_loader_val_cfg
 
+    @data_loader_val_cfg.setter
+    def data_loader_val_cfg(self, x):
+        self._logger.warning("Overriding `data_loader_val_cfg` with {x}.")
+        self.cfg.data_loader_val_cfg = x
+
     @property
     def solver_cfg(self) -> SolverBaseCFG:
         return self.cfg.solver_cfg
+
+    @solver_cfg.setter
+    def solver_cfg(self, x):
+        self._logger.warning("Overriding `solver_cfg` with {x}.")
+        self.cfg.solver_cfg = x
 
     def exec(self):
         r"""This method executes the training or inference pipeline according to the configuration. It will invoke
