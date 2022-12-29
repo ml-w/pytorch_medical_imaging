@@ -80,7 +80,11 @@ class SolverBaseCFG:
             The dataloader used during validation. If it is not provide, the validation step will be skipped and the
             training loss will be used to identify early stopping time points. Default to ``None``.
         early_stop (BaseEarlyStop, Optional):
-            If not ``None``, this will specify the policy for early stopping. See :class:`earlystop.BaseEarlyStop`
+            If not ``None``, this will specify the policy for early stopping. See :class:`:class:.earlystop.BaseEarlyStop`
+        early_stop_args(list, Optional):
+            Pass to initializing :class:`.earlystop.BaseEarlyStop`. Defaul to ``[]``.
+        early_stop_kwargs(dict, Optional):
+            Pass to initializing: class:`.earlystop.BaseEarlyStop` as keyword arguments. Default to ``{}``.
         accumulate_grad (int, Optional):
             If value > 1 specified, gradient will be calculate with loss accumulated for multiple iterations. See
             :func:`SolverBase._update_network`.
@@ -108,17 +112,19 @@ class SolverBaseCFG:
     data_loader  : PMIDataLoaderBase     = None
 
     # Options with defaults
-    use_cuda       : Optional[bool]              = True
-    debug          : Optional[bool]              = False
-    data_loader_val: Optional[PMIDataLoaderBase] = None
-    lr_sche        : Optional[PMILRScheduler]    = None # If ``None``, lr_scheduler.ExponentialLR will be used.
-    lr_sche_args   : Optional[list]              = []
-    lr_sche_kwargs : Optional[dict]              = {}
-    plotter_dict   : Optional[dict]              = None
-    early_stop     : Optional[BaseEarlyStop]     = None
-    accumulate_grad: Optional[int]               = 1
-    init_mom       : Optional[float]             = None
-    plot_to_tb     : Optional[bool]              = False
+    use_cuda         : Optional[bool]              = True
+    debug            : Optional[bool]              = False
+    data_loader_val  : Optional[PMIDataLoaderBase] = None
+    lr_sche          : Optional[PMILRScheduler]    = None # If ``None``, lr_scheduler.ExponentialLR will be used.
+    lr_sche_args     : Optional[list]              = []
+    lr_sche_kwargs   : Optional[dict]              = {}
+    plotter_dict     : Optional[dict]              = None
+    early_stop       : Optional[BaseEarlyStop]     = None
+    early_stop_args  : Optional[list]              = None
+    early_stop_kwargs: Optional[dict]              = None
+    accumulate_grad  : Optional[int]               = 1
+    init_mom         : Optional[float]             = None
+    plot_to_tb       : Optional[bool]              = False
 
     def __init__(self, **kwargs):
         # load class attributes as default values of the instance attributes
@@ -274,8 +280,10 @@ class SolverBase(object):
 
         if self.cp_load_dir is not None:
             self.load_checkpoint(self.cp_load_dir)
+
         # Stopping criteria
-        # self._early_stop_scheduler = BaseEarlyStop(self.solverparams_early_stop)
+        if isinstance(self.early_stop, str):
+            self.set_early_stop(self.early_stop)
 
     def _load_config(self, config_file = None):
         r"""Function to load the configurations. If ``config_file`` is ``None``, load the default class
@@ -381,7 +389,7 @@ class SolverBase(object):
         See Also:
             * :class:`PMILRScheduler`
         """
-        if not self.lr_sche is None and not isinstance():
+        if not self.lr_sche is None and not isinstance(self.lr_sche, str):
             self._logger.warning("Overriding CFG ``lr_sche``.")
 
         # if a string is supplied, try to creat it in PMILRScheduler.
@@ -394,6 +402,35 @@ class SolverBase(object):
         else:
             self.lr_sche = scheduler
         self.lr_sche.set_optimizer(self.optimizer)
+
+    def set_early_stop(self,
+                       early_stop: Union[str, BaseEarlyStop],
+                       *args,
+                       **kwargs) -> None:
+        r"""Externally set the :attr:`early_stop`. Also used in __init__ to create the instance if the cfg
+        ``early_stop`` attribute is a string. See :class:`.early_stop_scheduler.BaseEarlyStop` for more.
+
+        Args:
+            early_stop (str or BaseEarlyStop):
+                The early stop instance.
+            *args:
+                The argument that will be passed to :class:`BaseEarlyStop`.
+            **kwargs:
+                The key word arguments that will be passed to :class:`BaseEarlyStop`.
+
+        """
+        if not self.early_stop is None and not isinstance(self.early_stop, str):
+            self._logger.warning("Overriding CFG ``early_stop``.")
+
+        # if a string is supplied, try to creat it in PMILRScheduler.
+        if isinstance(early_stop, str):
+            if len(args) == 0:
+                args = self.early_stop_args or []
+            if len(kwargs) == 0:
+                kwargs = self.early_stop_kwargs or {}
+            self.early_stop = BaseEarlyStop(self.early_stop, *args, **kwargs)
+        else:
+            self.early_stop = early_stop
 
     def set_plotter(self, plotter: Union[TB_plotter, str]) -> None:
         r"""Externally set :attr:`tb_plotter` manually.

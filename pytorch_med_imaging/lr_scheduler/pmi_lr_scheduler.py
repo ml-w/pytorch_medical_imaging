@@ -5,7 +5,6 @@ from .. import lr_scheduler as custom_schedulers
 from torch.optim import lr_scheduler
 from mnts.mnts_logger import MNTSLogger
 
-lr_scheduler.ExponentialLR
 available_lr_scheduler = list(name for name, obj in inspect.getmembers(lr_scheduler) if inspect.isclass(obj))
 available_lr_scheduler += list(name for name, obj in inspect.getmembers(custom_schedulers) if inspect.isclass(obj))
 

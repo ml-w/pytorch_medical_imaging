@@ -1,0 +1,7 @@
+test_solver_cfg_1:
+  lr_sche: ExponentialLR
+  lr_sche_args: [0.99]
+
+test_solver_cfg_2:
+  early_stop: 'loss_reference'
+  early_stop_args: [10, 15]

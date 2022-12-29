@@ -1,6 +1,8 @@
 import tempfile
 import unittest
-from pytorch_med_imaging.solvers.earlystop import LossReferenceEarlyStop
+import yaml
+from pytorch_med_imaging.solvers.earlystop import LossReferenceEarlyStop, BaseEarlyStop
+from pytorch_med_imaging.lr_scheduler import PMILRScheduler
 from sample_data.config.sample_cfg import *
 
 from mnts.mnts_logger import MNTSLogger
@@ -121,7 +123,7 @@ class TestSegmentationSolver(TestSolver):
     def _prepare_cfg(self):
         self.data_loader_cfg = SampleSegLoaderCFG()
         self.data_loader_cfg_cls = SampleSegLoaderCFG
-        self.solver_cfg = SampleSegSolverCFG
+        self.solver_cfg = SampleSegSolverCFG()
         self.solver_cfg.debug = True
 
     def _prepare_loader(self):
@@ -137,7 +139,7 @@ class TestClassificationSolver(TestSolver):
     def _prepare_cfg(self):
         self.data_loader_cfg = SampleClsLoaderCFG()
         self.data_loader_cfg_cls = SampleClsLoaderCFG
-        self.solver_cfg = SampleClsSolverCFG
+        self.solver_cfg = SampleClsSolverCFG()
         self.solver_cfg.debug = True
 
     def _prepare_loader(self):
@@ -153,9 +155,39 @@ class TestBinaryClassificationSolver(TestClassificationSolver):
         super(TestBinaryClassificationSolver, self)._prepare_cfg()
         self.data_loader_cfg.target_dir = './sample_data/sample_binaryclass_gt.xlsx'
         self.data_loader_cfg_cls.target_dir = './sample_data/sample_binaryclass_gt.xlsx'
-        self.solver_cfg = SampleBinClsSolverCFG
+        self.solver_cfg = SampleBinClsSolverCFG()
         self.solver_cfg.debug = True
 
     def _prepare_solver(self):
         self.solver = BinaryClassificationSolver(self.solver_cfg)
         self.solver_cls = BinaryClassificationSolver
+
+class TestSolverCreateFromFlags(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        cls._logger = MNTSLogger(".", logger_name='unittest', keep_file=False, log_level='debug', verbose=True)
+
+    def setUp(self) -> None:
+        with open('./sample_data/config/sample_override/sample_override_setting_2.yaml', 'r') as f:
+            self._override_settings = yaml.safe_load(f)
+
+        # Use segmentation
+        self.data_loader_cfg = SampleSegLoaderCFG()
+        self.data_loader_cfg_cls = SampleSegLoaderCFG
+        self.solver_cfg = SampleSegSolverCFG()
+        self.solver_cfg.debug = True
+        self.data_loader = PMIImageDataLoader(self.data_loader_cfg)
+        self.data_loader_cls = PMIImageDataLoader
+
+    def test_create_lr_sche(self):
+        for k, v in self._override_settings['test_solver_cfg_1'].items():
+            setattr(self.solver_cfg, k, v)
+        solver = SegmentationSolver(self.solver_cfg)
+        self.assertIsInstance(solver.lr_sche, PMILRScheduler)
+
+    def test_create_early_stopper(self):
+        for k, v in self._override_settings['test_solver_cfg_2'].items():
+            setattr(self.solver_cfg, k, v)
+        solver = SegmentationSolver(self.solver_cfg)
+        self.assertIsInstance(solver.early_stop, BaseEarlyStop)
+        pass
