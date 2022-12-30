@@ -7,7 +7,6 @@ from pytorch_med_imaging.utils.visualization import draw_grid
 from functools import partial
 from cv2 import *
 import numpy as np
-import matplotlib.pyplot as plt
 
 from typing import Union, Optional
 

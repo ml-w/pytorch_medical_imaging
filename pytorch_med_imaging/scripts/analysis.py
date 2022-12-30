@@ -1,9 +1,3 @@
-import matplotlib as mpl
-try:
-    mpl.use('Qt5Agg')
-except:
-    # Guard to prevent error
-    pass
 import numpy as np
 import os
 import pandas as pd
