@@ -18,11 +18,13 @@ class PMILRScheduler(object):
 
         To create a scheduler, you need to specify the name of scheudler and its arguments.
 
-        >>> PMILRScheduler('EponentialLR', 0.99, last_epoch=100)
+        >>> lr_sche = PMILRScheduler('EponentialLR', 0.99, last_epoch=100)
         >>> PMILRScheduler.set_optimizer(optimizer)
         >>> for e in range(num_of_epoch):
-        >>>     ...
-        >>>     PMILRScheduler.step_scheduler()
+        ...     ...
+        ...     PMILRScheduler.step_scheduler()
+        ...     # or
+        ...     lr_sche.step()
     """
     instance = None
     optimizer = None
@@ -89,6 +91,7 @@ class PMILRScheduler(object):
 
     @classmethod
     def step_scheduler(cls, *args):
+        r"""Calls the ``step()`` function of the scheduler instance"""
         assert cls.instance is not None, "Singleton instance was not created."
         sche_name = cls.get_instance().scheduler_name
 
@@ -119,3 +122,7 @@ class PMILRScheduler(object):
     @classmethod
     def reset(cls):
         cls.instance = None
+
+    def step(self, *args, **kwargs):
+        r"""This is an instant port to the class method :meth:`.step_scheduler`"""
+        self.__class__.step_scheduler(*args)
