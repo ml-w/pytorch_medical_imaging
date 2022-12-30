@@ -151,6 +151,7 @@ class PMIDataLoaderBase(object):
         if not self._check_input:
             raise AttributeError
 
+        self._logger.info("Data loader was configured with options: {}".format(str(cfg)))
         self._read_config(cfg)
 
     @abstractmethod
@@ -237,18 +238,20 @@ class PMIDataLoaderBase(object):
         Returns:
             torch.utils.DataLoader
         """
+        num_workers = 0 if self.sampler is not None else os.cpu_count() - 2
+        self._logger.debug(f"Creating torch data loader with {num_workers} workers.")
         if self.run_mode: # training
             out_loader = DataLoader(self._load_data_set_training(exclude_augment),
                                     batch_size  = batch_size,
                                     shuffle     = True,
-                                    num_workers = 0,
+                                    num_workers = num_workers,
                                     drop_last   = True,
                                     pin_memory  = False)
         else:
             out_loader = DataLoader(self._load_data_set_inference(),
                                     batch_size  = batch_size,
                                     shuffle     = False,
-                                    num_workers = 0,
+                                    num_workers = num_workers,
                                     drop_last   = False,
                                     pin_memory  = False)
         return out_loader
