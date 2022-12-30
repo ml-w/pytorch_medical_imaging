@@ -161,22 +161,30 @@ class PMIController(object):
         if not isinstance(MNTSLogger.global_logger, MNTSLogger):
 
             log_dir = Path(self.log_dir)
-            if isinstance(self.net, torch.nn.Module):
-                log_fname = self.net._get_name()
-            elif isinstance(self.net, str):
-                log_fname = self.net.translate(str.maketrans('(),','[]-'," "))
+            if isinstance(self.solver_cfg.net, torch.nn.Module):
+                log_fname = self.solver_cfg.net._get_name()
+            elif isinstance(self.solver_cfg.net, str):
+                log_fname = self.solver_cfg.net.translate(str.maketrans('(),','[]-'," "))
             else:
                 log_fname = 'default'
             log_dir = log_dir.joinpath(log_fname)
             existing_logs_indices = [int(re.search(f"{log_fname}-(?P<num_log>\d+)\.log", l.name))
                                      for l in log_dir.parent.glob(f'{log_fname}-*.log')]
-            if len(existing_log_indices) > 0:
+            if len(existing_logs_indices) > 0:
                 new_log_index = max(existing_log_indices) + 1
                 log_dir = log_dir.with_name(f'{log_fname}-{new_log_index}.log')
             else:
                 log_dir = log_dir.with_suffix('.log')
+
+            # check if log dir parent is active
+            if not log_dir.parent.is_dir():
+                if log_dir.parent.is_file():
+                    msg = "The target directory specified by log_dir is already created and is a file. "
+                    raise FileExistsError(msg)
+                log_dir.parent.mkdir(parents=True, exist_ok=True)
+
             self._logger = MNTSLogger(log_dir, logger_name='pmi_controller', keep_file=self.keep_log,
-                                      verbose=self.verbose)
+                                      verbose=self.verbose, log_level='debug')
 
         # This is the root that dictates the behavior of the controller.
         if re.match('(?=.*train.*)', self.run_mode):
@@ -250,7 +258,10 @@ class PMIController(object):
                     num_of_epoch: 200
 
             This yaml will override the corresponding attributes of the ``controller`` and the ``solver`` before these
-            instances were initialized
+            instances were initialized. The flags can be specified when calling ``guild run`` like this
+
+            .. code-block:: bash
+                guild run solver_cfg.batch_size=10 controller_cfg.fold_code=['B00','B01','B02']
 
         .. important::
             * There are no checking implemented for this override function and the controller will not work if you
