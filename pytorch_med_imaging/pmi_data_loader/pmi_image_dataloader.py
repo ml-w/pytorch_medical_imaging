@@ -342,8 +342,9 @@ class PMIImageDataLoader(PMIDataLoaderBase):
             self._logger.debug(f"Created queue: {queue}")
             self.queue = queue
         else:
-            # if there are no sampler, simply return the subjects, in this case the dataloader need to perform
-            # shuffling during training.
+            # Because no sampler means the samples are loaded by default dataloader, it is needed to change the
+            # ``torch.utils.data.DataLoader` parameters to allow parallel loading. However, this is done in the
+            # method ``get_torch_data_loader()``.
             queue = subjects
 
         if return_sampler and self.sampler is not None:
