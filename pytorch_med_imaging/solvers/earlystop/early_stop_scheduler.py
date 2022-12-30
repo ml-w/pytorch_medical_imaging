@@ -51,7 +51,7 @@ class BaseEarlyStop(object):
 
     @classmethod
     def create_early_stop_scheduler(cls, policy, *args, **kwargs):
-        if policy not in cls.policies.keys:
+        if policy not in cls.policies.keys():
             msg = f'Incorrect policy ({policy}) specified. Available policies are [{"|".join(cls.policies.keys())}]'
             raise KeyError(msg)
 

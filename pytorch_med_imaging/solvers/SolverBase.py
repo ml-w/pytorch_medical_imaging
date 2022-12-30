@@ -25,8 +25,6 @@ from ..pmi_data_loader import PMIDataLoaderBase
 from .earlystop import BaseEarlyStop
 from ..loss import *
 
-available_lr_scheduler = list(name for name, obj in inspect.getmembers(lr_scheduler) if inspect.isclass(obj))
-available_lr_scheduler += list(name for name, obj in inspect.getmembers(pmi_lr_scheduler) if inspect.isclass(obj))
 
 class SolverBaseCFG:
     r"""Configuration for initializing :class:`SolverBase` and its child classes.
@@ -428,7 +426,7 @@ class SolverBase(object):
                 args = self.early_stop_args or []
             if len(kwargs) == 0:
                 kwargs = self.early_stop_kwargs or {}
-            self.early_stop = BaseEarlyStop(self.early_stop, *args, **kwargs)
+            self.early_stop = BaseEarlyStop.create_early_stop_scheduler(self.early_stop, *args, **kwargs)
         else:
             self.early_stop = early_stop
 
