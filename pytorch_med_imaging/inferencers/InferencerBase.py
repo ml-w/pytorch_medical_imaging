@@ -85,7 +85,13 @@ class InferencerBase(object):
         checkpoint_path = Path(checkpoint_path)
         if not checkpoint_path.is_file():
             msg = f"Cannot open checkpoint at: {str(checkpoint_path)}!"
-            raise IOError(msg)
+            if self.debug_mode:
+                self._logger.warning(msg)
+                self._logger.warning("Keep running because the pipeline is in debug mode.")
+                self.CP_LOADED = True
+                return
+            else:
+                raise IOError(msg)
 
         self._logger.info("Loading checkpoint " + str(checkpoint_path))
         self.get_net().load_state_dict(torch.load(str(checkpoint_path)), strict=False)
