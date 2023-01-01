@@ -450,7 +450,7 @@ class SolverBase(object):
                 tensorboard_rootdir = Path("/media/storage/PytorchRuns")
 
             # Strip the parenthesis and comma from the net name to avoid conflicts with system
-            net_name = self.solver.net.get_name().translate(str.maketrans('(),','[]-'," "))
+            net_name = self.net.get_name().translate(str.maketrans('(),','[]-'," "))
             self._logger.info("Creating TB writer, writing to directory: {}".format(tensorboard_rootdir))
 
             # check if the target exist
@@ -531,9 +531,15 @@ class SolverBase(object):
             raise AttributeError("Loss function must be defined!")
 
         if self.class_weights is None and self.loss_function.weight is None:
-            msg = "No class weights specified. It is strongly recommend to use class weights for training."
-            self._logger.warning(msg)
-            return
+            try:
+                self.auto_compute_class_weights()
+            except Exception as e:
+                msg = "No class weights specified and automatic weight computation failed. It is strongly recommend to " \
+                      "use class weights for training."
+                self._logger.warning(msg)
+                if self._logger.log_level == 10:
+                    self._logger.error("Original error raised:")
+                    self._logger.exception(e)
         elif self.class_weights is not None and self.loss_function.weight is not None:
             # warn if weight is being override
             msg = f"Overwriting class weights using CFG inputs: {self.loss_function.weight} -> {self.class_weights}"
@@ -1071,10 +1077,19 @@ class SolverBase(object):
     @abstractmethod
     def _validation_callback(self) -> None:
         r"""This is a method that is called after the whole batch of data is evaluated for validation. Typically, the
-        performance of the network is computed and plotted. You can use
-
-
+        performance of the network is computed and plotted. You implement performance reports here
         """
+        raise NotImplementedError
+
+    @abstractmethod
+    def auto_compute_class_weights(self) -> None:
+        r"""This function is called when ``self.class_weights`` is ``None`` after :func:`._load_config`. This should
+        write a float class weight tensor as the ``class_weights`` attribute and return 0 for success and 1 for error.
+
+        Returns:
+            int: 0 for success.
+        """
+        return 0
 
     def _epoch_callback(self, *args, **kwargs) -> None:
         """Default callback after `solver_epoch` is done. This is optional to inherit
