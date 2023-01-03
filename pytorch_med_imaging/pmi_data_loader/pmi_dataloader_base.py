@@ -142,6 +142,7 @@ class PMIDataLoaderBase(object):
 
 
     """
+    cfg_cls = PMIDataLoaderBaseCFG
     def __init__(self,
                  cfg: PMIDataLoaderBaseCFG,
                  **kwargs):
@@ -238,12 +239,16 @@ class PMIDataLoaderBase(object):
         Returns:
             torch.utils.DataLoader
         """
-        num_workers = 0 if self.sampler is not None else os.cpu_count() - 2
+        # num_workers = 0 if self.sampler is not None else os.cpu_count() - 2
+        num_workers = 0
         self._logger.debug(f"Creating torch data loader with {num_workers} workers.")
         if self.run_mode: # training
-            out_loader = DataLoader(self._load_data_set_training(exclude_augment),
+            _iterable = self._load_data_set_training(exclude_augment)
+            _shuffle = True if isinstance(_iterable, tio.SubjectsDataset) else ~ _iterable.shuffle_subjects
+            out_loader = DataLoader(_iterable,
                                     batch_size  = batch_size,
-                                    shuffle     = True,
+                                    # if tio.Queue have already shuffled, don't do added shuffling because it takes time
+                                    shuffle     = _shuffle,
                                     num_workers = num_workers,
                                     drop_last   = True,
                                     pin_memory  = False)
@@ -269,12 +274,12 @@ class PMIDataLoaderBase(object):
 
         """
         # Loading basic inputs
-        if not config_file is None:
+        if config_file is None:
             # if isinstance(config_file, type):
             #     cls = config_file
             # else:
             #     cls = config_file.__class__
-            cls = config_file
+            cls = self.cfg_cls()
             cls_dict = { attr: getattr(cls, attr) for attr in dir(cls) }
             self.__dict__.update(cls_dict)
 

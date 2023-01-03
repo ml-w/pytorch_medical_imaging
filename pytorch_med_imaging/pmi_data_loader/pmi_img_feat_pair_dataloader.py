@@ -42,6 +42,10 @@ class PMIImageFeaturePairLoader(PMIImageDataLoader):
 
     For attributes and configurations, see :class:`PMIImageFeaturePairLoaderCFG`
 
+    Class Attributes:
+        cfg_cls (type):
+            The class of the CFG that is default for this loader
+
     Args:
         cfg (PMIImageFeaturePairLoaderCFG): Config file instant/class. See :class:`PMIImageFeaturePairLoaderCFG`.
         *args: Please see parent class.
@@ -51,6 +55,7 @@ class PMIImageFeaturePairLoader(PMIImageDataLoader):
         :class:`PMIDataLoaderBase`
 
     """
+    cfg_cls = PMIImageFeaturePairLoaderCFG
     def __init__(self, cfg: PMIImageFeaturePairLoaderCFG, *args, **kwargs):
         super(PMIImageDataLoader, self).__init__(cfg, *args, **kwargs)
 
@@ -107,12 +112,16 @@ class PMIImageFeaturePairLoaderConcat(PMIImageFeaturePairLoader):
 
     This class is suitable for:
     * img to sequence
+
+    Class Attributes:
+        cfg_cls (type):
+            The class of the CFG that is default for this loader
+
+    See Also:
+        :class:`.PMIImageFeaturePairLoader`
     """
     def __init__(self, *args, **kwargs):
         super(PMIImageFeaturePairLoaderConcat, self).__init__(*args, **kwargs)
-
-    def _read_config(self, config_file=None):
-        super(PMIImageFeaturePairLoaderConcat, self)._read_config(config_file)
 
     def _load_gt_data(self):
         # Load the datasheet

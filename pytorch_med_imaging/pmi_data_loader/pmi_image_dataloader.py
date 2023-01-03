@@ -1,3 +1,4 @@
+import os
 import torchio
 from .pmi_dataloader_base import PMIDataLoaderBase, PMIDataLoaderBaseCFG
 from .. import med_img_dataset
@@ -7,7 +8,6 @@ from typing import *
 from functools import partial
 from dataclasses import dataclass
 import torchio as tio
-import multiprocessing as mpi
 import re
 
 __all__ = ['PMIImageDataLoader', 'PMIImageDataLoaderCFG']
@@ -93,6 +93,10 @@ class PMIImageDataLoader(PMIDataLoaderBase):
     Attributes:
         Attributes will be loaded from the supplied ``cfg`` into class
 
+    Class Attributes:
+        cfg_cls (type):
+            The class of the CFG that is default for this loader.
+
     Args:
         *args: Please see parent class.
         **kwargs: Please see parent class.
@@ -108,6 +112,7 @@ class PMIImageDataLoader(PMIDataLoaderBase):
     See Also:
         :class:`PMIDataLoaderBase`
     """
+    cfg_cls = PMIImageDataLoaderCFG
     def __init__(self, cfg: PMIImageDataLoaderCFG, *args, **kwargs):
         super(PMIImageDataLoader, self).__init__(cfg, *args, **kwargs)
 
@@ -131,8 +136,8 @@ class PMIImageDataLoader(PMIDataLoaderBase):
 
         # Update some kwargs with more complex default settings
         default_queue_kwargs = self._cfg.tio_queue_kwargs.copy()
-        if default_queue_kwargs['num_workers'] > mpi.cpu_count():
-            default_queue_kwargs['num_workers'] = mpi.cpu_count()
+        if default_queue_kwargs['num_workers'] > os.cpu_count():
+            default_queue_kwargs['num_workers'] = os.cpu_count()
         self.tio_queue_kwargs = default_queue_kwargs
 
         # If samplers are specified create tio queues using these samplers.
@@ -316,9 +321,8 @@ class PMIImageDataLoader(PMIDataLoaderBase):
         if training is None:
             training = self.run_mode
 
+        queue_dict, training = self._prepare_queue_dict(exclude_augment, subjects, training)
         if self.sampler is not None:
-            queue_dict, training = self._prepare_queue_dict(exclude_augment, subjects, training)
-
             # Create queue
             # If option to use post-sampling processing was provided, use CallbackQueue instead
             if  not self.patch_sampling_callback in ("", None):
@@ -345,8 +349,12 @@ class PMIImageDataLoader(PMIDataLoaderBase):
             # Because no sampler means the samples are loaded by default dataloader, it is needed to change the
             # ``torch.utils.data.DataLoader` parameters to allow parallel loading. However, this is done in the
             # method ``get_torch_data_loader()``.
-            queue = subjects
-
+            # queue = subjects
+            self._logger.debug(f"No sampler specified, use first shape in subjects: {subjects[0].shape[1:]}.")
+            _sampler = tio.UniformSampler(patch_size = subjects[0].shape[1:])
+            queue = tio.Queue(subjects, sampler=_sampler, samples_per_volume=1, max_length=self.queue_args[0],
+                              **queue_dict)
+            self.queue = queue
         if return_sampler and self.sampler is not None:
             return queue, self.queue_args[-1]
         else:
