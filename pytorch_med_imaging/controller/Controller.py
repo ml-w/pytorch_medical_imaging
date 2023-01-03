@@ -55,8 +55,8 @@ class PMIControllerCFG:
         id_list_val (PathLike, Optional):
             Specify the path to the ID list '.txt' file that specify the validation data. Note that this does
             accept '.ini' file.
-        debug (bool, Optional):
-            Default to ``False``.
+        debug_mode (bool, Optional):
+            This option will be passed to solver and data loader CFG. Default to ``False``.
         debug_validation (bool, Optional):
             Default to ``False``.
         validate_on_test_set (bool, Optional):
@@ -86,7 +86,7 @@ class PMIControllerCFG:
     id_list                    : PathLike       = None
     id_list_val                : PathLike       = None
     output_dir                 : PathLike       = None
-    debug                      : Optional[bool] = False
+    debug_mode                 : Optional[bool] = False
     debug_validation           : Optional[bool] = False
     validate_on_test_set       : Optional[bool] = False # this changes the how the validation data loader IDs in training mode
     inference_on_training_set  : Optional[bool] = False # this changes the data loader IDs in the inference mode
@@ -149,8 +149,6 @@ class PMIController(object):
     an inferencer, and also the dataloaders.
     """
     def __init__(self, cfg):
-        self._cfg = cfg
-
         # if global logger is already created, its configurations are not controlled by this controller
         if isinstance(MNTSLogger.global_logger, MNTSLogger):
             self._logger = MNTSLogger[self.__class__.__name__]
@@ -186,13 +184,6 @@ class PMIController(object):
             self._logger = MNTSLogger(log_dir, logger_name='pmi_controller', keep_file=self.keep_log,
                                       verbose=self.verbose, log_level='debug')
 
-        # This is the root that dictates the behavior of the controller.
-        if re.match('(?=.*train.*)', self.run_mode):
-            self._logger.info("Controller set to training mode.")
-            self.run_mode = True
-        else:
-            self._logger.info("Controller set to inference mode")
-            self.run_mode = False
 
         self._required_attributes_train = [
             'cp_save_dir'
@@ -221,6 +212,13 @@ class PMIController(object):
         else:
             if hasattr(self, '_logger'):
                 self._logger.warning("_load_config called without arguments.")
+
+        # This is the root that dictates the behavior of the controller.
+        if re.match('(?=.*train.*)', self.run_mode) is not None:
+            self.run_mode = True
+        else:
+            self.run_mode = False
+
 
     def check_flags_sanity(self):
         _check = [
@@ -287,6 +285,9 @@ class PMIController(object):
         solver_override = override_dict.get('solver_cfg', None)
         data_loader_override = override_dict.get('data_loader_cfg', None)
         data_loader_val_override = override_dict.get('data_loader_val_cfg', None)
+        if not controller_override is None:
+            self._override_subcfg(controller_override, self.cfg)
+            self._load_config(self.cfg)
         if not solver_override is None:
             self._override_subcfg(solver_override, self.solver_cfg)
         if not data_loader_override is None:
@@ -325,6 +326,16 @@ class PMIController(object):
                 _new = _old.replace('{fold_code}', self.fold_code)
                 self._logger.debug(f"Replace {_old} with {_new}")
                 setattr(inst, attr, _new)
+
+        # if in debug_mode
+        if self.debug_mode:
+            self._logger.info("Running in debug mode.")
+            try:
+                self.data_loader_cfg.debug_mode = True
+                self.solver_cfg.debug_mode = True
+                self.data_loader_val_cfg.debug_mode = True
+            except:
+                pass
 
         # if `id_list_val` is defined but `data_loader_val` isn't, try to create it from the `data_loader`
         if getattr(self, 'id_list_val', None) is not None:
@@ -383,8 +394,8 @@ class PMIController(object):
                 if training_ids is None:
                     msg = "Set inference on training set option but training IDs were not specified in the template."
                     raise ArithmeticError(msg)
-                self.data_loader_cfg = training_ids
-            if self.inference_on_validaiton_set:
+                self.data_loader_cfg.id_list = training_ids
+            if self.inference_on_validation_set:
                 if validation_ids is None:
                     msg = "Set inference on validation set option but validation IDs were not specified in the " \
                           "template."
