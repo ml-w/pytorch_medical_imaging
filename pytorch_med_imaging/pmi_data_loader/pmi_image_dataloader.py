@@ -63,13 +63,14 @@ class PMIImageDataLoaderCFG(PMIDataLoaderBaseCFG):
     sampler                       : Optional[str]      = None                 # 'weighted' or 'uniform'
     sampler_kwargs                : Optional[dict]     = dict()               # pass to ``tio.Sampler``
     augmentation                  : Optional[str]      = None                 # yaml file to create tio transform
+    force_augment                 : Optional[bool]     = False
     create_new_attribute          : Optional[str]      = None                 # create a new attribute in subjects for callback
     patch_sampling_callback       : Optional[Callable] = None                 # callback to generate new data
     patch_sampling_callback_kwargs: Optional[dict]     = dict()               # kwargs pass to the callback
     inf_samples_per_vol           : Optional[int]      = None                 # number of samples per volume during inference
     mask_dir                      : Optional[str]      = None                 # Image dir used by ``tio.Sampler``
     probmap_dir                   : Optional[str]      = None                 # Image dir used by ``tio.WeightedSampler``
-    tio_queue_kwargs: Optional[dict] = dict(            # dict passed to ``tio.Queue``
+    tio_queue_kwargs              : Optional[dict]     = dict(            # dict passed to ``tio.Queue``
         max_length             = 15,
         samples_per_volume     = 1,
         num_workers            = 16,
@@ -246,8 +247,11 @@ class PMIImageDataLoader(PMIDataLoaderBase):
                               f"`inf_samples_per_vol` {self.inf_samples_per_vol}")
             self.queue_args[1] = int(self.inf_samples_per_vol)
 
-        # set ``exclude_augment`` to False
-        return self._load_data_set_training(exclude_augment=True)
+        # set ``exclude_augment`` to False for normal inference unless `force_augment
+        if self.force_augment:
+            self._logger.warning(f"Force data augmentation during inference.")
+        return self._load_data_set_training(exclude_augment=not self.force_augment)
+
 
     def _prepare_data(self) -> dict:
         """This is an important function that will prepare the data as a dictionary. This dictionary will be passed
