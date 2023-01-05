@@ -218,7 +218,8 @@ class ClassificationInferencer(InferencerBase):
 
         dl = DataLabel.from_dict(out_decisions)
         dl.write(self.output_dir)
-        return dl
+        self._dl = dl
+        return self._dl
 
     def _prepare_output_dict(self, gt, out_tensor, sig_out, uids) -> dict:
         r"""This method pack the network output into ``out_decisions`` while computing the correct format to display.

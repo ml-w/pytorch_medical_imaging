@@ -58,6 +58,7 @@ class InferencerBase(object):
 
         # Flags
         self.CP_LOADED = False # whether `load_checkpoint` have been called
+        self.load_checkpoint(self.cp_load_dir)
 
     def set_data_loader(self, data_loader: PMIDataLoaderBase):
         # SolverBase.set_data_loader(self, data_loader, None)
