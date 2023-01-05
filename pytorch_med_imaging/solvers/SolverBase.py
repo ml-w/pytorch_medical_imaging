@@ -111,7 +111,7 @@ class SolverBaseCFG:
 
     # Options with defaults
     use_cuda         : Optional[bool]              = True
-    debug            : Optional[bool]              = False
+    debug_mode       : Optional[bool]              = False
     data_loader_val  : Optional[PMIDataLoaderBase] = None
     lr_sche          : Optional[PMILRScheduler]    = None # If ``None``, lr_scheduler.ExponentialLR will be used.
     lr_sche_args     : Optional[list]              = []
@@ -258,7 +258,7 @@ class SolverBase(object):
         # external_att
         self.plotter_dict      = {}
 
-        # create loss function if not specified
+         # create loss function if not specified
         self.prepare_lossfunction()
         self.create_optimizer()
         if isinstance(self.lr_sche, str):
@@ -514,7 +514,7 @@ class SolverBase(object):
                 self._logger.info("Loading checkpoint " + checkpoint_dir)
                 self.get_net().load_state_dict(torch.load(checkpoint_dir), strict=False)
             except Exception as e:
-                if not self.debug:
+                if not self.debug_mode:
                     self._logger.error(f"Cannot load checkpoint from: {checkpoint_dir}")
                     raise e
                 else:
@@ -773,7 +773,8 @@ class SolverBase(object):
             self._logger.info("\t[Step %04d] loss: %.010f"%(step_idx, loss.data))
 
             self._step_callback(s, g, out.cpu().float(), loss.data.cpu(),
-                                step_idx=epoch_number * len(data_loader) + step_idx)
+                                step_idx=epoch_number * len(data_loader) + step_idx, 
+                                uid = mb.get('uid', None))
             del s, g, out, loss, mb
             gc.collect()
 
@@ -1024,11 +1025,12 @@ class SolverBase(object):
         raise NotImplementedError
 
     @abstractmethod
-    def _step_callback(self, s, g, out, loss, step_idx=None) -> None:
+    def _step_callback(self, s, g, out, loss, uid=None, step_idx=None) -> None:
         r"""This is a method called after a step is finished, when overriding this function, be sure to use the
         standardized signature
 
         Args:
+            uid:
             s (torch.Tensor)            : The network input of the step.
             g (torch.Tensor)            : The target label of the step.
             out (torch.Tensor)          : The network output.
