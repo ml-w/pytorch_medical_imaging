@@ -61,6 +61,8 @@ class PMIControllerCFG:
             Default to ``False``.
         validate_on_test_set (bool, Optional):
             Default to ``False``.
+        validate_on_training_set (bool, Optional):
+            This option is used for debugging. Default to ``False``.
         inference_on_training_set (bool, Optional):
             Default to ``False``.
         inference_on_validation_set (bool, Optional):
@@ -88,7 +90,8 @@ class PMIControllerCFG:
     output_dir                 : PathLike       = None
     debug_mode                 : Optional[bool] = False
     debug_validation           : Optional[bool] = False
-    validate_on_test_set       : Optional[bool] = False # this changes the how the validation data loader IDs in training mode
+    validate_on_testing_set    : Optional[bool] = False # this changes the how the validation data loader IDs in training mode
+    validate_on_training_set   : Optional[bool] = False # this is generally for debugging
     inference_on_training_set  : Optional[bool] = False # this changes the data loader IDs in the inference mode
     inference_on_validation_set: Optional[bool] = False
     inference_all_checkpoints  : Optional[bool] = False
@@ -304,7 +307,8 @@ class PMIController(object):
 
         Special options:
 
-        * ``validate_on_test_set``
+        * ``validate_on_testing_set``
+        * ``validate_on_training_set``
         * ``inference_on_training_set``
         * ``inference_on_validation_set``
 
@@ -384,9 +388,18 @@ class PMIController(object):
         # put the defined IDs to work
         if self.run_mode: # during training mode
             self.data_loader_cfg.id_list = training_ids
+
+            # validation IDs
+            if not self.data_loader_val_cfg is None:
+                self.data_loader_val_cfg.id_list = validation_ids
             # Handle the special options
-            if self.validate_on_test_set:
+            if self.validate_on_testing_set:
+                self._logger.debug(f"validate_on_testing_set mode")
                 self.data_loader_val_cfg.id_list = testing_ids
+            if self.validate_on_training_set:
+                self._logger.debug(f"validate_on_training_set mode")
+                self.data_loader_val_cfg.id_list = training_ids
+
 
         else: # during inference mode
             self.data_loader_cfg.id_list = testing_ids
@@ -402,9 +415,10 @@ class PMIController(object):
                     raise ArithmeticError(msg)
                 self.data_loader_cfg.id_list = validation_ids
 
-        # don't forget validation IDs
-        if not self.data_loader_val_cfg is None:
-            self.data_loader_val_cfg.id_list = validation_ids
+        # put in the rest of the required attributes
+        self.solver_cfg.cp_save_dir = self.cp_save_dir
+        self.solver_cfg.cp_load_dir = self.cp_load_dir
+
 
     def _override_subcfg(self,
                          new_value_dict: dict,
@@ -475,7 +489,9 @@ class PMIController(object):
         self._logger.info("Start training...")
         self.check_flags_sanity()
         self.solver = solver = self.solver_cls(self.solver_cfg)
+        self._logger.info("Loading train data...")
         loader = self.data_loader_cls(self.data_loader_cfg)
+        self._logger.info("Loading validation data...")
         loader_val = self.data_loader_val_cls(self.data_loader_val_cfg)
         # Push dataloader to solver
         solver.set_data_loader(loader, loader_val)
@@ -490,7 +506,6 @@ class PMIController(object):
         loader = self.data_loader_cls(self.data_loader_cfg)
         inferencer.set_data_loader(loader)
         inferencer.output_dir = self.output_dir # override this flag
-        inferencer.load_checkpoint(self.cp_load_dir)
 
         with torch.no_grad():
             if self.inference_all_checkpoints:
