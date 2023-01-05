@@ -56,6 +56,7 @@ class BinaryClassificationInferencer(ClassificationInferencer):
         """
         out_decisions = {}
         out_tensor = torch.sigmoid(out_tensor) if sig_out else out_tensor # expect to be (B x C), where C is # questions
+        self._num_of_questions = int(out_tensor.shape[1]) # forward for display_summary()
         out_decision = (out_tensor > .5).int() # natural cut off when using BCE loss.
         out_decisions['IDs'] = uids
         for i in range(out_tensor.shape[1]):
@@ -82,22 +83,22 @@ class BinaryClassificationInferencer(ClassificationInferencer):
 
 
         if not hasattr(self, '_dl'):
-            self._logger.log_print_tqdm("Cannot find data. Have you called _writter() yet?", 30)
+            self._logger.warning("Cannot find data. Have you called _writter() yet?", 30)
             return
 
         if not self._TARGET_DATASET_EXIST_FLAG:
-            self._logger.log_print_tqdm("No target data provided. No summary to display.", 20)
+            self._logger.info("No target data provided. No summary to display.", 20)
             return
 
         subdf = self._dl._data_table.copy()
-        for i in range(self._num_out_out_class):
+        for i in range(self._num_of_questions):
             _subdf = subdf[['%s_%s'%(a, i) for a in ['Prob_Class', 'Decision', 'Truth']]]
             subdf['perf_%s'%i] = _subdf[[f'Decision_{i}', f'Truth_{i}']].apply(BinaryClassificationInferencer._get_perf, axis=1)
 
         # compute sensitivity, specificity ...etc
         perf = pd.DataFrame()
         TP, TN, FP, FN = [0, 0, 0, 0]
-        for i in range(self._num_out_out_class):
+        for i in range(self._num_of_questions):
             _col = subdf[f'perf_{i}']
             _TP = (_col == 'TP').sum()
             _TN = (_col == 'TN').sum()
@@ -113,13 +114,30 @@ class BinaryClassificationInferencer(ClassificationInferencer):
         row = pd.Series(BinaryClassificationInferencer._get_sum_perf([TP, FP, TN, FN]), name='Overall')
         perf = perf.append(row)
 
-        self._logger.info('\n' + subdf.to_string())
-        self._logger.info('\n' + perf.to_string())
+        # confusion matrix
+        mat_data = [[TP, FP], [TN, FN]]
+        mat_df = pd.DataFrame(data=mat_data, index=['Predict +', 'Predict -'], columns=['Actual +', 'Actual -'])
+
+        # printing results
+        try:
+            import tabulate
+            self._logger.info(
+                "Confusion matrix: \n" +
+                tabulate.tabulate(mat_df, headers = 'keys', tablefmt='fancy_grid')
+            )
+            self._logger.info(
+                "Summary: \n" +
+                tabulate.tabulate(perf, headers = 'keys', tablefmt='fancy_grid')
+            )
+        except: # if tabulate is not installed
+            self._logger.info(f"Confusion matrix: \n{mat_df.to_string()}")
+            self._logger.info('Summary: \n' + perf.to_string())
+
+        # Print for guild data capturing
         self._logger.info("Sensitivity: %.3f Specificity: %.3f NPV: %.3f PPV: %.3f OverallACC: %.3f"%(
             perf.loc['Overall']['Sensitivity'], perf.loc['Overall']['Specificity'],
             perf.loc['Overall']['NPV'], perf.loc['Overall']['PPV'], perf.loc['Overall']['ACC']
         ))
-
     @staticmethod
     def _get_perf(s):
         predict, truth = s
