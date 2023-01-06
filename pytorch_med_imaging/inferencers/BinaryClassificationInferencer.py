@@ -55,16 +55,17 @@ class BinaryClassificationInferencer(ClassificationInferencer):
         _imaging.inferencers.ClassificationInferencer._prepare_output_dict.
         """
         out_decisions = {}
-        out_tensor = torch.sigmoid(out_tensor) if sig_out else out_tensor # expect to be (B x C), where C is # questions
+        _out_tensor = torch.sigmoid(out_tensor) if sig_out else out_tensor # expect to be (B x C), where C is # questions
         self._num_of_questions = int(out_tensor.shape[1]) # forward for display_summary()
-        out_decision = (out_tensor > .5).int() # natural cut off when using BCE loss.
+        out_decision = (_out_tensor > .5).int() # natural cut off when using BCE loss.
         out_decisions['IDs'] = uids
-        for i in range(out_tensor.shape[1]):
-            out_decisions[f'Prob_Class_{i}'] = out_tensor[:, i].data.cpu().tolist()
+        for i in range(_out_tensor.shape[1]):
+            out_decisions[f'Raw_output_{i}'] = out_tensor[:, i].data.cpu().tolist()
+            out_decisions[f'Prob_Class_{i}'] = _out_tensor[:, i].data.cpu().tolist()
             out_decisions[f'Decision_{i}'] = out_decision[:, i].tolist()
             if gt is not None:
                 # if gt is one single column vector with same shape as out_decision
-                if gt.shape[1] == out_tensor.shape[1]:
+                if gt.shape[1] == _out_tensor.shape[1]:
                     out_decisions[f'Truth_{i}'] = gt[:, i].tolist()
                 else:
                     out_decisions[f'Truth_{i}'] = gt.flatten().tolist()

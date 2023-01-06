@@ -655,7 +655,7 @@ class SolverBase(object):
                                              momentum=self.init_mom)
             else:
                 raise AttributeError(f"Expecting optimzer to be one of ['Adam'|'SGD'|'AdamW']")
-        elif not isinstance(self.optimizer, torch.topim.Optimizer):
+        elif not isinstance(self.optimizer, torch.optim.Optimizer):
             msg = f"Expect optimizer to be either a string or a torch optimizer, but got {type(self.optimizer)} " \
                   f"instead. Check your settings in the CFG class"
             raise TypeError(msg)
@@ -759,6 +759,7 @@ class SolverBase(object):
         E = []
         # Reset dict each epoch
         self.net.train()
+        self.optimizer.zero_grad() # make sure validation loop doesn't alter the gradients
         self.plotter_dict = {'scalars': {}, 'epoch_num': epoch_number}
 
         data_loader = self.data_loader.get_torch_data_loader(self.batch_size) \
@@ -773,7 +774,7 @@ class SolverBase(object):
             self._logger.info("\t[Step %04d] loss: %.010f"%(step_idx, loss.data))
 
             self._step_callback(s, g, out.cpu().float(), loss.data.cpu(),
-                                step_idx=epoch_number * len(data_loader) + step_idx, 
+                                step_idx=epoch_number * len(data_loader) + step_idx,
                                 uid = mb.get('uid', None))
             del s, g, out, loss, mb
             gc.collect()
@@ -786,6 +787,25 @@ class SolverBase(object):
         self._last_val_loss = self.validation()
         self._epoch_callback()
         self.decay_optimizer(epoch_loss)
+
+    def _net_dropout_off(self):
+        r"""Because batch-norm is a very commonly used layer and the running variance/mean of small batch-size might
+        not always be sufficient for training a useful mean and variance statistics. This lead to the interesting
+        scenario where the mini-batch statistics behave better than the trained statistics and consequently, the
+        network behave much worse in ``eval()`` mode when compared to in ``train()`` mode.
+
+        Now there are several options to mitigate this effect, and this method implements one of the easiest but the
+        most unintuitive way, that is to shut down batch-norm during validation."""
+        self.p_map = {}
+        for name, m in self.net.named_modules():
+            if isinstance(m, (nn.Dropout)):
+                self.p_map[name] = m.p
+
+    def _net_dropout_on(self):
+        r"""See :func:`_net_dropout_off`"""
+        for name, m in self.net.named_modules():
+            if isinstance(m, (nn.Dropout)):
+                m.p = self.p_map[name]
 
     def validation(self) -> list:
         r"""Default pipeline for running the validation. This introduce two class attribute lists
@@ -808,7 +828,8 @@ class SolverBase(object):
         with torch.no_grad():
             self.validation_losses = []
             self.perfs = []
-            self.net.eval()
+            self.net.train() #! See :func:`_net_dropout_off` for explain of why train() but not eval()
+            self._net_dropout_off()
             for mb in tqdm(self.data_loader_val, desc="Validation", position=2):
                 s, g = self._unpack_minibatch(mb, self.unpack_key_forward)
                 s = self._match_type_with_network(s)
@@ -819,13 +840,14 @@ class SolverBase(object):
                 else:
                     res = self.net.forward(s)
                 loss = self._loss_eval(res, s, g.squeeze().long())
+                self._logger.debug(f"_val IDs: {mb['uid']}") if not mb.get('uid', None) is None else None
                 self._logger.debug("_val_step_loss: {}".format(loss.cpu().data.item()))
 
                 uids = mb.get('uid', None)
                 self._validation_step_callback(g.detach().cpu(), res.detach().cpu(), loss.detach().cpu(), uids)
                 del mb, s, g, loss
                 gc.collect()
-
+            self._net_dropout_on()
             self._validation_callback()
 
         self.net = self.net.train()
@@ -920,7 +942,7 @@ class SolverBase(object):
                 current_lr = self.get_optimizer().param_groups[0]['lr']
             self._logger.info("[Epoch %04d] Train Loss: %s Vaildation Loss: %s LR: %s}"
                               %(i,
-                                f'{self.get_last_train_loss():.010f}',
+                                f'{self.get_last_train_loss():.010f}' if self.get_last_train_loss() is not None else 'None',
                                 f'{self.get_last_val_loss():.010f}' if self.get_last_val_loss() is not None else 'None',
                                 f'{current_lr:.010f}' if current_lr is not None else 'None',))
 
@@ -998,7 +1020,6 @@ class SolverBase(object):
             out = tensor.type(self._net_weight_type)
         return out
 
-    @abstractmethod
     def _feed_forward(self, *args):
         r"""This function would dictate how each mini-batch is fed into the network during both
         training and inference. This must be inherited"""

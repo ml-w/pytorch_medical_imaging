@@ -303,8 +303,12 @@ class SegmentationSolver(SolverBase):
             return 2*TP / (2*TP+FP+FN)
 
 
-    def _step_callback(self, s, g, out, loss, step_idx=None):
-        r"""Plot segmentation. Requires the presence of a ``tb_plotter`` attribute."""
+    def _step_callback(self, s, g, out, loss, uid=None, step_idx=None):
+        r"""Plot segmentation. Requires the presence of a ``tb_plotter`` attribute.
+
+        Args:
+            uid:
+        """
         if self._tb_plotter is None:
             self._logger.warning("There are no tb_plotter.", True)
             return

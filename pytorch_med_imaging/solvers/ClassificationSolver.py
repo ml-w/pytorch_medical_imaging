@@ -166,19 +166,21 @@ class ClassificationSolver(SolverBase):
         self.plotter_dict['scalars']['Loss/Validation Loss'] = self.validation_losses
         self.plotter_dict['scalars']['Performance/ACC'] = acc
 
-    def _step_callback(self, s, g, out, loss, step_idx=None) -> None:
+    def _step_callback(self, s, g, out, loss, uid=None, step_idx=None) -> None:
         r"""Build and print a table summarizing the prediction of the step.
 
         Args:
+            uid:
             s (torch.Tensor)            : The network input of the step.
             g (torch.Tensor)            : The target label of the step.
             out (torch.Tensor)          : The network output.
             loss (float or torch.Tensor): The loss.
+            uid (list of str)           : The uids.
             step_idx (int, Optional)    : The number of steps.
         """
         # Print step information
         self._logger.debug(f"s: {s.shape} out: {out.shape}")
-        _df, _ = self._build_validation_df(g, out)
+        _df, _ = self._build_validation_df(g, out, uid=uid)
         self._logger.debug('\n' + _df.to_string())
 
         # These are used for specific network and will be move to other places soon.

@@ -244,7 +244,8 @@ class PMIDataLoaderBase(object):
         self._logger.debug(f"Creating torch data loader with {num_workers} workers.")
         if self.run_mode: # training
             _iterable = self._load_data_set_training(exclude_augment)
-            _shuffle = True if isinstance(_iterable, tio.SubjectsDataset) else ~ _iterable.shuffle_subjects
+            _shuffle = True if isinstance(_iterable, tio.SubjectsDataset) else not _iterable.shuffle_subjects
+            # _shuffle = False # debug
             out_loader = DataLoader(_iterable,
                                     batch_size  = batch_size,
                                     # if tio.Queue have already shuffled, don't do added shuffling because it takes time
@@ -264,7 +265,9 @@ class PMIDataLoaderBase(object):
     def _read_config(self, config_file=None):
         """
         Read params from prop_dict, adds to attribute of the object. If config file is specified, every will be
-        compied to the `self._loader_params`. Attributes are added as follow:
+        copied to the `self.__dict__`. See the CFG class for more. If this function is called without arguments, it will
+        try to locate the :attr:`cfg` and load configurations from it. If it still can't find it, it will finally turn
+        to the class attribute ``cfg_cls``, which is defined for each data loader types, to load the basic setting.
 
         Args:
             config_file (str or dict, Optional):
@@ -272,16 +275,20 @@ class PMIDataLoaderBase(object):
                 attribute `self._loader_params`. The section 'LoaderParams' must exist for .ini file reading.
                 Default to `None`.
 
+        .. note::
+            Most of the time the basic setting is not enough to properly load the data. Therefore, make sure you have
+            the configurations properly set before calling :func:`get_torch_data_loader`.
+
         """
         # Loading basic inputs
         if config_file is None:
-            # if isinstance(config_file, type):
-            #     cls = config_file
-            # else:
-            #     cls = config_file.__class__
-            cls = self.cfg_cls()
-            cls_dict = { attr: getattr(cls, attr) for attr in dir(cls) }
-            self.__dict__.update(cls_dict)
+            # Load default if cfg was not set properly
+            cls = getattr(self, 'cfg', self.cfg_cls())
+        else:
+            cls = config_file
+            
+        cls_dict = { attr: getattr(cls, attr) for attr in dir(cls) }
+        self.__dict__.update(cls_dict)
 
         if isinstance(self.run_mode, str):
             if re.match('(?=.*train.*)', self.run_mode):

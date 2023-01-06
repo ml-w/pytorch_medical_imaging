@@ -114,13 +114,13 @@ sequenceDiagram
 ```mermaid
 %%{ init : { "theme" : "dark", "flowchart" : { "curve" : "linear"}}}%%
 flowchart TD
-
 	subgraph configs TD
 		sc(Solver cfg)
 		lc(Data loader cfg)
 		sc & lc --> pmic(Controller cfg)
 	end
 	N[Network] --> sc
+        N --> B
 	pmic --> |populate|B[PMI Controller]
 	B --> |create|dl[Data loader] --> Solver["Solver/Inferencer"]
 	B --> |create|Solver

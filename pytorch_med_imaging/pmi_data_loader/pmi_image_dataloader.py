@@ -358,6 +358,7 @@ class PMIImageDataLoader(PMIDataLoaderBase):
             _sampler = tio.UniformSampler(patch_size = subjects[0].shape[1:])
             queue = tio.Queue(subjects, sampler=_sampler, samples_per_volume=1, max_length=self.queue_args[0],
                               **queue_dict)
+            self._logger.debug(f"Created queue: {queue}")
             self.queue = queue
         if return_sampler and self.sampler is not None:
             return queue, self.queue_args[-1]

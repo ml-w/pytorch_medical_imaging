@@ -1,3 +1,5 @@
+import os
+
 from ..pmi_data_loader import PMIDataLoaderBase
 from ..solvers import SolverBase
 from ..inferencers import InferencerBase
@@ -12,6 +14,10 @@ from pytorch_med_imaging.pmi_data_loader import *
 import yaml
 import configparser
 from mnts.mnts_logger import MNTSLogger
+
+import torch.distributed as dist
+import torch.multiprocessing as mp
+
 
 PathLike = Union[str, Path]
 
@@ -469,6 +475,28 @@ class PMIController(object):
     def solver_cfg(self, x):
         self._logger.warning("Overriding `solver_cfg` with {x}.")
         self.cfg.solver_cfg = x
+
+    def _setup_DDP(self):
+        r"""This method spawns a process and hook this controller to this process that can be used with torch
+        data distributed parallel module (DDP). Using DDP is generally faster and allows the use of synchronous batch
+        normalization layers. It can also allow multiple nodes to work together during training. """
+
+        # Set some params
+        addr = getattr(self, 'MASTER_ADDR', 'localhost')
+        port = getattr(self, 'MASTER_PORT' '23456')
+        os.environ['MASTER_ADDR'] = addr
+        os.environ['MASTER_PORT'] = port
+
+        # Create the world
+        dist.init_process_group('nccl', rank=0, world_size=torch.cuda.device_count())
+
+    def exec_DDP(self, rank, world_size):
+        self.init_DDP()
+        mp.spawn(demo_fn,
+             args=(world_size,),
+             nprocs=world_size,
+             join=True)
+        pass
 
     def exec(self):
         r"""This method executes the training or inference pipeline according to the configuration. It will invoke
