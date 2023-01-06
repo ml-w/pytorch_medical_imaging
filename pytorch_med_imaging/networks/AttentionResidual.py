@@ -11,15 +11,15 @@ class SoftMaskBranch_aed2d(nn.Module):
     def __init__(self, in_ch, out_ch, r=1):
         super(SoftMaskBranch_aed2d, self).__init__()
 
-        down1 = [ResidualBlock3d(in_ch, out_ch)] * r
+        down1 = [ResidualBlock3d(in_ch, out_ch) for i in range(r)]
         self.down1 = nn.Sequential(*down1)
 
-        down2 = [ResidualBlock3d(out_ch, out_ch)] * (2*r)
+        down2 = [ResidualBlock3d(out_ch, out_ch) for i in range(2 * r)]
         self.down2 = nn.Sequential(*down2)
 
         self.skip = ResidualBlock3d(out_ch, out_ch)
 
-        up1 = [ResidualBlock3d(out_ch, out_ch)] * r
+        up1 = [ResidualBlock3d(out_ch, out_ch) for i in range(r)]
         self.up1 = nn.Sequential(*up1)
 
         self.out_conv = nn.Sequential(
@@ -52,15 +52,15 @@ class AttentionModule(nn.Module):
     def __init__(self, in_ch, out_ch, p=1, t=2, r=1, save_mask=False):
         super(AttentionModule, self).__init__()
 
-        in_conv = [ResidualBlock3d(in_ch, out_ch)] * p
+        in_conv = [ResidualBlock3d(in_ch, out_ch) for i in range(p)]
         self.in_conv = nn.Sequential(*in_conv)
 
         self.soft_mask_branch = SoftMaskBranch_aed2d(out_ch, out_ch, r)
 
-        trunk_branch = [ResidualBlock3d(out_ch, out_ch)] * t
+        trunk_branch = [ResidualBlock3d(out_ch, out_ch) for i in range(t)]
         self.trunk_branch = nn.Sequential(*trunk_branch)
 
-        out_conv = [ResidualBlock3d(out_ch, out_ch)] * p
+        out_conv = [ResidualBlock3d(out_ch, out_ch) for i in range(p)]
         self.out_conv = nn.Sequential(*out_conv)
 
         self.bool_save_mask = save_mask
@@ -89,15 +89,15 @@ class AttentionModule_Modified(nn.Module):
     def __init__(self, in_ch, out_ch, p=1, t=2, r=1, save_mask=False):
         super(AttentionModule_Modified, self).__init__()
 
-        in_conv = [ResidualBlock3d(in_ch, out_ch)] * p
+        in_conv = [ResidualBlock3d(in_ch, out_ch) for i in range(p)]
         self.in_conv = nn.Sequential(*in_conv)
 
         self.soft_mask_branch = SoftMaskBranch_aed2d(out_ch, out_ch, r)
 
-        trunk_branch = [ResidualBlock3d(out_ch, out_ch)] * t
+        trunk_branch = [ResidualBlock3d(out_ch, out_ch) for i in range(t)]
         self.trunk_branch = nn.Sequential(*trunk_branch)
 
-        out_conv = [ResidualBlock3d(out_ch, out_ch)] * p
+        out_conv = [ResidualBlock3d(out_ch, out_ch) for i in range(p)]
         self.out_conv = nn.Sequential(*out_conv)
 
         self.bool_save_mask = save_mask
