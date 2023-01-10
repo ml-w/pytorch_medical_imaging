@@ -450,7 +450,9 @@ class SolverBase(object):
                 tensorboard_rootdir = Path("/media/storage/PytorchRuns")
 
             # Strip the parenthesis and comma from the net name to avoid conflicts with system
-            net_name = self.net.get_name().translate(str.maketrans('(),','[]-'," "))
+            if isinstance(self.net, nn.Module):
+                net_name = self.net.get_name()
+            net_name = net_name.translate(str.maketrans('(),','[]-'," "))
             self._logger.info("Creating TB writer, writing to directory: {}".format(tensorboard_rootdir))
 
             # check if the target exist
@@ -704,8 +706,10 @@ class SolverBase(object):
                 lass_lr = self.get_optimizer().param_groups[0]['lr']
             else:
                 lass_lr = next(self.get_optimizer().param_groups)['lr']
-        except:
+        except Exception as e:
             self._logger.warning("Cannot get learning rate!")
+            if self._logger._log_level == self._logger.DEBUG:
+                self._logger.exception(e)
             lass_lr = "Error"
         return lass_lr
 
@@ -828,8 +832,9 @@ class SolverBase(object):
         with torch.no_grad():
             self.validation_losses = []
             self.perfs = []
-            self.net.train() #! See :func:`_net_dropout_off` for explain of why train() but not eval()
-            self._net_dropout_off()
+            self.net.eval()
+            # self.net.train() #! See :func:`_net_dropout_off` for explain of why train() but not eval()
+            # self._net_dropout_off()
             for mb in tqdm(self.data_loader_val, desc="Validation", position=2):
                 s, g = self._unpack_minibatch(mb, self.unpack_key_forward)
                 s = self._match_type_with_network(s)
@@ -847,7 +852,7 @@ class SolverBase(object):
                 self._validation_step_callback(g.detach().cpu(), res.detach().cpu(), loss.detach().cpu(), uids)
                 del mb, s, g, loss
                 gc.collect()
-            self._net_dropout_on()
+            # self._net_dropout_on()
             self._validation_callback()
 
         self.net = self.net.train()
@@ -949,6 +954,7 @@ class SolverBase(object):
             epoch_time = time.time() - time_start_epoch # time for one epoch + validation.
             self._logger.info("{:-^80}".format(f" Epoch elapsed time : {epoch_time/60.:.02f} min"))
             if self.EARLY_STOP_FLAG:
+                self._logger.info("Breaking training loop.")
                 break
         fit_time = time.time() - time_start_fit # fit time in second
         self._logger.info("{:=^80}".format(f" Fit elapsed time: {fit_time / 60.:.02f} min "))
@@ -1129,7 +1135,7 @@ class SolverBase(object):
         # Step early stopper if it exists
         if not self.early_stop is None:
             if self.early_stop.step(self.get_epoch_loss(), self.current_epoch):
-                self.EARLY_STOP_FLAG
+                self.EARLY_STOP_FLAG = True
 
         # Plot data to tensorboardX
         scalars = self.plotter_dict.get('scalars', None)

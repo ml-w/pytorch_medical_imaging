@@ -80,6 +80,9 @@ class PMIDataLoaderBaseCFG:
 
     def __str__(self):
         _d = {k: v for k, v in self.__dict__.items() if k[0] != '_'}
+        if 'id_list' in _d:
+            if isinstance(_d['id_list'], (list, tuple)):
+                _d['id_list'] = ', '.join(_d['id_list']) # this takes up too much space originally
         return pprint.pformat(_d, indent=2)
 
     def __copy__(self):
