@@ -114,8 +114,11 @@ class PMILRScheduler(object):
                 lass_lr = cls.optimizer.param_groups[0]['lr']
             else:
                 lass_lr = next(cls.optimizer.param_groups)['lr']
-        except:
+        except Exception as e:
             MNTSLogger[cls.__name__].warning("Cannot get learning rate!")
+            # if MNTSLogger.global_logger._log_level == MNTSLogger.DEBUG:
+            MNTSLogger[cls.__name__].error(f"Uncaught exception: {e}")
+            MNTSLogger[cls.__name__].exception(e)
             lass_lr = "Error"
         return lass_lr
 

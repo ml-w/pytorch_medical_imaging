@@ -450,8 +450,7 @@ class SolverBase(object):
                 tensorboard_rootdir = Path("/media/storage/PytorchRuns")
 
             # Strip the parenthesis and comma from the net name to avoid conflicts with system
-            if isinstance(self.net, nn.Module):
-                net_name = self.net.get_name()
+            net_name = str(self.net)
             net_name = net_name.translate(str.maketrans('(),','[]-'," "))
             self._logger.info("Creating TB writer, writing to directory: {}".format(tensorboard_rootdir))
 
