@@ -1,5 +1,4 @@
 import ast
-import inspect
 import re
 import os
 import time
@@ -9,15 +8,14 @@ from abc import abstractmethod
 import gc
 import numpy as np
 import torch
-import torch.nn as nn
 from torch.optim import lr_scheduler
-from tqdm import *
-from typing import Union, Iterable, Any, Optional
+from typing import Union, Iterable, Optional
 from pathlib import Path
 
 import torchio as tio
 from tqdm import tqdm
 
+from ..pmi_base_cfg import PMIBaseCFG
 from ..tb_plotter import TB_plotter
 from .. import lr_scheduler as pmi_lr_scheduler
 from ..lr_scheduler import PMILRScheduler
@@ -26,7 +24,9 @@ from .earlystop import BaseEarlyStop
 from ..loss import *
 
 
-class SolverBaseCFG:
+__all__ = ['SolverBaseCFG', 'SolverBase']
+
+class SolverBaseCFG(PMIBaseCFG):
     r"""Configuration for initializing :class:`SolverBase` and its child classes.
 
     Class Attributes:
@@ -124,40 +124,12 @@ class SolverBaseCFG:
     init_mom         : Optional[float]             = None
     plot_to_tb       : Optional[bool]              = False
 
-    def __init__(self, **kwargs):
-        # load class attributes as default values of the instance attributes
-        cls = self.__class__
-        cls_dict = { attr: getattr(cls, attr) for attr in dir(cls) }
-        for key, value in cls_dict.items():
-            if key in ('solver_cls', 'inferencer_cls'):
-                continue
-
-            if not key[0] == '_':
-                try:
-                    setattr(self, key, value)
-                except:
-                    msg = f"Error when initializing: {key}: {value}"
-                    raise AttributeError(msg)
-
-        # replace instance attributes
-        if len(kwargs):
-            for key, value in kwargs.items():
-                setattr(self, key, value)
-
     def __str__(self):
         _d = {k: v for k, v in self.__dict__.items() if k[0] != '_'}
         _d['net'] = self.net._get_name()
         return pprint.pformat(_d, indent=2)
 
-    def _as_dict(self):
-        r"""This function is not supposed to be private, but it needs the private tag to be spared by :func:`.__init__`
-        """
-        return self.__dict__
 
-    def __iter__(self):
-        cls_dict = self._get_dict()
-        for k, v in cls_dict.items():
-            yield k, v
 
     @property
     def solver_cls(self) -> type:
@@ -354,6 +326,7 @@ class SolverBase(object):
         if not isinstance(data_loader, PMIDataLoaderBase):
             raise TypeError(f"Expect input to be ``PMIDataLoaderBase`` for ``data_loader``, "
                             f"but got: {type(data_loader)}")
+        # If solver is in DDP mode, wrap the loader for training data (no need to wrap validation loader
         self.data_loader = data_loader.get_torch_data_loader(self.batch_size)
 
         # Do the same for data_loader_val

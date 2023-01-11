@@ -5,7 +5,7 @@ from typing import *
 from pytorch_med_imaging.pmi_data_loader import *
 from pytorch_med_imaging.solvers import *
 from pytorch_med_imaging.networks import UNet_p, LiNet3d
-from pytorch_med_imaging.solvers import PMILRScheduler
+from pytorch_med_imaging.lr_scheduler import PMILRScheduler
 
 class SampleSegLoaderCFG(PMIImageDataLoaderCFG):
     input_dir  : str = './sample_data/img'

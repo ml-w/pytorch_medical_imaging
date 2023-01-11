@@ -1,22 +1,18 @@
-import os
+import re
 
-from ..pmi_data_loader import PMIDataLoaderBase
-from ..solvers import SolverBase
-from ..inferencers import InferencerBase
-from ..tb_plotter import TB_plotter
+from ..solvers import SolverBaseCFG, SolverDDPWrapper
+from ..pmi_base_cfg import PMIBaseCFG
+from ..pmi_data_loader import PMIDataLoaderBase, PMIDataLoaderBaseCFG, PMIDistributedDataWrapper
 from pathlib import Path
-from typing import Any, IO, Union, Optional
-
-from pytorch_med_imaging.solvers import *
-from pytorch_med_imaging.inferencers import *
-from pytorch_med_imaging.pmi_data_loader import *
+from typing import Union, Optional
 
 import yaml
-import configparser
 from mnts.mnts_logger import MNTSLogger
 
+import torch
 import torch.distributed as dist
-import torch.multiprocessing as mp
+
+__all__ = ['PMIController', 'PMIControllerCFG']
 
 
 PathLike = Union[str, Path]
@@ -25,8 +21,7 @@ r"""
 A simple API is used to override the template setting through a json
 
 """
-@dataclass
-class PMIControllerCFG:
+class PMIControllerCFG(PMIBaseCFG):
     r"""The master configuration template that controls the whole pipeline.
 
     Class Attributes:
@@ -103,6 +98,7 @@ class PMIControllerCFG:
     inference_all_checkpoints  : Optional[bool] = False
     plot_tb                    : Optional[bool] = True # if false no plots
 
+
     # log related
     log_dir : Optional[str]  = './Backup/Log/'
     keep_log: Optional[bool] = True
@@ -117,41 +113,6 @@ class PMIControllerCFG:
     solver_cls         : type = None
     inferencer_cls     : type = None
 
-
-    def __init__(self, **kwargs):
-        # load class attributes as default values of the instance attributes
-        cls = self.__class__
-        cls_dict = { attr: getattr(cls, attr) for attr in dir(cls) }
-        for key, value in cls_dict.items():
-            if key in ('solver_cls', 'inferencer_cls'):
-                continue
-
-            if not key[0] == '_':
-                try:
-                    setattr(self, key, value)
-                except:
-                    msg = f"Error when initializing: {key}: {value}"
-                    raise AttributeError(msg)
-
-        # replace instance attributes
-        if len(kwargs):
-            for key, value in kwargs.items():
-                setattr(self, key, value)
-
-    def __str__(self):
-        _d = {k: v for k, v in self.__dict__.items() if k[0] != '_'}
-        _d['net'] = self.net._get_name()
-        return pprint.pformat(_d, indent=2)
-
-    def _as_dict(self):
-        r"""This function is not supposed to be private, but it needs the private tag to be spared by :func:`.__init__`
-        """
-        return self.__dict__
-
-    def __iter__(self):
-        cls_dict = self._get_dict()
-        for k, v in cls_dict.items():
-            yield k, v
 
 class PMIController(object):
     r"""The controller to initiate training or inference. Based on the input cfg, this class will create a solver or
@@ -428,7 +389,7 @@ class PMIController(object):
 
     def _override_subcfg(self,
                          new_value_dict: dict,
-                         target_cfg: dataclass) -> None:
+                         target_cfg: PMIBaseCFG) -> None:
         r"""Overrides the attributes in target configuration class instance. Mainly written for solvers and data loaders
         cfg overrides.
 
@@ -476,27 +437,9 @@ class PMIController(object):
         self._logger.warning("Overriding `solver_cfg` with {x}.")
         self.cfg.solver_cfg = x
 
-    def _setup_DDP(self):
-        r"""This method spawns a process and hook this controller to this process that can be used with torch
-        data distributed parallel module (DDP). Using DDP is generally faster and allows the use of synchronous batch
-        normalization layers. It can also allow multiple nodes to work together during training. """
-
-        # Set some params
-        addr = getattr(self, 'MASTER_ADDR', 'localhost')
-        port = getattr(self, 'MASTER_PORT' '23456')
-        os.environ['MASTER_ADDR'] = addr
-        os.environ['MASTER_PORT'] = port
-
-        # Create the world
-        dist.init_process_group('nccl', rank=0, world_size=torch.cuda.device_count())
-
-    def exec_DDP(self, rank, world_size):
-        self.init_DDP()
-        mp.spawn(demo_fn,
-             args=(world_size,),
-             nprocs=world_size,
-             join=True)
-        pass
+    def _cleanup_DDP(self):
+        r""""""
+        dist.destroy_process_group()
 
     def exec(self):
         r"""This method executes the training or inference pipeline according to the configuration. It will invoke
@@ -516,16 +459,21 @@ class PMIController(object):
         # Create training solver and net
         self._logger.info("Start training...")
         self.check_flags_sanity()
-        self.solver = solver = self.solver_cls(self.solver_cfg)
+
+        self.solver = self.solver_cls(self.solver_cfg)
         self._logger.info("Loading train data...")
         loader = self.data_loader_cls(self.data_loader_cfg)
         self._logger.info("Loading validation data...")
         loader_val = self.data_loader_val_cls(self.data_loader_val_cfg)
         # Push dataloader to solver
-        solver.set_data_loader(loader, loader_val)
-
-        solver.fit(self.cp_save_dir,
-                   debug_validation=self.debug_validation) # TODO: move checkpoint_save argument to else where
+        if not dist.is_initialized():
+            self.solver.set_data_loader(loader, loader_val)
+            self.solver.fit(self.cp_save_dir,
+                            debug_validation=self.debug_validation) # TODO: move checkpoint_save argument to else where
+        else:
+            # if it is initialized, world size and rank are get from env variable.
+            loader = PMIDistributedDataWrapper(loader, dist.get_world_size(), dist.get_rank())
+            self.solver = SolverDDPWrapper(solver, dist.get_world_size(), dist.get_rank())
 
     def inference(self):
         r"""Initiate inference. This is usually called automatically using :func:`.exec`. """
@@ -552,3 +500,4 @@ class PMIController(object):
             inferencer.display_summary()
         except AttributeError as e:
             self._logger.exception("Error when computing summary.")
+

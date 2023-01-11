@@ -80,7 +80,7 @@ class InferencerBase(object):
             checkpoint_path = getattr(self, 'cp_load_dir', None)
             if checkpoint_path is None:
                 msg = "Checkpoint load directory is not set. Configure CFG `cp_load_dir` to specify the directory to " \
-                      "load teh checkpoint."
+                      "load the checkpoint."
                 raise AttributeError(msg)
 
         checkpoint_path = Path(checkpoint_path)

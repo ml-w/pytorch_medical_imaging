@@ -5,6 +5,7 @@ import re
 import tempfile
 import unittest
 import torch
+import copy
 from pathlib import Path
 
 from mnts.mnts_logger import MNTSLogger
@@ -73,6 +74,7 @@ class TestController(unittest.TestCase):
         self.controller = PMIController(self.cfg)
 
     def test_s1_create(self):
+        new_cfg = copy.deepcopy(self.cfg)
         pass
 
     def test_s2_id_override(self):
@@ -91,6 +93,10 @@ class TestController(unittest.TestCase):
         self.controller.train()
 
     def test_s4_inference(self):
+        dummy_cp_path = self.temp_output_path.joinpath('temp_file')
+        dummy_cp = torch.save(self.controller.solver_cfg.net.state_dict(),
+                              str(dummy_cp_path))
+        self.controller.inferencer.cp_load_dir = str(dummy_cp_path)
         self.controller.inference()
 
     def test_s5_kfold(self):
@@ -124,6 +130,10 @@ class TestController(unittest.TestCase):
             for key, v in _override['solver_cfg'].items():
                 msg = f"Expect key {key} overrided to be {v} but got {getattr(self.controller.solver_cfg, key)}."
                 self.assertEqual(getattr(self.controller.solver_cfg, key), v, msg)
+
+    def test_s7_ddp(self):
+        self.controller.enable_ddp = True
+        self.controller.exec()
 
 class TestSegController(TestController):
     def _prepare_cfg(self):

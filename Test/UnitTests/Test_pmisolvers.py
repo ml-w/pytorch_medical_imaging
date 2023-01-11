@@ -1,6 +1,8 @@
 import tempfile
 import unittest
 import yaml
+import copy
+from abc import abstractmethod
 from pytorch_med_imaging.solvers.earlystop import LossReferenceEarlyStop, BaseEarlyStop
 from pytorch_med_imaging.lr_scheduler import PMILRScheduler
 from sample_data.config.sample_cfg import *
@@ -72,6 +74,7 @@ class TestSolver(unittest.TestCase):
         raise NotImplementedError
 
     def test_s1_create(self):
+        new_cfg = copy.deepcopy(self.solver_cfg)
         pass
 
     def test_s2_step(self):

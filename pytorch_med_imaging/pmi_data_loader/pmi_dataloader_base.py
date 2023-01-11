@@ -4,11 +4,13 @@ import configparser
 import pandas as pd
 import pprint
 import itertools
+import copy
 from abc import *
 from pathlib import Path
 from torch.utils.data import DataLoader
 
 import torchio as tio
+from ..pmi_base_cfg import PMIBaseCFG
 from .augmenter_factory import create_transform_compose
 from ..med_img_dataset.PMIDataBase import PMIDataBase
 from mnts.mnts_logger import MNTSLogger
@@ -16,7 +18,7 @@ from typing import *
 
 __all__ = ['PMIDataLoaderBaseCFG', 'PMIDataLoaderBase']
 
-class PMIDataLoaderBaseCFG:
+class PMIDataLoaderBaseCFG(PMIBaseCFG):
     """Config required to initialize :class:`PMIDataLoader`.
 
     Class Attributes:
@@ -62,35 +64,16 @@ class PMIDataLoaderBaseCFG:
     run_mode     : Optional[str] = 'train'
     debug_mode   : Optional[bool] = False
 
-    def __init__(self, **kwargs):
-        # load class attributes as default values of the instance attributes
-        cls = self.__class__
-        cls_dict = {attr: getattr(cls, attr) for attr in dir(cls)}
-        self.__dict__.update(cls_dict)
-
-        # replace instance attributes
-        if len(kwargs):
-            for key, value in kwargs.items():
-                setattr(self, key, value)
-
     def _as_dict(self):
         r"""This function is not supposed to be private, but it needs the private tag to be spared by :func:`.__init__`
         """
         return self.__dict__
-
-    def __str__(self):
-        _d = {k: v for k, v in self.__dict__.items() if k[0] != '_'}
-        if 'id_list' in _d:
-            if isinstance(_d['id_list'], (list, tuple)):
-                _d['id_list'] = ', '.join(_d['id_list']) # this takes up too much space originally
-        return pprint.pformat(_d, indent=2)
 
     def __copy__(self):
         cls = self.__class__
         new_obj = cls.__new__(cls)
         new_obj.__dict__.update(self.__dict__)
         return new_obj
-
 
 
 class PMIDataLoaderBase(object):
