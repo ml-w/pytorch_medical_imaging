@@ -231,6 +231,7 @@ class PMIImageDataLoader(PMIDataLoaderBase):
             ImageDataSet or None
         """
         if not self.target_dir is None:
+            self._logger.info(f"Reading gt data from {self.target_dir}")
             return self._read_image(self.target_dir, dtype=self.data_types[1])
         else:
             self._logger.exception("Can't load from: {}".format(self.target_dir))
@@ -268,8 +269,10 @@ class PMIImageDataLoader(PMIDataLoaderBase):
             mask_out (ImageDataSet): Referenced by ``tio.Compose`` during transform.
             prob_out (ImageDataSet): Referenced by ``tio.Sampler`` during sampling.
         """
+        self._logger.info("Reading input images...")
         img_out = self._read_image(self.input_dir, dtype=self.data_types[0])
         gt_out = self._load_gt_data()
+        self._logger.info("Reading masks...")
         mask_out = self._read_image(self.mask_dir, dtype='uint8')
         prob_out = self._prepare_probmap()
 
