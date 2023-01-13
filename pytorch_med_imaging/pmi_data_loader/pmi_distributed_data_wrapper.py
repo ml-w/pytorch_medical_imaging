@@ -17,7 +17,7 @@ class PMIDistributedDataWrapper:
         self.data_loader = data_loader
         self.num_replicas = num_replicas
         self.rank = rank
-        self._logger = MNTSLogger[self.data_loader.__class__.__name__ + f"-{rank}"]
+        self._logger = MNTSLogger[self.data_loader.__class__.__name__ + f"-DDP-{rank:02d}"]
 
     def __getattr__(self, item):
         return getattr(self.data_loader, item)

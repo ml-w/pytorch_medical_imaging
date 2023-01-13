@@ -122,6 +122,7 @@ class PMIController(object):
         # if global logger is already created, its configurations are not controlled by this controller
         if isinstance(MNTSLogger.global_logger, MNTSLogger):
             self._logger = MNTSLogger[self.__class__.__name__]
+
         # Load configs
         self._load_config(cfg)
 
@@ -460,20 +461,29 @@ class PMIController(object):
         self._logger.info("Start training...")
         self.check_flags_sanity()
 
-        self.solver = self.solver_cls(self.solver_cfg)
+        # alter some of the flags if DDP is initialized because soem of the items can be shared
+        if dist.is_initialized():
+            if dist.get_rank() != 0:
+                self.solver_cfg.plot_to_tb = False
+
+        solver = self.solver_cls(self.solver_cfg)
         self._logger.info("Loading train data...")
         loader = self.data_loader_cls(self.data_loader_cfg)
         self._logger.info("Loading validation data...")
         loader_val = self.data_loader_val_cls(self.data_loader_val_cfg)
-        # Push dataloader to solver
-        if not dist.is_initialized():
-            self.solver.set_data_loader(loader, loader_val)
-            self.solver.fit(self.cp_save_dir,
-                            debug_validation=self.debug_validation) # TODO: move checkpoint_save argument to else where
-        else:
-            # if it is initialized, world size and rank are get from env variable.
+
+        # if DDP is initialized, world size and rank are get from env variable.
+        if dist.is_initialized():
+            # wrap loader and solver with DDP wrappers
+            self._logger.info("DDP is initiated, wrapping solver and data loader...")
             loader = PMIDistributedDataWrapper(loader, dist.get_world_size(), dist.get_rank())
-            self.solver = SolverDDPWrapper(solver, dist.get_world_size(), dist.get_rank())
+            solver = SolverDDPWrapper(solver, world_size=dist.get_world_size(), rank=dist.get_rank())
+
+        # Push dataloader to solver
+        self.solver = solver
+        self.solver.set_data_loader(loader, loader_val)
+        self.solver.fit(self.cp_save_dir,
+                        debug_validation=self.debug_validation) # TODO: move checkpoint_save argument to else where
 
     def inference(self):
         r"""Initiate inference. This is usually called automatically using :func:`.exec`. """

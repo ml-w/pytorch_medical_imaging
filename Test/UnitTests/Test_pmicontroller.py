@@ -11,6 +11,7 @@ from pathlib import Path
 from mnts.mnts_logger import MNTSLogger
 from torch.optim import lr_scheduler
 from torch.utils.data import DataLoader
+import torch.distributed as dist
 
 from pytorch_med_imaging.controller import PMIController, PMIControllerCFG
 from pytorch_med_imaging.lr_scheduler import *
@@ -96,7 +97,7 @@ class TestController(unittest.TestCase):
         dummy_cp_path = self.temp_output_path.joinpath('temp_file')
         dummy_cp = torch.save(self.controller.solver_cfg.net.state_dict(),
                               str(dummy_cp_path))
-        self.controller.inferencer.cp_load_dir = str(dummy_cp_path)
+        self.controller.solver_cfg.cp_load_dir = str(dummy_cp_path)
         self.controller.inference()
 
     def test_s5_kfold(self):
@@ -131,10 +132,26 @@ class TestController(unittest.TestCase):
                 msg = f"Expect key {key} overrided to be {v} but got {getattr(self.controller.solver_cfg, key)}."
                 self.assertEqual(getattr(self.controller.solver_cfg, key), v, msg)
 
-    def test_s7_ddp(self):
-        self.controller.enable_ddp = True
-        self.controller.exec()
+    def test_s7_ddptrain(self):
+        world_size = torch.cuda.device_count()
+        torch.multiprocessing.spawn(self.__class__.ddp_helper, args=(world_size, copy.deepcopy(self.cfg)),
+                                    nprocs=world_size)
+
+    @classmethod
+    def ddp_helper(cls, rank, world_size, cfg):
+        os.environ["MASTER_ADDR"] = "localhost"
+        os.environ["MASTER_PORT"] = "23455"
+        dist.init_process_group("nccl", world_size=world_size, rank=rank)
+        controller = PMIController(copy.deepcopy(cfg))
+        controller.train()
+        dist.barrier()
+        dist.destroy_process_group()
 
 class TestSegController(TestController):
+    cls_cfg = SampleSegControllerCFG()
+    def setUp(self):
+        super(TestSegController, self).setUp()
+        self.__class__.cls_cfg = self.cfg
+
     def _prepare_cfg(self):
         self.cfg = SampleSegControllerCFG()

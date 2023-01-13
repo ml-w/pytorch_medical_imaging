@@ -19,7 +19,7 @@ from ..pmi_base_cfg import PMIBaseCFG
 from ..tb_plotter import TB_plotter
 from .. import lr_scheduler as pmi_lr_scheduler
 from ..lr_scheduler import PMILRScheduler
-from ..pmi_data_loader import PMIDataLoaderBase
+from ..pmi_data_loader import PMIDataLoaderBase, PMIDistributedDataWrapper
 from .earlystop import BaseEarlyStop
 from ..loss import *
 
@@ -242,6 +242,7 @@ class SolverBase(object):
 
         if self.use_cuda:
             self._logger.info("Moving lossfunction and network to GPU.")
+
             self.loss_function = self.loss_function.cuda()
             self.net = self.net.cuda()
 
@@ -323,7 +324,7 @@ class SolverBase(object):
             self._logger.warning("Overriding CFG `dataloader`.")
 
         # Check input type
-        if not isinstance(data_loader, PMIDataLoaderBase):
+        if not isinstance(data_loader, (PMIDataLoaderBase, PMIDistributedDataWrapper)):
             raise TypeError(f"Expect input to be ``PMIDataLoaderBase`` for ``data_loader``, "
                             f"but got: {type(data_loader)}")
         # If solver is in DDP mode, wrap the loader for training data (no need to wrap validation loader
@@ -825,6 +826,7 @@ class SolverBase(object):
                 del mb, s, g, loss
                 gc.collect()
             # self._net_dropout_on()
+            self._validation_loss = np.mean(self.validation_losses)
             self._validation_callback()
 
         self.net = self.net.train()
@@ -876,7 +878,7 @@ class SolverBase(object):
         # configure checkpoints
         self.EARLY_STOP_FLAG = False
         self.net_to_parallel()
-        lastloss = 1e32
+        self._lastloss = 1e32
         self._logger.info("Start training...")
 
         # time fit
@@ -897,18 +899,9 @@ class SolverBase(object):
 
             # Save the checkpoint if the validation loss is lower then historical records.
             epoch_loss = self.get_epoch_loss()
-            if epoch_loss <= lastloss:
-                self._logger.info("New loss ({:.03f}) is smaller than previous loss ({:.03f})".format(epoch_loss, lastloss))
-                self._logger.info("Saving new checkpoint to: {}".format(checkpoint_path))
-                self._logger.info("Iteration number is: {}".format(i))
-                if not Path(checkpoint_path).parent.is_dir():
-                    Path(checkpoint_path).parent.mkdir(parents=True)
-                torch.save(self.get_net().state_dict(), checkpoint_path)
-                lastloss = epoch_loss
-                self._logger.info("Update benchmark loss.")
-            else:
-                torch.save(self.get_net().state_dict(), checkpoint_path.replace('.pt', '_temp.pt'))
+            self._check_best_epoch(checkpoint_path, epoch_loss)
 
+            #!! DDP-00 stucked !!!!
             # Save network every 5 epochs
             if i % 5 == 0:
                 torch.save(self.get_net().state_dict(), checkpoint_path.replace('.pt', '_{:03d}.pt'.format(i)))
@@ -925,11 +918,39 @@ class SolverBase(object):
 
             epoch_time = time.time() - time_start_epoch # time for one epoch + validation.
             self._logger.info("{:-^80}".format(f" Epoch elapsed time : {epoch_time/60.:.02f} min"))
+
+            # check if early stop flag is switched on
             if self.EARLY_STOP_FLAG:
                 self._logger.info("Breaking training loop.")
                 break
         fit_time = time.time() - time_start_fit # fit time in second
         self._logger.info("{:=^80}".format(f" Fit elapsed time: {fit_time / 60.:.02f} min "))
+
+    def _check_best_epoch(self,
+                          checkpoint_path: Union[str, Path],
+                          epoch_loss: float,
+                          ) -> None:
+        r"""Check if the last training iteration loss is smaller then historical record. If so, save it, other wise,
+        save a temp version of it.
+
+        Args:
+            checkpoint_path (str):
+                Path to save the checkpoint
+            epoch_loss (float):
+                Loss value of last epoch
+        """
+        if epoch_loss <= self._lastloss:
+            self._logger.info("New loss ({:.03f}) is smaller than previous loss ({:.03f})".format(epoch_loss,
+                                                                                                  self._lastloss))
+            self._logger.info("Saving new checkpoint to: {}".format(checkpoint_path))
+            self._logger.info("Iteration number is: {}".format(self.current_epoch))
+            if not Path(checkpoint_path).parent.is_dir():
+                Path(checkpoint_path).parent.mkdir(parents=True)
+            self._lastloss = epoch_loss
+            torch.save(self.get_net().state_dict(), checkpoint_path)
+            self._logger.info("Update benchmark loss.")
+        else:
+            torch.save(self.get_net().state_dict(), checkpoint_path.replace('.pt', '_temp.pt'))
 
     def get_epoch_loss(self) -> float:
         r"""Return the epoch_loss, which is the training loss if validation loop is not enabled. Used for early stop
@@ -961,12 +982,12 @@ class SolverBase(object):
         for name, module in self.net.named_modules():
             try:
                 self._net_weight_type = module.weight.type()
-                #self._logger.debug("Module type is: {}".format(self._net_weight_type))
+                # self._logger.debug("Module type is: {}".format(self._net_weight_type))
                 break
             except AttributeError:
                 continue
             except Exception as e:
-                self._logger.error("Unexpected error in type convertion of solver")
+                self._logger.error("Unexpected error in type conversion of solver")
                 self._logger.exception(e)
 
         if self._net_weight_type is None:
@@ -1105,9 +1126,7 @@ class SolverBase(object):
 
         """
         # Step early stopper if it exists
-        if not self.early_stop is None:
-            if self.early_stop.step(self.get_epoch_loss(), self.current_epoch):
-                self.EARLY_STOP_FLAG = True
+        self._step_early_stopper()
 
         # Plot data to tensorboardX
         scalars = self.plotter_dict.get('scalars', None)
@@ -1124,6 +1143,12 @@ class SolverBase(object):
                 self._logger.warning("Error when plotting to tensorboard.")
                 if self._logger.log_level == 10: # debug
                     self._logger.exception(e)
+
+    def _step_early_stopper(self):
+        r"""Step the early stopper if it exist. This method is refractored to allow overriding for DDP."""
+        if not self.early_stop is None:
+            if self.early_stop.step(self.get_epoch_loss(), self.current_epoch):
+                self.EARLY_STOP_FLAG = True
 
     def _unpack_minibatch(self, minibatch, unpacking_keys = None):
         r"""Unpack mini-batch drawn by ``torchio.Queue`` or ``torchio.SubjectsDataset``.
