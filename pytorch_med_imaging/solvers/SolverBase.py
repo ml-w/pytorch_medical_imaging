@@ -13,6 +13,7 @@ from typing import Union, Iterable, Optional
 from pathlib import Path
 
 import torchio as tio
+import torch.distributed as dist
 from tqdm import tqdm
 
 from ..pmi_base_cfg import PMIBaseCFG
@@ -211,7 +212,7 @@ class SolverBase(object):
         # Define minimal requirement to kick start a ``fit()``
         self._required_attributes = {
             'net': torch.nn.Module,
-            'data_loader': (PMIDataLoaderBase, torch.utils.data.DataLoader),
+            'data_loader': (PMIDataLoaderBase, torch.utils.data.DataLoader, PMIDistributedDataWrapper),
             'optimizer': torch.optim.Optimizer,
             'loss_function': torch.nn.Module,
             'init_lr': float,
@@ -240,17 +241,21 @@ class SolverBase(object):
         if  len(kwargs):
             self._logger.warning("Some solver configs were not used: {}".format(kwargs))
 
+        if self.cp_load_dir is not None:
+            self.load_checkpoint(self.cp_load_dir)
+
         if self.use_cuda:
             self._logger.info("Moving lossfunction and network to GPU.")
-
-            self.loss_function = self.loss_function.cuda()
-            self.net = self.net.cuda()
+            if not dist.is_initialized():
+                self.loss_function = self.loss_function.cuda()
+                self.net = self.net.cuda()
+            else:
+                # had to use this way to avoid running out of CUDA mem
+                self.loss_function = self.loss_function.cuda(device=dist.get_rank())
+                self.net = self.net.cuda(device=dist.get_rank())
 
         if self.plot_to_tb:
             self.create_plotter()
-
-        if self.cp_load_dir is not None:
-            self.load_checkpoint(self.cp_load_dir)
 
         # Stopping criteria
         if isinstance(self.early_stop, str):
@@ -327,8 +332,11 @@ class SolverBase(object):
         if not isinstance(data_loader, (PMIDataLoaderBase, PMIDistributedDataWrapper)):
             raise TypeError(f"Expect input to be ``PMIDataLoaderBase`` for ``data_loader``, "
                             f"but got: {type(data_loader)}")
-        # If solver is in DDP mode, wrap the loader for training data (no need to wrap validation loader
-        self.data_loader = data_loader.get_torch_data_loader(self.batch_size)
+        # If solver is in DDP mode, postpone the loading
+        if not dist.is_initialized():
+            self.data_loader = data_loader.get_torch_data_loader(self.batch_size)
+        else:
+            self.data_loader = data_loader
 
         # Do the same for data_loader_val
         if not hasattr(self, 'data_loader_val'):
@@ -341,6 +349,11 @@ class SolverBase(object):
             if not isinstance(data_loader_val, PMIDataLoaderBase) and not data_loader_val is None:
                 raise TypeError(f"Expect input to be ``PMIDataLoaderBase`` for ``data_loader_val``, "
                                 f"but got: {type(data_loader_val)}")
+            # no need to load validation set if its DDP
+            if dist.is_initialized():
+                # otherwise, only load when process is rank 0
+                if dist.get_rank() != 0:
+                    return
             self.data_loader_val = data_loader_val.get_torch_data_loader(self.batch_size, exclude_augment=True)
 
     def set_lr_scheduler(self,
@@ -451,6 +464,8 @@ class SolverBase(object):
         r"""Call to move :attr:`net` to :class:`torch.nn.DataParallel`. Sometimes the network used is special and
         you can override this for those exceptions.
         """
+        if dist.is_initialized():
+            raise ArithmeticError("DDP should not use this method to distribute the network.")
         if (torch.cuda.device_count()  > 1) & self.use_cuda:
             self._logger.info("Multi-GPU detected, using nn.DataParallel for distributing workload.")
             self.net = nn.DataParallel(self.net)
@@ -467,7 +482,10 @@ class SolverBase(object):
         self._logger.debug("loss functioning override.")
         if self.use_cuda:
             try:
-                func = func.cuda()
+                if dist.is_initialized():
+                    func = func.cuda(device=dist.get_rank())
+                else:
+                    func = func.cuda()
             except:
                 self._logger.warning("Failed to move loss function to GPU")
                 pass
@@ -487,7 +505,8 @@ class SolverBase(object):
             # assert os.path.isfile(checkpoint_load)
             try:
                 self._logger.info("Loading checkpoint " + checkpoint_dir)
-                self.get_net().load_state_dict(torch.load(checkpoint_dir), strict=False)
+                self.get_net().load_state_dict(torch.load(checkpoint_dir,
+                                                          torch.device('cpu')), strict=False)
             except Exception as e:
                 if not self.debug_mode:
                     self._logger.error(f"Cannot load checkpoint from: {checkpoint_dir}")
@@ -739,8 +758,11 @@ class SolverBase(object):
         self.optimizer.zero_grad() # make sure validation loop doesn't alter the gradients
         self.plotter_dict = {'scalars': {}, 'epoch_num': epoch_number}
 
-        data_loader = self.data_loader.get_torch_data_loader(self.batch_size) \
-            if isinstance(self.data_loader, PMIDataLoaderBase) else self.data_loader
+        if not dist.is_initialized():
+            data_loader = self.data_loader.get_torch_data_loader(self.batch_size) \
+                if isinstance(self.data_loader, PMIDataLoaderBase) else self.data_loader
+        else:
+            data_loader = self.data_loader.get_torch_data_loader(self.batch_size)
         for step_idx, mb in enumerate(data_loader):
             s, g = self._unpack_minibatch(mb, self.unpack_key_forward)
 
@@ -755,7 +777,6 @@ class SolverBase(object):
                                 uid = mb.get('uid', None))
             del s, g, out, loss, mb
             gc.collect()
-
         epoch_loss = np.array(E).mean()
         self.plotter_dict['scalars']['Loss/Loss'] = epoch_loss
         self._last_epoch_loss = epoch_loss
@@ -881,6 +902,7 @@ class SolverBase(object):
         self._lastloss = 1e32
         self._logger.info("Start training...")
 
+
         # time fit
         time_start_fit = time.time()
         for i in range(self.num_of_epochs):
@@ -901,10 +923,13 @@ class SolverBase(object):
             epoch_loss = self.get_epoch_loss()
             self._check_best_epoch(checkpoint_path, epoch_loss)
 
-            #!! DDP-00 stucked !!!!
             # Save network every 5 epochs
             if i % 5 == 0:
-                torch.save(self.get_net().state_dict(), checkpoint_path.replace('.pt', '_{:03d}.pt'.format(i)))
+                if dist.is_initialized():
+                    if dist.get_rank() == 0:
+                        torch.save(self.get_net().state_dict(), checkpoint_path.replace('.pt', '_{:03d}.pt'.format(i)))
+                else:
+                    torch.save(self.get_net().state_dict(), checkpoint_path.replace('.pt', '_{:03d}.pt'.format(i)))
 
             try:
                 current_lr = next(self.get_optimizer().param_groups)['lr']

@@ -92,6 +92,7 @@ class SolverDDPWrapper:
             self._logger.debug(f"Synced training loss: {self._last_epoch_loss}")
             self._logger.debug(f"Synced validation loss: {self.get_epoch_loss()}")
             self.solver._check_best_epoch_(checkpoint_path, self.get_epoch_loss())
+        dist.barrier()
 
 
     def __getattr__(self, item):
@@ -100,9 +101,12 @@ class SolverDDPWrapper:
 
     def net_to_parallel(self):
         # move the parameters to the correct device
-        self.net = self.net.to(f"cuda:{self.rank}")
         self.net = torch.nn.SyncBatchNorm.convert_sync_batchnorm(self.net)
-        self.net = torch.nn.parallel.DistributedDataParallel(self.net, device_ids=[self.rank], output_device=self.rank)
+        # This assumes the nets are already in the right places
+        # self.net = self.net.to(f"cuda:{self.rank}")
+        torch.cuda.set_device(dist.get_rank())
+        self.net = torch.nn.parallel.DistributedDataParallel(self.net, device_ids=[dist.get_rank()],
+                                                             output_device=dist.get_rank())
 
     def fit(self,
             checkpoint_path,
