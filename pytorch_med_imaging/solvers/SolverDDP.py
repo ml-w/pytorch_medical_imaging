@@ -61,24 +61,32 @@ class SolverDDPWrapper:
         return out
 
 
-    def sync_epoch_loss(self) -> float:
-        r"""Average the training loss across all DDP processes"""
+    def sync_epoch_loss(self) -> None:
+        r"""Average the training loss across all DDP processes. This doesn't change validation loss."""
         # make sure all processes are readied
         dist.barrier()
         last_train_loss = torch.as_tensor([self.solver.get_last_train_loss()]).cuda(device=self.rank)
         dist.all_reduce(last_train_loss)
         last_train_loss /= float(self.world_size)
         last_train_loss = last_train_loss.item()
-        return last_train_loss
+        self._last_epoch_loss = last_train_loss
 
     def _step_early_stopper(self):
         r"""This function breaks the training loop when any of the processes suggests early stop.
         Currently the policy is to stop training when any of the subprocess reaches the stopping criteria"""
-        self.solver._step_early_stopper_()
+        self.sync_epoch_loss()
+        # Because only rank 0 does validation loop, use it as the early stop reference.
+        if self.rank == 0:
+            self.solver._step_early_stopper_()
+
+        dist.barrier()
+        # note that cuda device doesn't like bool type so we are using uint8 instead
         early_stop_ten = torch.as_tensor([self.solver.EARLY_STOP_FLAG], dtype=torch.uint8).cuda(device=self.rank)
-        dist.all_reduce(early_stop_ten, op=dist.ReduceOp.SUM)
+        dist.broadcast(early_stop_ten, 0) # broad cast early stop flag from rank 0 to all others
         self.solver.EARLY_STOP_FLAG = early_stop_ten.data.item() > 0
         self._logger.debug(f"Early stopper stat: {self.EARLY_STOP_FLAG}")
+        del early_stop_ten
+
 
     def _check_best_epoch(self,
                           checkpoint_path,
@@ -86,11 +94,11 @@ class SolverDDPWrapper:
         r"""Override this so that only the rank 0 process is going to be saving the best epoch"""
         # sync the last loss first
         self._logger.debug(f"Local training loss: {self.solver.get_last_train_loss()}")
-        self._last_epoch_loss = self.sync_epoch_loss()
+        self.sync_epoch_loss()
         if dist.get_rank() == 0:
             # check if new loss is better than last loss and save the checkpoint
-            self._logger.debug(f"Synced training loss: {self._last_epoch_loss}")
-            self._logger.debug(f"Synced validation loss: {self.get_epoch_loss()}")
+            self._logger.debug(f"Synced training loss: {self.get_last_train_loss()}")
+            self._logger.debug(f"Synced validation loss: {self.get_last_val_loss()}")
             self.solver._check_best_epoch_(checkpoint_path, self.get_epoch_loss())
         dist.barrier()
 
@@ -122,7 +130,7 @@ class SolverDDPWrapper:
 
         if self.rank == 0:
             # only do validation on rank 0
-            self._last_val_loss = self.solver.validation_()
+            self.solver.validation_()
         else:
             self._logger.info("Skipping validation because this is not rank 0 process.")
 

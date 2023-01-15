@@ -782,7 +782,7 @@ class SolverBase(object):
         self._last_epoch_loss = epoch_loss
 
         self._logger.info("Initiating validation.")
-        self._last_val_loss = self.validation()
+        self.validation()
         self._epoch_callback()
         self.decay_optimizer(epoch_loss)
 
@@ -852,6 +852,7 @@ class SolverBase(object):
 
         self.net = self.net.train()
         mean_val_loss = np.mean(np.array(self.validation_losses).flatten())
+        self._last_val_loss = mean_val_loss
         return mean_val_loss
 
     def fit(self,
