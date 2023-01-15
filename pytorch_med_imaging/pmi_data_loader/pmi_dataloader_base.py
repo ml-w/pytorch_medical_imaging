@@ -69,6 +69,13 @@ class PMIDataLoaderBaseCFG(PMIBaseCFG):
         """
         return self.__dict__
 
+    def __str__(self):
+        _d = {k: v for k, v in self.__dict__.items() if k[0] != '_'}
+        if 'id_list' in _d:
+            if isinstance(_d['id_list'], (list, tuple)):
+                _d['id_list'] = ', '.join(_d['id_list'])
+        return pprint.pformat(_d, indent=2)
+
     def __copy__(self):
         cls = self.__class__
         new_obj = cls.__new__(cls)
