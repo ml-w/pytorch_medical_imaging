@@ -116,7 +116,7 @@ class BinaryClassificationInferencer(ClassificationInferencer):
         perf = perf.append(row)
 
         # confusion matrix
-        mat_data = [[TP, FP], [TN, FN]]
+        mat_data = [[TP, FP], [FN, TN]]
         mat_df = pd.DataFrame(data=mat_data, index=['Predict +', 'Predict -'], columns=['Actual +', 'Actual -'])
 
         # printing results
