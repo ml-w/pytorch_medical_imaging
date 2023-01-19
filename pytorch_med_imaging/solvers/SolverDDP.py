@@ -11,6 +11,47 @@ from mnts.mnts_logger import MNTSLogger
 __all__ = ['SolverDDPWrapper']
 
 class SolverDDPWrapper:
+    r"""Wrapper class for data distributed parallel training.
+
+    This method enables training the model in DDP mode. The motivation of doing DDP is to utilize the SynchBatchNorm
+    layer instead of ordinary batch norm because the later would have a very bad estimation of the batch mean
+    and variance from the running mean/variance when the batch size is small. Synch batch norm allows the calcualtion
+    of batch norm across all GPUs and hence a better estimation of the running mean.
+
+    This class wraps arround the original :class:`SolverBase` and modify the methods for DDP training. It is noted that
+    in DDP, each process operates with a single GPU. By default these processes communicates through network ports
+    at address `localhost:23455`. However, you can modify this default behavior by setting the environmental variables
+    `MASTER_ADDR` and `MASTER_PORT`.
+
+    Arguments:
+        solver (SolverBase):
+            See :class:`SolverBase` for more.
+        world_size (int):
+            Usually this is the number of GPUs.
+        rank (int, Optiona):
+            Rank of the solver. Usually, this is obtained through `dist.get_rank()` or automatically assigned using
+            :func:`~torch.multiprocessing.spawn`.
+
+    Examples:
+    >>> from pytorch_med_imaging.solvers import ClassificationSolver, ClassificationSolverCFG
+    ... from pytorch_med_imaging.solvers import SolverDDP
+    ... import torch
+    ... import torch.distributed as dist
+    ... import torch.multiprocessing as mp
+    ...
+    ... # define helper function
+    ... def ddp_helper(rank, world_size):
+    ...     dist.init_process_group('nccl', rank=rank, world_size=world_size)
+    ...     solver = ClassificationSolver(ClassificationSolverCFG())
+    ...     solver = SolverDDP(solver, world_size, rank)
+    ...     solver.fit('checkpoint.pt', False)
+    ...     dist.destroy_process_group()
+    ...
+    ... # main process
+    ... def main():
+    ...     mp.spawn(ddp_helper, args=(torch.cuda.device_count(), ), nprocs=torch.cuda.device_count())
+
+    """
     def __init__(self,
                  solver: SolverBase,
                  world_size: int = None,
@@ -39,7 +80,7 @@ class SolverDDPWrapper:
         if rank != 0:
             self.solver.plot_to_tb = False
 
-        # Replace solver's method with those defined in this method
+        # Replace solver's method with those defined in this wrapper
         _ = [
             '_step_early_stopper',
             '_check_best_epoch',
