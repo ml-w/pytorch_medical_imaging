@@ -830,8 +830,6 @@ class SolverBase(object):
             self.validation_losses = []
             self.perfs = []
             self.get_net().eval()
-            # self.net.train() #! See :func:`_net_dropout_off` for explain of why train() but not eval()
-            # self._net_dropout_off()
             for mb in tqdm(self.data_loader_val, desc="Validation", position=2):
                 s, g = self._unpack_minibatch(mb, self.unpack_key_forward)
                 s = self._match_type_with_network(s)
@@ -850,7 +848,6 @@ class SolverBase(object):
                 self._validation_step_callback(g.detach().cpu(), res.detach().cpu(), loss.detach().cpu(), uids)
                 del mb, s, g, loss
                 gc.collect()
-            self._net_dropout_on()
             self._validation_loss = np.mean(self.validation_losses)
             self._validation_callback()
 
