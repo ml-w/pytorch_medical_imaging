@@ -53,7 +53,7 @@ class PMILRScheduler(object):
             raise ArithmeticError(f"Your lr_scheduler setting ({scheduler_name}) contains illegal characters!")
 
         # The Pytorch Vanilla lr_schedulers and the customized scheduler I wrote
-        self._logger.info(f"Creating LR scheudler {self.scheduler_name}")
+        self._logger.info(f"Creating LR scheduler {self.scheduler_name}")
         self._logger.debug(f"Optimizer args: {args}")
         self._logger.debug(f"Optimizer kwargs: {kwargs}")
         try:
