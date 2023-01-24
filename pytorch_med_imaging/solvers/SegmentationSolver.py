@@ -325,6 +325,3 @@ class SegmentationSolver(SolverBase):
         # delete references
         del s, g, out
 
-    def _epoch_callback(self, *args, **kwargs):
-        self.decay_optimizer()
-        super(SegmentationSolver, self)._epoch_callback(*args, **kwargs)
