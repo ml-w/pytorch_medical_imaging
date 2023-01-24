@@ -2,7 +2,10 @@ import os
 import torch
 import torch.distributed as dist
 import torch.multiprocessing as mp
-
+import tempfile
+import hashlib
+import re
+import pprint
 
 from torch.utils.data import DistributedSampler
 from .SolverBase import SolverBase
@@ -85,8 +88,10 @@ class SolverDDPWrapper:
             '_step_early_stopper',
             '_check_best_epoch',
             '_match_type_with_network',
+            '_epoch_callback',
             'net_to_parallel',
-            'validation'
+            'validation',
+            '_update_network' # temp use
         ]
         for func_name in _:
             setattr(self.solver, func_name + '_', getattr(self.solver, func_name))
@@ -100,6 +105,89 @@ class SolverDDPWrapper:
         else:
             out = out.to(f'cuda:{self.rank}')
         return out
+
+    def sync_network(self) -> None:
+        r"""Synchronize the model parameters across all subrocesses.
+
+
+        .. warning::
+            Do not call this method before moving the network to the gpu in the subprocess, otherwise, the broadcast
+            action will, for some mysterious reason, takes up loads of GRAM, making it impossible to utilize the rest
+            of the memory
+        """
+        self._logger.info("Synchronizing network parameters...")
+        path_len = torch.as_tensor([0], dtype=torch.int).cuda(device=dist.get_rank())
+
+        # save the checkpoint to somewhere
+        if self.rank == 0:
+            self._logger.debug("Creating checkpoint in rank 0")
+            tmp_file = tempfile.NamedTemporaryFile('wb')
+            path_len.fill_(len(tmp_file.name))
+            tmp_file_encode = torch.as_tensor(list(tmp_file.name.encode()), dtype=torch.uint8).cuda(device=self.rank)
+            torch.save(self.net.state_dict(), tmp_file.name)
+            self._logger.debug(f"Checkpoint saved to: {tmp_file.name}!")
+
+        dist.barrier()
+        dist.broadcast(path_len, 0)
+        # Create path indices to hold path
+        self._logger.debug(f"Path_len: {path_len}")
+        if self.rank != 0:
+            tmp_file_encode = torch.zeros(path_len, dtype=torch.uint8).cuda(device=self.rank)
+        dist.broadcast(tmp_file_encode, 0)
+        self._logger.debug(f"encoded file path: {tmp_file_encode}")
+
+        dist.barrier()
+        if self.rank != 0:
+            # decode
+            tmp_file_name = "".join([chr(i) for i in tmp_file_encode])
+            self.solver.load_checkpoint(tmp_file_name)
+            dist.barrier()
+        else:
+            dist.barrier()
+            tmp_file.close()
+
+    def check_if_network_synced(self, raise_error = False, summarize_differences = False):
+        r"""Check if the hash sum is the same for networks in the subprocesses.
+
+        This assumes that the stringyfied network state dict will always be the same if the network parameters are
+        the same. The strings are hashed and passed to process 0 for verification.
+
+        Args:
+            raise_error (bool, Optional):
+                If ``True``, raise ``RuntimeError`` if the subprocesses network are not the same
+        """
+        netstate_str = str(self.net.state_dict())
+        # need to replace device information because each subprocess store network in different GPU devices supposedly
+        netstate_str = re.sub('cuda:[\d]+', '', netstate_str)
+        checksum = torch.as_tensor(list(hashlib.md5(netstate_str.encode()).hexdigest().encode()),
+                                   dtype=torch.uint8).cuda()
+        if self.rank == 0:
+            checksums = [torch.zeros(32, dtype=torch.uint8).cuda() for i in range(self.world_size)]
+        else:
+            checksums = None
+        dist.gather(checksum, checksums, dst=0)
+        ERROR_FLAG = torch.as_tensor([0], dtype=torch.uint8).cuda()
+        if self.rank == 0:
+            # revert the integer tensor back to hex md5 checksums
+            checksums = ["".join([chr(i) for i in l]) for l in checksums]
+            self._logger.debug(f"Network checksums:\n{pprint.pformat(checksums, indent=4)}")
+
+            # if any of the check sums are wrong, this should return error
+            if checksums.count(checksums[0]) != len(checksums):
+                msg = "Checksum of network parameters are not identical across processes!"
+                ERROR_FLAG.fill_(1)
+                if raise_error and not summarize_differences:
+                    raise RuntimeError(msg)
+                else:
+                    self._logger.warning(msg)
+
+        if summarize_differences:
+            dist.broadcast(ERROR_FLAG, 0)
+            if ERROR_FLAG:
+                torch.save(self.net.state_dict(), f'/tmp/tmp_DDP_{self.rank}.pt')
+
+        # wait for checking to finish
+        dist.barrier()
 
 
     def sync_epoch_loss(self) -> None:
@@ -156,6 +244,13 @@ class SolverDDPWrapper:
         torch.cuda.set_device(dist.get_rank())
         self.net = torch.nn.parallel.DistributedDataParallel(self.net, device_ids=[dist.get_rank()],
                                                              output_device=dist.get_rank())
+        self.sync_network()
+
+        # optimizer needs to be recreated to ensure the network parameters are synced across all processes
+        self._logger.info("Recreating optimizer, ignore oncoming warning as its normal.")
+        self.solver.optimizer = self.solver.optimizer.__class__.__name__
+        self.solver.create_optimizer(self.net)
+        self.check_if_network_synced(raise_error=True)
 
     def fit(self,
             checkpoint_path,
@@ -165,6 +260,7 @@ class SolverDDPWrapper:
 
     def validation(self):
         r"""This function should only run in processes"""
+        self.check_if_network_synced(raise_error=True)
         if not dist.is_initialized():
             msg = "This method is only meant for DDP."
             raise mp.ProcessError(msg)
@@ -178,3 +274,12 @@ class SolverDDPWrapper:
         # collect all other processes.
         dist.barrier()
 
+    def _epoch_callback(self, *args, **kwargs) -> None:
+        r"""Sync the network after each epoch just in case.n"""
+        self.solver._epoch_callback_(*args, **kwargs)
+        # sync the network using this chance also
+        dist.barrier()
+        self.check_if_network_synced(raise_error=True)
+
+    def _update_network(self, loss):
+        self.solver._update_network_(loss)

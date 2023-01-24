@@ -224,6 +224,7 @@ class SolverBase(object):
         # Optimizer attributes
         self._step_called_time: int = 0
         self._decayed_time    : int = 0
+        self._accumulated_steps: int = 0
 
         # internal attributes
         self._tb_plotter = None
@@ -234,8 +235,7 @@ class SolverBase(object):
          # create loss function if not specified
         self.prepare_lossfunction()
         self.create_optimizer()
-        if isinstance(self.lr_sche, str):
-            self.set_lr_scheduler(self.lr_sche)
+
 
         self._logger.info("Solver was configured with options: {}".format(str(cfg)))
         if  len(kwargs):
@@ -469,6 +469,7 @@ class SolverBase(object):
         if (torch.cuda.device_count()  > 1) & self.use_cuda:
             self._logger.info("Multi-GPU detected, using nn.DataParallel for distributing workload.")
             self.net = nn.DataParallel(self.net)
+            self.create_optimizer(self.net)
 
     def set_loss_function(self, func: torch.nn.Module) -> None:
         r"""Externally set :attr:`loss_function` manually. This will also move the loss function to GPU if
@@ -594,15 +595,15 @@ class SolverBase(object):
         """
         # Gradient accumulation
         if self.accumulate_grad > 1:
-            self.accumulated_steps += 1
+            self._accumulated_steps += 1
             _loss = loss / float(self.accumulate_grad)
             _loss.backward()
             loss.detach_()
-            if self.accumulated_steps >= self.accumulate_grad:
+            if self._accumulated_steps >= self.accumulate_grad:
                 self._logger.debug("Updating network params from accumulated loss")
                 self.optimizer.step()
                 self.optimizer.zero_grad()
-                self.accumulated_steps = 0
+                self._accumulated_steps = 0
         else:
             self.optimizer.zero_grad()
             loss.backward()
@@ -626,7 +627,7 @@ class SolverBase(object):
         Returns:
             torch.optim.Optimizer
         """
-        if not net is None:
+        if not net is None and net != self.net:
             msg = f"Overriding network when creating optimizer. If you didn't inherit the function create_optimizer, " \
                   f"something might have gone wrong becuase network should have already been created!"
             self._logger.warning(msg)
@@ -656,6 +657,9 @@ class SolverBase(object):
         else:
             # Do nothing if everything is fine. Assume the optimizer already knows the network parameters.
             pass
+
+        if isinstance(self.lr_sche, str):
+            self.set_lr_scheduler(self.lr_sche)
         return self.optimizer
 
     def decay_optimizer(self, *args):
