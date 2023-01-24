@@ -42,7 +42,7 @@ class PMIDistributedDataWrapper:
         """
         subjects = self.data_loader._pack_data_into_subjects_(*args)
 
-        random_seed = random.randint(0, 1E16)
+        random_seed = random.randint(0, 1E8)
         random_seed = torch.as_tensor([random_seed], dtype=torch.int32).cuda(device=dist.get_rank())
         dist.broadcast(random_seed, 0) # broadcast 0-th rank random_seed
         random.Random(random_seed.item()).shuffle(subjects._subjects) # use the same random seed to ensure the shuffled
@@ -51,6 +51,6 @@ class PMIDistributedDataWrapper:
         _len = len(subjects._subjects) - len(subjects._subjects) % self.num_replicas
         new_subjects = tio.SubjectsDataset(subjects._subjects[self.rank:_len:self.num_replicas],
                                            transform = subjects._transform)
-        del random_seed
+        dist.barrier()
         return new_subjects
 

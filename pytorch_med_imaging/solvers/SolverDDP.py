@@ -90,8 +90,7 @@ class SolverDDPWrapper:
             '_match_type_with_network',
             '_epoch_callback',
             'net_to_parallel',
-            'validation',
-            '_update_network' # temp use
+            'validation'
         ]
         for func_name in _:
             setattr(self.solver, func_name + '_', getattr(self.solver, func_name))
@@ -146,7 +145,7 @@ class SolverDDPWrapper:
             dist.barrier()
             tmp_file.close()
 
-    def check_if_network_synced(self, raise_error = False, summarize_differences = False):
+    def check_if_network_synced(self, raise_error = False):
         r"""Check if the hash sum is the same for networks in the subprocesses.
 
         This assumes that the stringyfied network state dict will always be the same if the network parameters are
@@ -166,7 +165,6 @@ class SolverDDPWrapper:
         else:
             checksums = None
         dist.gather(checksum, checksums, dst=0)
-        ERROR_FLAG = torch.as_tensor([0], dtype=torch.uint8).cuda()
         if self.rank == 0:
             # revert the integer tensor back to hex md5 checksums
             checksums = ["".join([chr(i) for i in l]) for l in checksums]
@@ -175,16 +173,10 @@ class SolverDDPWrapper:
             # if any of the check sums are wrong, this should return error
             if checksums.count(checksums[0]) != len(checksums):
                 msg = "Checksum of network parameters are not identical across processes!"
-                ERROR_FLAG.fill_(1)
-                if raise_error and not summarize_differences:
+                if raise_error:
                     raise RuntimeError(msg)
                 else:
                     self._logger.warning(msg)
-
-        if summarize_differences:
-            dist.broadcast(ERROR_FLAG, 0)
-            if ERROR_FLAG:
-                torch.save(self.net.state_dict(), f'/tmp/tmp_DDP_{self.rank}.pt')
 
         # wait for checking to finish
         dist.barrier()
@@ -208,7 +200,6 @@ class SolverDDPWrapper:
         if self.rank == 0:
             self.solver._step_early_stopper_()
 
-        dist.barrier()
         # note that cuda device doesn't like bool type so we are using uint8 instead
         early_stop_ten = torch.as_tensor([self.solver.EARLY_STOP_FLAG], dtype=torch.uint8).cuda(device=self.rank)
         dist.broadcast(early_stop_ten, 0) # broad cast early stop flag from rank 0 to all others
@@ -243,8 +234,9 @@ class SolverDDPWrapper:
         # self.net = self.net.to(f"cuda:{self.rank}")
         torch.cuda.set_device(dist.get_rank())
         self.net = torch.nn.parallel.DistributedDataParallel(self.net, device_ids=[dist.get_rank()],
-                                                             output_device=dist.get_rank())
-        self.sync_network()
+                                                             output_device=dist.get_rank(),
+                                                             find_unused_parameters=True)
+        # self.sync_network()
 
         # optimizer needs to be recreated to ensure the network parameters are synced across all processes
         self._logger.info("Recreating optimizer, ignore oncoming warning as its normal.")
@@ -260,7 +252,6 @@ class SolverDDPWrapper:
 
     def validation(self):
         r"""This function should only run in processes"""
-        self.check_if_network_synced(raise_error=True)
         if not dist.is_initialized():
             msg = "This method is only meant for DDP."
             raise mp.ProcessError(msg)
@@ -268,6 +259,7 @@ class SolverDDPWrapper:
         if self.rank == 0:
             # only do validation on rank 0
             self.solver.validation_()
+            self._logger.info("Processing 0 joining back.")
         else:
             self._logger.info("Skipping validation because this is not rank 0 process.")
 
@@ -280,6 +272,3 @@ class SolverDDPWrapper:
         # sync the network using this chance also
         dist.barrier()
         self.check_if_network_synced(raise_error=True)
-
-    def _update_network(self, loss):
-        self.solver._update_network_(loss)

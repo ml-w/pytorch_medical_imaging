@@ -772,7 +772,6 @@ class SolverBase(object):
 
             # initiate one train step. Things should be plotted in decorator of step if needed.
             out, loss = self.step(s, g)
-
             E.append(loss.data.cpu())
             self._logger.info("\t[Step %04d] loss: %.010f"%(step_idx, loss.data))
 
@@ -830,7 +829,7 @@ class SolverBase(object):
         with torch.no_grad():
             self.validation_losses = []
             self.perfs = []
-            self.net.eval()
+            self.get_net().eval()
             # self.net.train() #! See :func:`_net_dropout_off` for explain of why train() but not eval()
             # self._net_dropout_off()
             for mb in tqdm(self.data_loader_val, desc="Validation", position=2):
@@ -839,22 +838,24 @@ class SolverBase(object):
                 g = self._match_type_with_network(g) # no assumption but should be long in segmentation only.
 
                 if isinstance(s, list):
-                    res = self.net.forward(*s)
+                    res = self.get_net().forward(*s)
                 else:
-                    res = self.net.forward(s)
+                    res = self.get_net().forward(s)
+
                 loss = self._loss_eval(res, s, g.squeeze().long())
                 self._logger.debug(f"_val IDs: {mb['uid']}") if not mb.get('uid', None) is None else None
-                self._logger.debug("_val_step_loss: {}".format(loss.cpu().data.item()))
+                self._logger.debug("_val_step_loss: {}".format(loss.detach().cpu().data.item()))
 
                 uids = mb.get('uid', None)
                 self._validation_step_callback(g.detach().cpu(), res.detach().cpu(), loss.detach().cpu(), uids)
                 del mb, s, g, loss
                 gc.collect()
-            # self._net_dropout_on()
+            self._net_dropout_on()
             self._validation_loss = np.mean(self.validation_losses)
             self._validation_callback()
 
-        self.net = self.net.train()
+        self.optimizer.zero_grad()
+        self.get_net().train()
         mean_val_loss = np.mean(np.array(self.validation_losses).flatten())
         self._last_val_loss = mean_val_loss
         return mean_val_loss
@@ -933,6 +934,7 @@ class SolverBase(object):
                 if dist.is_initialized():
                     if dist.get_rank() == 0:
                         torch.save(self.get_net().state_dict(), checkpoint_path.replace('.pt', '_{:03d}.pt'.format(i)))
+                    dist.barrier()
                 else:
                     torch.save(self.get_net().state_dict(), checkpoint_path.replace('.pt', '_{:03d}.pt'.format(i)))
 
