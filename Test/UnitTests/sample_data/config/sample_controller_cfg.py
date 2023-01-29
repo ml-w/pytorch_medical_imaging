@@ -15,6 +15,7 @@ class SampleControllerCFG(PMIControllerCFG):
     # * cp_save_dir
     # * cp_load_dir
 
+
 class SampleSegControllerCFG(SampleControllerCFG):
     data_loader_cfg = SampleSegLoaderCFG()
     data_loader_val_cfg = SampleSegLoaderCFG()
@@ -23,3 +24,5 @@ class SampleSegControllerCFG(SampleControllerCFG):
     inferencer_cls = SegmentationInferencer
     data_loader_cls = PMIImageDataLoader
     data_loader_val_cls = PMIImageDataLoader
+    lr_sche = 'ExponentialLR'
+    lr_sche_args = [0.99]

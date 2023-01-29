@@ -52,6 +52,9 @@ class SampleSegSolverCFG(SegmentationSolverCFG):
     debug           : Optional[bool]              = False
     accumulate_grad : Optional[int]               = 1
 
+    lr_sche     : Optional[str]  = 'ExponentialLR'
+    lr_sche_args: Optional[list] = [0.99]
+
 
 class SampleClsLoaderCFG(PMIImageFeaturePairLoaderCFG):
     input_dir  : str = './sample_data/img'
