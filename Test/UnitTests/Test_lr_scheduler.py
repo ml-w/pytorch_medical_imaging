@@ -11,7 +11,7 @@ from mnts.mnts_logger import MNTSLogger
 from torch.optim import lr_scheduler
 from torch.utils.data import DataLoader
 
-from pytorch_med_imaging.pmi_controller import PMIController
+from pytorch_med_imaging.controller.pmi_controller import PMIController
 from pytorch_med_imaging.lr_scheduler import *
 
 class TestLRScheduler(unittest.TestCase):
@@ -49,7 +49,7 @@ class TestLRScheduler(unittest.TestCase):
         self.config['SolverParams']['lr_scheduler_kwargs'] = "{'max_lr':1E-4,'total_steps':50,'cycle_momentum':True}"
         self.config['SolverParams']['num_of_epochs'] = '3'
         self.build_controller()
-        controller = PMIController(self.temp_config.name, a=None)
+        controller = PMIController(self.temp_config.name)
         solver = controller.create_solver(controller.general_run_type)
         loader, loader_val = controller.prepare_loaders()
         solver.set_data_loader(loader, loader_val)
@@ -85,9 +85,10 @@ class TestPMILRScheduler(unittest.TestCase):
 
     def test_step(self):
         PMILRScheduler.set_optimizer(self.optimizer)
+        start_lr = PMILRScheduler.get_last_lr()
         PMILRScheduler.step_scheduler()
-        print(PMILRScheduler.get_last_lr())
-
+        end_lr = PMILRScheduler.get_last_lr()
+        print(f"before: {end_lr}, after: {start_lr}")
 
 class TestExponentialLR(TestPMILRScheduler):
     def setUp(self):
