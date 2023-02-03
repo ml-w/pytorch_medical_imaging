@@ -26,3 +26,4 @@ class SampleSegControllerCFG(SampleControllerCFG):
     data_loader_val_cls = PMIImageDataLoader
     lr_sche = 'ExponentialLR'
     lr_sche_args = [0.99]
+

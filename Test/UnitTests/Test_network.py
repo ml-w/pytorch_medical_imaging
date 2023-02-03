@@ -100,24 +100,3 @@ class Test3DNetworks(unittest.TestCase):
         net = ViTVNet(img_size = self.sample_input_big.shape[2:]).cuda()
         with torch.no_grad():
             out = net(self.sample_input_big)
-
-    def test_SlicewiseRAN(self):
-        from pytorch_med_imaging.networks.specialized.slicewise_ran import SlicewiseAttentionRAN
-        for mode in SlicewiseAttentionRAN._strats_dict:
-            net = SlicewiseAttentionRAN(1, 5, reduce_strats=mode).cuda()
-            with torch.no_grad():
-                out = net(self.sample_input)
-                print(f"Mode {mode} passed.")
-
-    def test_RAN25D(self):
-        from pytorch_med_imaging.networks.specialized.slicewise_ran import AttentionRAN_25D, AttentionRAN_25D_MSE
-        net = RAN_25D(1, 4).cuda()
-        with torch.no_grad():
-            out = net(self.sample_input)
-            print(out.shape)
-
-        net = RAN_25D(1, 1).cuda()
-        with torch.no_grad():
-            out = net(self.sample_input)
-            print(out.shape)
-

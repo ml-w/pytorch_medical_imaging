@@ -660,6 +660,11 @@ class SolverBase(object):
 
         if isinstance(self.lr_sche, str):
             self.set_lr_scheduler(self.lr_sche)
+        elif self.lr_sche is None:
+            self.set_lr_scheduler('ExponentialLR', 0.99)
+        elif isinstance(self.lr_sche, PMILRScheduler):
+            self.lr_sche.set_optimizer(self.optimizer)
+
         return self.optimizer
 
     def decay_optimizer(self, *args):
@@ -697,6 +702,8 @@ class SolverBase(object):
         """
         try:
             lass_lr = self.lr_sche.get_last_lr()[0]
+        except TypeError:
+            lass_lr = self.lr_sche.get_last_lr()
         except AttributeError:
             if isinstance(self.get_optimizer().param_groups, (tuple, list)):
                 lass_lr = self.get_optimizer().param_groups[0]['lr']
@@ -704,8 +711,7 @@ class SolverBase(object):
                 lass_lr = next(self.get_optimizer().param_groups)['lr']
         except Exception as e:
             self._logger.warning("Cannot get learning rate!")
-            if self._logger._log_level == self._logger.DEBUG:
-                self._logger.exception(e)
+            self._logger.exception(e)
             lass_lr = "Error"
         return lass_lr
 

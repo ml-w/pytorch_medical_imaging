@@ -11,6 +11,7 @@ class PMIBaseCFG:
         _no_str (list):
             Modify this list to control what are stringified by :meth:`__str__()`
     """
+    # these attributes are skipped because they can't be copied and there's no need to copy them
     _special_attr = ['inferencer_cls', 'solver_cls']
     def __init__(self, **kwargs):
         # load class attributes as default values of the instance attributes
