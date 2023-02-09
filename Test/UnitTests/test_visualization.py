@@ -3,7 +3,6 @@ import torchio as tio
 import tempfile
 from pathlib import Path
 from pytorch_med_imaging.utils.visualization import *
-from pytorch_med_imaging.utils.visualization_rAIdiologist import *
 from mnts.mnts_logger import MNTSLogger
 
 class Test_visualization(unittest.TestCase):
