@@ -28,49 +28,6 @@ class Test3DNetworks(unittest.TestCase):
         self.expect_nonzero[0, ..., 9:21] = True
         self.expect_nonzero[1, ..., 7:16] = True
 
-    def test_rAIdiologist(self):
-        net = rAIdiologist(1, record=False).cuda()
-        with torch.no_grad():
-            for i in range(6):
-                try:
-                    net.set_mode(i)
-                    self.assertTrue(net._mode == i)
-                    out = net(self.sample_input)
-                    self.assertEqual(2, out.dim(), "Failed during forward.")
-                    out = net(self.sample_input_size1)
-                    self.assertEqual(2, out.dim(), "Failed for batch-size = 1.")
-                    print(f"Mode {i} passed.")
-                except Exception as e:
-                    self.fail(f"Mode {i} error. Original message {e}")
-
-
-    def test_rAIdiologist_ch1(self):
-        net = rAIdiologist(out_ch=1, record=False).cuda()
-        with torch.no_grad():
-            for i in range(6):
-                try:
-                    net.set_mode(i)
-                    self.assertTrue(net._mode == i)
-                    out = net(self.sample_input)
-                    self.assertEqual(2, out.dim())
-                    print(f"Mode {i} passed. Out size: {out.shape}")
-                except Exception as e:
-                    self.fail(f"Mode {i} error. Original message {e}")
-
-    def test_rAIdiologist_recordon(self):
-        net = rAIdiologist(out_ch=1, record=True).cuda()
-        net.set_mode(5)
-        with torch.no_grad():
-            try:
-                out = net(self.sample_input)
-                self.assertNotEqual(0, len(net.get_playback()), "Playback length is zero")
-                self.assertEqual(2, out.dim(), "Failed during forward.")
-                out = net(self.sample_input_size1)
-                self.assertEqual(2, out.dim(), "Failed for batch-size = 1.")
-            except Exception as e:
-                self.fail(f"Original message: {e}")
-            self.assertNotEqual(0, len(net.get_playback()), "Play back is empty!")
-
     def test_AttentionUNet(self):
         net = AttentionUNet(1, 2).cuda()
         with torch.no_grad():

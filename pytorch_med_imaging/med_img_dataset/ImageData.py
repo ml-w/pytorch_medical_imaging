@@ -290,7 +290,7 @@ class ImageDataSet(PMIDataBase):
         r"""Filter the `file_dirs` using the specified attributions. Used in `parse_root_dir`."""
         # Filter by filelist
         #-------------------
-        target_idlist = self._filterargs['idlist'] # required id list from arguments
+        target_idlist = self._filterargs.get('idlist', None) or "" # required id list from arguments
         if (self._filtermode == 'idlist' or self._filtermode == 'both') and \
                 target_idlist not in ("", None) and self._id_globber is not None:
             self._logger.info("Globbing ID with globber: " + str(self._id_globber) + " ...")
