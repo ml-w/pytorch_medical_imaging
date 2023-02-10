@@ -31,7 +31,7 @@ class PMIControllerCFG(PMIBaseCFG):
             The cfg instance to create the solver
         [Required] data_loader_cls (type):
             The class of the data_loader. This is used to create the data loader instances with ``data_loader_cfg`` and
-            ``data_loader_val_cfg``.
+            ``data_loader_val_cfg`` during DDP.
         [Required] solver_cls (type):
             The class of the solver. This is used to create the solver instance with ``solver_cfg``.
         [Required] output_dir (str or Path):
@@ -83,6 +83,11 @@ class PMIControllerCFG(PMIBaseCFG):
         Don't confuse the `id_list` in this CFG with that in :class:`SolverBase`, the later is more flexible and can
         accept various specification formats
 
+    .. tips::
+        If you would like to use a different data loader CFG in training and inference mode, define the private tag
+        `_data_loader_cfg` and `_data_loader_inf_cfg` instead of `data_loader_cfg`. This would the property to return
+        a data_loader_cfg based on the runtime :attr:`run_mode`.
+
     """
     fold_code                  : str            = None
     run_mode                   : str            = 'training'
@@ -105,14 +110,40 @@ class PMIControllerCFG(PMIBaseCFG):
     verbose : Optional[bool] = True
 
     # Configurations
-    data_loader_cfg    : PMIDataLoaderBaseCFG           = None
-    data_loader_val_cfg: Optional[PMIDataLoaderBaseCFG] = None
-    solver_cfg         : SolverBaseCFG                  = None
-    data_loader_cls    : type = None
-    data_loader_val_cls: type = None
-    solver_cls         : type = None
-    inferencer_cls     : type = None
+    _data_loader_cfg    : PMIDataLoaderBaseCFG           = None
+    _data_loader_inf_cfg: Optional[PMIDataLoaderBaseCFG] = None
+    data_loader_val_cfg : Optional[PMIDataLoaderBaseCFG] = None
+    solver_cfg         : SolverBaseCFG = None
+    data_loader_cls    : type          = None
+    data_loader_val_cls: type          = None
+    solver_cls         : type          = None
+    inferencer_cls     : type          = None
 
+    @property
+    def data_loader_cfg(self):
+        r"""This property allows you to have a different solver CFG in training and inference mode.
+        """
+        if self.solver_cfg.run_mode == 'training':
+            return self._data_loader_cfg
+        else:
+            return self._data_loader_inf_cfg or self._data_loader_cfg
+
+    @data_loader_cfg.setter
+    def data_loader_cfg(self, x):
+        if self.solver_cfg.run_mode == 'training':
+            self._data_loader_cfg = x
+        else:
+            self._data_loader_inf_cfg = x
+
+    @property
+    def data_loader_inf_cfg(self):
+        r"""For completeness."""
+        return self._data_loader_inf_cfg
+
+    @data_loader_inf_cfg.setter
+    def data_loader_inf_cfg(self, x):
+        r"""For completeness."""
+        self._data_loader_incf_cfg = x
 
 class PMIController(object):
     r"""The controller to initiate training or inference. Based on the input cfg, this class will create a solver or

@@ -19,10 +19,10 @@ class PMIBaseCFG:
         cls_dict = { attr: getattr(cls, attr) for attr in dir(cls) }
         self._no_str = [] # the keys of this class will not be stringified by __str__()
         for key, value in cls_dict.items():
-            if key in cls._special_attr:
+            if key in cls._special_attr or isinstance(value, property):
                 continue
 
-            if not key[0] == '_':
+            if key.find('__') != 0:
                 try:
                     setattr(self, key, copy.deepcopy(value, {}))
                 except:
