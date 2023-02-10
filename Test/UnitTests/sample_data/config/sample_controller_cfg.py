@@ -17,7 +17,7 @@ class SampleControllerCFG(PMIControllerCFG):
 
 
 class SampleSegControllerCFG(SampleControllerCFG):
-    data_loader_cfg = SampleSegLoaderCFG()
+    _data_loader_cfg = SampleSegLoaderCFG()
     data_loader_val_cfg = SampleSegLoaderCFG()
     solver_cfg = SampleSegSolverCFG()
     solver_cls = SegmentationSolver

@@ -123,7 +123,7 @@ class PMIControllerCFG(PMIBaseCFG):
     def data_loader_cfg(self):
         r"""This property allows you to have a different solver CFG in training and inference mode.
         """
-        if self.solver_cfg.run_mode == 'training':
+        if self.run_mode == 'training':
             return self._data_loader_cfg
         else:
             return self._data_loader_inf_cfg or self._data_loader_cfg
@@ -143,7 +143,7 @@ class PMIControllerCFG(PMIBaseCFG):
     @data_loader_inf_cfg.setter
     def data_loader_inf_cfg(self, x):
         r"""For completeness."""
-        self._data_loader_incf_cfg = x
+        self._data_loader_inf_cfg = x
 
 class PMIController(object):
     r"""The controller to initiate training or inference. Based on the input cfg, this class will create a solver or

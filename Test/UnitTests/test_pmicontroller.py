@@ -138,6 +138,11 @@ class TestController(unittest.TestCase):
         torch.multiprocessing.spawn(self.__class__.ddp_helper, args=(world_size, copy.deepcopy(self.cfg)),
                                     nprocs=world_size)
 
+    def test_s8_inf_cfg(self):
+        self.cfg.run_mode = 'inference'
+        self.cfg.data_loader_inf_cfg = 'dummy'
+        self.assertEquals(self.cfg.data_loader_cfg, self.cfg.data_loader_inf_cfg)
+
     @classmethod
     def ddp_helper(cls, rank, world_size, cfg):
         os.environ["MASTER_ADDR"] = "localhost"
@@ -147,6 +152,7 @@ class TestController(unittest.TestCase):
         controller.train()
         dist.barrier()
         dist.destroy_process_group()
+
 
 class TestSegController(TestController):
     cls_cfg = SampleSegControllerCFG()
