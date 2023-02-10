@@ -99,7 +99,6 @@ class SegmentationInferencer(InferencerBase):
         last_batch_dim = 0
         # compute size to pass to piece_patches
         in_image_data = self.pmi_data_loader.data['input']
-        self.solverparams_inf_samples_per_vol = None
 
         with torch.no_grad():
             self.net = self.net.eval()
@@ -119,7 +118,7 @@ class SegmentationInferencer(InferencerBase):
 
                 # create new sampling queue based on inf_sample_per_vol
                 _queue, _aggregator = self.pmi_data_loader.create_aggregation_queue(
-                    subject, self.solverparams_inf_samples_per_vol)
+                    subject, force_samples_per_vol=self.solverparams_inf_samples_per_vol)
 
                 dataloader = DataLoader(_queue, batch_size=self._data_loader.batch_size, num_workers=0)
                 ndim = subject.get_first_image()[tio.DATA].dim()  # Assume channel dim always exist even if only has 1 channel

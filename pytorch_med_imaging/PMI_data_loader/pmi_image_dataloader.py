@@ -350,7 +350,7 @@ class PMIImageDataLoader(PMIDataLoaderBase):
         else:
             return queue
 
-    def create_aggregation_queue(self, subject: torchio.SubjectsDataset, *args, **kwargs):
+    def create_aggregation_queue(self, subject: torchio.SubjectsDataset, *args, force_samples_per_vol=None, **kwargs):
         r"""Note that this function should only be invoked during inference. Typically, you don't need the
         aggregator anywhere else."""
         required_att = ('sampler', 'data', 'queue')
@@ -362,8 +362,8 @@ class PMIImageDataLoader(PMIDataLoaderBase):
         if isinstance(self.sampler, tio.GridSampler):
             self.sampler.set_subject(subject)
         elif isinstance(self.sampler, tio.WeightedSampler):
-            _spv = self.inf_samples_per_vol if self.inf_samples_per_vol is not None \
-                else self.queue.samples_per_volume
+            self.inf_samples_per_vol = force_samples_per_vol or self.inf_samples_per_vol
+            _spv = self.inf_samples_per_vol or self.queue.samples_per_volume
             self._logger.info(f"Setting the number of patches to sample to: "
                               f"{_spv}")
             self.sampler.set_subject(subject, _spv)
@@ -379,6 +379,7 @@ class PMIImageDataLoader(PMIDataLoaderBase):
         self.queue.subjects_dataset = subject
         self.queue._subjects_iterable = None
         self.queue.sampler = self.sampler
+        self.queue.num_workers = 0
         self.queue._initialize_subjects_iterable()
         aggregator = tio.GridAggregator(self.sampler, 'average')
         return self.queue, aggregator
