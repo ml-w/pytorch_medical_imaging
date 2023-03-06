@@ -115,7 +115,7 @@ class PMIControllerCFG(PMIBaseCFG):
     data_loader_val_cfg : Optional[PMIDataLoaderBaseCFG] = None
     solver_cfg         : SolverBaseCFG = None
     data_loader_cls    : type          = None
-    data_loader_val_cls: type          = None
+    _data_loader_val_cls: type          = None
     solver_cls         : type          = None
     inferencer_cls     : type          = None
 
@@ -130,6 +130,7 @@ class PMIControllerCFG(PMIBaseCFG):
 
     @data_loader_cfg.setter
     def data_loader_cfg(self, x):
+        r"""This will make sure deep copy works."""
         if self.solver_cfg.run_mode == 'training':
             self._data_loader_cfg = x
         else:
@@ -144,6 +145,17 @@ class PMIControllerCFG(PMIBaseCFG):
     def data_loader_inf_cfg(self, x):
         r"""For completeness."""
         self._data_loader_inf_cfg = x
+
+    @property
+    def data_loader_val_cls(self):
+        r"""If validation cls was not set, use the data_loader_cls instead."""
+        return self._data_loader_val_cls or self.data_loader_cls
+
+    @data_loader_val_cls.setter
+    def data_loader_val_cls(self, x):
+        r"""For completeness"""
+        self._data_loader_val_cls = x
+
 
 class PMIController(object):
     r"""The controller to initiate training or inference. Based on the input cfg, this class will create a solver or
@@ -167,7 +179,8 @@ class PMIController(object):
                 log_fname = self.solver_cfg.net.translate(str.maketrans('(),','[]-'," "))
             else:
                 log_fname = 'default'
-            log_dir = log_dir.joinpath(log_fname)
+            if not log_dir.suffix == '.log':
+                log_dir = log_dir.joinpath(log_fname)
             existing_logs_indices = [int(re.search(f"{log_fname}-(?P<num_log>\d+)\.log", l.name))
                                      for l in log_dir.parent.glob(f'{log_fname}-*.log')]
             if len(existing_logs_indices) > 0:
@@ -220,7 +233,6 @@ class PMIController(object):
             self.run_mode = True
         else:
             self.run_mode = False
-
 
     def check_flags_sanity(self):
         _check = [
@@ -440,6 +452,8 @@ class PMIController(object):
         for  k, v in new_value_dict.items():
             if hasattr(target_cfg, k) and not v is None: # Dont override if new value is ``None``
                 self._logger.debug(f"Overriding tag {k}: {getattr(target_cfg, k)} -> {v}")
+            else:
+                self._logger.debug(f"Adding new tag {k}: {v}")
             setattr(target_cfg, k, v)
 
     @property
