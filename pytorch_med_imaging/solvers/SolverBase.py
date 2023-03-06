@@ -228,6 +228,7 @@ class SolverBase(object):
 
         # internal attributes
         self._tb_plotter = None
+        self.current_epoch = 0
 
         # external_att
         self.plotter_dict      = {}
