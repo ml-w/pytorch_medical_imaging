@@ -220,7 +220,7 @@ class PMIController(object):
         # Loading basic inputs
         if not config_file is None:
             cls = config_file
-            cls_dict = { attr: getattr(cls, attr) for attr in dir(cls) }
+            cls_dict = { attr: getattr(cls, attr) for attr in dir(cls) if not getattr(cls, attr) is None}
             self.__dict__.update(cls_dict)
             self.__class__.cls_cfg = cls
             self.cfg = config_file
