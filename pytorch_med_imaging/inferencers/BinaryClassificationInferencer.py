@@ -2,7 +2,7 @@ from .ClassificationInferencer import ClassificationInferencer
 from ..med_img_dataset import DataLabel
 from torch.utils.data import DataLoader
 from tqdm import *
-from sklearn.metrics import confusion_matrix
+from sklearn.metrics import confusion_matrix, roc_auc_score
 from typing import Union, Optional, Iterable
 import os
 import torch
@@ -92,9 +92,12 @@ class BinaryClassificationInferencer(ClassificationInferencer):
             return
 
         subdf = self._dl._data_table.copy()
+        auc = 0
         for i in range(self._num_of_questions):
             _subdf = subdf[['%s_%s'%(a, i) for a in ['Prob_Class', 'Decision', 'Truth']]]
             subdf['perf_%s'%i] = _subdf[[f'Decision_{i}', f'Truth_{i}']].apply(BinaryClassificationInferencer._get_perf, axis=1)
+            auc += roc_auc_score(_subdf[f'Truth_{i}'], _subdf[f'Prob_Class_{i}'])
+        auc /= self._num_of_questions
 
         # compute sensitivity, specificity ...etc
         perf = pd.DataFrame()
@@ -112,6 +115,8 @@ class BinaryClassificationInferencer(ClassificationInferencer):
             _row = pd.Series(BinaryClassificationInferencer._get_sum_perf([_TP, _FP, _TN, _FN]),
                              name=f"Class {i}")
             perf = perf.append(_row)
+
+        # Compute overall performance
         row = pd.Series(BinaryClassificationInferencer._get_sum_perf([TP, FP, TN, FN]), name='Overall')
         perf = perf.append(row)
 
@@ -135,9 +140,10 @@ class BinaryClassificationInferencer(ClassificationInferencer):
             self._logger.info('Summary: \n' + perf.to_string())
 
         # Print for guild data capturing
-        self._logger.info("Sensitivity: %.3f Specificity: %.3f NPV: %.3f PPV: %.3f OverallACC: %.3f"%(
+        self._logger.info("Sensitivity: %.3f Specificity: %.3f NPV: %.3f PPV: %.3f OverallACC: %.3f OverallAUC: %.3f"%(
             perf.loc['Overall']['Sensitivity'], perf.loc['Overall']['Specificity'],
-            perf.loc['Overall']['NPV'], perf.loc['Overall']['PPV'], perf.loc['Overall']['ACC']
+            perf.loc['Overall']['NPV'], perf.loc['Overall']['PPV'], perf.loc['Overall']['ACC'],
+            auc
         ))
     @staticmethod
     def _get_perf(s):
