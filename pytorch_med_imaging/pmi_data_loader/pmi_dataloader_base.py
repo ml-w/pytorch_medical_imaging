@@ -348,6 +348,8 @@ class PMIDataLoaderBase(object):
             msg = f"Expect all data to have same unique IDs, but some are not: \n"
             msg += _table.to_string()
             raise IndexError(msg)
+        elif len(ids) == 0:
+            raise IndexError("Cannot glob any IDs using the provided globber.")
 
         subjects = [tio.Subject(**{k: v for k, v in zip(data_exclude_none.keys(), row)})
                     for row in zip(*data_exclude_none.values())]
