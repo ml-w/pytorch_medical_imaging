@@ -11,6 +11,30 @@ import random
 __all__ = ['PMIDistributedDataWrapper']
 
 class PMIDistributedDataWrapper:
+    r"""Wraps a PyTorch DataLoader with functionality to distribute data across multiple processes using Distributed
+    Data Parallel (DDP).
+
+    Args:
+        data_loader (PMIDataLoaderBase):
+            A PMIDataLoader to be distributed.
+        num_replicas (Optional, int):
+            The number of processes to distribute the data across. Defaults to None.
+        rank (Optional, int):
+            The rank of the current process. Defaults to None.
+
+    Attributes:
+        data_loader (PMIDataLoaderBase):
+            The wrapped PyTorch DataLoader.
+        num_replicas (Optional, int):
+            The number of processes to distribute the data across.
+        rank (Optional, int):
+            The rank of the current process.
+
+    .. note::
+        This wrapper replace the `_pack_data_into_subjects` function to shuffle the data in all subprocesses using same
+        random seed (shared through `broadcast`). However, this means that after each epoch, the `torchio` queue needs
+        to be rebuilt. This has the limitation of adding computational time.
+    """
     def __init__(self,
                  data_loader: PMIDataLoaderBase,
                  num_replicas: Optional[int] = None,
