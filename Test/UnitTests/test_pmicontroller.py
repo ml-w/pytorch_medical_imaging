@@ -135,6 +135,7 @@ class TestController(unittest.TestCase):
 
     def test_s7_ddptrain(self):
         world_size = torch.cuda.device_count()
+        self._logger.info(f"Testing with world size: {world_size}")
         torch.multiprocessing.spawn(self.__class__.ddp_helper, args=(world_size, copy.deepcopy(self.cfg)),
                                     nprocs=world_size)
 
