@@ -1,6 +1,8 @@
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
+from torch.types import *
+from typing import Optional, Iterable
 from .StandardLayers import PermuteTensor, _activation
 
 __all__ = ['InvertedConv3d', 'Conv3d', 'DoubleConv3d', 'ConvTrans3d', 'ResidualBlock3d',
@@ -27,6 +29,54 @@ class InvertedConv3d(nn.Module):
         return self.conv(x)
 
 
+class Mask3d(nn.Module):
+    r"""This class serves the sole purpose of masking the input 3d tensor that is zero padded along certain axis. This
+    module was implemented to prevent propagation of bias from the padded slices to the slices with contents. Typical
+    usage is to attach this mask after each operation with a global bias (e.g., Conv3d, BatchNorm3d, LayerNorm...etc).
+    This class also assumes that the zero padding was always done at the tail.
+
+    .. note::
+        This class has no learnable parameters and will only mask the input tensor `x` based on the other parameters.
+
+    """
+    def __init__(self):
+        super(Mask3d, self).__init__()
+
+    def forward(self, x: torch.Tensor, seq_length: Optional[Tuple[int]] = None, axis: Optional[int]=-1) -> torch.Tensor:
+        r"""Performs a masked 3D convolution on the input tensor `x`, using the specified convolution kernel.
+
+        Args:
+            x (torch.Tensor):
+                The input tensor for the convolution operation, of shape (B x C x H x W x Z).
+            seq_length (Optional[Tuple[int]]):
+                A tuple of integers indicating the sequence length of the input tensor along the specified `axis`.
+                If `seq_length` is not None, a mask will be applied to the convolution output, such that the convolution
+                operation is not applied to certain elements of the input tensor. Default is `None`.
+            axis (int):
+                The axis along which the sequence elements are located in the input tensor. Default is -1, which is the
+                last dimension
+
+        Returns:
+            torch.Tensor
+        """
+        # If seq_legnth is `None`, do nothing.
+        if seq_length is None:
+            return x
+        else:
+            # check length
+            if not x.shape[0] == len(seq_length):
+                raise ValueError(f"Batch size {x.shape} and the length of seq_length ({seq_length}) doesn't match.")
+
+            # create a mask that is applied after the convolution
+            axis = axis % x.dim() # handle negative values
+            mask_size = [s if i in (0, axis) else 1 for i, s in enumerate(x.shape)]
+            mask = torch.ones(mask_size, dtype=bool).to(x.device).expand_as(x)
+            for i, l in enumerate(seq_length):
+                ori_len = mask[i].shape[axis-1]
+                mask[i].narrow(axis - 1, l, ori_len - l).fill_(0) # Mask
+            return x * mask
+
+
 class Conv3d(nn.Module):
     def __init__(self, in_ch, out_ch, kern_size=3, stride=1, padding=1, bias=True, activation='relu'):
         super(Conv3d, self).__init__()
@@ -47,7 +97,37 @@ class Conv3d(nn.Module):
 
 
 class DoubleConv3d(nn.Module):
-    def __init__(self, in_ch, out_ch, kern_size=3, stride=1, padding=1, bias=True, dropout=0, activation='relu'):
+    r"""A 3D convolutional neural network block consisting of two consecutive convolutional layers followed by a 3D
+    dropout layer.
+
+    Args:
+        in_ch (int):
+            The number of input channels to the first convolutional layer.
+        out_ch (int):
+            The number of output channels from the second convolutional layer.
+        kern_size (Union[int, Tuple[int, int, int]]):
+            The size of the convolutional kernel(s) used in both convolutional layers. If an integer is specified, a
+            cubic kernel of that size is used. Default is 3.
+        stride (Union[int, Tuple[int, int, int]]):
+            The stride(s) of the convolutional kernel(s) used in the first convolutional layer. If an integer is
+            specified, the same stride is used in all dimensions. Default is 1.
+        padding (Union[int, Tuple[int, int, int]]):
+            The padding(s) for the convolutional kernel(s) used in both convolutional layers. If an integer is
+            specified, the same padding is used in all dimensions. Default is 1.
+        bias (bool):
+            Whether or not to include a bias term in the convolutional layers.
+            Default: True.
+        dropout (float):
+            The dropout probability for the 3D dropout layer. If zero, no dropout is applied. Default is 0.
+        activation (str):
+            The activation function to use after each convolutional layer. Must be one of the following: {'relu',
+            'prelu', 'leaky_relu', 'elu', 'tanh'}. Default is 'relu'.
+        mask (bool):
+            Whether to use a :class:`MaskedConv3d` layer instead of a regular Conv3d layer for the convolutional layers.
+            If true, the convolutional layers will perform masked convolutions. Default is `False`.
+    """
+    def __init__(self, in_ch, out_ch, kern_size=3, stride=1, padding=1, bias=True, dropout=0, activation='relu',
+                 mask=False):
         super(DoubleConv3d, self).__init__()
         self.conv = nn.Sequential(
             Conv3d(in_ch, out_ch, kern_size=kern_size, stride=stride, padding=padding, bias=bias, activation=activation),

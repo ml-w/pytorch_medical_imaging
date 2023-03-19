@@ -80,3 +80,26 @@ class AttentionModule_25D(nn.Module):
     def get_mask(self):
         return self.saved_mask
 
+class SoftMaskbranch_25D(nn.Module):
+    def __init__(self, in_ch, out_ch, r = 1, stage=0):
+        super(SoftMaskbranch_25D, self).__init__()
+
+        self._in_ch = in_ch
+        self._out_ch = out_ch
+        self._stage = stage
+
+        if self.stage == 0:
+            skipconnection = 2
+        elif self.stage == 1:
+            skipconnection = 1
+        else:
+            skipconnection = 0
+
+        for i in range(skipconnection):
+            self.add_module(f'skip{i}', ResidualBlock3d(out_ch, out_ch))
+            self.add_module(f'down{i}', nn.Sequential(*(
+                [nn.MaxPool3d(kernel_size=[3, 3, 1], stride=[2, 2, 1], padding=[1, 1, 0])] +
+                [ResidualBlock3d(in_ch, out_ch) for i in range(r * (i + 1))]
+            )))
+
+
