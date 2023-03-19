@@ -86,7 +86,7 @@ def draw_grid(image, segmentation, ground_truth=None,
 
 
     if nrow is None:
-        nrow = np.int(np.ceil(np.sqrt(len(segmentation))))
+        nrow = np.ceil(np.sqrt(len(segmentation))).astype('int')
 
 
     if not crop is None:
@@ -398,7 +398,7 @@ def draw_grid_contour(im_grid, seg, crop=None, nrow=None, offset=0, background=0
 
         # compute number of image per row if now provided
         if nrow is None:
-            nrow = np.int(np.ceil(np.sqrt(len(ss))))
+            nrow = np.ceil(np.sqrt(len(ss))).astype('int')
 
 
         # Crop the image along the x, y direction, ignore z direction.
