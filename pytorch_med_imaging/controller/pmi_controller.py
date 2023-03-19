@@ -56,6 +56,8 @@ class PMIControllerCFG(PMIBaseCFG):
         id_list_val (PathLike, Optional):
             Specify the path to the ID list '.txt' file that specify the validation data. Note that this does
             accept '.ini' file.
+        compile_net (bool, Optional):
+            If `True`, the network will be compiled using `torch.compile`. Support only for torch version >= 2.0
         debug_mode (bool, Optional):
             This option will be passed to solver and data loader CFG. Default to ``False``.
         debug_validation (bool, Optional):
@@ -101,6 +103,7 @@ class PMIControllerCFG(PMIBaseCFG):
     inference_on_training_set  : Optional[bool] = False # this changes the data loader IDs in the inference mode
     inference_on_validation_set: Optional[bool] = False
     inference_all_checkpoints  : Optional[bool] = False
+    compile_net                : Optional[bool] = False # If true, `torch.compile` will be applied.
     plot_tb                    : Optional[bool] = True # if false no plots
 
 
@@ -430,6 +433,12 @@ class PMIController(object):
         self.solver_cfg.cp_save_dir = self.cp_save_dir
         self.solver_cfg.cp_load_dir = self.cp_load_dir
 
+        # compile net
+        if self.compile_net:
+            if int(torch.__version__.split('.')[0]) < 2:
+                self._logger.warning("Compile net only supported for torch version >= 2.0.0.")
+            else:
+                self.solver_cfg.net = torch.compile(self.solver_cfg.net)
 
     def _override_subcfg(self,
                          new_value_dict: dict,
