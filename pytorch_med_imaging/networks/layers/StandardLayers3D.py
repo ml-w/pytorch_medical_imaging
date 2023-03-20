@@ -3,6 +3,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 from torch.types import *
 from typing import Optional, Iterable, Tuple
+from .dummy_layers import SupportMask3d
 from .StandardLayers import PermuteTensor, _activation
 
 __all__ = ['InvertedConv3d', 'Conv3d', 'DoubleConv3d', 'ConvTrans3d', 'ResidualBlock3d',
@@ -16,20 +17,26 @@ activation_funcs = {
     'tanh': nn.Tanh,
 }
 
-class InvertedConv3d(nn.Module):
-    def __init__(self, in_ch, out_ch, kern_size=3, stride=1, padding=1, bias=True):
+
+class InvertedConv3d(nn.Module, SupportMask3d):
+    def __init__(self, in_ch, out_ch, kern_size=3, stride=1, padding=1, bias=True, mask=False):
         super(InvertedConv3d, self).__init__()
-        self.conv = nn.Sequential(
+        self._mask = mask
+        seq = nn.Sequential if not mask else MaskedSequential3d
+        self.conv = seq(
             nn.BatchNorm3d(in_ch),
             nn.ReLU(inplace=True),
             nn.Conv3d(in_ch, out_ch, kern_size, stride, padding=padding, bias=bias)
         )
 
-    def forward(self, x):
-        return self.conv(x)
+    def forward(self, x, seq_length=None, axis=-1):
+        if not self._mask:
+            return self.conv(x)
+        else:
+            return self.conv(x, seq_length=seq_length, axis=axis)
 
 
-class MaskedSequential3d(nn.Sequential):
+class MaskedSequential3d(nn.Sequential, SupportMask3d):
     r"""
     A PyTorch module that applies a mask to the output of each convolutional or batch normalization layer in a sequence.
 
@@ -90,8 +97,10 @@ class MaskedSequential3d(nn.Sequential):
                                    nn.BatchNorm3d)):
                 input = module(input)
                 input = self._mask_input(input, seq_length=seq_length, axis=axis) # apply mask right after these key operators
-            elif isinstance(module, MaskedSequential3d):
+            elif isinstance(module, SupportMask3d):
                 input = module(input, seq_length=seq_length, axis=axis) # support for nested sequence
+            else:
+                input = module(input)
         return input
 
     @staticmethod
@@ -130,7 +139,7 @@ class MaskedSequential3d(nn.Sequential):
             return x * mask
 
 
-class Conv3d(nn.Module):
+class Conv3d(nn.Module, SupportMask3d):
     def __init__(self, in_ch, out_ch, kern_size=3, stride=1, padding=1, bias=True, activation='relu', mask=False):
         super(Conv3d, self).__init__()
 
@@ -156,7 +165,7 @@ class Conv3d(nn.Module):
             return self.conv(x, seq_length=seq_length, axis=axis)
 
 
-class DoubleConv3d(nn.Module):
+class DoubleConv3d(nn.Module, SupportMask3d):
     r"""A 3D convolutional neural network block consisting of two consecutive convolutional layers followed by a 3D
     dropout layer.
 
@@ -225,36 +234,43 @@ class ConvTrans3d(nn.Module):
         return self.conv(x)
 
 
-class ResidualBlock3d(nn.Module):
-    def __init__(self, in_ch, out_ch, p=0.2):
+class ResidualBlock3d(nn.Module, SupportMask3d):
+    def __init__(self, in_ch, out_ch, p=0.2, mask=False):
         super(ResidualBlock3d, self).__init__()
         self._in_ch = in_ch
         self._out_ch = out_ch
-
-        self.in_conv = nn.Sequential(
-            Conv3d(in_ch, out_ch // 4, 1, 1, bias=False, padding=0),
-            Conv3d(out_ch // 4, out_ch // 4, kern_size=3, bias=False, padding=1)
+        self._mask = mask
+        seq = nn.Sequential if not mask else MaskedSequential3d
+        self.in_conv = seq(
+            Conv3d(in_ch, out_ch // 4, 1, 1, bias=False, padding=0, mask=mask),
+            Conv3d(out_ch // 4, out_ch // 4, kern_size=3, bias=False, padding=1, mask=mask),
+            nn.Dropout3d(p=p)
         )
-        self.in_bn = nn.BatchNorm3d(in_ch)
+        self.in_bn = seq(
+            nn.BatchNorm3d(in_ch),
+            nn.ReLU(inplace=True)
+        )
+        self.out_conv = seq(nn.Conv3d(out_ch // 4, out_ch, 1, 1, bias=False, padding=0))
+        self.pre_add_conv = seq(nn.Conv3d(in_ch, out_ch, kernel_size=1))
 
-        self.out_conv = nn.Conv3d(out_ch // 4, out_ch, 1, 1, bias=False, padding=0)
-        self.pre_add_conv = nn.Conv3d(in_ch, out_ch, kernel_size=1)
-        self.dropout = nn.Dropout3d(p=p)
-
-    def forward(self, x):
+    def forward(self, x, seq_length=None, axis=-1):
         while x.dim() < 5:
             x = x.unsqueeze(0)
         res = x
-        pre_out = F.relu(self.in_bn(x), inplace=True)
-        out = self.dropout(self.in_conv(pre_out))
-        out = self.out_conv(out)
-
-        if (self._in_ch != self._out_ch):
-            res = self.pre_add_conv(pre_out)
-
+        if not self._mask:
+            pre_out = self.in_bn(x)
+            out = self.in_conv(pre_out)
+            out = self.out_conv(out)
+            if (self._in_ch != self._out_ch):
+                res = self.pre_add_conv(pre_out)
+        else:
+            pre_out = self.in_bn(x, seq_length=seq_length, axis=axis)
+            out = self.in_conv(pre_out, seq_length=seq_length, axis=axis)
+            out = self.out_conv(out, seq_length=seq_length, axis=axis)
+            if (self._in_ch != self._out_ch):
+                res = self.pre_add_conv(pre_out, seq_length=seq_length, axis=axis)
         out += res
         return out
-
 
 class MultiConvResBlock3d(nn.Module):
     def __init__(self, in_ch, out_ch, num_of_convs, kern_size=5, padding=2, drop_out=0, bias=True, activation='relu'):
