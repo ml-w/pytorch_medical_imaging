@@ -2,7 +2,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from torch.types import *
-from typing import Optional, Iterable
+from typing import Optional, Iterable, Tuple
 from .StandardLayers import PermuteTensor, _activation
 
 __all__ = ['InvertedConv3d', 'Conv3d', 'DoubleConv3d', 'ConvTrans3d', 'ResidualBlock3d',
@@ -29,20 +29,73 @@ class InvertedConv3d(nn.Module):
         return self.conv(x)
 
 
-class Mask3d(nn.Module):
-    r"""This class serves the sole purpose of masking the input 3d tensor that is zero padded along certain axis. This
-    module was implemented to prevent propagation of bias from the padded slices to the slices with contents. Typical
-    usage is to attach this mask after each operation with a global bias (e.g., Conv3d, BatchNorm3d, LayerNorm...etc).
-    This class also assumes that the zero padding was always done at the tail.
+class MaskedSequential3d(nn.Sequential):
+    r"""
+    A PyTorch module that applies a mask to the output of each convolutional or batch normalization layer in a sequence.
 
-    .. note::
-        This class has no learnable parameters and will only mask the input tensor `x` based on the other parameters.
+    This class is designed to be used with 3D convolutional neural networks that have been zero-padded along a certain
+    axis. The purpose of the masking is to prevent the bias from the padded slices from propagating to the non-padded
+    slices during a convolution operation. This module was implemented to prevent propagation of bias from the padded
+    slices to the slices with contents. Typically bias inducing modules are tracked (e.g., Conv3d, BatchNorm3d).
+    This class also assumes that the zero padding was always done at the tail. You must calculate the `seq_length`
+    carefully to avoid errors.
+
+    The `MaskedSequential` class applies the :func:`_mask_input` after each convolutional or batch normalization layer
+    in the sequence. This ensures that the masking is applied to the output of each of these layers before it is passed
+    to the next layer in the sequence.
+
+    Args:
+        layers (List[nn.Module]):
+            A list of PyTorch modules to be sequentially stacked together.
+
+    Raises:
+        ValueError: If the `seq_length` parameter is not compatible with the input tensor.
+
+    Note:
+        * This class assumes that the padding has been applied at the end of the tensor along the specified axis.
+        * The `Mask3d` module requires the specification of `seq_length` and `axis` hyperparameters. Choosing the
+          appropriate
+        * values for these hyperparameters can be challenging, especially for complex architectures or datasets.
+        * I had ChatGPT wrote this docstring for me. Tell me how doomed we are.
 
     """
-    def __init__(self):
-        super(Mask3d, self).__init__()
+    def __init__(self, *args, **kwargs):
+        super(MaskedSequential3d, self).__init__(*args, **kwargs)
 
-    def forward(self, x: torch.Tensor, seq_length: Optional[Tuple[int]] = None, axis: Optional[int]=-1) -> torch.Tensor:
+    def forward(self, input: torch.Tensor, seq_length: Optional[Tuple[int]]=None, axis:Optional[int]=-1):
+        r"""
+        Applies the `Mask3d` module after each convolutional or batch normalization layer in the sequence.
+
+        Args:
+            input (torch.Tensor):
+                The input tensor for the sequence of modules in the sequence.
+            seq_length (Optional[Tuple[int]]):
+                A tuple of integers indicating the sequence length of the input tensor along the specified `axis`.
+                If `seq_length` is not None, a mask will be applied to the convolution output, such that the convolution
+                operation is not applied to certain elements of the input tensor. Default is `None`.
+            axis (int):
+                The axis along which the sequence elements are located in the input tensor. Default is -1, which is the
+                last dimension
+
+        Returns:
+            torch.Tensor:
+                The output tensor from the sequence of modules in the sequence, with a mask applied to the output
+                of each convolutional or batch normalization layer.
+
+        Raises:
+            ValueError: If the `seq_length` parameter is not compatible with the input tensor.
+        """
+        for module in self:
+            if isinstance(module, (nn.Conv3d,
+                                   nn.BatchNorm3d)):
+                input = module(input)
+                input = self._mask_input(input, seq_length=seq_length, axis=axis) # apply mask right after these key operators
+            elif isinstance(module, MaskedSequential3d):
+                input = module(input, seq_length=seq_length, axis=axis) # support for nested sequence
+        return input
+
+    @staticmethod
+    def _mask_input(x: torch.Tensor, seq_length: Optional[Tuple[int]] = None, axis: Optional[int]=-1) -> torch.Tensor:
         r"""Performs a masked 3D convolution on the input tensor `x`, using the specified convolution kernel.
 
         Args:
@@ -70,7 +123,7 @@ class Mask3d(nn.Module):
             # create a mask that is applied after the convolution
             axis = axis % x.dim() # handle negative values
             mask_size = [s if i in (0, axis) else 1 for i, s in enumerate(x.shape)]
-            mask = torch.ones(mask_size, dtype=bool).to(x.device).expand_as(x)
+            mask = torch.ones(mask_size, dtype=bool, requires_grad=False).to(x.device).expand_as(x)
             for i, l in enumerate(seq_length):
                 ori_len = mask[i].shape[axis-1]
                 mask[i].narrow(axis - 1, l, ori_len - l).fill_(0) # Mask
@@ -78,22 +131,29 @@ class Mask3d(nn.Module):
 
 
 class Conv3d(nn.Module):
-    def __init__(self, in_ch, out_ch, kern_size=3, stride=1, padding=1, bias=True, activation='relu'):
+    def __init__(self, in_ch, out_ch, kern_size=3, stride=1, padding=1, bias=True, activation='relu', mask=False):
         super(Conv3d, self).__init__()
 
         if not activation in activation_funcs:
             raise AttributeError(f"Activation should be one of [{'|'.join(activation_funcs.keys())}], "
                                  f"got {activation} instead")
         activation = activation_funcs.get(activation)
+        self._mask = mask
 
-        self.conv = nn.Sequential(
+        seq = nn.Sequential if not mask else MaskedSequential3d
+        self.conv = seq(
             nn.Conv3d(in_ch, out_ch, kern_size, stride, padding=padding, bias=bias),
             nn.BatchNorm3d(out_ch),
             activation()
         )
 
-    def forward(self, x):
-        return self.conv(x)
+    def forward(self, x, seq_length=None, axis=-1):
+        if not self._mask:
+            if seq_length is not None or axis != -1:
+                raise ValueError("This module was not intended to have masked inputs.")
+            return self.conv(x)
+        else:
+            return self.conv(x, seq_length=seq_length, axis=axis)
 
 
 class DoubleConv3d(nn.Module):
@@ -122,21 +182,29 @@ class DoubleConv3d(nn.Module):
         activation (str):
             The activation function to use after each convolutional layer. Must be one of the following: {'relu',
             'prelu', 'leaky_relu', 'elu', 'tanh'}. Default is 'relu'.
-        mask (bool):
-            Whether to use a :class:`MaskedConv3d` layer instead of a regular Conv3d layer for the convolutional layers.
-            If true, the convolutional layers will perform masked convolutions. Default is `False`.
     """
     def __init__(self, in_ch, out_ch, kern_size=3, stride=1, padding=1, bias=True, dropout=0, activation='relu',
                  mask=False):
         super(DoubleConv3d, self).__init__()
-        self.conv = nn.Sequential(
-            Conv3d(in_ch, out_ch, kern_size=kern_size, stride=stride, padding=padding, bias=bias, activation=activation),
-            Conv3d(out_ch, out_ch, kern_size=kern_size, padding=padding, bias=bias, activation=activation),
+        self._mask = mask
+
+        seq = nn.Sequential if not mask else MaskedSequential3d
+        self.conv = seq(
+            Conv3d(in_ch, out_ch, kern_size=kern_size, stride=stride, padding=padding, bias=bias, activation=activation,
+                   mask=mask),
+            Conv3d(out_ch, out_ch, kern_size=kern_size, padding=padding, bias=bias, activation=activation,
+                   mask=mask),
             nn.Dropout3d(p = dropout, inplace=False)
         )
 
-    def forward(self, x):
-        return self.conv(x)
+    def forward(self, x, seq_length=None, axis=-1):
+        if not self._mask:
+            if seq_length is not None or axis != -1:
+                raise ValueError("This module was not intended to have masked inputs.")
+            return self.conv(x)
+        else:
+            return self.conv(x, seq_length=seq_length, axis=axis)
+
 
 class ConvTrans3d(nn.Module):
     def __init__(self, in_ch, out_ch, kern_size=3, stride=1, padding=1, bias=True, activation='relu'):

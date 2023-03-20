@@ -71,7 +71,7 @@ class SampleClsLoaderCFG(PMIImageFeaturePairLoaderCFG):
     )
 
     # This is how you change only one attribute of a default dict
-    PMIImageFeaturePairLoaderCFG.tio_queue_kwargs['samples_per_volume'] = 5
+    PMIImageFeaturePairLoaderCFG.tio_queue_kwargs['samples_per_volume'] = 10
 
 
 class SampleClsSolverCFG(ClassificationSolverCFG):
@@ -88,7 +88,7 @@ class SampleClsSolverCFG(ClassificationSolverCFG):
     # Training hyper params (must be provided for training)
     init_lr      : float = 1e-4
     init_mom     : float = 0.9
-    batch_size   : int   = 4
+    batch_size   : int   = 8
     num_of_epochs: int   = 5
 
     # I/O

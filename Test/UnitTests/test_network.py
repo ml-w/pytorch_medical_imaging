@@ -51,9 +51,3 @@ class Test3DNetworks(unittest.TestCase):
             self.assertEqual(self.sample_input_3d_size1.shape[2:], out.shape[2:])
             with self.assertRaises(AssertionError):
                 net(self.sample_input)
-
-    def test_ViT_VNet(self):
-        from pytorch_med_imaging.networks.third_party_nets import ViTVNet
-        net = ViTVNet(img_size = self.sample_input_big.shape[2:]).cuda()
-        with torch.no_grad():
-            out = net(self.sample_input_big)
