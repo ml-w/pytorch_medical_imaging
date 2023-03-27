@@ -60,22 +60,23 @@ class ClassificationSolver(SolverBase):
         r"""Build pandas table for displaying the prediction results. Displayed after each step and is called in
         the step callback.
         """
-        _df = pd.DataFrame.from_dict({f'res_{d}': list(res[:, d].cpu().detach().numpy())
+        g, res = g.cpu().detach(), res.cpu().detach()
+        _df = pd.DataFrame.from_dict({f'res_{d}': list(res[:, d].numpy())
                                       for d in range(res.shape[-1])})
         if not self.ordinal_mse:
             if g.dim() == 1:
-                _df_gt = pd.DataFrame.from_dict({'gt': list(g.flatten().cpu().detach().numpy())})
+                _df_gt = pd.DataFrame.from_dict({'gt': list(g.flatten().numpy())})
                 _df = pd.concat([_df, _df_gt], axis=1)
-                _df['predicted'] = torch.argmax(res.squeeze(), dim=1).cpu().detach().numpy()
+                _df['predicted'] = torch.argmax(res.squeeze(), dim=1).numpy()
                 _df['eval'] = (_df['predicted'] == _df['gt']).replace({True: 'Correct', False: 'Wrong'})
             else:
-                _df_gt = pd.DataFrame.from_dict({f'gt_{d}': list(g[:, d].cpu().detach().numpy())
+                _df_gt = pd.DataFrame.from_dict({f'gt_{d}': list(g[:, d].numpy())
                                                  for d in range(g.shape[-1])})
                 _df = pd.concat([_df, _df_gt], axis=1)
         else:
-            _df_gt = pd.DataFrame.from_dict({'gt': list(g.flatten().cpu().detach().numpy())})
+            _df_gt = pd.DataFrame.from_dict({'gt': list(g.flatten().numpy())})
             _df = pd.concat([_df, _df_gt], axis=1)
-            _df['predicted'] = torch.round(res.squeeze()).cpu().detach().long().numpy()
+            _df['predicted'] = torch.round(res.squeeze()).long().numpy()
             _df['eval'] = (_df['predicted'] == _df['gt']).replace({True: 'Correct', False: 'Wrong'})
 
         if not uid is None:
