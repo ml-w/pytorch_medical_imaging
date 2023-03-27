@@ -108,7 +108,6 @@ class SolverDDPWrapper:
     def sync_network(self) -> None:
         r"""Synchronize the model parameters across all subrocesses.
 
-
         .. warning::
             Do not call this method before moving the network to the gpu in the subprocess, otherwise, the broadcast
             action will, for some mysterious reason, takes up loads of GRAM, making it impossible to utilize the rest

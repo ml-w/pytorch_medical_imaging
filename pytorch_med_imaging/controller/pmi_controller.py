@@ -79,7 +79,10 @@ class PMIControllerCFG(PMIBaseCFG):
         keep_log (bool, Optional):
             Default to ``True``.
         verbose (bool, Optional):
-            Defaul to ``True``.
+            Default to ``True``.
+        matmul_precision (str, Optional):
+            Option to control the matrix multiplication precision. Only useful when torch version >= 2.0.0. Default to
+            'medium'. Must be one of ('medium', 'high', 'highest').
 
     .. note::
         Don't confuse the `id_list` in this CFG with that in :class:`SolverBase`, the later is more flexible and can
@@ -104,7 +107,8 @@ class PMIControllerCFG(PMIBaseCFG):
     inference_on_validation_set: Optional[bool] = False
     inference_all_checkpoints  : Optional[bool] = False
     compile_net                : Optional[bool] = False # If true, `torch.compile` will be applied.
-    plot_tb                    : Optional[bool] = True # if false no plots
+    plot_tb                    : Optional[bool] = True  # if false no plots
+    matmul_precision           : Optional[str]  = 'medium' # Only effect when torch version >= 2.0.0
 
 
     # log related
@@ -439,6 +443,15 @@ class PMIController(object):
                 self._logger.warning("Compile net only supported for torch version >= 2.0.0.")
             else:
                 self.solver_cfg.net = torch.compile(self.solver_cfg.net)
+
+        # select precision
+        if int(torch.__version__.split('.')[0]) >= 2:
+            if not self.matmul_precision in ('medium', 'high', 'highest'):
+                msg = f"Precision option can only be: ['medium'|'high'|'higest]. Got {self.matmul_precision} instead."
+                self._logger.warning(msg)
+                return
+            self._logger.info(f"Seting precision to {self.matmul_precision}")
+            torch.set_float32_matmul_precision(self.matmul_precision)
 
     def _override_subcfg(self,
                          new_value_dict: dict,

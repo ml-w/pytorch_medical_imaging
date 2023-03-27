@@ -114,7 +114,7 @@ sequenceDiagram
 ```mermaid
 %%{ init : { "theme" : "dark", "flowchart" : { "curve" : "linear"}}}%%
 flowchart TD
-	subgraph configs TD
+	subgraph configs
 		sc(Solver cfg)
 		lc(Data loader cfg)
 		sc & lc --> pmic(Controller cfg)

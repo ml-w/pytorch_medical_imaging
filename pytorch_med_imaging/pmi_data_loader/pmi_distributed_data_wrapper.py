@@ -16,7 +16,7 @@ class PMIDistributedDataWrapper:
 
     Args:
         data_loader (PMIDataLoaderBase):
-            A PMIDataLoader to be distributed.
+            A :class:`PMIDataLoader` to be distributed.
         num_replicas (Optional, int):
             The number of processes to distribute the data across. Defaults to None.
         rank (Optional, int):

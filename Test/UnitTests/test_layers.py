@@ -43,10 +43,17 @@ class Test3dLayers(unittest.TestCase):
         self.input_3d[2, ..., 25:].fill_(0)
         seq_length = [15, 20, 25, 30]
         axis = -1
+        # for k in self.activations:
+        #     self.test_layer = Conv3d(self.in_ch, self.out_ch, activation=k, mask=True).cuda()
+        #     self._test_masked_forward(self.input_3d, seq_length, axis)
+        #     print(f"{k} passed")
+        # print(f"=== Conv3d all passed ===")
+
         for k in self.activations:
-            self.test_layer = Conv3d(self.in_ch, self.out_ch, activation=k, mask=True).cuda()
+            self.test_layer = DoubleConv3d(self.in_ch, self.out_ch, activation=k, mask=True).cuda()
             self._test_masked_forward(self.input_3d, seq_length, axis)
             print(f"{k} passed")
+        print(f"=== DoubleConv3d all passed ===")
 
     def _test_masked_forward(self, x, seq_length, axis):
         r"""Test the forward pass of :class:`MaskedSequential3d`"""

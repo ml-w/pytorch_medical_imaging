@@ -139,33 +139,26 @@ class MaskedSequential3d(nn.Sequential, SupportMask3d):
             return x * mask
 
 
-class Conv3d(nn.Module, SupportMask3d):
-    def __init__(self, in_ch, out_ch, kern_size=3, stride=1, padding=1, bias=True, activation='relu', mask=False):
+class Conv3d(nn.Module):
+    def __init__(self, in_ch, out_ch, kern_size=3, stride=1, padding=1, bias=True, activation='relu'):
         super(Conv3d, self).__init__()
 
         if not activation in activation_funcs:
             raise AttributeError(f"Activation should be one of [{'|'.join(activation_funcs.keys())}], "
                                  f"got {activation} instead")
         activation = activation_funcs.get(activation)
-        self._mask = mask
 
-        seq = nn.Sequential if not mask else MaskedSequential3d
-        self.conv = seq(
+        self.conv = nn.Sequential(
             nn.Conv3d(in_ch, out_ch, kern_size, stride, padding=padding, bias=bias),
             nn.BatchNorm3d(out_ch),
             activation()
         )
 
-    def forward(self, x, seq_length=None, axis=-1):
-        if not self._mask:
-            if seq_length is not None or axis != -1:
-                raise ValueError("This module was not intended to have masked inputs.")
+    def forward(self, x):
             return self.conv(x)
-        else:
-            return self.conv(x, seq_length=seq_length, axis=axis)
 
 
-class DoubleConv3d(nn.Module, SupportMask3d):
+class DoubleConv3d(nn.Module):
     r"""A 3D convolutional neural network block consisting of two consecutive convolutional layers followed by a 3D
     dropout layer.
 
@@ -192,28 +185,16 @@ class DoubleConv3d(nn.Module, SupportMask3d):
             The activation function to use after each convolutional layer. Must be one of the following: {'relu',
             'prelu', 'leaky_relu', 'elu', 'tanh'}. Default is 'relu'.
     """
-    def __init__(self, in_ch, out_ch, kern_size=3, stride=1, padding=1, bias=True, dropout=0, activation='relu',
-                 mask=False):
+    def __init__(self, in_ch, out_ch, kern_size=3, stride=1, padding=1, bias=True, dropout=0, activation='relu'):
         super(DoubleConv3d, self).__init__()
-        self._mask = mask
-
-        seq = nn.Sequential if not mask else MaskedSequential3d
-        self.conv = seq(
-            Conv3d(in_ch, out_ch, kern_size=kern_size, stride=stride, padding=padding, bias=bias, activation=activation,
-                   mask=mask),
-            Conv3d(out_ch, out_ch, kern_size=kern_size, padding=padding, bias=bias, activation=activation,
-                   mask=mask),
+        self.conv = nn.Sequential(
+            Conv3d(in_ch, out_ch, kern_size=kern_size, stride=stride, padding=padding, bias=bias, activation=activation),
+            Conv3d(out_ch, out_ch, kern_size=kern_size, padding=padding, bias=bias, activation=activation),
             nn.Dropout3d(p = dropout, inplace=False)
         )
 
-    def forward(self, x, seq_length=None, axis=-1):
-        if not self._mask:
-            if seq_length is not None or axis != -1:
-                raise ValueError("This module was not intended to have masked inputs.")
+    def forward(self, x):
             return self.conv(x)
-        else:
-            return self.conv(x, seq_length=seq_length, axis=axis)
-
 
 class ConvTrans3d(nn.Module):
     def __init__(self, in_ch, out_ch, kern_size=3, stride=1, padding=1, bias=True, activation='relu'):
@@ -234,43 +215,36 @@ class ConvTrans3d(nn.Module):
         return self.conv(x)
 
 
-class ResidualBlock3d(nn.Module, SupportMask3d):
-    def __init__(self, in_ch, out_ch, p=0.2, mask=False):
+class ResidualBlock3d(nn.Module):
+    def __init__(self, in_ch, out_ch, p=0.2):
         super(ResidualBlock3d, self).__init__()
         self._in_ch = in_ch
         self._out_ch = out_ch
-        self._mask = mask
-        seq = nn.Sequential if not mask else MaskedSequential3d
-        self.in_conv = seq(
-            Conv3d(in_ch, out_ch // 4, 1, 1, bias=False, padding=0, mask=mask),
-            Conv3d(out_ch // 4, out_ch // 4, kern_size=3, bias=False, padding=1, mask=mask),
-            nn.Dropout3d(p=p)
-        )
-        self.in_bn = seq(
-            nn.BatchNorm3d(in_ch),
-            nn.ReLU(inplace=True)
-        )
-        self.out_conv = seq(nn.Conv3d(out_ch // 4, out_ch, 1, 1, bias=False, padding=0))
-        self.pre_add_conv = seq(nn.Conv3d(in_ch, out_ch, kernel_size=1))
 
-    def forward(self, x, seq_length=None, axis=-1):
+        self.in_conv = nn.Sequential(
+            Conv3d(in_ch, out_ch // 4, 1, 1, bias=False, padding=0),
+            Conv3d(out_ch // 4, out_ch // 4, kern_size=3, bias=False, padding=1)
+        )
+        self.in_bn = nn.BatchNorm3d(in_ch)
+
+        self.out_conv = nn.Conv3d(out_ch // 4, out_ch, 1, 1, bias=False, padding=0)
+        self.pre_add_conv = nn.Conv3d(in_ch, out_ch, kernel_size=1)
+        self.dropout = nn.Dropout3d(p=p)
+
+    def forward(self, x):
         while x.dim() < 5:
             x = x.unsqueeze(0)
         res = x
-        if not self._mask:
-            pre_out = self.in_bn(x)
-            out = self.in_conv(pre_out)
-            out = self.out_conv(out)
-            if (self._in_ch != self._out_ch):
-                res = self.pre_add_conv(pre_out)
-        else:
-            pre_out = self.in_bn(x, seq_length=seq_length, axis=axis)
-            out = self.in_conv(pre_out, seq_length=seq_length, axis=axis)
-            out = self.out_conv(out, seq_length=seq_length, axis=axis)
-            if (self._in_ch != self._out_ch):
-                res = self.pre_add_conv(pre_out, seq_length=seq_length, axis=axis)
+        pre_out = F.relu(self.in_bn(x), inplace=True)
+        out = self.dropout(self.in_conv(pre_out))
+        out = self.out_conv(out)
+
+        if (self._in_ch != self._out_ch):
+            res = self.pre_add_conv(pre_out)
+
         out += res
         return out
+
 
 class MultiConvResBlock3d(nn.Module):
     def __init__(self, in_ch, out_ch, num_of_convs, kern_size=5, padding=2, drop_out=0, bias=True, activation='relu'):
