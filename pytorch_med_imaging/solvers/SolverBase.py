@@ -597,11 +597,11 @@ class SolverBase(object):
         # Gradient accumulation
         if self.accumulate_grad > 1:
             self._accumulated_steps += 1
-            _loss = loss / float(self.accumulate_grad)
-            _loss.backward()
-            loss.detach_()
+            loss = loss / float(self.accumulate_grad)
+            loss.backward()
+            # loss.detach_()
             if self._accumulated_steps >= self.accumulate_grad:
-                self._logger.debug("Updating network params from accumulated loss")
+                self._logger.debug("Updating network params from accumulated loss.")
                 self.optimizer.step()
                 self.optimizer.zero_grad()
                 self._accumulated_steps = 0
@@ -782,7 +782,7 @@ class SolverBase(object):
             E.append(loss.data.cpu())
             self._logger.info("\t[Step %04d] loss: %.010f"%(step_idx, loss.data))
 
-            self._step_callback(s, g, out.cpu().float(), loss.data.cpu(),
+            self._step_callback(s.cpu(), g.cpu(), out.detach().cpu().float(), loss.data.cpu(),
                                 step_idx=epoch_number * len(data_loader) + step_idx,
                                 uid = mb.get('uid', None))
             del s, g, out, loss, mb
@@ -795,25 +795,6 @@ class SolverBase(object):
         self.validation()
         self._epoch_callback()
         self.decay_optimizer(epoch_loss)
-
-    def _net_dropout_off(self):
-        r"""Because batch-norm is a very commonly used layer and the running variance/mean of small batch-size might
-        not always be sufficient for training a useful mean and variance statistics. This lead to the interesting
-        scenario where the mini-batch statistics behave better than the trained statistics and consequently, the
-        network behave much worse in ``eval()`` mode when compared to in ``train()`` mode.
-
-        Now there are several options to mitigate this effect, and this method implements one of the easiest but the
-        most unintuitive way, that is to shut down batch-norm during validation."""
-        self.p_map = {}
-        for name, m in self.net.named_modules():
-            if isinstance(m, (nn.Dropout)):
-                self.p_map[name] = m.p
-
-    def _net_dropout_on(self):
-        r"""See :func:`_net_dropout_off`"""
-        for name, m in self.net.named_modules():
-            if isinstance(m, (nn.Dropout)):
-                m.p = self.p_map[name]
 
     def validation(self) -> list:
         r"""Default pipeline for running the validation. This introduce two class attribute lists
@@ -1083,7 +1064,7 @@ class SolverBase(object):
     @abstractmethod
     def _step_callback(self, s, g, out, loss, uid=None, step_idx=None) -> None:
         r"""This is a method called after a step is finished, when overriding this function, be sure to use the
-        standardized signature
+        standardized signature. Also, the inputs to this method should have already been detached from the grad graph.
 
         Args:
             uid:
