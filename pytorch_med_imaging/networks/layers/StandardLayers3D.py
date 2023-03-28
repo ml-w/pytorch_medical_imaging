@@ -18,7 +18,7 @@ activation_funcs = {
 }
 
 
-class InvertedConv3d(nn.Module, SupportMask3d):
+class InvertedConv3d(nn.Module):
     def __init__(self, in_ch, out_ch, kern_size=3, stride=1, padding=1, bias=True, mask=False):
         super(InvertedConv3d, self).__init__()
         self._mask = mask
@@ -29,11 +29,8 @@ class InvertedConv3d(nn.Module, SupportMask3d):
             nn.Conv3d(in_ch, out_ch, kern_size, stride, padding=padding, bias=bias)
         )
 
-    def forward(self, x, seq_length=None, axis=-1):
-        if not self._mask:
-            return self.conv(x)
-        else:
-            return self.conv(x, seq_length=seq_length, axis=axis)
+    def forward(self, x):
+        return self.conv(x)
 
 
 class MaskedSequential3d(nn.Sequential, SupportMask3d):

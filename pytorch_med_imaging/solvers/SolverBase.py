@@ -60,6 +60,8 @@ class SolverBaseCFG(PMIBaseCFG):
         unpack_key_inference (Iterable[str], Optional):
             If this is specified, the inferencer will be default to use this, otherwise, it will try to use
             :attr:`unpack_key_forward`, but this is not always correct. Default to ``None``.
+        compile_net (bool, Optional):
+            If `True`, the network will be compiled using `torch.compile`. Support only for torch version >= 2.0
         init_mom (float, Optional):
             Initial momentum. Ignored for some of the optimizers.
         lr_sche (lr_scheduler._LRScheduler, Optional):
@@ -113,6 +115,7 @@ class SolverBaseCFG(PMIBaseCFG):
     # Options with defaults
     use_cuda         : Optional[bool]              = True
     debug_mode       : Optional[bool]              = False
+    compile_net      : Optional[bool]              = False
     data_loader_val  : Optional[PMIDataLoaderBase] = None
     lr_sche          : Optional[PMILRScheduler]    = None # If ``None``, lr_scheduler.ExponentialLR will be used.
     lr_sche_args     : Optional[list]              = []
@@ -470,6 +473,12 @@ class SolverBase(object):
         if (torch.cuda.device_count()  > 1) & self.use_cuda:
             self._logger.info("Multi-GPU detected, using nn.DataParallel for distributing workload.")
             self.net = nn.DataParallel(self.net)
+            if self.compile_net:
+                if int(torch.__version__.split('.')[0]) < 2:
+                    self._logger.warning("Compile net only supported for torch version >= 2.0.0.")
+                else:
+                    self.net = torch.compile(self.net)
+
             self.create_optimizer(self.net)
 
     def set_loss_function(self, func: torch.nn.Module) -> None:
@@ -830,10 +839,10 @@ class SolverBase(object):
 
                 loss = self._loss_eval(res, s, g.squeeze().long())
                 self._logger.debug(f"_val IDs: {mb['uid']}") if not mb.get('uid', None) is None else None
-                self._logger.debug("_val_step_loss: {}".format(loss.detach().cpu().data.item()))
+                self._logger.debug("_val_step_loss: {}".format(loss.cpu().data.item()))
 
                 uids = mb.get('uid', None)
-                self._validation_step_callback(g.detach().cpu(), res.detach().cpu(), loss.detach().cpu(), uids)
+                self._validation_step_callback(g.cpu(), res.cpu(), loss.cpu(), uids)
                 del mb, s, g, loss
                 gc.collect()
             self._validation_loss = np.mean(self.validation_losses)

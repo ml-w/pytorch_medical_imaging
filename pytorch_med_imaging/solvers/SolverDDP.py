@@ -235,6 +235,12 @@ class SolverDDPWrapper:
         self.net = torch.nn.parallel.DistributedDataParallel(self.net, device_ids=[dist.get_rank()],
                                                              output_device=dist.get_rank(),
                                                              find_unused_parameters=True)
+
+        if self.solver.compile_net:
+            if int(torch.__version__.split('.')[0]) < 2:
+                self._logger.warning("Compile net only supported for torch version >= 2.0.0.")
+            else:
+                self.net = torch.compile(self.net)
         # self.sync_network()
 
         # optimizer needs to be recreated to ensure the network parameters are synced across all processes
