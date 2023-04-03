@@ -64,8 +64,8 @@ class PaddedLayerNorm(nn.Module):
         variance = (masked_input - mean.unsqueeze(1)).pow(2).sum(dim=1) / mask.sum(dim=1, keepdim=True)
 
         # Normalize the input
-        input_centered = input - mean.unsqueeze(1)
-        input_normalized = input_centered / torch.sqrt(variance.unsqueeze(1) + self.eps)
+        input_centered = masked_input - mean.unsqueeze(1)
+        input_normalized = input_centered * mask_expanded / torch.sqrt(variance.unsqueeze(1) + self.eps)
 
         # Apply gamma and beta for learnable scale and shift
         output = self.gamma * input_normalized + self.beta
