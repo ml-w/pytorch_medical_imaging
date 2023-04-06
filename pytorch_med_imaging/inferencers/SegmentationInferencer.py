@@ -132,9 +132,9 @@ class SegmentationInferencer(InferencerBase):
                         s = self._match_type_with_network(s)
 
                         if isinstance(s, list):
-                            out = self.net.forward(*s).squeeze()
+                            out = self.net.forward(*s)
                         else:
-                            out = self.net.forward(s).squeeze()
+                            out = self.net.forward(s)
                         self._logger.debug(f"{out.shape}, {mb[tio.LOCATION].shape}")
                         # If the original input is 3D, but 2D patches was given out here, expand it back to 3D
                         if ndim == 4:
