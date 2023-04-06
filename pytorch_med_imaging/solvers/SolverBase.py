@@ -340,11 +340,9 @@ class SolverBase(object):
         if not isinstance(data_loader, (PMIDataLoaderBase, PMIDistributedDataWrapper)):
             raise TypeError(f"Expect input to be ``PMIDataLoaderBase`` for ``data_loader``, "
                             f"but got: {type(data_loader)}")
-        # If solver is in DDP mode, postpone the loading
-        if not dist.is_initialized():
-            self.data_loader = data_loader.get_torch_data_loader(self.batch_size)
-        else:
-            self.data_loader = data_loader
+
+        self.ddwrapper = data_loader if isinstance(data_loader, PMIDistributedDataWrapper) else None
+        self.data_loader = data_loader.get_torch_data_loader(self.batch_size)
 
         # Do the same for data_loader_val
         if not hasattr(self, 'data_loader_val'):
@@ -782,11 +780,9 @@ class SolverBase(object):
         self.optimizer.zero_grad() # make sure validation loop doesn't alter the gradients
         self.plotter_dict = {'scalars': {}, 'epoch_num': epoch_number}
 
-        if not dist.is_initialized():
-            data_loader = self.data_loader.get_torch_data_loader(self.batch_size) \
-                if isinstance(self.data_loader, PMIDataLoaderBase) else self.data_loader
-        else:
-            data_loader = self.data_loader.get_torch_data_loader(self.batch_size)
+        if dist.is_initialized():
+            self.ddwrapper.set_epoch(epoch_number)
+        data_loader = self.data_loader
         for step_idx, mb in enumerate(data_loader):
             s, g = self._unpack_minibatch(mb, self.unpack_key_forward)
 
@@ -830,16 +826,17 @@ class SolverBase(object):
         with torch.no_grad():
             self.validation_losses = []
             self.perfs = []
-            self.get_net().eval()
+            n = self.get_net()
+            n.eval()
             for mb in tqdm(self.data_loader_val, desc="Validation", position=2):
                 s, g = self._unpack_minibatch(mb, self.unpack_key_forward)
                 s = self._match_type_with_network(s)
                 g = self._match_type_with_network(g) # no assumption but should be long in segmentation only.
 
                 if isinstance(s, list):
-                    res = self.get_net().forward(*s)
+                    res = n.forward(*s)
                 else:
-                    res = self.get_net().forward(s)
+                    res = n.forward(s)
 
                 loss = self._loss_eval(res, s, g.squeeze().long())
                 self._logger.debug(f"_val IDs: {mb['uid']}") if not mb.get('uid', None) is None else None
@@ -847,7 +844,7 @@ class SolverBase(object):
 
                 uids = mb.get('uid', None)
                 self._validation_step_callback(g.cpu(), res.cpu(), loss.cpu(), uids)
-                del mb, s, g, loss
+                del mb, s, g, loss, res
                 gc.collect()
             self._validation_loss = np.mean(self.validation_losses)
             self._validation_callback()

@@ -46,6 +46,7 @@ class PMIDistributedDataWrapper:
 
         _ = [
             '_pack_data_into_subjects',
+            '_create_queue'
         ]
         for func_name in _:
             setattr(self.data_loader, func_name + '_', getattr(self.data_loader, func_name))
@@ -64,17 +65,55 @@ class PMIDistributedDataWrapper:
         See Also:
             * :func:`~pytorch_med_imaging.pmi_data_loader._pack_data_into_subjects`
         """
-        subjects = self.data_loader._pack_data_into_subjects_(*args)
+        if not dist.is_initialized():
+            msg = f"This wrapper can only be used with DDP"
+            raise RuntimeError(msg)
 
-        random_seed = random.randint(0, 1E8)
-        random_seed = torch.as_tensor([random_seed], dtype=torch.int32).cuda(device=dist.get_rank())
-        dist.broadcast(random_seed, 0) # broadcast 0-th rank random_seed
-        random.Random(random_seed.item()).shuffle(subjects._subjects) # use the same random seed to ensure the shuffled
-                                                                      # order is the same
+        subjects = self.data_loader._pack_data_into_subjects_(*args) # subjects: tio.SubjectDataset
 
-        _len = len(subjects._subjects) - len(subjects._subjects) % self.num_replicas
-        new_subjects = tio.SubjectsDataset(subjects._subjects[self.rank:_len:self.num_replicas],
-                                           transform = subjects._transform)
-        dist.barrier()
-        return new_subjects
+        self.ddp_subjects_sampler = DistributedSampler(
+            subjects,
+            rank = dist.get_rank(),
+            shuffle=True,
+            drop_last=True
+        )
+        return subjects
 
+        # random_seed = random.randint(0, 1E8)
+        # random_seed = torch.as_tensor([random_seed], dtype=torch.int32).cuda(device=dist.get_rank())
+        # dist.broadcast(random_seed, 0) # broadcast 0-th rank random_seed
+        # random.Random(random_seed.item()).shuffle(subjects._subjects) # use the same random seed to ensure the shuffled
+        #                                                               # order is the same
+        #
+        # _len = len(subjects._subjects) - len(subjects._subjects) % self.num_replicas
+        # new_subjects = tio.SubjectsDataset(subjects._subjects[self.rank:_len:self.num_replicas],
+        #                                    transform = subjects._transform)
+        # dist.barrier()
+        # return new_subjects
+
+    def set_epoch(self, idx) -> None:
+        self.ddp_subjects_sampler.set_epoch(idx)
+
+    def _create_queue(self,
+                      exclude_augment: bool,
+                      subjects: tio.SubjectsDataset,
+                      training: Optional[bool]=None,
+                      return_sampler: Optional[bool]=False) -> [tio.Queue, tio.GridSampler] or \
+                                                                [tio.SubjectsDataset, None]:
+        Q = self.data_loader._create_queue_(exclude_augment,
+                                            subjects,
+                                            training,
+                                            return_sampler)
+        if return_sampler:
+            queue, _ = Q
+        else:
+            queue = Q
+
+        # This is a Hack
+        queue.subject_sampler = self.ddp_subjects_sampler
+        queue.shuffle_subjects = False
+
+        if return_sampler:
+            return queue, _
+        else:
+            return queue
