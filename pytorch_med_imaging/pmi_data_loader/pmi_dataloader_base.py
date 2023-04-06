@@ -84,9 +84,42 @@ class PMIDataLoaderBaseCFG(PMIBaseCFG):
 
 
 class PMIDataLoaderBase(object):
-    """
-    This is the base class to allow automatic loading from main.py. All custom class should inherit this class such
+    r"""This is the base class to allow automatic loading from main.py. All custom class should inherit this class such
     and implement the abstract methods for the main file to function properly.
+
+    The instance of this class is designed for easy data loading. A directory is specified as a root dir through
+    :attr:`input_dir`, which would be searched recursively for files that matches a certain pattern `id_globber` and
+    assigning them an ID. Sometimes the pattern might be decided by the class itself. The IDs in training and testing
+    sets can be stored in a .ini file with section `[FileList]` and attributes `training` and `testing` as comma
+    separated values. If `run_mode` is specified as `train`, then the training IDs will be loaded. A torch `DataLoader`
+    can be obtained using :method:`get_torch_data_loader`.
+
+    This class is initialized using a :class:`PMIDataLoaderBaseCFG` instance. On calling `get_torch_data_loader`, this
+    instance will try to create the data loader based on the configuration loaded from the CFG. It will try to call
+    either :func:`_load_data_set_training` or :func:`_load_data_set_testing`. The logic of these two function is largely
+    the same except for creating the augmentation filters. If `run_mode` is not `train`, the agumentation will ignore
+    all non-normalizing filters.
+
+    This class generally uses data structures defined in `pmi.med_img_dataset`, which are iteraters that returns
+    `torchio.Subject`. Once all subjects are collected, they are packed into `torchio.SubjectsDataset` using the
+    function `_pack_data_into_subjects`, which is then passed to :func:`get_torch_data_loader`.
+
+    .. mermaid::
+
+        stateDiagram-v2
+            [*] --> PMIDataLoaderBaseCFG
+            PMIDataLoaderBaseCFG --> run_mode_decision: Initialize with PMIDataLoaderBaseCFG
+            state run_mode_decision {
+                [*] --> check_run_mode: Check run_mode
+                check_run_mode --> load_training: run_mode = train
+                check_run_mode --> load_testing: run_mode <> train
+            }
+            load_training --> create_aug_filters_training(): Call _load_data_set_training
+            load_testing --> create_aug_filters_testing: Call _load_data_set_testing
+            create_aug_filters_training --> pack_data_into_subjects: Call _create_augmentation_filters_training
+            create_aug_filters_testing --> pack_data_into_subjects: Call _create_augmentation_filters_testing
+            pack_data_into_subjects --> get_torch_data_loader: Call _pack_data_into_subjects
+            get_torch_data_loader --> [*]
 
     Attributes:
         data_type (str):
