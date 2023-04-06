@@ -128,6 +128,8 @@ class InferencerBase(object):
     def _load_config(self, cfg: SolverBaseCFG = None) -> None:
         r"""See :func:`SolverBase._load_config`."""
         SolverBase._load_config(self, cfg)
+        if self.use_cuda:
+            self.batch_size = self.batch_size_val or self.batch_size // torch.cuda.device_count()
 
     def _match_type_with_network(self, *args, **kwargs):
         r"""See :func:`SolverBase._match_type_with_network`."""

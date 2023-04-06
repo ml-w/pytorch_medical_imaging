@@ -336,7 +336,8 @@ class PMIController(object):
                 (self, 'cp_load_dir'),
                 (self, 'cp_save_dir'),
                 (self, 'output_dir'),
-                (self, 'id_list')
+                (self, 'id_list'),
+                (self.solver_cfg, 'rAI_pretrained_swran')
             ]
             for inst, attr in replace_target:
                 _old = getattr(inst, attr, None)

@@ -49,6 +49,9 @@ class SolverBaseCFG(PMIBaseCFG):
         [Required] unpack_key_forowrad (list of str):
             This list is used to unpack the ``tio.Subject`` (or patches) loaded by the ``data_loader``. See
             :func:`.solve_epoch`.
+        batch_size_val (int, Optional):
+            If validation set is loaded, this parameters is used as the batch size for the validation loop. If this is
+            not specified, the default is to use `self.batch_size` instead.
         cp_save_dir (str, Optional):
             Specify the file directory to write the network parameters when criteria reached. If ``None``, you will
             need to call the :func:`.fit` with the `checkpoint_path` argument. Default to ``None``.
@@ -96,9 +99,10 @@ class SolverBaseCFG(PMIBaseCFG):
 
     """
     # Training hyper params (must be provided for training)
-    init_lr      : float = None
-    num_of_epochs: int   = None
-    batch_size   : int   = None
+    init_lr       : float = None
+    num_of_epochs : int   = None
+    batch_size    : int   = None
+    batch_size_val: int   = None
 
     # I/O
     unpack_key_forward  : Iterable[str]           = None
@@ -353,12 +357,12 @@ class SolverBase(object):
             if not isinstance(data_loader_val, PMIDataLoaderBase) and not data_loader_val is None:
                 raise TypeError(f"Expect input to be ``PMIDataLoaderBase`` for ``data_loader_val``, "
                                 f"but got: {type(data_loader_val)}")
-            # no need to load validation set if its DDP
+            # In DDP only rank 0 needs to load val
             if dist.is_initialized():
-                # otherwise, only load when process is rank 0
                 if dist.get_rank() != 0:
                     return
-            self.data_loader_val = data_loader_val.get_torch_data_loader(self.batch_size, exclude_augment=True)
+            self.data_loader_val = data_loader_val.get_torch_data_loader(self.batch_size_val or self.batch_size,
+                                                                         exclude_augment=True)
 
     def set_lr_scheduler(self,
                          scheduler: Union[str, PMILRScheduler],
