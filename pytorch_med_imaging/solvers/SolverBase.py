@@ -796,7 +796,7 @@ class SolverBase(object):
                                 uid = mb.get('uid', None))
             del s, g, out, loss, mb
             gc.collect()
-        epoch_loss = np.array(E).mean()
+        epoch_loss = np.array(E, dtype=float).mean()
         self.plotter_dict['scalars']['Loss/Loss'] = epoch_loss
         self._last_epoch_loss = epoch_loss
 
@@ -830,6 +830,7 @@ class SolverBase(object):
             n.eval()
             for mb in tqdm(self.data_loader_val, desc="Validation", position=2):
                 s, g = self._unpack_minibatch(mb, self.unpack_key_forward)
+                self._logger.debug(f"s: {s.shape}, g: {g.shape}")
                 s = self._match_type_with_network(s)
                 g = self._match_type_with_network(g) # no assumption but should be long in segmentation only.
 
