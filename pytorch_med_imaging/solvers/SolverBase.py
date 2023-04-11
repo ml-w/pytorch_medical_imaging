@@ -945,14 +945,14 @@ class SolverBase(object):
                                 f'{current_lr:.010f}' if current_lr is not None else 'None',))
 
             epoch_time = time.time() - time_start_epoch # time for one epoch + validation.
-            self._logger.info("{:-^80}".format(f" Epoch elapsed time : {epoch_time/60.:.02f} min"))
+            self._logger.debug("{:-^80}".format(f" Epoch elapsed time : {epoch_time/60.:.02f} min"))
 
             # check if early stop flag is switched on
             if self.EARLY_STOP_FLAG:
                 self._logger.info("Breaking training loop.")
                 break
         fit_time = time.time() - time_start_fit # fit time in second
-        self._logger.info("{:=^80}".format(f" Fit elapsed time: {fit_time / 60.:.02f} min "))
+        self._logger.debug("{:=^80}".format(f" Fit elapsed time: {fit_time / 60.:.02f} min "))
 
     def _check_best_epoch(self,
                           checkpoint_path: Union[str, Path],
