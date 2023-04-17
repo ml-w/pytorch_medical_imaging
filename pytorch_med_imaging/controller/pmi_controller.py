@@ -1,3 +1,4 @@
+import os
 import re
 
 from ..solvers import SolverBaseCFG, SolverDDPWrapper
@@ -312,6 +313,12 @@ class PMIController(object):
             self._override_subcfg(data_loader_override, self.data_loader_cfg)
         if not data_loader_val_override is None and not self.data_loader_val_cfg is None:
             self._override_subcfg(data_loader_val_override, self.data_loader_val_cfg)
+
+        # Global flags
+        global_flags = override_dict.get('global_cfg', None)
+        if not global_flags is None:
+            for  k, v in global_flags.items():
+                os.environ[k] = str(v)
 
     def _pre_process_flags(self) -> None:
         r"""The flags defined in :class:`PMIControllerCFG` might need to further change the CFGs of the solver and the
