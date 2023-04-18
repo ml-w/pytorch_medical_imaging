@@ -387,8 +387,12 @@ class SolverBase(object):
         if isinstance(scheduler, str):
             if len(args) == 0:
                 args = self.lr_sche_args
+                if isinstance(args, str):
+                    args = ast.literal_eval(args)
             if len(kwargs) == 0:
                 kwargs = self.lr_sche_kwargs
+                if isinstance(kwargs, str):
+                    args = ast.literal_eval(kwargs)
             self.lr_sche = pmi_lr_scheduler.PMILRScheduler(scheduler, *args, **kwargs)
         else:
             self.lr_sche = scheduler
