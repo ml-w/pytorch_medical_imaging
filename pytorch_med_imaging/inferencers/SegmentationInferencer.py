@@ -113,7 +113,7 @@ class SegmentationInferencer(InferencerBase):
                 probmap = subject.get('probmap', None)
                 if not probmap is None:
                     if probmap.count_nonzero() == 0:
-                        self._logger.warning(f"Subject {probmap['uid']} has no proper prob-map, skipping")
+                        self._logger.warning(f"Subject {uid} has no proper prob-map, skipping")
                         continue
 
                 # create new sampling queue based on inf_sample_per_vol
