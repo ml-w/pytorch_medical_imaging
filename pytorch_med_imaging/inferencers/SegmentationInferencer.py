@@ -111,6 +111,7 @@ class SegmentationInferencer(InferencerBase):
 
                 # check if probmap is empty
                 probmap = subject.get('probmap', None)
+                uid = subject.get('uid', 'unknown')
                 if not probmap is None:
                     if probmap.count_nonzero() == 0:
                         self._logger.warning(f"Subject {uid} has no proper prob-map, skipping")
