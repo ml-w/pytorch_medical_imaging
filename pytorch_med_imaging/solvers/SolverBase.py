@@ -387,12 +387,13 @@ class SolverBase(object):
         if isinstance(scheduler, str):
             if len(args) == 0:
                 args = self.lr_sche_args
-                if isinstance(args, str):
-                    args = ast.literal_eval(args)
+            if isinstance(args, str):
+                args = ast.literal_eval(args)
+
             if len(kwargs) == 0:
                 kwargs = self.lr_sche_kwargs
-                if isinstance(kwargs, str):
-                    args = ast.literal_eval(kwargs)
+            if isinstance(kwargs, str):
+                kwargs = ast.literal_eval(kwargs)
             self.lr_sche = pmi_lr_scheduler.PMILRScheduler(scheduler, *args, **kwargs)
         else:
             self.lr_sche = scheduler
@@ -656,16 +657,7 @@ class SolverBase(object):
             self.optimizer = optimizer
 
         if isinstance(self.optimizer, str):
-            net_params = self.net.parameters()
-            if self.optimizer == 'Adam':
-                self.optimizer = torch.optim.Adam(net_params, lr=self.init_lr)
-            elif self.optimizer == 'AdamW':
-                self.optimizer = torch.optim.AdamW(net_params, lr=self.init_lr)
-            elif self.optimizer == 'SGD':
-                self.optimizer = torch.optim.SGD(net_params, lr=self.init_lr,
-                                             momentum=self.init_mom)
-            else:
-                raise AttributeError(f"Expecting optimzer to be one of ['Adam'|'SGD'|'AdamW']")
+            self.optimizer_set_params()
         elif not isinstance(self.optimizer, torch.optim.Optimizer):
             msg = f"Expect optimizer to be either a string or a torch optimizer, but got {type(self.optimizer)} " \
                   f"instead. Check your settings in the CFG class"
@@ -682,6 +674,20 @@ class SolverBase(object):
             self.lr_sche.set_optimizer(self.optimizer)
 
         return self.optimizer
+
+    def optimizer_set_params(self):
+        r"""This is the default method to set the parameters for optimizer. Override this in child classes to control
+        the behavior your self"""
+        net_params = self.net.parameters()
+        if self.optimizer == 'Adam':
+            self.optimizer = torch.optim.Adam(net_params, lr=self.init_lr)
+        elif self.optimizer == 'AdamW':
+            self.optimizer = torch.optim.AdamW(net_params, lr=self.init_lr)
+        elif self.optimizer == 'SGD':
+            self.optimizer = torch.optim.SGD(net_params, lr=self.init_lr,
+                                             momentum=self.init_mom)
+        else:
+            raise AttributeError(f"Expecting optimzer to be one of ['Adam'|'SGD'|'AdamW']")
 
     def decay_optimizer(self, *args):
         r"""Step learning rate after the optimizer has been stepped.
@@ -788,6 +794,7 @@ class SolverBase(object):
             self.ddwrapper.set_epoch(epoch_number)
         data_loader = self.data_loader
         for step_idx, mb in enumerate(data_loader):
+            self.current_uid = mb.get('uid', None)
             s, g = self._unpack_minibatch(mb, self.unpack_key_forward)
 
             # initiate one train step. Things should be plotted in decorator of step if needed.
@@ -797,7 +804,7 @@ class SolverBase(object):
 
             self._step_callback(s.cpu(), g.cpu(), out.detach().cpu().float(), loss.data.cpu(),
                                 step_idx=epoch_number * len(data_loader) + step_idx,
-                                uid = mb.get('uid', None))
+                                uid = self.current_uid)
             del s, g, out, loss, mb
             gc.collect()
         epoch_loss = np.array(E, dtype=float).mean()
