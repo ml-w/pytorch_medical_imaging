@@ -280,6 +280,7 @@ class SolverBase(object):
             self.__class__.cls_cfg = config_file
         else:
             self._logger.warning("_load_config called without arguments.")
+            self._load_config(SolverBaseCFG())
 
     def _check_fit_ready(self) -> bool:
         r"""Check the instance attribute specified in ``self._required_attribute`` and their types to make sure that the

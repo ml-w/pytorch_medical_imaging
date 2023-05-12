@@ -299,6 +299,12 @@ class PMIController(object):
                   f"'.yaml' and '.json' were implemented. Got {override_file.name} instead."
             raise ArithmeticError(msg)
 
+        # Global flags
+        global_flags = override_dict.get('global_cfg', None)
+        if not global_flags is None:
+            for  k, v in global_flags.items():
+                os.environ[k] = str(v)
+
         # Override template setting with flags
         controller_override = override_dict.get('controller_cfg', None)
         solver_override = override_dict.get('solver_cfg', None)
@@ -314,11 +320,6 @@ class PMIController(object):
         if not data_loader_val_override is None and not self.data_loader_val_cfg is None:
             self._override_subcfg(data_loader_val_override, self.data_loader_val_cfg)
 
-        # Global flags
-        global_flags = override_dict.get('global_cfg', None)
-        if not global_flags is None:
-            for  k, v in global_flags.items():
-                os.environ[k] = str(v)
 
     def _pre_process_flags(self) -> None:
         r"""The flags defined in :class:`PMIControllerCFG` might need to further change the CFGs of the solver and the

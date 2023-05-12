@@ -33,10 +33,11 @@ class SampleSegSolverCFG(SegmentationSolverCFG):
     decay_init_epoch = 0
 
     # Training hyper params (must be provided for training)
-    init_lr      : float = 1e-4
-    init_mom     : float = 0.9
-    batch_size   : int   = 3
-    num_of_epochs: int   = 5
+    init_lr       : float = 1e-4
+    init_mom      : float = 0.9
+    batch_size    : int   = 3
+    batch_size_val: int   = 3
+    num_of_epochs : int   = 5
 
     # I/O
     unpack_key_forward: Iterable[str] = ['input', 'gt']
@@ -49,7 +50,7 @@ class SampleSegSolverCFG(SegmentationSolverCFG):
 
     # Options with defaults
     use_cuda        : Optional[bool]              = True
-    debug           : Optional[bool]              = False
+    debug_mode      : Optional[bool]              = False
     accumulate_grad : Optional[int]               = 1
 
     lr_sche     : Optional[str]  = 'ExponentialLR'
@@ -86,10 +87,11 @@ class SampleClsSolverCFG(ClassificationSolverCFG):
     decay_init_epoch = 0
 
     # Training hyper params (must be provided for training)
-    init_lr      : float = 1e-4
-    init_mom     : float = 0.9
-    batch_size   : int   = 8
-    num_of_epochs: int   = 5
+    init_lr       : float = 1e-4
+    init_mom      : float = 0.9
+    batch_size    : int   = 8
+    batch_size_val: int   = 2
+    num_of_epochs : int   = 5
 
     # I/O
     unpack_key_forward: Iterable[str] = ['input', 'gt']
@@ -102,7 +104,7 @@ class SampleClsSolverCFG(ClassificationSolverCFG):
 
     # Options with defaults
     use_cuda        : Optional[bool]              = True
-    debug           : Optional[bool]              = False
+    debug_mode      : Optional[bool]              = False
     accumulate_grad : Optional[int]               = 1
 
 

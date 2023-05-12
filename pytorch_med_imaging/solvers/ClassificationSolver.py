@@ -112,7 +112,7 @@ class ClassificationSolver(SolverBase):
                       f"{type(self.loss_function)} instead."
                 raise AttributeError(msg)
 
-        self._logger.debug(f"Output size out: {out.shape} g: {g.shape}")
+        # self._logger.debug(f"Output size out: {out.shape} g: {g.shape}")
         # Cross entropy does not need any processing, just give the raw output
         loss = self.loss_function(out, g)
         return loss
