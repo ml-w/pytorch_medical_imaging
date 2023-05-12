@@ -1,5 +1,6 @@
 import tempfile
 import unittest
+import pytest
 from sample_data.config.sample_cfg import *
 
 from mnts.mnts_logger import MNTSLogger
@@ -89,6 +90,15 @@ class TestInferencer(unittest.TestCase):
         self.inferencer.set_data_loader(self.data_loader)
         self.inferencer.write_out()
         self.inferencer.display_summary()
+
+    def test_set_data_loader(self):
+        self.inferencer.set_data_loader(self.data_loader)
+        assert inferencer.data_loader == data_loader
+
+    def test_load_checkpoint_nonexistent_path(self):
+        with pytest.raises(IOError):
+            self.inferencer.load_checkpoint('nonexistent_path')
+
 
 class TestSegmentationInferencer(TestInferencer):
     def _prepare_cfg(self):
