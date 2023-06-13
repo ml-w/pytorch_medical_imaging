@@ -95,7 +95,10 @@ class SolverBaseCFG(PMIBaseCFG):
         plotter_dict (dict, Optional):
             This dict could be used by the child class to perform plotting after validation or in each step.
         plot_to_tb (bool, Optional):
-            If try, the solver will try to create a :class:`TB_plotter` for plotting the intermediate results.
+            If true, the solver will try to create a :class:`TB_plotter` for plotting the intermediate results.
+        max_step (int, Optional):
+            If this is not `None`, the epoch will end after hitting `max_step`. The max number of datapoints processed
+            each epoch is then `max_step` * `batch_size`.
 
     """
     # Training hyper params (must be provided for training)
@@ -131,6 +134,7 @@ class SolverBaseCFG(PMIBaseCFG):
     accumulate_grad  : Optional[int]               = 1
     init_mom         : Optional[float]             = None
     plot_to_tb       : Optional[bool]              = False
+    max_step         : Optional[int]               = None
 
     def __str__(self):
         _d = {k: v for k, v in self.__dict__.items() if k[0] != '_'}
@@ -795,6 +799,11 @@ class SolverBase(object):
             self.ddwrapper.set_epoch(epoch_number)
         data_loader = self.data_loader
         for step_idx, mb in enumerate(data_loader):
+            # end this epoch directly if max_step is hit
+            if self.max_step is not None:
+                if not step_idx < self.max_step:
+                    break
+
             self.current_uid = mb.get('uid', None)
             s, g = self._unpack_minibatch(mb, self.unpack_key_forward)
 

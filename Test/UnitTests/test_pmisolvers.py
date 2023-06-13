@@ -118,6 +118,10 @@ class TestSolver(unittest.TestCase):
         self.solver.set_data_loader(dataloader_train, dataloader_test)
         self.solver.fit(self.solver_cp_save_path.name)
 
+    def test_max_step(self):
+        self.solver.set_data_loader(self.data_loader)
+        self.solver.max_step = 1
+        self.solver.fit(self.solver_cp_save_path.name)
 
 class TestSegmentationSolver(TestSolver):
     def setUp(self):
