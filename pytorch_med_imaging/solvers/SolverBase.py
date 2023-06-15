@@ -800,7 +800,7 @@ class SolverBase(object):
         data_loader = self.data_loader
         for step_idx, mb in enumerate(data_loader):
             # end this epoch directly if max_step is hit
-            if self.max_step is not None:
+            if self.max_step is not None and isinstance(self.max_step, int):
                 if not step_idx < self.max_step:
                     break
 
