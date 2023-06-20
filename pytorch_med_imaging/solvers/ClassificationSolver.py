@@ -12,6 +12,7 @@ from ..loss import CumulativeLinkLoss
 from typing import Optional, Union, Iterable, Any
 
 import pandas as pd
+import pprint
 
 
 class ClassificationSolverCFG(SolverBaseCFG):
@@ -53,8 +54,16 @@ class ClassificationSolver(SolverBase):
         Args:
             cfg *ClassificationSolverCFG):
                 Configuration.
+
+        Attributes:
+            _validation_misclassification_record (dict):
+                Record of misclassifications during validation. This dictionary is populated in the method
+                :func:`_validation_step_callback` and is only populated when the argument `uid` is provided and is a
+                hashable object.
+
         """
         super(ClassificationSolver, self).__init__(cfg, *args, **kwargs)
+        self._validation_misclassification_record = {}
 
     def _build_validation_df(self, g, res, uid=None):
         r"""Build pandas table for displaying the prediction results. Displayed after each step and is called in
@@ -143,19 +152,56 @@ class ClassificationSolver(SolverBase):
         return g, res
 
     def _validation_step_callback(self, g: torch.Tensor, res: torch.Tensor, loss: Union[torch.Tensor, float],
-                                  uids=None) -> None:
+                                  uids: Union[Iterable, None]=None) -> None:
         r"""Stores decision, step loss and performance.
 
         Args:
-            uids:
+            uids (list, Iterable):
         """
         # when ordinal_mse mode, the decision is based on rounding the probability to the nearest class.
         if not self.ordinal_mse:
             dic = torch.argmax(torch.softmax(res, dim=1), dim=1)
         else:
             dic = torch.round(res).long()
+        # add the classification result to the list
         self.perfs.extend([guess == truth for guess, truth in zip(dic.tolist(), g.tolist())])
+        # add the misclassified result to the dictionary
+        self.report_misclassification(dic, g, uids)
         self.validation_losses.append(loss.item())
+
+    def report_misclassification(self, dic, g, uids=None):
+        r"""Updates the misclassification record for the given data and logs it.
+
+        This function takes in the predicted classifications, true classifications, and unique
+        identifiers of data samples. It updates the misclassification record by incrementing
+        the count for each misclassified data sample. Finally, it logs the updated
+        misclassification record.
+
+        Args:
+            dic (array-like):
+                The array of predicted classifications.
+            g (array-like):
+                The array of true classifications.
+            uids (list, optional):
+                A list of unique identifiers for the data samples. If not
+                provided, the misclassification record will not be updated.
+
+        Returns:
+            None
+        """
+        if uids is not None:
+            # find out which element is wrong
+            wrong_pred = {idx: guess != truth for idx, guess, truth in zip(uids, dic.tolist(), g.tolist())}
+            for idx, val in wrong_pred.items():
+                if idx in self._validation_misclassification_record:
+                    self._validation_misclassification_record[idx] += 1
+                else:
+                    self._validation_misclassification_record[idx] = 1
+            if len(self._validation_misclassification_record) > 0:
+                # print the misclassification record
+                self._logger.info("Misclassification record: \n%s" % (
+                    pprint.pprint(self._validation_misclassification_record)
+                ))
 
     def _validation_callback(self) -> None:
         r"""Calculate accuracy of classification.
