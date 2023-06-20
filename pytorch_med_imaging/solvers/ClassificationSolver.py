@@ -192,7 +192,9 @@ class ClassificationSolver(SolverBase):
         if uids is not None:
             # find out which element is wrong
             wrong_pred = {idx: guess != truth for idx, guess, truth in zip(uids, dic.tolist(), g.tolist())}
-            for idx, val in wrong_pred.items():
+            for idx, miss_classififed in wrong_pred.items():
+                if not miss_classififed:
+                    continue
                 if idx in self._validation_misclassification_record:
                     self._validation_misclassification_record[idx] += 1
                 else:
