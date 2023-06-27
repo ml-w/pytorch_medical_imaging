@@ -166,10 +166,10 @@ class ClassificationSolver(SolverBase):
         # add the classification result to the list
         self.perfs.extend([guess == truth for guess, truth in zip(dic.tolist(), g.tolist())])
         # add the misclassified result to the dictionary
-        self.report_misclassification(dic, g, uids)
+        self._update_misclassification_record(dic, g, uids)
         self.validation_losses.append(loss.item())
 
-    def report_misclassification(self, dic, g, uids=None):
+    def _update_misclassification_record(self, dic, g, uids=None):
         r"""Updates the misclassification record for the given data and logs it.
 
         This function takes in the predicted classifications, true classifications, and unique
@@ -199,11 +199,6 @@ class ClassificationSolver(SolverBase):
                     self._validation_misclassification_record[idx] += 1
                 else:
                     self._validation_misclassification_record[idx] = 1
-            if len(self._validation_misclassification_record) > 0:
-                # print the misclassification record
-                self._logger.info("Misclassification record: \n%s" % (
-                    pprint.pprint(self._validation_misclassification_record)
-                ))
 
     def _validation_callback(self) -> None:
         r"""Calculate accuracy of classification.
@@ -214,6 +209,13 @@ class ClassificationSolver(SolverBase):
         self._logger.info("Validation Result - ACC: %.05f, VAL: %.05f"%(acc, self.validation_losses))
         self.plotter_dict['scalars']['Loss/Validation Loss'] = self.validation_losses
         self.plotter_dict['scalars']['Performance/ACC'] = acc
+
+        # Print the misclassification report
+        if len(self._validation_misclassification_record) > 0:
+            self._logger.info("Validation misclassification report: {}".format(
+                pprint.pformat(self._validation_misclassification_record)
+            ))
+
 
     def _step_callback(self, s, g, out, loss, uid=None, step_idx=None) -> None:
         r"""Build and print a table summarizing the prediction of the step.

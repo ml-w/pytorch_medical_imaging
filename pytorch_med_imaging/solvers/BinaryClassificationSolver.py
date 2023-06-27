@@ -10,6 +10,7 @@ import torch
 import torch.nn as nn
 import numpy as np
 import pandas as pd
+import pprint
 from tqdm import tqdm
 from typing import Union, Iterable, Any, Tuple
 
@@ -31,6 +32,7 @@ class BinaryClassificationSolver(ClassificationSolver):
                  cfg: ClassificationSolver,
                  *args, **kwargs):
         super(ClassificationSolver, self).__init__(cfg, *args, **kwargs)
+        self._validation_misclassification_record = {}
 
     def _validation_step_callback(self, g: torch.Tensor, res: torch.Tensor, loss: Union[torch.Tensor, float],
                                   uids=None) -> None:
@@ -76,6 +78,13 @@ class BinaryClassificationSolver(ClassificationSolver):
         self.plotter_dict['scalars']['Performance/ACC'] = acc
         for param, val in per_mean.iteritems():
             self.plotter_dict['scalars']['Performance/%s'%param] = val
+
+        # Print the misclassification report
+        if len(self._validation_misclassification_record) > 0:
+            self._logger.info("Validation misclassification report: {}".format(
+                pprint.pformat(self._validation_misclassification_record)
+            ))
+
 
     @staticmethod
     def _compute_performance(dics: Iterable[torch.IntTensor],
