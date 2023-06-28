@@ -50,11 +50,8 @@ class TestLoss(unittest.TestCase):
         self.run_loss()
 
     def run_loss(self):
-        if torch.cuda.is_available():
-            self.loss_func = self.loss_func.cuda()
-            self.test_target = self.test_target.cuda()
-            for i, t in enumerate(self.test_inputs):
-                self.test_inputs[i] = t.cuda()
+        r"""Run loss for all test inputs"""
+        self._to_cuda()
         for t in self.test_inputs:
             msg = f"Loss function failed when handling input with shape ({t.shape}): \n{t}"
             loss = self.loss_func(t, self.test_target)
@@ -65,7 +62,15 @@ class TestLoss(unittest.TestCase):
                 msg += f"The loss shape was: {loss.shape}"
                 self.fail(msg)
 
+    def _to_cuda(self):
+        r"""Move loss function and test tensors to GPU if a CUDA device is found"""
+        if torch.cuda.is_available():
+            self.loss_func = self.loss_func.cuda()
+            self.test_target = self.test_target.cuda()
+            for i, t in enumerate(self.test_inputs):
+                self.test_inputs[i] = t.cuda()
+
     def test_FocalLoss(self):
-        loss_func = FocalLoss()
-        self.run_loss
+        self.loss_func = BinaryFocalLoss(alpha=0.5, reduction='none')
+        loss = self.loss_func(self.test_input_5, self.test_target)
 

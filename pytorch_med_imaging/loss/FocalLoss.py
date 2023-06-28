@@ -3,7 +3,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 from mnts.mnts_logger import MNTSLogger
 
-class FocalLoss(nn.Module):
+class BinaryFocalLoss(nn.Module):
     r"""
     Focal loss implemented with respect to [2]_.
 
@@ -35,22 +35,19 @@ class FocalLoss(nn.Module):
 
     """
     def __init__(self, with_sigmoid=True, gamma=2., reduction='mean', alpha=0.8):
-        super(FocalLoss, self).__init__()
+        super(BinaryFocalLoss, self).__init__()
 
-        assert reduction in [None, 'mean', 'sum'], "Incorrect reduction method specified {}".format(reduction)
+        assert reduction in [None, 'none', 'mean', 'sum'], "Incorrect reduction method specified {}".format(reduction)
         assert gamma > 0, "Gamma must be greater than 0."
 
         self._gamma = torch.tensor(gamma)
         self._reduction = reduction
         self._with_sigmoid = with_sigmoid
-        self._alpha = torch.tensor(alpha)
-        self._logger = MNTSLogger[self.__class__.__name__]
-        self._logger.debug("Set up loss with gamma: {}".format(self._gamma))
-        self.register_buffer('alpha', self._alpha)
+        self._weight = torch.tensor(alpha)
+        self.register_buffer('weight', self._weight)
         self.register_buffer('gamma', self._gamma)
 
     def forward(self, x: torch.Tensor, targets: torch.Tensor):
-        x, targets = input
         if self._with_sigmoid:
             x = torch.sigmoid(x)
 
@@ -59,21 +56,20 @@ class FocalLoss(nn.Module):
             return tv.mean()
         elif self._reduction == 'sum':
             return tv.sum()
-        elif self._reduction is None:
+        elif self._reduction is None or self._reduction == 'none':
             return tv
         else:
-            self._logger.error("Incorrect setting for reduction: {}".format(self._reduction))
             raise AttributeError("Incorrect setting for reduction: {}".format(self._reduction))
 
 
     def focal(self, x: torch.Tensor, targets: torch.Tensor):
         # Create index of g
-        ce_loss = F.binary_cross_entropy_with_logits(x, targets, reduction="none")
-        p_t = p * targets + (1 - x) * (1 - targets)
+        ce_loss = F.binary_cross_entropy(x, targets, reduction="none")
+        p_t = x * targets + (1 - x) * (1 - targets)
         loss = ce_loss * ((1 - p_t) ** self.gamma)
 
-        if alpha >= 0:
-            alpha_t = alpha * targets + (1 - self.alpha) * (1 - targets)
+        if self.weight >= 0:
+            alpha_t = self.weight * targets + (1 - self.weight) * (1 - targets)
             loss = alpha_t * loss
 
         return loss
