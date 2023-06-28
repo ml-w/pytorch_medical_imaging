@@ -46,20 +46,26 @@ class TestLoss(unittest.TestCase):
             self.test_inputs[i] = autograd.Variable(t, requires_grad=True)
 
     def test_ConfBCELoss(self):
-        loss_func = ConfidenceBCELoss(conf_factor=1)
+        self.loss_func = ConfidenceBCELoss(conf_factor=1)
+        self.run_loss()
+
+    def run_loss(self):
         if torch.cuda.is_available():
-            loss_func = loss_func.cuda()
+            self.loss_func = self.loss_func.cuda()
             self.test_target = self.test_target.cuda()
             for i, t in enumerate(self.test_inputs):
                 self.test_inputs[i] = t.cuda()
-
         for t in self.test_inputs:
             msg = f"Loss function failed when handling input with shape ({t.shape}): \n{t}"
-            loss = loss_func(t, self.test_target)
+            loss = self.loss_func(t, self.test_target)
             self.assertIn(loss.dim(), (0, 1), msg=msg + " Loss must be a single number!")
             try:
                 loss.backward()
             except Exception as e:
                 msg += f"The loss shape was: {loss.shape}"
                 self.fail(msg)
+
+    def test_FocalLoss(self):
+        loss_func = FocalLoss()
+        self.run_loss
 
