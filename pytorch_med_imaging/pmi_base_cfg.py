@@ -55,3 +55,6 @@ class PMIBaseCFG:
         for k, v in self.__dict__.items():
             setattr(new_inst, k, copy.deepcopy(v, memo))
         return new_inst
+
+    def __setattr__(self, key, value):
+        self.__dict__[key] = value
