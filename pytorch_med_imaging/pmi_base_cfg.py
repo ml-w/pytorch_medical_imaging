@@ -35,13 +35,9 @@ class PMIBaseCFG:
                 setattr(self, key, value)
 
     def __str__(self):
-        _d = {k: v for k, v in self.__dict__.items() if k[0] != '_'}
+        _d = {k: v if not isinstance(v, self.__class__) else v.__dict__
+              for k, v in self.__dict__.items() if k[0] != '_'}
         return pprint.pformat(_d, indent=2)
-
-    def _as_dict(self):
-        r"""This function is not supposed to be private, but it needs the private tag to be spared by :func:`.__init__`
-        """
-        return self.__dict__
 
     def __iter__(self):
         cls_dict = self._get_dict()
