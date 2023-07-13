@@ -157,6 +157,12 @@ class TestClassificationSolver(TestSolver):
         self.solver = ClassificationSolver(self.solver_cfg)
         self.solver_cls = ClassificationSolver
 
+    def test_report_missclassification(self):
+        dic = torch.Tensor([0, 1, 1, 0])
+        g   = torch.Tensor([1, 1, 1, 0])
+        uids = ['1', '2', '3' , '4']
+        self.solver._update_misclassification_record(dic, g, uids)
+
 class TestBinaryClassificationSolver(TestClassificationSolver):
     def _prepare_cfg(self):
         super(TestBinaryClassificationSolver, self)._prepare_cfg()

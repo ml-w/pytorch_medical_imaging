@@ -4,7 +4,7 @@ from mnts.mnts_logger import MNTSLogger
 from torch import optim
 from torch.utils.data import DataLoader, TensorDataset
 from torch.optim import lr_scheduler
-from ..loss import FocalLoss, TverskyDiceLoss
+from ..loss import BinaryFocalLoss, TverskyDiceLoss
 from sklearn.metrics import confusion_matrix
 import torch
 import torch.nn as nn
@@ -32,6 +32,7 @@ class BinaryClassificationSolver(ClassificationSolver):
                  cfg: ClassificationSolver,
                  *args, **kwargs):
         super(ClassificationSolver, self).__init__(cfg, *args, **kwargs)
+
         self._validation_misclassification_record = {}
 
     def _validation_step_callback(self, g: torch.Tensor, res: torch.Tensor, loss: Union[torch.Tensor, float],
