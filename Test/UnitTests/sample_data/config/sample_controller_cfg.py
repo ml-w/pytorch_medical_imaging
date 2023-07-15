@@ -10,6 +10,7 @@ class SampleControllerCFG(PMIControllerCFG):
     run_mode = 'training'
     id_list = str(Path(__file__).parent.joinpath('sample_id_setting.ini').absolute())
     id_list_val = str(Path(__file__).parent.joinpath('sample_id_setting.txt').absolute())
+
     # The followings are specified in runtime because a temp folder was created to hold outputs
     # * output_dir
     # * cp_save_dir
@@ -27,3 +28,13 @@ class SampleSegControllerCFG(SampleControllerCFG):
     lr_sche = 'ExponentialLR'
     lr_sche_args = [0.99]
 
+
+class SampleClsControllerCFG(SampleControllerCFG):
+    _data_loader_cfg = SampleClsLoaderCFG()
+    data_loader_val_cfg = SampleClsLoaderCFG()
+    solver_cfg = SampleClsSolverCFG()
+    solver_cls = BinaryClassificationSolver
+    data_loader_cls = PMIImageFeaturePairLoader
+    data_loader_val_cls = PMIImageFeaturePairLoader
+    lr_sche = 'ExponentialLR'
+    lr_sche_args = [0.99]
