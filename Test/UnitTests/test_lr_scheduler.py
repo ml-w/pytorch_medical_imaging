@@ -172,3 +172,14 @@ class TestDecayCAWR_n_EXP(TestPMILRScheduler):
             eta_min = 1E-6
         )
         super(TestDecayCAWR_n_EXP, self).setUp()
+
+class TestOneCycleLR(TestPMILRScheduler):
+    def setUp(self):
+        self.name = 'OneCycleLR'
+        self.args = [1E-2] # max_lr
+        self.kwargs = dict(
+            steps_per_epoch=2,
+            epochs= 3,
+            base_momentum = 0.5,
+        )
+        super(TestOneCycleLR, self).setUp()
