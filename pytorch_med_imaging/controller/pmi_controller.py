@@ -84,8 +84,10 @@ class PMIControllerCFG(PMIBaseCFG):
             'medium'. Must be one of ('medium', 'high', 'highest').
 
     .. note::
-        Don't confuse the `id_list` in this CFG with that in :class:`SolverBase`, the later is more flexible and can
-        accept various specification formats
+        * Don't confuse the `id_list` in this CFG with that in :class:`SolverBase`, the later is more flexible and can
+          accept various specification formats.
+        * The solver is used for both training and inference. The attribute :attr:`run_mode` determine which mode it
+          will run in.
 
     .. tips::
         If you would like to use a different data loader CFG in training and inference mode, define the private tag
@@ -115,8 +117,8 @@ class PMIControllerCFG(PMIBaseCFG):
     verbose : Optional[bool] = True
 
     # Configurations
-    _data_loader_cfg    : PMIDataLoaderBaseCFG           = None
-    _data_loader_inf_cfg: Optional[PMIDataLoaderBaseCFG] = None
+    _data_loader_cfg    : PMIDataLoaderBaseCFG           = None # Use this for different train and inference loader
+    _data_loader_inf_cfg: Optional[PMIDataLoaderBaseCFG] = None # Use this for different train and inference loader
     data_loader_val_cfg : Optional[PMIDataLoaderBaseCFG] = None
     solver_cfg         : SolverBaseCFG = None
     data_loader_cls    : type          = None
