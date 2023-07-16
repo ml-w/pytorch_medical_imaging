@@ -37,8 +37,8 @@ class TestLRSchedulerWithController(unittest.TestCase):
     def test_onecyclelr_losses(self):
         # One cycle LR must be tested this way
         self.ctl_cfg.solver_cfg.lr_sche = "OneCycleLR"
-        self.ctl_cfg.solver_cfg.lr_scheduler_args = [1E-4] # max_lr
-        self.ctl_cfg.solver_cfg.lr_scheduler_kwargs = {'total_steps':50,'cycle_momentum':True}
+        self.ctl_cfg.solver_cfg.lr_sche_args = [1E-4] # max_lr
+        self.ctl_cfg.solver_cfg.lr_sche_kwargs = {'total_steps':50,'cycle_momentum':True}
         self.ctl_cfg.solver_cfg.num_of_epochs = 3
         self.ctl_cfg.solver_cfg.optimizer = 'SGD'
         self.ctl_cfg.solver_cfg.init_mom = 0.99

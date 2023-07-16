@@ -34,6 +34,7 @@ class SampleClsControllerCFG(SampleControllerCFG):
     data_loader_val_cfg = SampleClsLoaderCFG()
     solver_cfg = SampleClsSolverCFG()
     solver_cls = BinaryClassificationSolver
+    inferencer_cls = BinaryClassificationInferencer
     data_loader_cls = PMIImageFeaturePairLoader
     data_loader_val_cls = PMIImageFeaturePairLoader
     lr_sche = 'ExponentialLR'
