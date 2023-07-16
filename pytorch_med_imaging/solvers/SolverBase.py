@@ -229,7 +229,8 @@ class SolverBase(object):
             'init_lr': float,
             'num_of_epochs': int,
             'unpack_key_forward': (tuple, list),
-            'batch_size': int
+            'batch_size': int,
+            'lr_sche': PMILRScheduler
         }
 
         # Optimizer attributes
@@ -390,15 +391,33 @@ class SolverBase(object):
 
         # if a string is supplied, try to creat it in PMILRScheduler.
         if isinstance(scheduler, str):
+            # if nothing is provided, read from attributes
             if len(args) == 0:
                 args = self.lr_sche_args
+            # if attributes is a string
             if isinstance(args, str):
                 args = ast.literal_eval(args)
+            # if the string is not a list, make it a list
+            if not isinstance(args, (list, tuple)):
+                args = [args]
 
             if len(kwargs) == 0:
                 kwargs = self.lr_sche_kwargs
             if isinstance(kwargs, str):
                 kwargs = ast.literal_eval(kwargs)
+
+            self._logger.debug(f"Arguments provided: \nargs: {pprint.pformat(args)}\nkwargs: {pprint.pformat(kwargs)}")
+
+
+            # Special treatment for OneCycleLR
+            if scheduler == 'OneCycleLR':
+                # Calculate steps and number of epochs automatically
+                self._logger.info("Detect OneCycleLR config. Automatically updating epochs and steps")
+                kwargs['epochs'] = self.num_of_epochs
+                kwargs['steps_per_epoch'] = min(len(self.data_loader),
+                                                self.max_step if self.max_step > 0 else len(self.data_loader))
+            self._logger.debug(f"Optimizer args: {pprint.pformat(args)}")
+            self._logger.debug(f"Optimizer kwargs: {pprint.pformat(kwargs)}")
             self.lr_sche = pmi_lr_scheduler.PMILRScheduler(scheduler, *args, **kwargs)
         else:
             self.lr_sche = scheduler
@@ -597,7 +616,10 @@ class SolverBase(object):
         self._update_network(loss)
 
         # if schedular is OneCycleLR
-        if isinstance(self.lr_sche, lr_scheduler.OneCycleLR):
+        if isinstance(self.lr_sche, PMILRScheduler):
+            if self.lr_sche.scheduler_name == 'OneCycleLR':
+                self.lr_sche.step()
+        elif isinstance(self.lr_sche, lr_scheduler.OneCycleLR):
             self.lr_sche.step()
         self._step_called_time += 1
         return out, loss.cpu().data
@@ -670,15 +692,21 @@ class SolverBase(object):
         else:
             # Do nothing if everything is fine. Assume the optimizer already knows the network parameters.
             pass
+        return self.optimizer
 
+
+    def prepare_lr_scheduler(self):
+        r"""Setup LR scheduler for training. This is called at the end of :func:`set_data_loader`."""
+        assert hasattr(self, 'optimizer'), "Optimizer must be set before lr scheduler!"
+        assert self.optimizer is not None, "Optimizer must be set before lr scheduler!"
+
+        # Setup LR Scheduler
         if isinstance(self.lr_sche, str):
             self.set_lr_scheduler(self.lr_sche)
         elif self.lr_sche is None:
             self.set_lr_scheduler('ExponentialLR', 0.99)
         elif isinstance(self.lr_sche, PMILRScheduler):
             self.lr_sche.set_optimizer(self.optimizer)
-
-        return self.optimizer
 
     def optimizer_set_params(self):
         r"""This is the default method to set the parameters for optimizer. Override this in child classes to control
@@ -707,11 +735,20 @@ class SolverBase(object):
             :class:`lr_scheduler.OneCycleLR` is implemented.
         """
         if not self.lr_sche is None:
+            # If using pytorch default LR schedulers
             if isinstance(self.lr_sche, (lr_scheduler.ReduceLROnPlateau)):
                 self.lr_sche.step(*args)
-            elif isinstance(self.lr_sche, lr_scheduler.OneCycleLR):
+            elif isinstance(self.lr_sche, (lr_scheduler.OneCycleLR)):
                 # Do nothing because it's supposed to be done in `step()`
                 pass
+            elif isinstance(lr_scheduler, PMILRScheduler):
+                if self.lr_sche.scheduler_name == 'ReduceLROnPlateau':
+                    self.lr_sche.step(*args)
+                elif self.lr_sche.scheduler_name == 'OneCycleLR':
+                    # Do nothing because it's supposed to be done in `step()`
+                    pass
+                else:
+                    self.lr_sche.step()
             else:
                 self.lr_sche.step()
         self._decayed_time += 1
@@ -915,6 +952,9 @@ class SolverBase(object):
                       f"{checkpoint_path} now."
                 self._logger.warning(msg)
                 self.cp_save_dir = checkpoint_path
+
+        # If fit, needs lr scheduler
+        self.prepare_lr_scheduler()
 
         # Error check
         self._check_fit_ready()
