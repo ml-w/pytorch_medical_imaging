@@ -128,4 +128,5 @@ class PMILRScheduler(object):
 
     def step(self, *args, **kwargs):
         r"""This is an instant port to the class method :meth:`.step_scheduler`"""
+        self._logger.debug(f"Calling {self.scheduler_name} step(). Current lr: {self.get_last_lr():.09f}")
         self.__class__.step_scheduler(*args)

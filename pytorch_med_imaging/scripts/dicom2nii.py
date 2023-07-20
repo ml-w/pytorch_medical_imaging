@@ -6,8 +6,8 @@ import os
 __all__ = ['dicom2nii']
 
 def dicom2nii(a, logger):
-    if not os.path.isdir(a.input):
-        raise FileNotFoundError(f"Cannot open {a.input}.")
+    if not os.path.isdir(a.root_dir):
+        raise FileNotFoundError(f"Cannot open {a.root_dir}.")
     if not os.path.isdir(a.output):
         logger.warning(f"Target directory does not exist, trying to create: {a.output}")
         os.makedirs(a.output, exist_ok=True)
@@ -18,7 +18,7 @@ def dicom2nii(a, logger):
     logger.info(f"Specified ID globber: {a.idglobber}")
     logger.info(f"Use patient ID: {a.usepid}")
     ids = a.idlist.split(',') if not a.idlist is None else None
-    dicom_dirs = preprocessing.recursive_list_dir(a.depth, a.input)
+    dicom_dirs = preprocessing.recursive_list_dir(a.depth, a.root_dir)
     logger.info(f"Dirs:\n{dicom_dirs}")
 
     data_formatting.batch_dicom2nii(dicom_dirs,
@@ -28,7 +28,7 @@ def dicom2nii(a, logger):
                                     idglobber = a.idglobber,
                                     use_patient_id = a.usepid,
                                     use_top_level_fname = a.usefname,
-                                    input = a.input,
+                                    input = a.root_dir,
                                     idlist = ids,
                                     prefix = a.prefix,
                                     debug = a.debug_mode,

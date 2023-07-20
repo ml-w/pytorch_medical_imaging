@@ -736,19 +736,17 @@ class SolverBase(object):
         """
         if not self.lr_sche is None:
             # If using pytorch default LR schedulers
-            if isinstance(self.lr_sche, (lr_scheduler.ReduceLROnPlateau)):
+            if isinstance(self.lr_sche, PMILRScheduler):
+                _lr_sche = self.lr_sche.lr_sche
+            else:
+                _lr_sche = self.lr_sche
+
+            # If using pmi LR schedulers
+            if isinstance(_lr_sche, lr_scheduler.ReduceLROnPlateau):
                 self.lr_sche.step(*args)
-            elif isinstance(self.lr_sche, (lr_scheduler.OneCycleLR)):
+            elif isinstance(_lr_sche, lr_scheduler.OneCycleLR):
                 # Do nothing because it's supposed to be done in `step()`
                 pass
-            elif isinstance(lr_scheduler, PMILRScheduler):
-                if self.lr_sche.scheduler_name == 'ReduceLROnPlateau':
-                    self.lr_sche.step(*args)
-                elif self.lr_sche.scheduler_name == 'OneCycleLR':
-                    # Do nothing because it's supposed to be done in `step()`
-                    pass
-                else:
-                    self.lr_sche.step()
             else:
                 self.lr_sche.step()
         self._decayed_time += 1
