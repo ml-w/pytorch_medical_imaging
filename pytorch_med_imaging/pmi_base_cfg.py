@@ -55,6 +55,12 @@ class PMIBaseCFG:
     def __setattr__(self, key, value):
         self.__dict__[key] = value
 
+    def __getattr__(self, item):
+        if item in self.__dict__:
+            return self.__dict__[item]
+        else:
+            return super().__getattr__(item)
+
     def __getitem__(self, item):
         return self.__dict__[item]
 
