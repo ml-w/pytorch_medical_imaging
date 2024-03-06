@@ -4,6 +4,7 @@ from .pmi_dataloader_base import PMIDataLoaderBase, PMIDataLoaderBaseCFG
 from .. import med_img_dataset
 from ..med_img_dataset import ImageDataSet
 from .lambda_tio_adaptor import CallbackQueue
+from .computations.queue_callback import *
 from typing import *
 from functools import partial
 from dataclasses import dataclass
