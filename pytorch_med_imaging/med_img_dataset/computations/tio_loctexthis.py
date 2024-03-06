@@ -8,14 +8,24 @@ from torchio.transforms import Transform
 from typing import Sequence, Union, Optional
 
 def img_to_histogram(image: torch.Tensor, bins=256):
-    """
-    Compute the LNDP and LBP texture as histogram bin counts from the input patch.
+    """Computes histograms for LNDP and LBP textures of a 2D image.
+
+    This function takes a 2D image tensor, computes Local Binary Patterns (LBP) and
+    Local Neighbor Difference Patterns (LNDP), and then calculates histograms for
+    each texture. The histograms are concatenated and returned as a single tensor.
+
     Args:
-        image:
-        bins:
+        image (torch.Tensor):
+            A 2D image tensor.
+        bins (int, optional):
+            The number of bins to use for the histograms. Defaults to 256.
 
     Returns:
-        torch.Tensor
+        torch.Tensor: A 1D tensor containing the concatenated histograms for LBP
+        and LNDP textures.
+
+    Raises:
+        ArithmeticError: If the input image tensor is not 2D.
     """
     # only deal with 2D images
     image = image.squeeze(0)
@@ -35,15 +45,33 @@ def img_to_histogram(image: torch.Tensor, bins=256):
     return feats
 
 class LocTextHistTransform(Transform):
-    """
+    """A TorchIO transform for computing histograms of local textures.
+
+    This transform computes Local Binary Patterns (LBP) and Local Neighbor
+    Difference Patterns (LNDP) for each image in the subject, and stores the
+    resulting histograms in the subject's properties.
+
+    Attributes:
+        target_attribute (str):
+            The attribute name where the computed histograms will be stored in
+            each subject.
+        types_to_apply (Union[Sequence[str], str], optional):
+            Image types to which this transform should be applied. If `None`,
+            the transform is applied to all image types in the subject.
+            Can be a sequence of strings or a single string.
+        nbins (int, optional):
+            The number of bins to use for the histograms. Defaults to 256.
+
     Args:
-        target_attribute: String as target attribute
-        types_to_apply: List of strings corresponding to the image types to
-            which this transform should be applied. If ``None``, the transform
-            will be applied to all images in the subject.
-        nbins: Number of bins
-        **kwargs: See :class:`~torchio.transforms.Transform` for additional
-            keyword arguments.
+        target_attribute (str):
+            The attribute name where the computed histograms will be stored.
+        types_to_apply (Union[Sequence[str], str], optional):
+            Image types to apply this transform on. Defaults to `None`.
+        nbins (int, optional):
+            The number of bins to use for the histograms. Defaults to 256.
+        **kwargs:
+            Additional keyword arguments. See :class:`~torchio.transforms.Transform`.
+
     """
     def __init__(self,
                  target_attribute: str,
@@ -57,6 +85,18 @@ class LocTextHistTransform(Transform):
         self.args_names = 'target_attribute', 'types_to_apply', 'nbins'
 
     def apply_transform(self, subject: Subject) -> Subject:
+        """Apply the local texture histogram transform to a subject.
+
+        Args:
+            subject (Subject): The subject to transform.
+
+        Returns:
+            Subject: The transformed subject with new histogram attributes.
+
+        Raises:
+            ValueError: If the result of histogram computation is not a
+                torch.Tensor.
+        """
         images = subject.get_images(
             intensity_only=True,
             include=self.include,
@@ -83,6 +123,15 @@ class LocTextHistTransform(Transform):
 
 
     def _getpos(self, item):
+        """Compute the normalized position of a patch within a slice.
+
+        Args:
+            item (int): The index of the item.
+
+        Returns:
+            float: The normalized position of the item within its slice,
+            ranging from -0.5 to 0.5.
+        """
         # locate slice number of the patch
         if self._random_patches:
             slice_index = item / self._patch_perslice
