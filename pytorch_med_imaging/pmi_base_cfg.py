@@ -11,6 +11,21 @@ class PMIBaseCFG:
     Attributes:
         _no_str (list):
             Modify this list to control what are stringified by :meth:`__str__()`
+
+    .. note::
+        Keywords within {} will be replace by the attribute value (converted to str if its not one). Avoid
+        putting other attributes name within {} if you don't intend to replace it. Example:
+
+        ```
+        base_cfg = PMIBaseCFG(
+            number = 10,
+            mystring = "There are {number} balls"
+        )
+        base_cfg.mystring
+        # string: "There are 10 balls"
+        base_cfg.number
+        # int: 10
+        ```
     """
     # these attributes are skipped because they can't be copied and there's no need to copy them
     _special_attr = ['inferencer_cls', 'solver_cls']
@@ -64,25 +79,32 @@ class PMIBaseCFG:
         if item in ('__dict__', '_RESOLVE', '__getattribute__'):
             return super().__getattribute__(item)
 
-        if item in super().__getattribute__('_RESOLVE'):
+        _RESOLVE = super().__getattribute__('_RESOLVE')
+
+        if item in _RESOLVE:
             super().__getattribute__('_RESOLVE').remove(item)
             return super().__getattribute__(item)
 
         # First, get the attribute using the base class to prevent infinite recursion
         o = super().__getattribute__(item)
 
-        super().__getattribute__('_RESOLVE').add(item)
+        _RESOLVE.add(item)
         # Try to replace whatever is wrapped by {} with class attr. Note that this does not check for self references
         if isinstance(o, str):
-            mo = re.findall(r'{.*?}', o)
-            if mo is not None:
-                for g in mo:
-                    key = g.strip('{}')
-                    # Here we are using super() again to prevent recursion
-                    val = super().__getattribute__(key)
-                    # strip
-                    o = o.replace(g, val)
-
+            try:
+                mo = re.findall(r'{.*?}', o)
+                if mo is not None:
+                    for g in mo:
+                        key = g.strip('{}')
+                        # Here we are using super() again to prevent recursion
+                        try:
+                            val = super().__getattribute__(key)
+                            # strip
+                            o = o.replace(g, str(val))
+                        except AttributeError:
+                            continue
+            finally:
+                _RESOLVE.remove(item)
         return o
 
 

@@ -22,3 +22,19 @@ class TestPMICFG(unittest.TestCase):
         # There's only one layer
         self.assertEqual('{A}', base_cfg.A)
         self.assertEqual('{A}_{A}', base_cfg.C)
+
+    def test_cfg_notfound(self):
+        base_cfg = PMIBaseCFG(
+            A = '{wrong_keyword}',
+            B = '{another wrong keyword}_{A}'
+        )
+        self.assertEqual('{wrong_keyword}', base_cfg.A)
+        self.assertEqual('{another wrong keyword}_{wrong_keyword}', base_cfg.B)
+
+    def test_cfg_wrongtype(self):
+        base_cfg = PMIBaseCFG(
+            number = 10,
+            mystring = "There are {number} balls"
+        )
+        self.assertEqual("There are 10 balls", base_cfg.mystring)
+        self.assertEqual(10, base_cfg.number)
