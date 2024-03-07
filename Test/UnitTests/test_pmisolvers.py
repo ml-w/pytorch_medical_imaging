@@ -196,6 +196,7 @@ class TestSolverCreateFromFlags(unittest.TestCase):
         for k, v in self._override_settings['test_solver_cfg_1'].items():
             setattr(self.solver_cfg, k, v)
         solver = SegmentationSolver(self.solver_cfg)
+        solver.prepare_lr_scheduler()
         self.assertIsInstance(solver.lr_sche, PMILRScheduler)
 
     def test_create_early_stopper(self):
