@@ -12,9 +12,9 @@ class SampleControllerCFG(PMIControllerCFG):
     id_list_val = str(Path(__file__).parent.joinpath('sample_id_setting.txt').absolute())
 
     # The followings are specified in runtime because a temp folder was created to hold outputs
-    # * output_dir
-    # * cp_save_dir
-    # * cp_load_dir
+    # - output_dir
+    # - cp_save_dir
+    # - cp_load_dir
 
 
 class SampleSegControllerCFG(SampleControllerCFG):
@@ -33,8 +33,8 @@ class SampleClsControllerCFG(SampleControllerCFG):
     _data_loader_cfg = SampleClsLoaderCFG()
     data_loader_val_cfg = SampleClsLoaderCFG()
     solver_cfg = SampleClsSolverCFG()
-    solver_cls = BinaryClassificationSolver
-    inferencer_cls = BinaryClassificationInferencer
+    solver_cls = ClassificationSolver
+    inferencer_cls = ClassificationInferencer
     data_loader_cls = PMIImageFeaturePairLoader
     data_loader_val_cls = PMIImageFeaturePairLoader
     lr_sche = 'ExponentialLR'

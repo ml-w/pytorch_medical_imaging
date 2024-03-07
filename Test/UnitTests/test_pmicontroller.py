@@ -141,7 +141,7 @@ class TestController(unittest.TestCase):
 
     def test_s8_inf_cfg(self):
         self.cfg.run_mode = 'inference'
-        self.cfg.data_loader_inf_cfg = 'dummy'
+        self.cfg._data_loader_inf_cfg = 'dummy'
         self.assertEquals(self.cfg.data_loader_cfg, self.cfg.data_loader_inf_cfg)
 
     @classmethod

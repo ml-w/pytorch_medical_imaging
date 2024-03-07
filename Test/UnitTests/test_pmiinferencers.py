@@ -93,7 +93,7 @@ class TestInferencer(unittest.TestCase):
 
     def test_set_data_loader(self):
         self.inferencer.set_data_loader(self.data_loader)
-        assert inferencer.data_loader == data_loader
+        assert self.inferencer.data_loader == self.data_loader
 
     def test_load_checkpoint_nonexistent_path(self):
         with pytest.raises(IOError):
