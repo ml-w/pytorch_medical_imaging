@@ -1,6 +1,7 @@
 import sys
 import copy
 import pprint
+import re
 
 __all__ = ['PMIBaseCFG']
 
@@ -14,6 +15,9 @@ class PMIBaseCFG:
     # these attributes are skipped because they can't be copied and there's no need to copy them
     _special_attr = ['inferencer_cls', 'solver_cls']
     def __init__(self, **kwargs):
+        # this prevents self recursion with __getattribute__
+        self._RESOLVE = set()
+
         # load class attributes as default values of the instance attributes
         cls = self.__class__
         cls_dict = { attr: getattr(cls, attr) for attr in dir(cls) }
@@ -55,11 +59,32 @@ class PMIBaseCFG:
     def __setattr__(self, key, value):
         self.__dict__[key] = value
 
-    def __getattr__(self, item):
-        if item in self.__dict__:
-            return self.__dict__[item]
-        else:
-            return super().__getattr__(item)
+    def __getattribute__(self, item):
+        # avoid recurssion when using __dict__
+        if item in ('__dict__', '_RESOLVE', '__getattribute__'):
+            return super().__getattribute__(item)
+
+        if item in super().__getattribute__('_RESOLVE'):
+            super().__getattribute__('_RESOLVE').remove(item)
+            return super().__getattribute__(item)
+
+        # First, get the attribute using the base class to prevent infinite recursion
+        o = super().__getattribute__(item)
+
+        super().__getattribute__('_RESOLVE').add(item)
+        # Try to replace whatever is wrapped by {} with class attr. Note that this does not check for self references
+        if isinstance(o, str):
+            mo = re.findall(r'{.*?}', o)
+            if mo is not None:
+                for g in mo:
+                    key = g.strip('{}')
+                    # Here we are using super() again to prevent recursion
+                    val = super().__getattribute__(key)
+                    # strip
+                    o = o.replace(g, val)
+
+        return o
+
 
     def __getitem__(self, item):
         return self.__dict__[item]
