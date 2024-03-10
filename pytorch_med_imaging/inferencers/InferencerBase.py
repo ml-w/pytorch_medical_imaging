@@ -43,8 +43,18 @@ class InferencerBase(object):
                  **kwargs):
         super(InferencerBase, self).__init__()
 
+        # Defined required attributes
+        self.required_attributes = [
+            'output_dir',
+            'batch_size',
+            'net',
+            'cp_load_dir',
+            'data_loader'
+        ]
+
         # borrow methods from SolverBase
         self._check_write_out_ready = SolverBase._check_fit_ready
+        self._cfg = cfg
 
         # initialize
         self._logger        = MNTSLogger[self.__class__.__name__]
@@ -60,6 +70,8 @@ class InferencerBase(object):
         self.CP_LOADED = False # whether `load_checkpoint` have been called
         self.load_checkpoint(self.cp_load_dir)
 
+
+
     def set_data_loader(self, data_loader: PMIDataLoaderBase):
         # SolverBase.set_data_loader(self, data_loader, None)
         self.data_loader = data_loader
@@ -67,7 +79,10 @@ class InferencerBase(object):
         self.data_loader.load_dataset(exclude_augment=True)
 
     def _input_check(self):
-        assert os.path.isfile(self.net_state_dict), f"Cannot open network checkpoint at {self.net_state_dict}"
+        for att in self.required_attributes:
+            if not hasattr(self, att):
+                raise AttributeError(f"Must sepcific {str(att)} in CFG.")
+
 
     def load_checkpoint(self, checkpoint_path: Union[str, Path] = None) -> None:
         r"""Load the checkpoint states. If input argument is ``None``, calling this function will bring this
@@ -128,6 +143,7 @@ class InferencerBase(object):
     def _load_config(self, cfg: SolverBaseCFG = None) -> None:
         r"""See :func:`SolverBase._load_config`."""
         SolverBase._load_config(self, cfg)
+        self._input_check()
         if self.use_cuda:
             if not hasattr(self, 'batch_size_val'):
                 self.batch_size_val = self.batch_size

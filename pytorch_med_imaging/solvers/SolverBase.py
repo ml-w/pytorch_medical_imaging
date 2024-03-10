@@ -104,7 +104,7 @@ class SolverBaseCFG(PMIBaseCFG):
     # Training hyper params (must be provided for training)
     init_lr       : float = None
     num_of_epochs : int   = None
-    batch_size    : int   = None
+    batch_size    : int   = None # inference requires
     batch_size_val: int   = None
 
     # I/O

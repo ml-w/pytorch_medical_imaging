@@ -213,7 +213,7 @@ class ImageDataSet(PMIDataBase):
         Main parsing function.
         """
 
-        self._logger.info("Parsing root path: " + self.rootdir)
+        self._logger.info("Parsing root path: " + str(self.rootdir))
 
         #===================================
         # Read all nii.gz files exist first.

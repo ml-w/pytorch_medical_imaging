@@ -227,7 +227,7 @@ class PMIController(object):
         # Loading basic inputs
         if not config_file is None:
             cls = config_file
-            cls_dict = { attr: getattr(cls, attr) for attr in dir(cls) if not getattr(cls, attr) is None}
+            cls_dict = { attr: getattr(cls, attr) for attr in dir(cls)}
             self.__dict__.update(cls_dict)
             self.__class__.cls_cfg = cls
             self.cfg = config_file
@@ -244,7 +244,8 @@ class PMIController(object):
     def check_flags_sanity(self):
         _check = [
             (self.solver_cls, type),
-            (self.inferencer_cls, type)
+            (self.inferencer_cls, type),
+            (self.batch_size, int)
         ]
         for k, v in _check:
             if k is None:
@@ -556,10 +557,16 @@ class PMIController(object):
     def inference(self):
         r"""Initiate inference. This is usually called automatically using :func:`.exec`. """
         self._logger.info("Starting evalution...")
+        # Create inferencer
         self.inferencer = inferencer = self.inferencer_cls(self.solver_cfg)
+        # Create dataloader
         loader = self.data_loader_cls(self.data_loader_cfg)
         inferencer.set_data_loader(loader)
-        inferencer.output_dir = self.output_dir # override this flag
+
+        if self.output_dir is not None:
+            inferencer.output_dir = self.output_dir # override this flag
+        else:
+            self._logger.warning("Output directory is not specified. This could be an error.")
 
         with torch.no_grad():
             if self.inference_all_checkpoints:

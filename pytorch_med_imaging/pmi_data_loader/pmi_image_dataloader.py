@@ -195,7 +195,7 @@ class PMIImageDataLoader(PMIDataLoaderBase):
         See Also:
             :class:`med_img_dataset.ImageDataSet`
         """
-        if root_dir is None:
+        if root_dir is None or root_dir == '':
             self._logger.warning("Received `None` for root_dir arguement.")
             return None
 

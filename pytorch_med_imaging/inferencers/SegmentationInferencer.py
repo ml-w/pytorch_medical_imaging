@@ -64,10 +64,12 @@ class SegmentationInferencer(InferencerBase):
         Returns:
 
         """
-        if not os.path.isdir(self.output_dir):
-            # Try to make dir first
-            os.makedirs(self.output_dir, exist_ok=True)
-            assert os.path.isdir(self.output_dir), f"Cannot open output directory: {self.output_dir}"
+        super()._input_check()
+        # output_dir = self.data_loader.output_dir
+        # if not os.path.isdir(output_dir):
+        #     # Try to make dir first
+        #     os.makedirs(self.output_dir, exist_ok=True)
+        #     assert os.path.isdir(self.output_dir), f"Cannot open output directory: {self.output_dir}"
         return 0
 
     def _write_out(self, output_dir = None):
