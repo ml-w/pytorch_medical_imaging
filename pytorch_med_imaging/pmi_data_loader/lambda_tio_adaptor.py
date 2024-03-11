@@ -117,6 +117,7 @@ class CallbackQueue(Queue):
             raise ArithmeticError(msg)
 
     def _fill(self):
+        # fill the patch list first
         super(CallbackQueue, self)._fill()
         if self.callback is None or self.create_new_attribute is None:
             return
@@ -128,13 +129,19 @@ class CallbackQueue(Queue):
             #   setting ulimit -n [large number], > 100000
             #   Also, there is a fair chance that this will cause memory deadlock and hangs the whole process, thus the
             #   operations are repeated until it works.
-            # Things tried:
-            #   * use torch.mpi, seems helpful but not fully resolve
-            #   * rerun super._fill(), lead to the dataloader thread incorrectly hangs
-            #   * seems like the program runs correctly with pool.terminate() + pool.join() trap
-            #   * If patch-size is too large, this still goes into deadlock even when number of sample per volume is small
-            #   * Turns out the function torch.tensor(something) to turn a numpy array to a pytorch tensor is causing some problem
-            #   * Bad File Descriptor error probably have nothing to do with this
+            #   This might occur if the callback function keeps loading images (e.g., call tio.Subject['input']).
+            # Solution:
+            #   Your callback functino should be wrapped by a Semaphore statement.
+            #   ```
+            #   from multiprocessing import Semaphore
+            #
+            #   sem = Semaphore([cpu number])
+            #
+            #   def worker_func(*args, **kwargs):
+            #       with sem:
+            #           o = callback(*args, **kwargs):
+            #       return o
+            #   ```
 
 
             #  Create thread pool
@@ -167,7 +174,6 @@ class CallbackQueue(Queue):
                     # make a copy to avoid deadlock
                     self.patches_list = [Subject(sub) for sub in self.patches_list]
 
-                pool.terminate()
                 del pool, p
                 gc.collect()
         else:
