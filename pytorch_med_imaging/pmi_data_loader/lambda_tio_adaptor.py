@@ -5,6 +5,7 @@ import torch
 import torch.multiprocessing as mpi
 from mnts.mnts_logger import MNTSLogger
 from tqdm import tqdm
+mpi.set_sharing_strategy('file_system')
 
 import torchio
 from torchio import Queue
@@ -129,23 +130,11 @@ class CallbackQueue(Queue):
             #   setting ulimit -n [large number], > 100000
             #   Also, there is a fair chance that this will cause memory deadlock and hangs the whole process, thus the
             #   operations are repeated until it works.
-            #   This might occur if the callback function keeps loading images (e.g., call tio.Subject['input']).
-            # Solution:
-            #   Your callback functino should be wrapped by a Semaphore statement.
-            #   ```
-            #   from multiprocessing import Semaphore
-            #
-            #   sem = Semaphore([cpu number])
-            #
-            #   def worker_func(*args, **kwargs):
-            #       with sem:
-            #           o = callback(*args, **kwargs):
-            #       return o
-            #   ```
+            #   To prevent this, make sure you set mpi.set_sharing_strategy('file_system')
 
 
             #  Create thread pool
-            while len(res) == 0:
+            if len(res) == 0:
                 [s.load() for s in self.patches_list] # pre-load the patches
                 pool = mpi.Pool(self.num_workers)
                 p = pool.map_async(self.callback,

@@ -14,6 +14,7 @@ import os
 import numpy as np
 import SimpleITK as sitk
 import nibabel as nib
+from pathlib import Path
 
 NIFTI_DICT = {
     "sizeof_hdr": int,
@@ -750,6 +751,8 @@ class ImageDataSet(PMIDataBase):
                   f"Make sure that patch sampling is not overlapped with transform `crop_or_pad` function."
 
         out_im.CopyInformation(src_im)
+        if isinstance(outputdirectory, Path):
+            outputdirectory = str(outputdirectory.absolute())
         out_name = outputdirectory +'/' + prefix + os.path.basename(self.data_source_path[index])
         self._logger.info(f"Writing {out_name}")
         sitk.WriteImage(out_im, out_name)

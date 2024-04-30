@@ -334,13 +334,19 @@ class PMIImageDataLoader(PMIDataLoaderBase):
             # Create queue
             # If option to use post-sampling processing was provided, use CallbackQueue instead
             if  not self.patch_sampling_callback in ("", None):
-                # check if there's illegal characters in the patch_sampling_callback
-                if re.search("[\W]+", self.patch_sampling_callback.translate(str.maketrans('', '', "[], "))) is not None:
-                    raise AttributeError(f"You patch_sampling_callback specified ({self.patch_sampling_callback}) "
-                                         f"contains illegal characters!")
-                queue_dict['start_background'] = training # if not training, delay dataloading
-                _callback_func = eval(self.patch_sampling_callback)
+                if isinstance(self.patch_sampling_callback, str):
+                    # check if there's illegal characters in the patch_sampling_callback
+                    if re.search("[\W]+", self.patch_sampling_callback.translate(str.maketrans('', '', "[], "))) is not None:
+                        raise AttributeError(f"You patch_sampling_callback specified ({self.patch_sampling_callback}) "
+                                             f"contains illegal characters!")
+                    _callback_func = eval(self.patch_sampling_callback)
+                elif callable(self.patch_sampling_callback):
+                    self._logger.info("Detect callable patch sampling callback specified.")
+                    _callback_func = self.patch_sampling_callback
+                    pass
+
                 _callback_func = partial(_callback_func, **self.patch_sampling_callback_kwargs)
+                queue_dict['start_background'] = training # if not training, delay dataloading
                 queue = CallbackQueue(subjects, *self.queue_args,
                                       patch_sampling_callback=_callback_func,
                                       create_new_attribute = self.create_new_attribute,
