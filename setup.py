@@ -21,7 +21,7 @@ if use_cython:
     ]
     ext_modules += [
         Extension("pytorch_med_imaging.med_img_dataset.computations._interpolation",
-                  ["pytorch_med_imaging/med_img_dataset/computations/_interpolation.pxd"],
+                  ["pytorch_med_imaging/med_img_dataset/computations/_interpolation.pyx"],
                   include_dirs=[numpy.get_include()]),
     ]
     ext_modules += [

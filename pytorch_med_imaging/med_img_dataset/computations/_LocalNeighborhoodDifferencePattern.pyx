@@ -69,7 +69,7 @@ def LNDP(double[:,::1] image, int P, float R):
 
                     # construct values from results
                     for i in range(P):
-                        lndp += texture_b[i] * 2**i
+                        lndp += texture_b[i] << i
 
                     output[r, c] = lndp
 
