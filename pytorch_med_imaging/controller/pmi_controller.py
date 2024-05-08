@@ -245,7 +245,6 @@ class PMIController(object):
         _check = [
             (self.solver_cls, type),
             (self.inferencer_cls, type),
-            (self.batch_size, int)
         ]
         for k, v in _check:
             if k is None:
