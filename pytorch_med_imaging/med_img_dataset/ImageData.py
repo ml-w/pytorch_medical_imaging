@@ -715,8 +715,24 @@ class ImageDataSet(PMIDataBase):
                   tensor_data: torch.Tensor,
                   unique_id: str,
                   outputdirectory: str,
-                  prefix: Optional[str] = '') -> None:
-        r"""Write data with reference to the source image with specified unique_id.
+                  prefix: Optional[str] = '', 
+                  suffix: Optional[str] = '',
+                  input_orientation: Optional[str] = None) -> None:
+        r"""Write data with reference to the source image with specified unique_id. You may specify
+        an orientation that represents the axis orientation of your input torch tensor.
+
+        This method assumes all DICOM files are read via ITK and saved as Nifti, standardizing their
+        orientation to LPS regardless of their original orientation. This typically works well, but
+        issues may arise if DICOMs are loaded directly rather than Nifti files.
+
+        .. notes::
+            The method expects tensors to maintain LPS orientation. If tensors are processed with external
+            packages like `torchio.ToCanonical` or `nib` which may alter orientation, they should be
+            adjusted back to LPS to ensure compatibility with this method. This function is designed to
+            avoid axis swapping; it raises an error if the axis orientation does not match expected
+            configurations. Orientation mismatches are handled simply by adjusting the sign, under the
+            assumption that direction is the only discrepancy.
+
 
         Args:
             tensor_data (torch.Tensor):
@@ -728,13 +744,17 @@ class ImageDataSet(PMIDataBase):
                 Folder to output the nii files
             prefix (str, Optional):
                 Prefix to add before the saved files. Default to ''.
-            suffix:
-                Prefix to add after the saved files. Default to ''.
+
+        Raise:
+            NotImplementedError:
+                Raised if the specified `input_orientation` require axis swapping when compared to the
+                source image orientation (that is calculated with `GetDirection()` method).
+
         """
 
         # Load source image
         if isinstance(unique_id, str):
-            index = self.get_unique_IDs().index(str)
+            index = self.get_unique_IDs().index(unique_id)
         elif isinstance(unique_id, int):
             index = unique_id
         else:
@@ -743,6 +763,28 @@ class ImageDataSet(PMIDataBase):
         src_path = self.data_source_path[index]
         src_im = sitk.ReadImage(src_path)
         out_im = sitk.GetImageFromArray(tensor_data.squeeze().numpy())
+
+        # Fix orientation
+        if not input_orientation is None:
+            if tuple(input_orientation) != self.metadata[index]['orientation']:
+                # * Notes: See docstring notes for more details about this part
+                src_ori = self.metadata[index]['orientation']
+                inp_ori = tuple(input_orientation)
+                self._logger.info(f"Detect orientation mismatch: src={src_ori} input={inp_ori}")
+                self._logger.info(f"Reorientating {inp_ori} -> {src_ori}")
+                # Make sure change does not involve axis swap
+                allowed = ['LR', 'RL', 'AP', 'PA', 'SI', 'IS']
+                for i_ori, s_ori in zip(inp_ori, src_ori):
+                    if not i_ori + s_ori in allowed and i_ori != s_ori:
+                        msg = (f"Correcting orientation {i_ori} to {s_ori} will involve axis swapping that is"
+                               f" not supported.")
+                        self._logger.warning(msg)
+                        raise NotImplementedError(msg)
+                # changing orientation now is just giving negative signs to the axis with mismatch direction
+                self._logger.info(f"\tBefore: {out_im.GetDirection()}")
+                out_im = sitk.DICOMOrient(out_im, ''.join(inp_ori))
+                self._logger.info(f"\tAfter: {out_im.GetDirection()}")
+                
 
         # Check if size equal
         if src_im.GetSize() != out_im.GetSize():
@@ -753,7 +795,9 @@ class ImageDataSet(PMIDataBase):
         out_im.CopyInformation(src_im)
         if isinstance(outputdirectory, Path):
             outputdirectory = str(outputdirectory.absolute())
-        out_name = outputdirectory +'/' + prefix + os.path.basename(self.data_source_path[index])
+
+        base_name = re.sub('\.nii(\.gz)?}', '', os.path.basename(self.data_source_path[index]))
+        out_name = outputdirectory +'/' + f"{prefix}{base_name}{suffix}.nii.gz"
         self._logger.info(f"Writing {out_name}")
         sitk.WriteImage(out_im, out_name)
 
