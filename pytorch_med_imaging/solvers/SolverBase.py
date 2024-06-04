@@ -710,8 +710,32 @@ class SolverBase(object):
 
     def optimizer_set_params(self):
         r"""This is the default method to set the parameters for optimizer. Override this in child classes to control
-        the behavior your self"""
-        net_params = self.net.parameters()
+        the behavior your self. There's an option to add an attribute `lr_weights` in your network to control the weight
+        learning speed of different layers.
+
+        .. note::
+            `lr_weights` must be specified at the outer-most layer. Nested weights are ignored.
+
+        """
+        self._logger.info("Configuring optimizer...")
+        if hasattr(self.get_net(), 'lr_weights'):
+            self._logger.info("Detect `lr_weights` specified...")
+            # lr_weights should be defined as a dict {module_name: weights}
+            # * construct param group by filtering out those that has a specific weights
+            # get those with specified weights
+            lr_weight_dict = self.get_net().lr_weights
+            specific_layer_names, lr_weights = zip(*lr_weight_dict.items())
+            net_params = []
+            # build for those without specified weights
+            net_params.append({'params': [param for name, param in self.net.named_parameters()
+                                           if all([spec_name not in name for spec_name in specific_layer_names])]})
+
+            # build for those with specific weights
+            for spec_name, lr_weight in lr_weight_dict.items():
+                net_params.append({'params': self.get_net().get_submodule(spec_name).parameters(), 'lr': self.init_lr * lr_weight})
+            self._logger.debug(f"Build param_group for non-specified modules: {net_params}")
+        else:
+            net_params = self.net.parameters()
         if self.optimizer == 'Adam':
             self.optimizer = torch.optim.Adam(net_params, lr=self.init_lr)
         elif self.optimizer == 'AdamW':
@@ -882,7 +906,8 @@ class SolverBase(object):
         with torch.no_grad():
             self.validation_losses = []
             self.perfs = []
-            n = self.get_net()
+            n = self.net
+            self._logger.warning(f"Network after get net {type(n) = }")
             n.eval()
             for mb in tqdm(self.data_loader_val, desc="Validation", position=2):
                 s, g = self._unpack_minibatch(mb, self.unpack_key_forward)
@@ -905,6 +930,7 @@ class SolverBase(object):
                 gc.collect()
             self._validation_loss = np.mean(self.validation_losses)
             self._validation_callback()
+            torch.cuda.empty_cache()
 
         self.optimizer.zero_grad()
         self.get_net().train()
