@@ -7,7 +7,7 @@ import numpy as np
 import os
 from pytorch_med_imaging.med_img_dataset import ImageDataSet
 from mnts.mnts_logger import MNTSLogger
-from typing import Optional, Iterable, Callable, Type, List, Dict, Tuple
+from typing import Optional, Iterable, Callable, Type, List, Dict, Tuple, Any
 
 colormaps = {
     'Default': None,
@@ -29,7 +29,7 @@ def draw_grid(image: torch.Tensor,
               segmentation: torch.Tensor,
               ground_truth: Optional[torch.Tensor] = None,
               nrow: Optional[int] = None,
-              padding: Optinoal[int] = 1,
+              padding: Optional[int] = 1,
               color: Optional[Tuple[int, int, int]] = None,
               only_with_seg: Optional[bool] = False,
               thickness: Optional[int] = 2,
@@ -244,6 +244,12 @@ def draw_overlay_heatmap(baseim, heatmap):
         ValueError: If the input images are not of type float or double.
         TypeError: If `baseim` or `heatmap` is not a numpy array or torch tensor.
 
+
+    .. notes::
+        - This function scales the heat map to between 0 to 1, therefore its adviced that before using this function,
+          you should clean the distinct values that could affect the color mapping.
+        - The color map used is revered JET mapping.
+
     Example:
         >>> import numpy as np
         >>> base_image = np.random.rand(256, 256)
@@ -252,10 +258,6 @@ def draw_overlay_heatmap(baseim, heatmap):
         >>> print(result_image.shape)
         (256, 256, 3)
 
-    .. notes::
-        - This function scales the heat map to between 0 to 1, therefore its adviced that before using this function,
-          you should clean the distinct values that could affect the color mapping.
-        - The color map used is revered JET mapping.
     """
     # convert input to cv format
     baseim = np.array(baseim)
@@ -345,10 +347,10 @@ def contour_grid_by_dir(im_dir: str,
                          seg[tio.DATA].squeeze().unsqueeze(1).int(), ground_truth=gt, only_with_seg=True)
         cv2.imwrite(fname, grid)
 
-def contour_grid_by_image(img: ImageDataBase,
-                          seg: ImageDataBase,
+def contour_grid_by_image(img: ImageDataSet,
+                          seg: ImageDataSet,
                           output_dir: str,
-                          ground_truth: Optional[ImageDataBase] = None,
+                          ground_truth: Optional[ImageDataSet] = None,
                           write_png: bool = False,
                           **kwargs: Any) -> int:
     r"""Contours an image with the provided segmentation and, optionally, the ground truth, and saves the output.
