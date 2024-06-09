@@ -7,6 +7,7 @@ import numpy as np
 import os
 from pytorch_med_imaging.med_img_dataset import ImageDataSet
 from mnts.mnts_logger import MNTSLogger
+from typing import Optional, Iterable, Callable, Type, List, Dict, Tuple
 
 colormaps = {
     'Default': None,
@@ -24,13 +25,17 @@ colormaps = {
     'Hot': cv2.COLORMAP_HOT
 }
 
-__all__ = ['draw_overlay_heatmap', 'draw_grid', 'contour_grid_by_dir', 'contour_grid_by_image']
-
-
-def draw_grid(image, segmentation, ground_truth=None,
-              nrow=None, padding=1, color=None, only_with_seg=False, thickness=2, crop=None, gt_color=(30, 255, 30)):
-    """
-    Draw contour of segmentation and the ground_truth on the image input.
+def draw_grid(image: torch.Tensor,
+              segmentation: torch.Tensor,
+              ground_truth: Optional[torch.Tensor] = None,
+              nrow: Optional[int] = None,
+              padding: Optinoal[int] = 1,
+              color: Optional[Tuple[int, int, int]] = None,
+              only_with_seg: Optional[bool] = False,
+              thickness: Optional[int] = 2,
+              crop: Optional[bool] = None,
+              gt_color: Optional[Tuple[int, int, int]] = (30, 255, 30)) -> np.ndarray:
+    r"""Draw contour of segmentation and the ground_truth on the image input.
 
     Args:
         image (torch.Tensor):
@@ -218,23 +223,45 @@ def draw_vector_image_grid(vect_im, out_prefix, nrow=5, downscale=-1):
 
 
 def draw_overlay_heatmap(baseim, heatmap):
-    """
-    Draw a heatmap thats originally ranged from 0 to 1 over a greyscale image
+    """Draws a heatmap over a grayscale image for visualization purposes.
+
+    This function overlays a heatmap onto a base image, both of which should be normalized to have values
+    ranging from 0 to 1. The function is ideal for visualizing segmentation probabilities or attention map overlays.
+    The output image is either in RGBA or RGB format with values scaled from 0 to 255.
 
     Args:
         baseim (np.array or torch.Tensor):
-            Base `float` or `double` image.
+            The base image as a float or double array or tensor. This should be a grayscale image.
         heatmap (np.array or torch.Tensor):
-            A `float` or `double` heat map to draw over `baseim`. Range should be 0 to 1.
+            The heatmap array or tensor to overlay. Values should range from 0 to 1 and be of type float or double.
 
     Returns:
-        (np.array): RGBA or RGB array output ranged from 0 to 255.
-    """
+        np.array:
+            The resulting image after applying the heatmap overlay. The image is in RGBA or RGB format with
+            pixel values scaled from 0 to 255.
 
+    Raises:
+        ValueError: If the input images are not of type float or double.
+        TypeError: If `baseim` or `heatmap` is not a numpy array or torch tensor.
+
+    Example:
+        >>> import numpy as np
+        >>> base_image = np.random.rand(256, 256)
+        >>> heat_map = np.random.rand(256, 256)
+        >>> result_image = draw_overlay_heatmap(base_image, heat_map)
+        >>> print(result_image.shape)
+        (256, 256, 3)
+
+    .. notes::
+        - This function scales the heat map to between 0 to 1, therefore its adviced that before using this function,
+          you should clean the distinct values that could affect the color mapping.
+        - The color map used is revered JET mapping.
+    """
     # convert input to cv format
     baseim = np.array(baseim)
     heatmap = np.array(heatmap)
 
+    # Scales the image to standard scalar range 0 to 1
     baseim -= baseim.min()
     heatmap -= heatmap.min()
     baseim /= baseim.max()
@@ -253,7 +280,45 @@ def draw_overlay_heatmap(baseim, heatmap):
     return out_im
 
 
-def contour_grid_by_dir(im_dir, seg_dir, output_dir, gt_dir=None, write_png=False):
+def contour_grid_by_dir(im_dir: str,
+                        seg_dir: str,
+                        output_dir: str,
+                        gt_dir: Optional[str] = None,
+                        write_png: bool = False) -> None:
+    r"""Contours all images within the specified directory and saves the output.
+
+    This function reads images and their corresponding segmentation data from specified directories, contours the images
+    based on the segmentation, optionally overlays ground truth contours if provided, and saves the contoured images to
+    a specified output directory in either PNG or JPEG format.
+
+    Args:
+        im_dir (str):
+            The directory containing the image files.
+        seg_dir (str):
+            The directory containing the segmentation data files.
+        output_dir (str):
+            The directory where the contoured images will be saved.
+        gt_dir (str, optional):
+            The directory containing the ground truth data files, if available. Defaults to None.
+        write_png (bool, optional):
+            If True, the output images are saved in PNG format; otherwise, they are saved in JPEG format. Defaults to
+            `False`.
+
+    Raises:
+        IOError:
+            If there is an issue accessing the directories or reading the files.
+        ValueError:
+            If the `im_dir` or `seg_dir` does not contain matching image IDs.
+
+    Note:
+        The function depends on the ImageDataSet class from the pytorch_med_imaging.med_img_dataset module, which must
+        be compatible with the data structure of the directories provided. The function assumes that the ImageDataSet
+        can handle verbose output and dtype specifications.
+
+    Example:
+        >>> contour_grid_by_dir('path/to/images', 'path/to/segmentations', 'path/to/output',
+        >>>                     gt_dir='path/to/ground_truths', write_png=True)
+    """
     from pytorch_med_imaging.med_img_dataset import ImageDataSet
 
     if not os.path.isdir(output_dir):
@@ -280,29 +345,49 @@ def contour_grid_by_dir(im_dir, seg_dir, output_dir, gt_dir=None, write_png=Fals
                          seg[tio.DATA].squeeze().unsqueeze(1).int(), ground_truth=gt, only_with_seg=True)
         cv2.imwrite(fname, grid)
 
-def contour_grid_by_image(img, seg, output_dir, ground_truth=None, write_png=False, **kwargs):
-    """
-    Contour image with the segmentation and, optionally, the ground truth.
+def contour_grid_by_image(img: ImageDataBase,
+                          seg: ImageDataBase,
+                          output_dir: str,
+                          ground_truth: Optional[ImageDataBase] = None,
+                          write_png: bool = False,
+                          **kwargs: Any) -> int:
+    r"""Contours an image with the provided segmentation and, optionally, the ground truth, and saves the output.
+
+    This function overlays segmentation contours on an image and can also overlay ground truth contours if provided.
+    The output images are saved to a specified directory in either PNG or JPEG format. Additional parameters for
+    contouring can be passed through kwargs which are utilized by the :func:`draw_grid` function.
 
     Args:
-        img (:obj:`ImageDataSet`):
-            Image that the segmentation was drawn on.
-        seg (:obj:`ImageDataSet`:
-            Segmentation to draw on the image.
-        output_dir (str):
-            Output .png or .jpg are stored under this directory.
-        ground_truth (:obj:`ImageDataSet`):
-            A third set of segmentation that will be drawn on the image.
-        write_png (bool, Optional):
-            Whether to write .png or not. If `False`, this function will write images as JPEG images. Default to
-            `False`.
+        img (ImageDataSet):
+            The dataset containing the images on which the segmentations are to be drawn.
+        seg (ImageDataSet):
+            The dataset containing the segmentation data used to generate contours.
+        output, _dir (str):
+            The path to the directory where the output images will be saved.
+        ground_truth (ImageDataSet, optional):
+            The dataset containing the ground truth segmentation data used for additional contour overlay.
+            Defaults to None.
+        write_png (bool, optional):
+            If True, the output images are saved in PNG format; otherwise, they are saved in JPEG format.
+            Defaults to False.
         **kwargs:
-            Pass to function :func:`draw_grid`.
-
+            Additional keyword arguments that are passed to the :func:`draw_grid` function, which is used to generate
+            the grid images with contours.
 
     Returns:
-        (int): 0 if success.
+        int: Always returns 0 indicating successful execution.
 
+    Example:
+        >>> img_dataset = ImageDataSet("path/to/image/data")
+        >>> seg_dataset = ImageDataSet("path/to/segmentation/data")
+        >>> output_directory = "path/to/output"
+        >>> contour_grid_by_image(img_dataset, seg_dataset, output_directory, write_png=True)
+
+    Raises:
+        AssertionError: If the inputs `img` or `seg` are not instances of `ImageDataSet`.
+
+    See Also:
+        - :func:`draw_grid`: Used internally to draw the image and segmentation contours on a grid.
     """
     assert isinstance(img, ImageDataSet) and isinstance(seg, ImageDataSet), "Input has to be ImageDataSet obj or its " \
                                                                             "child class objects."
@@ -336,8 +421,11 @@ def contour_grid_by_image(img, seg, output_dir, ground_truth=None, write_png=Fal
 
 def draw_grid_contour(im_grid, seg, crop=None, nrow=None, offset=0, background=0, margins=1, color=None,
                       thickness=2, alpha=0.5, **kwargs):
-    """
-    This is the wrapper function for make_grid that supports some extra tweaking.
+    r"""Generates a visual grid of images with contours overlaid from segmentation data.
+
+    This function utilizes an underlying grid creation mechanism to compile images and their corresponding
+    segmentations into an organized grid format. It supports additional visual customizations such as cropping,
+    color adjustments, and alpha blending for the overlaid contours.
 
     Args:
         im_grid (np.ndarray):
@@ -366,6 +454,11 @@ def draw_grid_contour(im_grid, seg, crop=None, nrow=None, offset=0, background=0
 
     Returns:
         torch.Tensor
+
+    .. seealso::
+        - :func:`draw_grid`
+        - :func:`draw_grid_by_image`
+
     """
     assert (offset >= 0) or (offset is None), "In correct offset setting!"
     logger = MNTSLogger['draw_grid_contour']
