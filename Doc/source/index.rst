@@ -63,6 +63,13 @@ Metrics
 
    Metrics/segmentation_metrics.rst
 
+Utils
+-----
+.. toctree::
+   :maxdepth: 2
+
+   Utils/Utils.rst
+
 Indices and tables
 ==================
 

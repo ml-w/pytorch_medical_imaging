@@ -1,4 +1,4 @@
-pmi_data_loader
+PMIDataLoader
 ===============
 
 .. currentmodule:: pytorch_med_imaging.pmi_data_loader
