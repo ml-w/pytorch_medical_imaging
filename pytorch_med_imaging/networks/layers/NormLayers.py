@@ -7,6 +7,23 @@ from .dummy_layers import SupportMask3d
 class PaddedLayerNorm(nn.Module):
     r"""A layer normalization module that handles padded sequences.
 
+    This module normalizes a 3D input tensor along its last dimension (hidden_size) using mean and variance
+    computed from the non-padded elements of the tensor. It is specifically designed for use in sequence
+    processing where some sequences are padded.
+
+    .. math::
+        \mu_j = \frac{1}{m_j} \sum_{i=1}^{m_j} x_{ij}
+        \sigma_j^2 = \frac{1}{m_j} \sum_{i=1}^{m_j} (x_{ij} - \mu_j)^2
+        y_{ij} = \gamma_j \left(\frac{x_{ij} - \mu_j}{\sqrt{\sigma_j^2 + \epsilon}}\right) + \beta_j
+
+    where:
+    - :math:`x_{ij}` is the element of the tensor `x` in batch `i` and feature `j`.
+    - :math:`m_j` is the number of non-padded elements in feature `j`.
+    - :math:`\mu_j` and :math:`\sigma_j^2` are the mean and variance computed over non-padded elements.
+    - :math:`\gamma_j` and :math:`\beta_j` are the learnable scale and shift parameters, respectively.
+    - :math:`\epsilon` is a small constant for numerical stability (defined by `eps` attribute).
+
+
     Args:
         hidden_size (int):
             The number of features in the input tensor.
@@ -15,19 +32,25 @@ class PaddedLayerNorm(nn.Module):
 
     Attributes:
         eps (float):
-            The value of the `eps` parameter.
-        hidden_size (int):
-            The value of the `hidden_size` parameter.
+            The value of the `eps` parameter, which is used to avoid division by zero during normalization.
+        hidden, size (int):
+            The number of features (dimension of the last axis) in the input tensor.
         gamma (torch.nn.Parameter):
-            A learnable parameter tensor of shape `(hidden_size,)` used for scaling the output.
+            A learnable parameter tensor of shape `(hidden_size,)` used for scaling the normalized output.
         beta (torch.nn.Parameter):
-            A learnable parameter tensor of shape `(hidden_size,)` used for shifting the output.
-
-    Returns:
-        A tensor of the same shape as the input tensor, normalized along the last dimension.
+            A learnable parameter tensor of shape `(hidden_size,)` used for shifting the normalized output.
 
     .. note::
-        * Gosh GPT-3 wrote the whole thing for me. What a world we are living in. I am gonna loss my job soon.
+        The use of `gamma` and `beta` allows for learnable scaling and shifting parameters, which can be
+        optimized during training of a neural network model.
+
+    Example:
+        >>> layer_norm = PaddedLayerNorm(hidden_size=512)
+        >>> input_tensor = torch.randn(10, 20, 512)
+        >>> seq_lengths = torch.tensor([20, 18, 15, 20, 20, 19, 17, 20, 20, 20])
+        >>> output_tensor = layer_norm(input_tensor, seq_lengths)
+        >>> output_tensor.shape
+        torch.Size([10, 20, 512])
     """
     def __init__(self, hidden_size, eps=1e-12):
         super(PaddedLayerNorm, self).__init__()
@@ -36,17 +59,34 @@ class PaddedLayerNorm(nn.Module):
         self.gamma = nn.Parameter(torch.ones(hidden_size))
         self.beta = nn.Parameter(torch.zeros(hidden_size))
 
-    def forward(self, input: torch.Tensor, seq_length: Iterable[int]):
-        r"""Applies layer normalization to the input tensor along the last dimension, handling padded sequences.
+    def forward(self, input: torch.Tensor, seq_length: Iterable[int]) -> torch.Tensor:
+        r"""Applies layer normalization to an input tensor, handling padded sequences.
+
+        This method expects a 3-dimensional tensor and normalizes the tensor along its last dimension
+        (hidden_size). It calculates mean and variance using only the non-padded elements of the tensor,
+        determined by `seq_length`.
 
         Args:
             input (torch.Tensor):
                 A tensor of shape `(batch_size, seq_length, hidden_size)` containing the input sequence.
-            seq_length (torch.Tensor):
-                A tensor of shape `(batch_size,)` containing the length of each sequence in the batch.
+                The tensor must be 3-dimensional.
+            seq_length (Iterable[int]):
+                An iterable of integers representing the actual lengths of each sequence in the batch,
+                used to create masks that identify padded elements.
 
         Returns:
-            A tensor of the same shape as the input tensor, normalized along the last dimension.
+            torch.Tensor:
+                A tensor of the same shape as `input`, where each sequence has been normalized along the
+                last dimension.
+
+        Raises:
+            ValueError: If the input tensor is not 3-dimensional as expected.
+
+        .. notes::
+            - The normalization process involves subtracting the mean and dividing by the standard deviation,
+              computed only on non-padded elements.
+            - The function uses learnable parameters `gamma` and `beta` for scaling and shifting the normalized
+              data, which should be attributes of the class this function belongs to.
         """
         if input.dim() > 3:
             msg = f"Expect input to be 1D sequence with (B x S x C) configuration. Got {x.shape}"
