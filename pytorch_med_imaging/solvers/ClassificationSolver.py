@@ -121,7 +121,12 @@ class ClassificationSolver(SolverBase):
                       f"{type(self.loss_function)} instead."
                 raise AttributeError(msg)
 
-        # self._logger.debug(f"Output size out: {out.shape} g: {g.shape}")
+        # required dimension of CrossEntropy is either (B) or (B, num_class)
+        if isinstance(self.loss_function, nn.CrossEntropyLoss) and g.shape[1] == 1:
+            # squeeze (B, 1) to (B)
+            g = g.squeeze()
+
+        self._logger.debug(f"Output size out: {out.shape} g: {g.shape}")
         # Cross entropy does not need any processing, just give the raw output
         loss = self.loss_function(out, g)
         return loss
