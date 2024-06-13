@@ -365,6 +365,14 @@ class PMIImageDataLoader(PMIDataLoaderBase):
             # method ``get_torch_data_loader()``.
             # queue = subjects
             self._logger.debug(f"No sampler specified, use first shape in subjects: {subjects[0].shape[1:]}.")
+            # Ad crop-or-pad to prevent shape issues
+            crop_or_pad = tio.CropOrPad(target_shape=subjects[0].shape[1:])
+            if isinstance(subjects._transform, tio.Compose):
+                subjects._transform.transforms.append(crop_or_pad)
+            elif isinstance(subjects._transform, tio.Transform):
+                subjects._transform = tio.Compose([subjects._transform, crop_or_pad])
+            else:
+                subjects.set_transform(crop_or_pad)
             _sampler = tio.UniformSampler(patch_size = subjects[0].shape[1:])
             queue = tio.Queue(subjects, sampler=_sampler, samples_per_volume=1, max_length=self.queue_args[0],
                               **queue_dict)
