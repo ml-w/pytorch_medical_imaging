@@ -4,6 +4,7 @@ from typing import Union, Optional, Iterable
 
 import numpy as np
 import pandas as pd
+import sklearn.metrics as metrics
 import torch
 import torch.nn.functional as F
 from SimpleITK import GetImageFromArray, ReadImage, WriteImage
@@ -14,7 +15,7 @@ from tqdm import *
 
 from .InferencerBase import InferencerBase
 from ..solvers import ClassificationSolverCFG
-from ..utils.visualization import draw_overlay_heatmap
+from ..utils.visualization.segmentation_vis import draw_overlay_heatmap
 from ..pmi_data_loader.pmi_dataloader_base import PMIDataLoaderBase
 from ..med_img_dataset import DataLabel
 from ..networks.GradCAM import *
@@ -224,7 +225,19 @@ class ClassificationInferencer(InferencerBase):
     def _prepare_output_dict(self, gt, out_tensor, sig_out, uids) -> dict:
         r"""This method pack the network output into ``out_decisions`` while computing the correct format to display.
 
-        For arguments, see :func:`._writter`.
+        Args:
+            gt (torch.Tensor):
+                Ground-truth, expect dimension is :math:`(B)`.
+            out_tensor (torch.Tensor):
+                Network output, expect :math:`(B \times C)` tensor
+            sig_out (bool):
+                Whether the output_tensor requires further sigmoid function. If True, sigmoid will
+                be applied before softmax
+            uids (int):
+                UIDs, should match the first dimesion of `gt`.
+
+        .. seealso::
+            For arguments, see :func:`._writter`.
 
         Returns:
             dict
@@ -236,6 +249,7 @@ class ClassificationInferencer(InferencerBase):
         out_tensor = torch.sigmoid(out_tensor) if sig_out else out_tensor # (B x C), where C is total # classes
         out_tensor = F.softmax(out_tensor, dim=1)
         out_decisions['IDs'] = uids
+        out_decisions['Decision'] = out_decision.tolist()
         # For each channel, write down the probability
         for i in range(out_tensor.shape[1]):
             out_decisions['Prob_Class_%s' % i] = out_tensor[:, i].data.cpu().tolist()
@@ -243,14 +257,14 @@ class ClassificationInferencer(InferencerBase):
             # check gt dim, if dim == 2, assume (B x C)
             if gt.dim() == 1:
                 gt = gt.unsqueeze(-1)
-
-            for j in range(gt.shape[1]):
-                out_decisions[f'Truth_{j}'] = gt[:, j].flatten().tolist()
-
+                out_decisions['Truth'] = gt.flatten().tolist()
+                out_decisions['Result'] = ['Correct' if a == b else "Wrong"
+                                           for a, b in zip(out_decisions['Truth'],out_decisions['Decision'])]
+            else:
+                self._logger.warning(f"Ground-truth dimension doesn't look right for classification: {gt.shape}")
             self._TARGET_DATASET_EXIST_FLAG = True
         else:
             self._TARGET_DATASET_EXIST_FLAG = False
-        out_decisions['Decision'] = out_decision.tolist()
         return out_decisions
 
     def display_summary(self) -> None:
@@ -258,10 +272,58 @@ class ClassificationInferencer(InferencerBase):
         dl = pd.read_csv(self.output_dir, index_col=0)
         n = len(dl)
         try:
-            tp = (dl['Truth_0'] == dl['Decision']).sum()
+            tp = (dl['Truth'] == dl['Decision']).sum()
+            report = metrics.classification_report(dl['Truth'], dl['Decision'])
+            report_dict = metrics.classification_report(dl['Truth'], dl['Decision'], output_dict = True)
+            self._logger.debug(f"{report_dict = }")
+            self._logger.info("Classificaiton report:\n" + report)
             self._logger.info(f"ACC: {float(tp) * 100/ float(n):.01f}%")
-        except KeyError:
+
+            # Additional binary classification information if there's only two classes
+            if len(dl['Truth'].unique()) == 2:
+                pos_cls = str(dl['Truth'].max())
+                neg_cls = str(dl['Truth'].min())
+                perf = {
+                    'Sensitivity': report_dict[pos_cls]['recall'],
+                    'Specificity': report_dict[neg_cls]['recall'],
+                    'PPV': report_dict[pos_cls]['precision'],
+                    'NPV': report_dict[neg_cls]['precision']
+                }
+
+                cm = metrics.confusion_matrix((dl['Truth'] == int(pos_cls)).tolist(), (dl['Decision'] == int(pos_cls)).tolist())
+                self._logger.debug(f"{cm = }")
+                tn, fp, fn, tp = cm.ravel()
+                perf['AUC'] = metrics.roc_auc_score(dl['Truth'], dl[f'Prob_Class_{pos_cls}'])
+                perf['ACC'] = (tp + tn) / float(tp + fn + fp + tn)
+                mat_data = [[tp, fp], [fn, tn]]
+                mat_df = pd.DataFrame(data=mat_data, index=['Predict +', 'Predict -'], columns=['Actual +', 'Actual -'])
+                perf = pd.Series(perf, name='Performance').to_frame().T
+
+                # printing results
+                try:
+                    import tabulate
+                    self._logger.info(
+                        "Confusion matrix: \n" +
+                        tabulate.tabulate(mat_df, headers = 'keys', tablefmt='fancy_grid')
+                    )
+                    self._logger.info(
+                        "Summary: \n" +
+                        tabulate.tabulate(perf, headers = 'keys', tablefmt='fancy_grid')
+                    )
+                except ModuleNotFoundError: # if tabulate is not installed
+                    self._logger.info(f"Confusion matrix: \n{mat_df.to_string()}")
+                    self._logger.info('Summary: \n' + perf.to_string())
+                finally:
+                    self._logger.info("Sensitivity: %.3f Specificity: %.3f NPV: %.3f PPV: %.3f OverallACC: %.3f OverallAUC: %.3f"%(
+                        perf.loc['Sensitivity'], perf.loc['Specificity'],perf.loc['NPV'], perf.loc['PPV'],
+                        perf.loc['ACC'], perf.loc['AUC']
+                    ))
+
+        except KeyError as e:
+            self._logger.exception(e)
             pass
+        except Exception as e:
+            self._logger.exception(e)
         return
 
     def _reshape_tensors(self,
