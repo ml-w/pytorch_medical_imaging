@@ -245,7 +245,7 @@ def draw_overlay_heatmap(baseim, heatmap):
         TypeError: If `baseim` or `heatmap` is not a numpy array or torch tensor.
 
 
-    .. notes::
+    .. note::
         - This function scales the heat map to between 0 to 1, therefore its adviced that before using this function,
           you should clean the distinct values that could affect the color mapping.
         - The color map used is revered JET mapping.

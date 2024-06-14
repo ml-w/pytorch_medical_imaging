@@ -2,8 +2,9 @@ import torch
 import numpy as np
 import base64
 import json
+from typing import Optional, Union
 
-def tensor_to_ascii(tensor: torch.Tensor) -> str:
+def tensor_to_ascii(tensor: torch.Tensor, to_dict: Optional[bool] = False) -> Union[str, dict]:
     r"""Converts a PyTorch tensor into a JSON-formatted ASCII string.
 
     This function first transfers the tensor to CPU memory, if not already in CPU. It then converts the tensor
@@ -37,9 +38,12 @@ def tensor_to_ascii(tensor: torch.Tensor) -> str:
         'dtype': str(numpy_array.dtype),
         'shape': numpy_array.shape
     }
-    # Serialize the dictionary to a JSON string
-    tensor_json = json.dumps(tensor_info)
-    return tensor_json
+    if not to_dict:
+        # Serialize the dictionary to a JSON string
+        tensor_json = json.dumps(tensor_info)
+        return tensor_json
+    else:
+        return tensor_info
 
 
 def ascii_to_tensor(tensor_json: str) -> torch.Tensor:
