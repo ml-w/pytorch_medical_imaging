@@ -163,6 +163,21 @@ class TestClassificationSolver(TestSolver):
         uids = ['1', '2', '3' , '4']
         self.solver._update_misclassification_record(dic, g, uids)
 
+    def test_validation_step(self):
+        g = torch.LongTensor([1, 1, 1, 0])
+        res = torch.FloatTensor([
+            [0.8, 1.0],
+            [-10, 2.5],
+            [1.0, 0.3],
+            [12, 0.2]
+        ])
+        self.solver.perfs = []
+        self.solver.validation_losses = []
+        self.solver.plotter_dict = {'scalars': {'Loss/Validation Loss': None}}
+        self.solver._validation_step_callback(g, res, torch.Tensor([0.0]), range(len(g)))
+        self.solver._validation_callback()
+        print(self.solver.perfs)
+
 class TestBinaryClassificationSolver(TestClassificationSolver):
     def _prepare_cfg(self):
         super(TestBinaryClassificationSolver, self)._prepare_cfg()
