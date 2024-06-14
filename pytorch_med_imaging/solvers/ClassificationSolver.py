@@ -122,11 +122,11 @@ class ClassificationSolver(SolverBase):
                 raise AttributeError(msg)
 
         # required dimension of CrossEntropy is either (B) or (B, num_class)
-        if isinstance(self.loss_function, nn.CrossEntropyLoss) and g.shape[1] == 1:
+        if isinstance(self.loss_function, nn.CrossEntropyLoss):
             # squeeze (B, 1) to (B)
             g = g.squeeze()
 
-        self._logger.debug(f"Output size out: {out.shape} g: {g.shape}")
+        self._logger.debug(f"Output size out: {out.shape}({out.dtype}) g: {g.shape}({g.dtype})")
         # Cross entropy does not need any processing, just give the raw output
         loss = self.loss_function(out, g)
         return loss
@@ -161,18 +161,28 @@ class ClassificationSolver(SolverBase):
         r"""Stores decision, step loss and performance.
 
         Args:
+            g (torch.Tensor):
+                Expect input to be :math:`(B)`
+            res (torch.Tenor):
+                Expect input to be :math:`(B\times \texttt{num of class})`
+            loss (torch.Tensor or float):
+                Should be a single value, or a tensor with a single value.
             uids (list, Iterable):
+                Expect length identical as `g`
+
+        Returns:
+            None
         """
+        self.validation_losses.append(loss.item() if isinstance(loss, torch.Tensor) else loss)
         # when ordinal_mse mode, the decision is based on rounding the probability to the nearest class.
         if not self.ordinal_mse:
-            dic = torch.argmax(torch.softmax(res, dim=1), dim=1)
+            dic = torch.argmax(res, dim=1)
         else:
             dic = torch.round(res).long()
         # add the classification result to the list
         self.perfs.extend([guess == truth for guess, truth in zip(dic.tolist(), g.tolist())])
         # add the misclassified result to the dictionary
         self._update_misclassification_record(dic, g, uids)
-        self.validation_losses.append(loss.item())
 
     def _update_misclassification_record(self, dic, g, uids=None):
         r"""Updates the misclassification record for the given data and logs it.
