@@ -315,8 +315,8 @@ class ClassificationInferencer(InferencerBase):
                     self._logger.info('Summary: \n' + perf.to_string())
                 finally:
                     self._logger.info("Sensitivity: %.3f Specificity: %.3f NPV: %.3f PPV: %.3f OverallACC: %.3f OverallAUC: %.3f"%(
-                        perf.loc['Sensitivity'], perf.loc['Specificity'],perf.loc['NPV'], perf.loc['PPV'],
-                        perf.loc['ACC'], perf.loc['AUC']
+                        perf['Sensitivity'], perf['Specificity'],perf['NPV'], perf['PPV'],
+                        perf['ACC'], perf['AUC']
                     ))
 
         except KeyError as e:
