@@ -1,12 +1,8 @@
 from .ClassificationInferencer import ClassificationInferencer
-from ..med_img_dataset import DataLabel
-from torch.utils.data import DataLoader
-from tqdm import *
-from sklearn.metrics import confusion_matrix, roc_auc_score
-from typing import Union, Optional, Iterable
-import os
+from sklearn.metrics import roc_auc_score
+from typing import Iterable
 import torch
-import pandas as pd
+
 #from ..networks.GradCAM import *
 
 __all__ = ['BinaryClassificationInferencer']
@@ -21,13 +17,6 @@ class BinaryClassificationInferencer(ClassificationInferencer):
     """
     def __init__(self, *args, **kwargs):
         super(BinaryClassificationInferencer, self).__init__(*args, **kwargs)
-
-    def _prepare_data(self):
-        r"""Try to load in training mode first to include the ground-truth but ignoring the augmentation."""
-        try:
-            self._inference_subjects = self.data_loader._load_data_set_training(True)
-        except:
-            self._inference_subjects = self.data_loader._load_data_set_inference()
 
     def _reshape_tensors(self,
                          out_list: Iterable[torch.FloatTensor],
