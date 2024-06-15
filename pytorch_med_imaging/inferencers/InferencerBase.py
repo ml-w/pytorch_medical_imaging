@@ -164,3 +164,10 @@ class InferencerBase(object):
     def get_net(self):
         r"""See :func:`SolverBase.get_net<pytorch_med_imaging.solvers.SolverBase.get_net>`."""
         return SolverBase.get_net(self)
+
+    def _prepare_data(self):
+        r"""Try to load in training mode first to include the ground-truth but ignoring the augmentation."""
+        try:
+            self._inference_subjects = self.data_loader._load_data_set_training(True)
+        except:
+            self._inference_subjects = self.data_loader._load_data_set_inference()
