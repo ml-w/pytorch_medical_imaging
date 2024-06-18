@@ -395,13 +395,19 @@ class PMIController(object):
         # validation id_lists
         try:
             if not self.id_list_val is None:
+                # if a txt file is provided
                 if isinstance(self.id_list_val, (str, Path)):
+                    self._logger.info(f"Reading validation set ID from: {self.id_list_val}")
                     with open(self.id_list_val, 'r') as _val_txt:
                         validation_ids = [r.rstrip() for r in _val_txt.readlines()]
                     validation_ids.sort()
                 else:
+                    # if a list of str is provided
+                    if not all(isinstance(r, str) for r in self.id_list_val):
+                        self._logger.error("If a list is provided for `id_list_val`, all its element must be string.")
                     validation_ids = self.id_list_val
             else:
+                self._logger.info("No ID for validation specified.")
                 validation_ids = None
         except Exception as e:
             if self._logger.log_level == 10:
@@ -418,6 +424,7 @@ class PMIController(object):
             # validation IDs
             if not self.data_loader_val_cfg is None:
                 self.data_loader_val_cfg.id_list = validation_ids
+                self._logger.debug(f"Validation IDs: {validaiton_ids}")
             # Handle the special options
             if self.validate_on_testing_set:
                 self._logger.debug(f"validate_on_testing_set mode")
@@ -514,7 +521,9 @@ class PMIController(object):
         r"""This method executes the training or inference pipeline according to the configuration. It will invoke
         :meth:`.train` or :meth:`inference` based on the flag `run_mode`.
         """
+        self._logger.info(f"Before preprocess flag {self.solver_cls = }")
         self._pre_process_flags()
+        self._logger.info(f"After {self.solver_cls = }")
 
         # Run train or inference
         if self.run_mode:
@@ -533,7 +542,7 @@ class PMIController(object):
         if dist.is_initialized():
             if dist.get_rank() != 0:
                 self.solver_cfg.plot_to_tb = False
-
+        self._logger.debug(f"{self.solver_cls = }")
         solver = self.solver_cls(self.solver_cfg)
         self._logger.info("Loading train data...")
         loader = self.data_loader_cls(self.data_loader_cfg)
