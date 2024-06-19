@@ -55,7 +55,8 @@ def GenerateTestBatch(ids                 : Iterable,
                       validation          : Optional[int]       = 0) -> None:
     r"""
     Seperate the `ids` into K-fold with stratification. The configurations are stored in .ini files with session
-    `FileList` and attributes `testing` and `training`.
+    `FileList` and attributes `testing` and `training`. Optionally, you can assign a set of IDs as validation
+    ids, which stays the same across folds and are deposited in the file "Validation.txt".
 
     Args:
         ids (list or tuple):
@@ -72,6 +73,21 @@ def GenerateTestBatch(ids                 : Iterable,
             If not None, the K-fold is arranged with stratification referencing this. Default to None.
         validation (int, Optional):
             If > 0, a validation set with `validation` cases will also be created and deposite to "Validation.txt"
+
+    Examples:
+    >>> from pytorch_med_imaging.med_img_dataset.ImageData import ImageDataSet
+    >>> from pytorch_med_imaging.utils.batchgenerator import GenerateTestBatch
+    >>>
+    >>> regex = r"^[0-9]+"
+    >>> images = ImageDataSet(data_dir.__str__(), verbose=True, idGlobber=regex)
+    >>> im_ids =images.get_unique_IDs(regex)
+    >>>
+    >>> GenerateTestBatch(images.get_unique_IDs(),          # IDs
+    >>>                   5,                                # Number of folds
+    >>>                   out_file_dir.__str__(),           # Where to write the .ini file
+    >>>                   validation=len(images) // 10,     # Number of cases as validation set
+    >>>                   prefix='B'                        # Prefix for naming
+    >>>                   )
 
     """
     import configparser
@@ -218,8 +234,6 @@ def check_batches_files(dir, globber=None):
                 continue
             if fulllist[k1] != fulllist[k2]:
                 print("Difference in full: ", k1, k2)
-
-
     pass
 
 
