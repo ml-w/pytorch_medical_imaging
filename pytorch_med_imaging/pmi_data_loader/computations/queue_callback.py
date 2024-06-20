@@ -13,7 +13,6 @@ from ...med_img_dataset.computations import lndp, lbp
 from typing import Sequence, Union, Optional
 from torchio import Subject
 from torchio.constants import TYPE, DATA, LOCATION
-from multiprocessing import Semaphore
 import time
 
 import gc

@@ -3,7 +3,7 @@ import gc
 from mnts.mnts_logger import MNTSLogger
 from tensorboardX import SummaryWriter
 from torchvision.utils import make_grid
-from pytorch_med_imaging.utils.visualization import draw_grid
+from pytorch_med_imaging.utils.visualization.segmentation_vis import draw_grid
 from functools import partial
 from cv2 import *
 import numpy as np

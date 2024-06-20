@@ -424,7 +424,7 @@ class PMIController(object):
             # validation IDs
             if not self.data_loader_val_cfg is None:
                 self.data_loader_val_cfg.id_list = validation_ids
-                self._logger.debug(f"Validation IDs: {validaiton_ids}")
+                self._logger.debug(f"Validation IDs: {validation_ids}")
             # Handle the special options
             if self.validate_on_testing_set:
                 self._logger.debug(f"validate_on_testing_set mode")

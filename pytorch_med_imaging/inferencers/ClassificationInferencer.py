@@ -247,7 +247,7 @@ class ClassificationInferencer(InferencerBase):
         out_decisions = {}
         out_decision = torch.argmax(out_tensor, dim=1) # expect to be (B x 1)
         out_tensor = torch.sigmoid(out_tensor) if sig_out else out_tensor # (B x C), where C is total # classes
-        out_tensor = F.softmax(out_tensor, dim=1)
+        # out_tensor = F.softmax(out_tensor, dim=1)
         out_decisions['IDs'] = uids
         out_decisions['Decision'] = out_decision.tolist()
         # For each channel, write down the probability

@@ -154,6 +154,7 @@ class SolverDDPWrapper:
             raise_error (bool, Optional):
                 If ``True``, raise ``RuntimeError`` if the subprocesses network are not the same
         """
+        self._logger.info("Checking if network is synced.")
         netstate_str = str(self.net.state_dict())
         # need to replace device information because each subprocess store network in different GPU devices supposedly
         netstate_str = re.sub('cuda:[\d]+', '', netstate_str)
@@ -198,13 +199,30 @@ class SolverDDPWrapper:
         # Because only rank 0 does validation loop, use it as the early stop reference.
         if self.rank == 0:
             self.solver._step_early_stopper_()
+        else:
+            self._logger.info("Waiting for process 0 for stepping early stopper")
+        # Synchronize all processes
+        dist.barrier()
 
-        # note that cuda device doesn't like bool type so we are using uint8 instead
-        early_stop_ten = torch.as_tensor([self.solver.EARLY_STOP_FLAG], dtype=torch.uint8).cuda(device=self.rank)
-        dist.broadcast(early_stop_ten, 0) # broad cast early stop flag from rank 0 to all others
-        self.solver.EARLY_STOP_FLAG = early_stop_ten.data.item() > 0
-        self._logger.debug(f"Early stopper stat: {self.EARLY_STOP_FLAG}")
-        del early_stop_ten
+        # Create tensor for the early stop flag
+        early_stop_ten = torch.tensor(
+            [int(self.solver.EARLY_STOP_FLAG)],
+            dtype=torch.int32,
+            device=f'cuda:{self.rank}'
+        )
+        tensorlist = [torch.zeros_like(early_stop_ten) for i in range(dist.get_world_size())]
+
+
+        # Broadcast the early stop flag from rank 0 to all other processes
+        self._logger.debug(f"{self.solver.EARLY_STOP_FLAG}")
+        self._logger.debug(f"Before {early_stop_ten = }")
+        dist.all_gather(tensorlist, early_stop_ten)
+        self._logger.debug(f"After {tensorlist = }")
+
+        # Update the EARLY_STOP_FLAG based on the broadcasted value
+        self.solver.EARLY_STOP_FLAG = early_stop_ten.item() > 0
+        self._logger.info(f"Early stopper stat: {self.EARLY_STOP_FLAG}")
+
 
 
     def _check_best_epoch(self,
@@ -253,6 +271,7 @@ class SolverDDPWrapper:
             checkpoint_path,
             debug_validation):
         self.solver.fit(checkpoint_path, debug_validation)
+        self._logger.debug("Hitting fit barrier")
         dist.barrier()
 
     def validation(self):
@@ -261,15 +280,20 @@ class SolverDDPWrapper:
             msg = "This method is only meant for DDP."
             raise mp.ProcessError(msg)
 
-        if self.rank == 0:
-            # only do validation on rank 0
-            self.solver.validation_()
-            self._logger.info("Processing 0 joining back.")
-        else:
-            self._logger.info("Skipping validation because this is not rank 0 process.")
+        try:
+            if self.rank == 0:
+                # only do validation on rank 0
+                self.solver.validation_()
+                self._logger.info("Processing 0 joining back.")
+            else:
+                self._logger.info("Skipping validation because this is not rank 0 process.")
+        except Exception as e:
+            self._logger.error("Encounter error during DDP run")
+            self._logger.exception(e)
+        finally:
+            # collect all other processes.
+            dist.barrier()
 
-        # collect all other processes.
-        dist.barrier()
 
     def _epoch_callback(self, *args, **kwargs) -> None:
         r"""Sync the network after each epoch just in case.n"""

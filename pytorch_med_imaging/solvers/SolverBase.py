@@ -75,6 +75,9 @@ class SolverBaseCFG(PMIBaseCFG):
             Some schedulers require supplying arguments. Do it through this attribute. Default to empty list ``[]``.
         lr_sche_kwargs (dict, Optional):
             Some schedulers require supplying key word arguments. Do it through this attribute. Defaul to ``{}``.
+        lr_weights (dict, Optional):
+            Use this when you want to assign different learning rate weights to different modules of the network.
+            This will be set into the network as attribute. Be mindful that some network has a default weight dict.
         use_cuda (bool, Optional):
             Whether this solver will move the items to cuda for computation. Default to ``True``.
         debug (bool, Optional):
@@ -127,6 +130,7 @@ class SolverBaseCFG(PMIBaseCFG):
     lr_sche          : Optional[PMILRScheduler]    = None # If ``None``, lr_scheduler.ExponentialLR will be used.
     lr_sche_args     : Optional[list]              = []
     lr_sche_kwargs   : Optional[dict]              = {}
+    lr_weights       : Optional[dict]              = {}
     plotter_dict     : Optional[dict]              = None
     early_stop       : Optional[BaseEarlyStop]     = None
     early_stop_args  : Optional[list]              = None
@@ -230,7 +234,8 @@ class SolverBase(object):
             'num_of_epochs': int,
             'unpack_key_forward': (tuple, list),
             'batch_size': int,
-            'lr_sche': PMILRScheduler
+            'lr_sche': PMILRScheduler,
+            'lr_weights': dict
         }
 
         # Optimizer attributes
@@ -241,6 +246,7 @@ class SolverBase(object):
         # internal attributes
         self._tb_plotter = None
         self.current_epoch = 0
+        self._last_epoch_loss = 1e32
 
         # external_att
         self.plotter_dict      = {}
@@ -677,6 +683,12 @@ class SolverBase(object):
             self._logger.warning(msg)
             self.net = net
 
+        if len(self.lr_weights):
+            if isinstance(self.lr_weights, str):
+                self.lr_weights = ast.literal_eval(self.lr_weights)
+            self._logger.info(f"Setting lr_weight ({self.lr_weights}) into network ({type(self.net)}).")
+            self.get_net().lr_weights = self.lr_weights
+
         if not optimizer is None and not self.optimizer is None and not isinstance(self.optimizer) is str:
             msg = f"Overriding optimizer defined in CFG. If you didn't inherit the function create_optimizer, something" \
                   f"might have gone wrong!"
@@ -724,16 +736,22 @@ class SolverBase(object):
             # * construct param group by filtering out those that has a specific weights
             # get those with specified weights
             lr_weight_dict = self.get_net().lr_weights
-            specific_layer_names, lr_weights = zip(*lr_weight_dict.items())
-            net_params = []
-            # build for those without specified weights
-            net_params.append({'params': [param for name, param in self.net.named_parameters()
-                                           if all([spec_name not in name for spec_name in specific_layer_names])]})
 
-            # build for those with specific weights
-            for spec_name, lr_weight in lr_weight_dict.items():
-                net_params.append({'params': self.get_net().get_submodule(spec_name).parameters(), 'lr': self.init_lr * lr_weight})
-            self._logger.debug(f"Build param_group for non-specified modules: {net_params}")
+            if len(lr_weight_dict) != 0:
+                specific_layer_names, lr_weights = zip(*lr_weight_dict.items())
+                net_params = []
+                # build for those without specified weights
+                net_params.append({'params': [param for name, param in self.net.named_parameters()
+                                               if all([spec_name not in name for spec_name in specific_layer_names])]})
+
+                # build for those with specific weights
+                for spec_name, lr_weight in lr_weight_dict.items():
+                    net_params.append({'params': self.get_net().get_submodule(spec_name).parameters(), 'lr': self.init_lr * lr_weight})
+                self._logger.debug(f"Build param_group for non-specified modules: {net_params}")
+            else:
+                # If the dictionary is empty
+                self._logger.warning(f"lr_weights seems to be empty {lr_weight_dict = }")
+                net_params = self.net.parameters()
         else:
             net_params = self.net.parameters()
         if self.optimizer == 'Adam':
@@ -984,7 +1002,7 @@ class SolverBase(object):
         self._check_fit_ready()
 
         # configure checkpoints
-        self.EARLY_STOP_FLAG = False
+        self.EARLY_STOP_FLAG = 0
         self.net_to_parallel()
         self._lastloss = 1e32
         self._logger.info("Start training...")
@@ -1076,7 +1094,7 @@ class SolverBase(object):
         train_loss = self.get_last_train_loss()
         val_loss = self.get_last_val_loss()
         # use validation loss as epoch loss if it exist
-        measure_loss = val_loss if val_loss is not None else train_loss
+        measure_loss = val_loss or train_loss
         return measure_loss
 
     def _match_type_with_network(self, tensor: torch.Tensor) -> torch.Tensor:

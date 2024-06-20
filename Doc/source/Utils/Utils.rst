@@ -1,7 +1,6 @@
 Utilities
 =========
 
-
 .. py:currentmodule:: pytorch_med_imaging.utils
 
 Preprocessing
@@ -11,5 +10,9 @@ Preprocessing
 
 Visualization
 -------------
-.. automodule:: pytorch_med_imaging.utils.visualization
+
+Segmentation Visualization
+^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+.. automodule:: pytorch_med_imaging.utils.visualization.segmentation_vis
     :members:

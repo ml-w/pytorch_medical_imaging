@@ -114,7 +114,7 @@ class PMIDataLoaderBase(object):
                 check_run_mode --> load_training: run_mode = train
                 check_run_mode --> load_testing: run_mode <> train
             }
-            load_training --> create_aug_filters_training(): Call _load_data_set_training
+            load_training --> create_aug_filters_training: Call _load_data_set_training
             load_testing --> create_aug_filters_testing: Call _load_data_set_testing
             create_aug_filters_training --> pack_data_into_subjects: Call _create_augmentation_filters_training
             create_aug_filters_testing --> pack_data_into_subjects: Call _create_augmentation_filters_testing
