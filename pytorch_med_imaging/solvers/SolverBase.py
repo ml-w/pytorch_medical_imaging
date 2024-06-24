@@ -478,7 +478,7 @@ class SolverBase(object):
                 tensorboard_rootdir = Path("/media/storage/PytorchRuns")
 
             # Strip the parenthesis and comma from the net name to avoid conflicts with system
-            net_name = str(self.net_name) + time.strftime('%Y-%b-%d_%H%M%p', time.localtime())
+            net_name = str(self.net_name) + '_' + time.strftime('%Y-%b-%d_%H%M%p', time.localtime())
             net_name = net_name.translate(str.maketrans('(),.','[]--'," "))
             self._logger.info("Creating TB writer, writing to directory: {}".format(tensorboard_rootdir))
 
@@ -737,7 +737,7 @@ class SolverBase(object):
                 net_params = []
                 # build for those without specified weights
                 net_params.append({'params': [param for name, param in self.net.named_parameters()
-                                               if all([spec_name not in name for spec_name in specific_layer_names])]})
+                                               if all([spec_name != name.split('.')[0] for spec_name in specific_layer_names])]})
 
                 # build for those with specific weights
                 for spec_name, lr_weight in lr_weight_dict.items():
@@ -891,6 +891,7 @@ class SolverBase(object):
             gc.collect()
         epoch_loss = np.array(E, dtype=float).mean()
         self.plotter_dict['scalars']['Loss/Loss'] = epoch_loss
+        self.plotter_dict['scalars']['LR/Learning Rate'] = self.get_last_lr()
         self._last_epoch_loss = epoch_loss
 
         self._logger.info("Initiating validation.")
@@ -1269,6 +1270,10 @@ class SolverBase(object):
                 self._logger.warning("Error when plotting to tensorboard.")
                 if self._logger.log_level == 10: # debug
                     self._logger.exception(e)
+
+        if hasattr(self, '_np_plotter'):
+            self._np_plotter.plot_scalars(scalars)
+
 
     def _step_early_stopper(self):
         r"""Step the early stopper if it exist. This method is refractored to allow overriding for DDP."""
