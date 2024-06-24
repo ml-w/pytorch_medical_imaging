@@ -8,16 +8,16 @@ from abc import abstractmethod
 import gc
 import numpy as np
 import torch
+import torch.distributed as dist
+import torchio as tio
+
+from tensorboardX import SummaryWriter
 from torch.optim import lr_scheduler
+from tqdm import tqdm
 from typing import Union, Iterable, Optional
 from pathlib import Path
-
-import torchio as tio
-import torch.distributed as dist
-from tqdm import tqdm
-
 from ..pmi_base_cfg import PMIBaseCFG
-from ..tb_plotter import TB_plotter
+from ..integration.tb_plotter import TB_plotter
 from .. import lr_scheduler as pmi_lr_scheduler
 from ..lr_scheduler import PMILRScheduler
 from ..pmi_data_loader import PMIDataLoaderBase, PMIDistributedDataWrapper
@@ -478,23 +478,18 @@ class SolverBase(object):
                 tensorboard_rootdir = Path("/media/storage/PytorchRuns")
 
             # Strip the parenthesis and comma from the net name to avoid conflicts with system
-            net_name = str(self.net)
-            net_name = net_name.translate(str.maketrans('(),','[]-'," "))
+            net_name = str(self.net_name) + time.strftime('%Y-%b-%d_%H%M%p', time.localtime())
+            net_name = net_name.translate(str.maketrans('(),.','[]--'," "))
             self._logger.info("Creating TB writer, writing to directory: {}".format(tensorboard_rootdir))
 
-            # check if the target exist
-            dirs_num = [int(re.search(f"{net_name}-(?P<number>\d+)", d.name).groupdict()['number'])
-                        for d in tensorboard_rootdir.glob(f"{net_name}-*")]
-            if len(dirs_num) > 0:
-                next_num = max(dir_num) + 1
-            else:
-                next_num = 0
+            # create new directory
+            idx = 0
+            tensor_dir = tensorboard_rootdir / net_name
+            while tensor_dir.is_dir():
+                tensor_dir = tensorboard_rootdir / f"{net_name}-{idx:02d}"
+                idx += 1
 
-            writer = SummaryWriter(str(tensorboard_rootdir.joinpath(
-                "{}{}".format(net_name,
-                              f'-{next_num}' if next_num > 0 else ''
-            ))))
-
+            writer = SummaryWriter(str(tensor_dir))
             self._tb_plotter = TB_plotter(writer)
         except Exception as e:
             self._logger.warning("Tensorboard writter creation encounters failure, falling back to no writer.")
