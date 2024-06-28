@@ -681,7 +681,7 @@ class SolverBase(object):
         if len(self.lr_weights):
             if isinstance(self.lr_weights, str):
                 self.lr_weights = ast.literal_eval(self.lr_weights)
-            self._logger.info(f"Setting lr_weight ({self.lr_weights}) into network ({type(self.net)}).")
+            self._logger.info(f"Setting lr_weight ({self.lr_weights}) into network ({type(self.get_net())}).")
             self.get_net().lr_weights = self.lr_weights
 
         if not optimizer is None and not self.optimizer is None and not isinstance(self.optimizer) is str:
@@ -741,6 +741,8 @@ class SolverBase(object):
 
                 # build for those with specific weights
                 for spec_name, lr_weight in lr_weight_dict.items():
+                    if '.' in spec_name:
+                        self._logger.warning("There should not be any '.' in the specific name")
                     net_params.append({'params': self.get_net().get_submodule(spec_name).parameters(), 'lr': self.init_lr * lr_weight})
                 self._logger.debug(f"Build param_group for non-specified modules: {net_params}")
             else:
