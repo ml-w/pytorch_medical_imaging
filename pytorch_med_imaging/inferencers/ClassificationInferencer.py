@@ -152,8 +152,7 @@ class ClassificationInferencer(InferencerBase):
                         out = self.net(*s)
                     else:
                         out = self.net(s)
-                    if out.shape[-1] > 1:
-                        out = out.squeeze()
+                    out = self._prepare_network_output(out)
                 except Exception as e:
                     if 'uid' in mb:
                         self._logger.error(f"Error when dealing with minibatch: {mb['uid']}")
@@ -174,6 +173,21 @@ class ClassificationInferencer(InferencerBase):
             out_tensor, gt_tensor = self._reshape_tensors(out_tensor, gt_tensor)
             dl = self._writter(out_tensor, uids, gt_tensor)
             self._logger.debug('\n' + dl._data_table.to_string())
+
+    def _prepare_network_output(self, out: torch.FloatTensor) -> torch.FloatTensor:
+        r"""Introduced to alter the output of the model for further classification results generation. This can also
+        relax the limitation that the network output must be a torch.FloatTensor, as sometimes we want to output more
+        than just a float tensor.
+
+        Args:
+            out (torch.FloatTensor): Output of the model is the input of this method.
+
+        Returns:
+            torch.FloatTensor: Processed output for writing results.
+        """
+        if out.shape[-1] > 1:
+            out = out.squeeze()
+        return out
 
     def _writter(self,
                  out_tensor: torch.IntTensor,
