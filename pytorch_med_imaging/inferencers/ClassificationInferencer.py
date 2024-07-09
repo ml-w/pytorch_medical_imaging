@@ -125,7 +125,7 @@ class ClassificationInferencer(InferencerBase):
             outname = os.path.join(outdir, "%s_gradcam.jpg"%ids[i])
             imsave(outname, hm)
 
-    def write_out(self):
+    def _write_out(self):
         uids = []
         gt_tensor = []
         out_tensor = []
