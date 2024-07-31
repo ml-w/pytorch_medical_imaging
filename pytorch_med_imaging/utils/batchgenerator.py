@@ -52,7 +52,8 @@ def GenerateTestBatch(ids                 : Iterable,
                       prefix              : Optional[str]       = "Batch_",
                       exclude_list        : Optional[List]      = None,
                       stratification_class: Optional[pd.Series] = None,
-                      validation          : Optional[int]       = 0) -> None:
+                      validation          : Optional[int]       = 0,
+                      overwrite           : Optional[bool]      = False) -> None:
     r"""
     Seperate the `ids` into K-fold with stratification. The configurations are stored in .ini files with session
     `FileList` and attributes `testing` and `training`. Optionally, you can assign a set of IDs as validation
@@ -73,6 +74,8 @@ def GenerateTestBatch(ids                 : Iterable,
             If not None, the K-fold is arranged with stratification referencing this. Default to None.
         validation (int, Optional):
             If > 0, a validation set with `validation` cases will also be created and deposite to "Validation.txt"
+        overwrite (bool, Optional):
+            If False, raise error if target location already has files. Default to False.
 
     Examples:
     >>> from pytorch_med_imaging.med_img_dataset.ImageData import ImageDataSet
@@ -173,6 +176,8 @@ def GenerateTestBatch(ids                 : Iterable,
 
         outconf = configparser.ConfigParser()
         outconf['FileList'] = {'testing': ','.join(out[k]['test_ids']), 'training': ','.join(out[k]['train_id'])}
+        if Path(outfile).is_file() and not overwrite:
+            raise FileExistsError(f"Find existing file at {outfile}. Set `overwrite=True` to overwrite it.")
         with open(outfile, 'w') as f:
             outconf.write(f)
 
@@ -244,29 +249,30 @@ if __name__ == '__main__':
 
     # table_dir = Path('../../NPC_Segmentation/99.Testing/Screening_Segmentation/v1_seg-datasheet.csv')
     # table = pd.read_csv(table_dir.__str__(), index_col='Study Number')
-    # data_dir = Path('../../NPC_Segmentation/60.Large-Study/v1-All-Data/Normalized_2/T2WFS_TRA/01.NyulNormalized')
+    data_dir = Path('../../NPC_Segmentation/60.Large-Study/v1-All-Data/Normalized_2/T2WFS_TRA/01.NyulNormalized')
+    out_file_dir = Path('../../NPC_Segmentation/60.Large-Study/v1-All-Data/Normalized_2/T2WFS_TRA/01.NyulNormalized')
     # out_file_dir = Path('../../NPC_Segmentation/99.Testing/Screening_Segmentation/')
     # data_dir = Path("../../SCC/10.Pilot_Study/Normed_Images/NyulNormalizer")
     # out_file_dir = Path("../../SCC/99.Testing/Pilot")
-    data_dir = Path("../../NPC_Segmentation/")
-    out_file_dir = Path("../../SCC/99.Testing/Pilot")
+    # data_dir = Path("../../NPC_Segmentation/")
+    # out_file_dir = Path("../../SCC/99.Testing/Pilot")
 
 
     regex = r"^[0-9]+"
     images = ImageDataSet(data_dir.__str__(), verbose=True, idGlobber=regex)
     im_ids =images.get_unique_IDs(regex)
 
-    # # Check if all images are available
-    # for i in table.index:
-    #     if i not in im_ids:
-    #         print(f"Dropping: {i}")
-    #         table.drop(i, axis=0, inplace=True)
+    # Check if all images are available
+    for i in table.index:
+        if i not in im_ids:
+            print(f"Dropping: {i}")
+            table.drop(i, axis=0, inplace=True)
 
-    # GenerateTestBatch(images.get_unique_IDs(),
-    #                   5,
-    #                   out_file_dir.__str__(),
-    #                   # stratification_class=table['Tstage'],
-    #                   validation=len(images) // 10,
-    #                   prefix='B'
-    #                   )
+    GenerateTestBatch(images.get_unique_IDs(),
+                      5,
+                      out_file_dir.__str__(),
+                      # stratification_class=table['Tstage'],
+                      validation=len(images) // 10,
+                      prefix='B'
+                      )
 
