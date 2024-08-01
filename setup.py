@@ -12,6 +12,17 @@ else:
     use_cython = True
 
 
+# Function to read the requirements.txt file
+def parse_requirements(filename):
+    with open(filename, 'r') as f:
+        lines = f.readlines()
+        # Remove comments and empty lines
+        requirements = [line.strip() for line in lines if line and not line.startswith('#')]
+        return requirements
+
+# Read requirements from the requirements.txt file
+requirements = parse_requirements('requirements.txt')
+
 cmdclass = {}
 ext_modules = []
 if use_cython:
@@ -21,15 +32,11 @@ if use_cython:
                   include_dirs=[numpy.get_include()]),
     ]
     ext_modules += [
-        Extension("pytorch_med_imaging.med_img_dataset.computations._interpolation",
-                  ["pytorch_med_imaging/med_img_dataset/computations/_interpolation.pxd"],
-                  include_dirs=[numpy.get_include()]),
-    ]
-    ext_modules += [
         Extension("pytorch_med_imaging.med_img_dataset.computations._prob_func",
                   ["pytorch_med_imaging/med_img_dataset/computations/_prob_func.pyx"],
                   include_dirs=[numpy.get_include()]),
     ]
+    ext_modules = cythonize(ext_modules)
     cmdclass.update({'build_ext': build_ext})
     # ext_modules += cythonize("med_img_dataset.rst/computations/_LocalNeighborhoodDifferencePattern.pyx")
 
@@ -61,6 +68,7 @@ setup(
             'pmi-labels_statistic = pytorch_med_imaging.scripts.preprocessing_labelmaps:pmi_label_statistics'
         ]
     },
+    install_requires = requirements
     # scripts = scripts,
     # install_requires=['torchio'],
     # dependency_links=[os.path.abspath('./ThirdParty/torchio')]
