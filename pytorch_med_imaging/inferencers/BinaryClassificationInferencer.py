@@ -103,11 +103,11 @@ class BinaryClassificationInferencer(ClassificationInferencer):
             FN += _FN
             _row = pd.Series(BinaryClassificationInferencer._get_sum_perf([_TP, _FP, _TN, _FN]),
                              name=f"Class {i}")
-            perf = perf.append(_row)
+            perf = pd.concat([perf, _row.to_frame().T])
 
         # Compute overall performance
         row = pd.Series(BinaryClassificationInferencer._get_sum_perf([TP, FP, TN, FN]), name='Overall')
-        perf = perf.append(row)
+        perf = pd.concat([perf, row.to_frame().T])
 
         # confusion matrix
         mat_data = [[TP, FP], [FN, TN]]
