@@ -583,6 +583,7 @@ class SolverBase(object):
             self._logger.warning(msg)
             self.loss_function.weight.copy_(torch.as_tensor(self.class_weights).float())
         elif self.class_weights is not None and self.loss_function.weight is None:
+            # If class_weights are explicitly specified in the CFG
             self.loss_function.weight = torch.as_tensor(self.class_weights).float()
 
         # make sure the weights are float
@@ -612,7 +613,7 @@ class SolverBase(object):
 
         """
         out = self._feed_forward(*args)
-        loss = self._loss_eval(out, *args)
+        loss = self._loss_eval(out, *args) # *args = (s, g)
 
         self._update_network(loss)
 
@@ -735,6 +736,8 @@ class SolverBase(object):
             if len(lr_weight_dict) != 0:
                 specific_layer_names, lr_weights = zip(*lr_weight_dict.items())
                 net_params = []
+                net_params_names = []
+
                 # build for those without specified weights
                 net_params.append({'params': [param for name, param in self.net.named_parameters()
                                                if all([spec_name != name.split('.')[0] for spec_name in specific_layer_names])]})
@@ -743,6 +746,7 @@ class SolverBase(object):
                 for spec_name, lr_weight in lr_weight_dict.items():
                     if '.' in spec_name:
                         self._logger.warning("There should not be any '.' in the specific name")
+                        name_params_names.extend([self.get_submodule(spec_name).parameters()])
                     net_params.append({'params': self.get_net().get_submodule(spec_name).parameters(), 'lr': self.init_lr * lr_weight})
                 self._logger.debug(f"Build param_group for non-specified modules: {net_params}")
             else:
@@ -886,7 +890,12 @@ class SolverBase(object):
             E.append(loss.data.cpu())
             self._logger.info("\t[Step %04d] loss: %.010f"%(step_idx, loss.data))
 
-            self._step_callback(s.cpu(), g.cpu(), out.detach().cpu().float(), loss.data.cpu(),
+            # out does not have to be a tensor
+            if isinstance(out, (list, tuple)):
+                out = [oo.detach().cpu().float() for oo in out]
+            else:
+                out = out.detach().cpu().float()
+            self._step_callback(s.cpu(), g.cpu(), out, loss.data.cpu(),
                                 step_idx=epoch_number * len(data_loader) + step_idx,
                                 uid = self.current_uid)
             del s, g, out, loss, mb
@@ -940,8 +949,16 @@ class SolverBase(object):
                 self._logger.debug(f"_val IDs: {mb['uid']}") if not mb.get('uid', None) is None else None
                 self._logger.debug("_val_step_loss: {}".format(loss.cpu().data.item()))
 
+                # obtain identifiers
                 uids = mb.get('uid', None)
-                self._validation_step_callback(g.cpu(), res.cpu(), loss.cpu(), uids)
+
+                # not limiting res to tensor now
+                if isinstance(res, (list, tuple)):
+                    res = [oo.cpu() for oo in res]
+                else:
+                    res = res.cpu()
+
+                self._validation_step_callback(g.cpu(), res, loss.cpu(), uids)
                 del mb, s, g, loss, res
                 gc.collect()
             self._validation_loss = np.mean(self.validation_losses)
