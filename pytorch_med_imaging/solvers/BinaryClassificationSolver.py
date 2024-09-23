@@ -77,7 +77,7 @@ class BinaryClassificationSolver(ClassificationSolver):
         self._logger.info("Validation Result - ACC: %.05f, VAL: %.05f"%(acc, validation_loss))
         self.plotter_dict['scalars']['Loss/Validation Loss'] = validation_loss
         self.plotter_dict['scalars']['Performance/ACC'] = acc
-        for param, val in per_mean.iteritems():
+        for param, val in per_mean.items():
             self.plotter_dict['scalars']['Performance/%s'%param] = val
 
         # Print the misclassification report
