@@ -5,7 +5,7 @@ from ..solvers import SolverBaseCFG, SolverDDPWrapper
 from ..pmi_base_cfg import PMIBaseCFG
 from ..pmi_data_loader import PMIDataLoaderBase, PMIDataLoaderBaseCFG, PMIDistributedDataWrapper
 from pathlib import Path
-from typing import Union, Optional
+from typing import Union, Optional, Any
 
 import yaml
 from mnts.mnts_logger import MNTSLogger
@@ -71,8 +71,6 @@ class PMIControllerCFG(PMIBaseCFG):
             Default to ``False``.
         inference_all_checkpoints (bool, Optional):
             Default to ``False``.
-        plot_tb (bool, Optional):
-            Default to ``True``.
         log_dir (str, Optional):
             Default directory for outputting the log file. Default to ``'./Backup/Log'``.
         keep_log (bool, Optional):
@@ -82,12 +80,20 @@ class PMIControllerCFG(PMIBaseCFG):
         matmul_precision (str, Optional):
             Option to control the matrix multiplication precision. Only useful when torch version >= 2.0.0. Default to
             'medium'. Must be one of ('medium', 'high', 'highest').
+        plotting (Optional[bool]):
+            Indicates whether plotting is enabled. Defaults to `False`.
+        plotter (Optional[Any]):
+            Specifies the plotter instance if plotting is enabled. Defaults to `False`.
+        plotter_type (Optional[str]):
+            Defines the type of plotter to be used. Defaults to `None`.
 
     .. note::
         * Don't confuse the `id_list` in this CFG with that in :class:`SolverBase`, the later is more flexible and can
           accept various specification formats.
         * The solver is used for both training and inference. The attribute :attr:`run_mode` determine which mode it
           will run in.
+        * If you need different train and inference dataloader, specify `_data_loader_cfg` and `_data_loader_inf_cfg`,
+          the code will automatically recognize these two variable and use thme instead of the one in the solver_cfg.
 
     .. tips::
         If you would like to use a different data loader CFG in training and inference mode, define the private tag
@@ -107,7 +113,6 @@ class PMIControllerCFG(PMIBaseCFG):
     inference_on_training_set  : Optional[bool] = False # this changes the data loader IDs in the inference mode
     inference_on_validation_set: Optional[bool] = False
     inference_all_checkpoints  : Optional[bool] = False
-    plot_tb                    : Optional[bool] = True  # if false no plots
     matmul_precision           : Optional[str]  = 'medium' # Only effect when torch version >= 2.0.0
 
 
@@ -178,7 +183,6 @@ class PMIController(object):
 
         # otherwise, create the logger based on controller configs
         if not isinstance(MNTSLogger.global_logger, MNTSLogger):
-
             log_dir = Path(self.log_dir)
             if isinstance(self.solver_cfg.net, torch.nn.Module):
                 log_fname = self.solver_cfg.net._get_name()
@@ -206,7 +210,6 @@ class PMIController(object):
             self._logger = MNTSLogger(log_dir, logger_name='pmi_controller', keep_file=self.keep_log,
                                       verbose=self.verbose, log_level='debug')
 
-
         self._required_attributes_train = [
             'cp_save_dir'
         ]
@@ -214,6 +217,10 @@ class PMIController(object):
         self._required_attributes_inference = [
             'cp_load_dir'
         ]
+
+        # Finally create plotter
+        if self.plotting:
+            self.create_plotter()
 
     def _load_config(self, config_file = None):
         r"""Function to load the configurations. If ``config_file`` is ``None``, load the default class
@@ -525,6 +532,11 @@ class PMIController(object):
         self._pre_process_flags()
         self._logger.info(f"After {self.solver_cls = }")
 
+        # write down the configurations before execution
+        controller_config = {'cfg/controller/' + k: v for k, v in self.__dict__.items() if
+                             isinstance(v, (str, int, float))}
+        self._plotter.save_dict(controller_config)
+
         # Run train or inference
         if self.run_mode:
             self.train()
@@ -541,7 +553,7 @@ class PMIController(object):
         # alter some of the flags if DDP is initialized because soem of the items can be shared
         if dist.is_initialized():
             if dist.get_rank() != 0:
-                self.solver_cfg.plot_to_tb = False
+                self.solver_cfg.plotting = False
         self._logger.debug(f"{self.solver_cls = }")
         solver = self.solver_cls(self.solver_cfg)
         self._logger.info("Loading train data...")
@@ -594,3 +606,36 @@ class PMIController(object):
         except AttributeError as e:
             self._logger.exception("Error when computing summary.")
 
+    def create_plotter(self):
+        r"""Create the tensorboard plotter. Note that th """
+        try:
+            if self.plotter_type == 'tensorboard':
+                # for legacy purpose, this has always been specified by global env variable.
+                tensorboard_rootdir =  Path(os.environ.get('TENSORBOARD_LOGDIR', '/media/storage/PytorchRuns'))
+                if not tensorboard_rootdir.is_dir():
+                    self._logger.warning("Cannot read from TENORBOARD_LOGDIR, retreating to default path...")
+                    tensorboard_rootdir = Path("/media/storage/PytorchRuns")
+
+                # Strip the parenthesis and comma from the net name to avoid conflicts with system
+                net_name = str(self.net_name) + '_' + time.strftime('%Y-%b-%d_%H%M%p', time.localtime())
+                net_name = net_name.translate(str.maketrans('(),.','[]--'," "))
+                self._logger.info("Creating TB writer, writing to directory: {}".format(tensorboard_rootdir))
+
+                # create new directory
+                idx = 0
+                tensor_dir = tensorboard_rootdir / net_name
+                while tensor_dir.is_dir():
+                    tensor_dir = tensorboard_rootdir / f"{net_name}-{idx:02d}"
+                    idx += 1
+
+                writer = SummaryWriter(str(tensor_dir))
+                self._plotter = TB_plotter(writer)
+            elif self.plotter_type == 'neptune':
+                self._logger.info("Using Neptune plotter")
+                self._plotter = NP_Plotter()
+                self._plotter.init_run(init_meta=self.plotter_init_meta)
+        except Exception as e:
+            self._logger.warning("Plotter creation encounters failure, falling back to no writer.")
+            self._logger.exception(e)
+            raise e
+            self._plotter = None

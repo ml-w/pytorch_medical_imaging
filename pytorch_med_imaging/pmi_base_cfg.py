@@ -59,9 +59,10 @@ class PMIBaseCFG:
         return pprint.pformat(_d, indent=2)
 
     def __iter__(self):
-        cls_dict = self._get_dict()
+        cls_dict = self.__dict__
         for k, v in cls_dict.items():
-            yield k, v
+            if not k.startswith('_'):
+                yield k, v
 
     def __deepcopy__(self,  memo = {}):
         cls = self.__class__
@@ -107,7 +108,5 @@ class PMIBaseCFG:
                 _RESOLVE.remove(item)
         return o
 
-
     def __getitem__(self, item):
         return self.__dict__[item]
-

@@ -60,7 +60,7 @@ class DataLabel(PMIDataBase):
         # type cast
         if not dtype is None:
             try:
-                self._get_table[self._target_column] = self._get_table[self._target_column].astype(dtype)
+                self._get_table.loc[:, self._target_column] = self._get_table[self._target_column].astype(dtype)
             except Exception as e:
                 self._logger.warning(f"Cannot cast column {self.target_column} to type {dtype}")
                 self._logger.exception(e)

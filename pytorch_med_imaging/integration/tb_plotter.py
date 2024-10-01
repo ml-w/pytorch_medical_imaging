@@ -143,11 +143,12 @@ class TB_plotter(object):
         self._last_writer_index = writer_index
         self._writer.add_scalar('loss', loss, writer_index)
 
-    def plot_scalars(self, writer_index: int, scalars: dict):
+    def log_scalar(self, writer_index: int, scalars: dict, label):
         """
         Write optional scalars using dictionary. Returns nothing other than exit code.
 
         Args:
+            label:
             writer_index (int): Index to write.
             scalars (dict): Key value pairs to write.
 

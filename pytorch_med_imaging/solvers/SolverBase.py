@@ -280,9 +280,6 @@ class SolverBase(object):
                 self.loss_function = self.loss_function.cuda(device=dist.get_rank())
                 self.net = self.net.cuda(device=dist.get_rank())
 
-        if self.plotting:
-            self.create_plotter()
-
         # Stopping criteria
         if isinstance(self.early_stop, str):
             self.set_early_stop(self.early_stop)
@@ -295,7 +292,8 @@ class SolverBase(object):
         if not config_file is None:
             # cls_dict = { attr: getattr(cls, attr) for attr in dir(cls)}
             self.__dict__.update(config_file.__dict__)
-            self.__class__.cls_cfg = config_file
+            # self.__class__.cls_cfg = config_file
+            self.cfg = config_file
         else:
             self._logger.warning("_load_config called without arguments.")
             self._load_config(SolverBaseCFG())
@@ -470,62 +468,18 @@ class SolverBase(object):
             self.early_stop = early_stop
 
     def set_plotter(self, plotter: Union[TB_plotter, str]) -> None:
-        r"""Externally set :attr:`tb_plotter` manually.
+        r"""Externally set :attr:`tb_plotter` manually. Note that this
+        does not change
 
         Returns:
             TB_plotter
         """
         if not self._plotter is None:
-            self._logger.warning(f"Overriding CFG ``tb_plotter``.")
-        self._plotter = plotter
-
-    def create_plotter(self):
-        r"""Create the tensorboard plotter."""
-        try:
-            if self.plotter_type == 'tensorboard':
-                # for legacy purpose, this has always been specified by global env variable.
-                tensorboard_rootdir =  Path(os.environ.get('TENSORBOARD_LOGDIR', '/media/storage/PytorchRuns'))
-                if not tensorboard_rootdir.is_dir():
-                    self._logger.warning("Cannot read from TENORBOARD_LOGDIR, retreating to default path...")
-                    tensorboard_rootdir = Path("/media/storage/PytorchRuns")
-
-                # Strip the parenthesis and comma from the net name to avoid conflicts with system
-                net_name = str(self.net_name) + '_' + time.strftime('%Y-%b-%d_%H%M%p', time.localtime())
-                net_name = net_name.translate(str.maketrans('(),.','[]--'," "))
-                self._logger.info("Creating TB writer, writing to directory: {}".format(tensorboard_rootdir))
-
-                # create new directory
-                idx = 0
-                tensor_dir = tensorboard_rootdir / net_name
-                while tensor_dir.is_dir():
-                    tensor_dir = tensorboard_rootdir / f"{net_name}-{idx:02d}"
-                    idx += 1
-
-                writer = SummaryWriter(str(tensor_dir))
-                self._plotter = TB_plotter(writer)
-            elif self.plotter_type == 'neptune':
-                self._logger.info("Using Neptune plotter")
-                run_parameters = {
-                    'hyperparams/init_lr': self.init_lr,
-                    'hyperparams/batch_size': self.batch_size,
-                    'hyperparams/net_name': self.net.__class__.__name__,
-                    'hyperparams/optimizer': self.optimizer.__class__.__name__,
-                    'hyperparams/loss_function': self.loss_function.__class__.__name__,
-                    'hyperparams/num_of_epoch': self.num_of_epochs
-                }
-                model_parameters = {
-                    'name': self.net.__class__.__name__
-                }
-                self._plotter = NP_Plotter(model_parameters=model_parameters)
-                self._plotter.init_run()
-                self._plotter.log_scalar_dict(run_parameters)
-
-
-        except Exception as e:
-            self._logger.warning("Plotter creation encounters failure, falling back to no writer.")
-            self._logger.exception(e)
-            raise e
+            self._logger.warning(f"Overriding CFG ``plotter``.")
+        else:
             self._plotter = None
+            self.plotting = False
+        self._plotter = plotter
 
     def net_to_parallel(self) -> None:
         r"""Call to move :attr:`net` to :class:`torch.nn.DataParallel`. Sometimes the network used is special and
@@ -1321,12 +1275,11 @@ class SolverBase(object):
             return
         else:
             try:
-                self._plotter.log_scalar_dict(scalars)
+                self._plotter.log_dict(scalars)
                 self._plotter.plot_weight_histogram(self.net, writer_index)
             except Exception as e:
                 self._logger.warning("Error when plotting to tensorboard.")
                 self._logger.exception(e)
-
 
     def _step_early_stopper(self):
         r"""Step the early stopper if it exist. This method is refractored to allow overriding for DDP."""
