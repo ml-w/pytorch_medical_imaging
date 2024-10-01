@@ -141,13 +141,7 @@ class SolverBaseCFG(PMIBaseCFG):
     early_stop_kwargs: Optional[dict]              = {}
     accumulate_grad  : Optional[int]               = 1
     init_mom         : Optional[float]             = None
-    plotting         : Optional[bool]              = False
-    plotter          : Optional[Any]               = False
-    plotter_type     : Optional[str]               = None
     max_step         : Optional[int]               = -1
-
-    # Choices
-    PLOTTER_TYPES = ['neptune', 'tensorboard']
 
     def __str__(self):
         _d = {k: v for k, v in self.__dict__.items() if k[0] != '_'}
@@ -990,6 +984,7 @@ class SolverBase(object):
             * :func:`._step_callback
 
         """
+        # Error check input
         if checkpoint_path is None:
             if not hasattr(self, 'cp_save_dir') or getattr(self, 'cp_save_dir', None):
                 msg = "Checkpoint save path must be specified. Either supply an argument to the `fit()` method or " \
@@ -1007,6 +1002,18 @@ class SolverBase(object):
 
         # Error check
         self._check_fit_ready()
+
+        # Set up plotter
+        if self.plotting:
+            # check if plotter is there
+            if self._plotter is None:
+                self._logger.warning("Plotting option ticked but 3D Plotter not found. Turning it off.")
+                self.plotting = False
+            else:
+                # plot the hyperparameters listed in the cfg
+                cfg_dict = {'cfg/solver/' + k: v for k, v in dict(self.cfg).items()
+                                 if isinstance(v, (str, int, float, dict))}
+                self._plotter.save_dict(cfg_dict)
 
         # configure checkpoints
         self.EARLY_STOP_FLAG = 0

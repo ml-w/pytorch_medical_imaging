@@ -73,11 +73,11 @@ class BinaryClassificationInferencer(ClassificationInferencer):
 
 
         if not hasattr(self, '_dl'):
-            self._logger.warning("Cannot find data. Have you called _writter() yet?", 30)
+            self._logger.warning("Cannot find data. Have you called _writter() yet?")
             return
 
         if not self._TARGET_DATASET_EXIST_FLAG:
-            self._logger.info("No target data provided. No summary to display.", 20)
+            self._logger.info("No target data provided. No summary to display.")
             return
 
         subdf = self._dl._data_table.copy()

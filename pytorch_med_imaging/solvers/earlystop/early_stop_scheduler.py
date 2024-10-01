@@ -125,7 +125,7 @@ class LossReferenceEarlyStop(BaseEarlyStop, key='loss_reference'):
         if epoch < warmup:
                 return 0
         else:
-            self._logger.debug(f"{loss}, {self._last_loss}")
+            self._logger.debug(f"{loss = }, {self._last_loss = }, {self._watch = }")
             if loss < self._last_loss:
                 # reset if new loss is smaller than last loss
                 self._logger.debug(f"Counter reset because loss {loss:.05f} is smaller than "

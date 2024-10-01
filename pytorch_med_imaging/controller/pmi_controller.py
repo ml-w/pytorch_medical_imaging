@@ -4,6 +4,7 @@ import re
 from ..solvers import SolverBaseCFG, SolverDDPWrapper
 from ..pmi_base_cfg import PMIBaseCFG
 from ..pmi_data_loader import PMIDataLoaderBase, PMIDataLoaderBaseCFG, PMIDistributedDataWrapper
+from ..integration import *
 from pathlib import Path
 from typing import Union, Optional, Any
 
@@ -130,6 +131,12 @@ class PMIControllerCFG(PMIBaseCFG):
     _data_loader_val_cls: type          = None
     solver_cls         : type          = None
     inferencer_cls     : type          = None
+
+    # Plotting related
+    plotting         : Optional[bool] = False
+    plotter          : Optional[Any]  = None
+    plotter_type     : Optional[str]  = None
+    plotter_init_meta: Optional[dict] = {}
 
     @property
     def data_loader_cfg(self):
@@ -570,6 +577,9 @@ class PMIController(object):
 
         # Push dataloader to solver
         self.solver = solver
+        self.solver.set_plotter(self._plotter) # This could be None
+        self.solver.plotting = self.plotting
+        self.solver.plotter_type = self.plotter_type
         self.solver.set_data_loader(loader, loader_val)
         self.solver.fit(self.cp_save_dir,
                         debug_validation=self.debug_validation) # TODO: move checkpoint_save argument to else where
@@ -582,6 +592,7 @@ class PMIController(object):
         # Create dataloader
         loader = self.data_loader_cls(self.data_loader_cfg)
         inferencer.set_data_loader(loader)
+        inferencer.set_plotter(self._plotter)
 
         if self.output_dir is not None:
             inferencer.output_dir = self.output_dir # override this flag
