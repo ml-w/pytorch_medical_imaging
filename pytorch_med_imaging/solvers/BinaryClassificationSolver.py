@@ -75,10 +75,10 @@ class BinaryClassificationSolver(ClassificationSolver):
         self._logger.info(f"\n{df.to_string()}")
         # self._logger.debug("_val_perfs: \n%s"%res_table.T.to_string())
         self._logger.info("Validation Result - ACC: %.05f, VAL: %.05f"%(acc, validation_loss))
-        self.plotter_dict['scalars']['Loss/Validation Loss'] = validation_loss
-        self.plotter_dict['scalars']['Performance/ACC'] = acc
+        self.plotter_dict['scalars']['val/loss'] = validation_loss
+        self.plotter_dict['scalars']['val/performance/ACC'] = acc
         for param, val in per_mean.items():
-            self.plotter_dict['scalars']['Performance/%s'%param] = val
+            self.plotter_dict['scalars']['val/performance/%s'%param] = val
 
         # Print the misclassification report
         if len(self._validation_misclassification_record) > 0:

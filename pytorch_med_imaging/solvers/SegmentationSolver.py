@@ -134,8 +134,8 @@ class SegmentationSolver(SolverBase):
         dsc = self._DICE(tps, fps, tns, fns)
         mean_val_loss = np.mean(np.array(self.validation_losses).flatten())
         self._logger.info("Validation Result VAL: %.05f DSC: %.05f" % (mean_val_loss, dsc))
-        self.plotter_dict['scalars']['Loss/Validation Loss'] = mean_val_loss
-        self.plotter_dict['scalars']['Perf/Validation DSC'] = dsc
+        self.plotter_dict['scalars']['val/loss'] = mean_val_loss
+        self.plotter_dict['scalars']['val/performance/DSC'] = dsc
 
     def _validation_step_callback(self, g, res, loss, uids=None):
         r"""Count the FP, TN, FP and FN.
@@ -309,7 +309,7 @@ class SegmentationSolver(SolverBase):
         Args:
             uid:
         """
-        if self._tb_plotter is None:
+        if self._plotter is None:
             self._logger.warning("There are no tb_plotter.", True)
             return
 
@@ -320,7 +320,7 @@ class SegmentationSolver(SolverBase):
 
         if step_idx % 10 == 0:
             # make sure they are not remaining in the gpu.
-            self._tb_plotter.plot_segmentation(g.cpu(), out.cpu(), s.cpu().float(), step_idx)
+            self._plotter.plot_segmentation(g.cpu(), out.cpu(), s.cpu().float(), step_idx)
 
         # delete references
         del s, g, out

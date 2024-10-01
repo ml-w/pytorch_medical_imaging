@@ -81,7 +81,7 @@ class SolverDDPWrapper:
 
         # Turn off plotting to make it less messy
         if rank != 0:
-            self.solver.plot_to_tb = False
+            self.solver.plotting = False
 
         # Replace solver's method with those defined in this wrapper
         _ = [

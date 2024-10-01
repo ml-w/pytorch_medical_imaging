@@ -18,11 +18,13 @@ from typing import Union, Iterable, Optional
 from pathlib import Path
 from ..pmi_base_cfg import PMIBaseCFG
 from ..integration.tb_plotter import TB_plotter
+from ..integration.neptune_plotter import NP_Plotter
 from .. import lr_scheduler as pmi_lr_scheduler
 from ..lr_scheduler import PMILRScheduler
 from ..pmi_data_loader import PMIDataLoaderBase, PMIDistributedDataWrapper
 from .earlystop import BaseEarlyStop
 from ..loss import *
+from typing import *
 
 
 __all__ = ['SolverBaseCFG', 'SolverBase']
@@ -97,8 +99,10 @@ class SolverBaseCFG(PMIBaseCFG):
             :func:`SolverBase._update_network`.
         plotter_dict (dict, Optional):
             This dict could be used by the child class to perform plotting after validation or in each step.
-        plot_to_tb (bool, Optional):
+        <Depracated> plot_to_tb (bool, Optional):
             If true, the solver will try to create a :class:`TB_plotter` for plotting the intermediate results.
+        plotter (Any, Optional):
+            A plotting object.
         max_step (int, Optional):
             If this value > 0, the epoch will end after hitting `max_step`. The max number of datapoints processed
             each epoch is then `max_step` * `batch_size`. Default to -1, meaning no limit.
@@ -134,18 +138,21 @@ class SolverBaseCFG(PMIBaseCFG):
     plotter_dict     : Optional[dict]              = None
     early_stop       : Optional[BaseEarlyStop]     = None
     early_stop_args  : Optional[list]              = None
-    early_stop_kwargs: Optional[dict]              = None
+    early_stop_kwargs: Optional[dict]              = {}
     accumulate_grad  : Optional[int]               = 1
     init_mom         : Optional[float]             = None
-    plot_to_tb       : Optional[bool]              = False
+    plotting         : Optional[bool]              = False
+    plotter          : Optional[Any]               = False
+    plotter_type     : Optional[str]               = None
     max_step         : Optional[int]               = -1
+
+    # Choices
+    PLOTTER_TYPES = ['neptune', 'tensorboard']
 
     def __str__(self):
         _d = {k: v for k, v in self.__dict__.items() if k[0] != '_'}
         _d['net'] = self.net._get_name()
         return pprint.pformat(_d, indent=2)
-
-
 
     @property
     def solver_cls(self) -> type:
@@ -207,8 +214,8 @@ class SolverBase(object):
             Number of time :func:`step` was called.
         _decayed_time (int):
             Number of time :func:`decay_optimizer` was called.
-        _tb_plotter (TB_plotter):
-            Tensor board summary writter.
+        _plotter (Any):
+            Plotter. <Partially Implemented>
 
     .. hint::
         When implementing a child class solver, you should pay attention to implementing the two methods including
@@ -244,7 +251,7 @@ class SolverBase(object):
         self._accumulated_steps: int = 0
 
         # internal attributes
-        self._tb_plotter = None
+        self._plotter = None
         self.current_epoch = 0
         self._last_epoch_loss = 1e32
 
@@ -273,7 +280,7 @@ class SolverBase(object):
                 self.loss_function = self.loss_function.cuda(device=dist.get_rank())
                 self.net = self.net.cuda(device=dist.get_rank())
 
-        if self.plot_to_tb:
+        if self.plotting:
             self.create_plotter()
 
         # Stopping criteria
@@ -454,7 +461,11 @@ class SolverBase(object):
                 args = self.early_stop_args or []
             if len(kwargs) == 0:
                 kwargs = self.early_stop_kwargs or {}
-            self.early_stop = BaseEarlyStop.create_early_stop_scheduler(self.early_stop, *args, **kwargs)
+            if len(early_stop) == 0:
+                self._logger.warning("Early stopper is disabled because it's an empty string!")
+                self.early_stop = None
+            else:
+                self.early_stop = BaseEarlyStop.create_early_stop_scheduler(self.early_stop, *args, **kwargs)
         else:
             self.early_stop = early_stop
 
@@ -464,37 +475,57 @@ class SolverBase(object):
         Returns:
             TB_plotter
         """
-        if not self._tb_plotter is None:
+        if not self._plotter is None:
             self._logger.warning(f"Overriding CFG ``tb_plotter``.")
-        self._tb_plotter = plotter
+        self._plotter = plotter
 
     def create_plotter(self):
         r"""Create the tensorboard plotter."""
         try:
-            # for legacy purpose, this has always been specified by global env variable.
-            tensorboard_rootdir =  Path(os.environ.get('TENSORBOARD_LOGDIR', '/media/storage/PytorchRuns'))
-            if not tensorboard_rootdir.is_dir():
-                self._logger.warning("Cannot read from TENORBOARD_LOGDIR, retreating to default path...")
-                tensorboard_rootdir = Path("/media/storage/PytorchRuns")
+            if self.plotter_type == 'tensorboard':
+                # for legacy purpose, this has always been specified by global env variable.
+                tensorboard_rootdir =  Path(os.environ.get('TENSORBOARD_LOGDIR', '/media/storage/PytorchRuns'))
+                if not tensorboard_rootdir.is_dir():
+                    self._logger.warning("Cannot read from TENORBOARD_LOGDIR, retreating to default path...")
+                    tensorboard_rootdir = Path("/media/storage/PytorchRuns")
 
-            # Strip the parenthesis and comma from the net name to avoid conflicts with system
-            net_name = str(self.net_name) + '_' + time.strftime('%Y-%b-%d_%H%M%p', time.localtime())
-            net_name = net_name.translate(str.maketrans('(),.','[]--'," "))
-            self._logger.info("Creating TB writer, writing to directory: {}".format(tensorboard_rootdir))
+                # Strip the parenthesis and comma from the net name to avoid conflicts with system
+                net_name = str(self.net_name) + '_' + time.strftime('%Y-%b-%d_%H%M%p', time.localtime())
+                net_name = net_name.translate(str.maketrans('(),.','[]--'," "))
+                self._logger.info("Creating TB writer, writing to directory: {}".format(tensorboard_rootdir))
 
-            # create new directory
-            idx = 0
-            tensor_dir = tensorboard_rootdir / net_name
-            while tensor_dir.is_dir():
-                tensor_dir = tensorboard_rootdir / f"{net_name}-{idx:02d}"
-                idx += 1
+                # create new directory
+                idx = 0
+                tensor_dir = tensorboard_rootdir / net_name
+                while tensor_dir.is_dir():
+                    tensor_dir = tensorboard_rootdir / f"{net_name}-{idx:02d}"
+                    idx += 1
 
-            writer = SummaryWriter(str(tensor_dir))
-            self._tb_plotter = TB_plotter(writer)
+                writer = SummaryWriter(str(tensor_dir))
+                self._plotter = TB_plotter(writer)
+            elif self.plotter_type == 'neptune':
+                self._logger.info("Using Neptune plotter")
+                run_parameters = {
+                    'hyperparams/init_lr': self.init_lr,
+                    'hyperparams/batch_size': self.batch_size,
+                    'hyperparams/net_name': self.net.__class__.__name__,
+                    'hyperparams/optimizer': self.optimizer.__class__.__name__,
+                    'hyperparams/loss_function': self.loss_function.__class__.__name__,
+                    'hyperparams/num_of_epoch': self.num_of_epochs
+                }
+                model_parameters = {
+                    'name': self.net.__class__.__name__
+                }
+                self._plotter = NP_Plotter(model_parameters=model_parameters)
+                self._plotter.init_run()
+                self._plotter.log_scalar_dict(run_parameters)
+
+
         except Exception as e:
-            self._logger.warning("Tensorboard writter creation encounters failure, falling back to no writer.")
+            self._logger.warning("Plotter creation encounters failure, falling back to no writer.")
             self._logger.exception(e)
-            self._tb_plotter = None
+            raise e
+            self._plotter = None
 
     def net_to_parallel(self) -> None:
         r"""Call to move :attr:`net` to :class:`torch.nn.DataParallel`. Sometimes the network used is special and
@@ -565,28 +596,33 @@ class SolverBase(object):
         :attr:`loss_function.weight`. This allow us to port the class weights as fine-tunable hyperparameters.
         """
         if self.loss_function is None:
+            # Check if the loss function is defined
             raise AttributeError("Loss function must be defined!")
 
         if self.class_weights is None and self.loss_function.weight is None:
             try:
+                # Try to compute class weights automatically
                 self.auto_compute_class_weights()
             except Exception as e:
+                # Log a warning if automatic weight computation fails
                 msg = "No class weights specified and automatic weight computation failed. It is strongly recommend to " \
                       "use class weights for training."
                 self._logger.warning(msg)
                 if self._logger.log_level == 10:
+                    # Log the original error for debugging
                     self._logger.error("Original error raised:")
                     self._logger.exception(e)
         elif self.class_weights is not None and self.loss_function.weight is not None:
-            # warn if weight is being override
+            # Warn if class weights are being overwritten
             msg = f"Overwriting class weights using CFG inputs: {self.loss_function.weight} -> {self.class_weights}"
             self._logger.warning(msg)
+            # Overwrite the weights
             self.loss_function.weight.copy_(torch.as_tensor(self.class_weights).float())
         elif self.class_weights is not None and self.loss_function.weight is None:
-            # If class_weights are explicitly specified in the CFG
+            # Set class weights if explicitly specified
             self.loss_function.weight = torch.as_tensor(self.class_weights).float()
 
-        # make sure the weights are float
+        # Ensure the weights are float type
         if not self.loss_function.weight is None:
             self.loss_function.weight = self.loss_function.weight.float()
 
@@ -889,6 +925,8 @@ class SolverBase(object):
             out, loss = self.step(s, g)
             E.append(loss.data.cpu())
             self._logger.info("\t[Step %04d] loss: %.010f"%(step_idx, loss.data))
+            if self.plotting:
+                self._plotter.log_scalar("training/step_loss", loss.data)
 
             # out does not have to be a tensor
             if isinstance(out, (list, tuple)):
@@ -901,8 +939,8 @@ class SolverBase(object):
             del s, g, out, loss, mb
             gc.collect()
         epoch_loss = np.array(E, dtype=float).mean()
-        self.plotter_dict['scalars']['Loss/Loss'] = epoch_loss
-        self.plotter_dict['scalars']['LR/Learning Rate'] = self.get_last_lr()
+        self.plotter_dict['scalars']['train/loss'] = epoch_loss
+        self.plotter_dict['scalars']['train/lr'] = self.get_last_lr()
         self._last_epoch_loss = epoch_loss
 
         self._logger.info("Initiating validation.")
@@ -1279,19 +1317,15 @@ class SolverBase(object):
         writer_index = self.plotter_dict.get('epoch_num', None)
         if scalars is None:
             return
-        elif self._tb_plotter is None:
+        elif self._plotter is None:
             return
         else:
             try:
-                self._tb_plotter.plot_scalars(writer_index, scalars)
-                self._tb_plotter.plot_weight_histogram(self.net, writer_index)
+                self._plotter.log_scalar_dict(scalars)
+                self._plotter.plot_weight_histogram(self.net, writer_index)
             except Exception as e:
                 self._logger.warning("Error when plotting to tensorboard.")
-                if self._logger.log_level == 10: # debug
-                    self._logger.exception(e)
-
-        if hasattr(self, '_np_plotter'):
-            self._np_plotter.plot_scalars(scalars)
+                self._logger.exception(e)
 
 
     def _step_early_stopper(self):

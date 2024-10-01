@@ -222,8 +222,8 @@ class ClassificationSolver(SolverBase):
         acc = float(self.perfs.count(True)) / float(len(self.perfs))
         self.validation_losses = np.mean(np.array(self.validation_losses).flatten())
         self._logger.info("Validation Result - ACC: %.05f, VAL: %.05f"%(acc, self.validation_losses))
-        self.plotter_dict['scalars']['Loss/Validation Loss'] = self.validation_losses
-        self.plotter_dict['scalars']['Performance/ACC'] = acc
+        self.plotter_dict['scalars']['val/loss'] = self.validation_losses
+        self.plotter_dict['scalars']['val/performance/ACC'] = acc
 
         # Print the misclassification report
         if len(self._validation_misclassification_record) > 0:

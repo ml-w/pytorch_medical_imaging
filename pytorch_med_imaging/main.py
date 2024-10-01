@@ -88,7 +88,7 @@ def console_entry(raw_args=None):
         logger.info(">" * 40 + " Start Main " + "<" * 40)
         try:
             main = PMIController(config, a)
-            main.run()
+            main.np_run()
         except Exception as e:
             logger.error("Uncaught exception!")
             logger.exception(e)
