@@ -38,3 +38,20 @@ class TestPMICFG(unittest.TestCase):
         )
         self.assertEqual("There are 10 balls", base_cfg.mystring)
         self.assertEqual(10, base_cfg.number)
+
+    def test_cfg_as_dict(self):
+        base_cfg =  PMIBaseCFG(
+            fold_code = 'B00',
+            fold_path = '/path/{fold_code}/{fold_code}_targets',
+            version_code = 'v1.0',
+            checkpoint_dir = '/path/{fold_code}/checkpoint_{version_code}.pt'
+        )
+        dict_equv = {
+            'fold_code': 'B00',
+            'fold_path': '/path/{fold_code}/{fold_code}_targets',
+            'version_code': 'v1.0',
+            'checkpoint_dir': '/path/{fold_code}/checkpoint_{version_code}.pt'
+        }
+
+        out_dict = dict(base_cfg)
+        self.assertDictEqual(out_dict, dict_equv)
