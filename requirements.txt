@@ -5,7 +5,6 @@ imgaug>=0.2.7
 nibabel>=3.2.1
 pydicom >= 2.0.0
 numpy>=1.23,<= 2.0.0
-opencv-python>=3.4
 opencv-python>=4.4.0.44
 scikit-image>=0.14.2
 scikit-learn>=0.15.0
