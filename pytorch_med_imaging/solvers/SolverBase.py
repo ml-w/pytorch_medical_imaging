@@ -448,11 +448,20 @@ class SolverBase(object):
             self._logger.warning("Overriding CFG ``early_stop``.")
 
         # if a string is supplied, try to creat it in PMILRScheduler.
+        # Check if early_stop is a string
         if isinstance(early_stop, str):
+            # If no arguments are provided, use default early_stop_args
             if len(args) == 0:
                 args = self.early_stop_args or []
+            # Convert string arguments to a list using literal_eval
+            if isinstance(args, str):
+                args = ast.literal_eval(args)
+            # If no keyword arguments are provided, use default early_stop_kwargs
             if len(kwargs) == 0:
                 kwargs = self.early_stop_kwargs or {}
+            # Convert string keyword arguments to a dictionary using literal_eval
+            if isinstance(kwargs, str):
+                kwargs = ast.literal_eval(kwargs)
             if len(early_stop) == 0:
                 self._logger.warning("Early stopper is disabled because it's an empty string!")
                 self.early_stop = None
@@ -1044,13 +1053,13 @@ class SolverBase(object):
 
             # Save network every 5 epochs
             if i % 5 == 0:
-                if dist.is_initialized():
-                    if dist.get_rank() == 0:
-                        torch.save(self.get_net().state_dict(), checkpoint_path.replace('.pt', '_{:03d}.pt'.format(i)))
-                    dist.barrier()
-                else:
-                    torch.save(self.get_net().state_dict(), checkpoint_path.replace('.pt', '_{:03d}.pt'.format(i)))
-
+                # if dist.is_initialized():
+                #     if dist.get_rank() == 0:
+                #         torch.save(self.get_net().state_dict(), checkpoint_path.replace('.pt', '_{:03d}.pt'.format(i)))
+                #     dist.barrier()
+                # else:
+                #     torch.save(self.get_net().state_dict(), checkpoint_path.replace('.pt', '_{:03d}.pt'.format(i)))
+                pass
             try:
                 current_lr = next(self.get_optimizer().param_groups)['lr']
             except:

@@ -137,6 +137,7 @@ class PMIControllerCFG(PMIBaseCFG):
     plotter          : Optional[Any]  = None
     plotter_type     : Optional[str]  = None
     plotter_init_meta: Optional[dict] = {}
+    neptune_id       : Optional[str]  = None
 
     @property
     def data_loader_cfg(self):
@@ -228,6 +229,17 @@ class PMIController(object):
         # Finally create plotter
         if self.plotting:
             self.create_plotter()
+            # if this is a neptune run, add the ID to the config
+            if self.plotter_type == 'neptune':
+                current_np_id = self._plotter.np_run['sys/id'].fetch()
+                with open('./flags.yaml', 'r') as f:
+                    flags = yaml.safe_load(f)
+                flags['controller_cfg']['neptune_id'] = current_np_id
+                with open('./flags.yaml', 'w') as f:
+                    yaml.safe_dump(flags, f)
+        else:
+            self._plotter = None
+
 
     def _load_config(self, config_file = None):
         r"""Function to load the configurations. If ``config_file`` is ``None``, load the default class
@@ -310,6 +322,8 @@ class PMIController(object):
         if override_file.suffix in ('.yml', '.yaml'):
             with override_file.open('r') as f:
                 override_dict = yaml.safe_load(f)
+                self.guild_dict = override_dict
+                self.guild_yaml_path = override_file
         else:
             msg = f"Suffix of the override file should be align with guildai's definitions. Currently only '.ini', " \
                   f"'.yaml' and '.json' were implemented. Got {override_file.name} instead."
@@ -535,20 +549,33 @@ class PMIController(object):
         r"""This method executes the training or inference pipeline according to the configuration. It will invoke
         :meth:`.train` or :meth:`inference` based on the flag `run_mode`.
         """
-        self._logger.info(f"Before preprocess flag {self.solver_cls = }")
-        self._pre_process_flags()
-        self._logger.info(f"After {self.solver_cls = }")
+        try:
+            self._logger.info(f"Before preprocess flag {self.solver_cls = }")
+            self._pre_process_flags()
+            self._logger.info(f"After {self.solver_cls = }")
 
-        # write down the configurations before execution
-        controller_config = {'cfg/controller/' + k: v for k, v in self.__dict__.items() if
-                             isinstance(v, (str, int, float))}
-        self._plotter.save_dict(controller_config)
+            # write down the configurations before execution
+            controller_config = {'cfg/controller/' + k: v for k, v in self.__dict__.items() if
+                                 isinstance(v, (str, int, float))}
+            # record the run parameters
+            if self.plotting:
+                self._plotter.save_dict(controller_config)
+                if hasattr(self, 'guild_dict'):
+                    guild_config = {'cfg/guild/' + k: v for k, v in self.guild_dict.items()}
+                    self._plotter.save_dict(guild_config)
+                if hasattr(self, 'guild_yaml_path'):
+                    self._plotter.save_file('cfg/guild/guild.yaml', str(self.guild_yaml_path))
 
-        # Run train or inference
-        if self.run_mode:
-            self.train()
-        else:
-            self.inference()
+            # Run train or inference
+            if self.run_mode:
+                self.train()
+            else:
+                self.inference()
+            return 0
+        except Exception as e:
+            self._logger.error("Execution failed!")
+            self._logger.exception(e)
+            return 1
 
     def train(self):
         r"""Initiate training. This is usually called automatically using :func:`.exec`. """
@@ -644,7 +671,12 @@ class PMIController(object):
             elif self.plotter_type == 'neptune':
                 self._logger.info("Using Neptune plotter")
                 self._plotter = NP_Plotter()
-                self._plotter.init_run(init_meta=self.plotter_init_meta)
+                # check if there's already a run with the same guid ID
+                if self.neptune_id is not None:
+                    self._logger.warning(f"Neptune ID {self.neptune_id} exist, continuing plotting to this run.")
+                    self._plotter.continue_run(neptune_run_id=self.neptune_id)
+                else:
+                    self._plotter.init_run(init_meta=self.plotter_init_meta)
         except Exception as e:
             self._logger.warning("Plotter creation encounters failure, falling back to no writer.")
             self._logger.exception(e)

@@ -5,6 +5,7 @@ from typing import Any, Dict, Optional, Union
 
 import neptune
 import re
+import threading
 
 from mnts.mnts_logger import MNTSLogger
 
@@ -17,10 +18,21 @@ def check_init(func):
         return func(self, *args, **kwargs)
     return wrapper
 
-class NP_Plotter(object):
-    r"""Plotter for PMI to log information to Neptune.ai.
-    """
+class NP_Plotter:
+    """Plotter for PMI to log information to Neptune.ai."""
+    _instance = None
+    _lock = threading.Lock()
+
+    def __new__(cls, *args, **kwargs):
+        with cls._lock:
+            if cls._instance is None:
+                cls._instance = super(NP_Plotter, cls).__new__(cls)
+        return cls._instance
+
     def __init__(self, project: str = None, api_token: str = None):
+        if hasattr(self, '_initialized') and self._initialized:
+            return
+
         # Create logger
         self._logger = MNTSLogger[self.__class__.__name__]
 
@@ -29,8 +41,19 @@ class NP_Plotter(object):
         self.api_token = api_token or os.environ.get("NEPTUNE_API_TOKEN", None)
         self.np_run: neptune.Run = None
 
-        # * Create/Connect Neptune object
-        self.np_project = neptune.init_project(self.project, api_token= self.api_token, mode='debug')
+        # Create/Connect Neptune object
+        self.np_project = neptune.init_project(self.project, api_token=self.api_token, mode='debug')
+
+        self._initialized = True
+
+    @classmethod
+    def get_plotter(cls):
+        """Get the singleton instance of NP_Plotter."""
+        if cls._instance is None:
+            if MNTSLogger.global_logger:
+                MNTSLogger.global_logger.warning("No plotter.")
+            return None
+        return cls._instance
 
     @property
     def api_token(self):
@@ -59,6 +82,23 @@ class NP_Plotter(object):
             api_token=self.api_token,
             **init_meta
         )
+
+    def continue_run(self, neptune_run_id: str) -> None:
+        """Continues a Neptune.ai run with the given ID.
+
+        Connects to an existing Neptune.ai run using the provided
+        run ID and assigns it to the `np_run` attribute.
+
+        Args:
+            neptune_run_id (str): The ID of the Neptune.ai run to connect to.
+        """
+        self._logger.info("Connecting to a neptune run.")
+        self.np_run = neptune.init_run(
+            project=self.project,
+            api_token=self.api_token,
+            with_id=neptune_run_id
+        )
+
 
     def log_dict(self, scalar_dict: dict) -> None:
         r"""Plot a dictionary of scalar-value pair."""
@@ -102,6 +142,10 @@ class NP_Plotter(object):
         for k, v in scalar_dict.items():
             # Log the scalar value
             self.save_value(k, v)
+
+    def save_file(self, label, file_path: str):
+        self._logger.info(f"Uploading file: {file_path}")
+        self.np_run[label].upload(file_path)
 
     def save_value(self, label: str, value: Any):
         self._logger.info(f"Logging value: {label}: {value}")
@@ -152,3 +196,7 @@ class NP_Plotter(object):
         if not self.np_run is None:
             self._logger.info("Stopping Neptune run.")
             self.np_run.stop()
+
+    def plot_weight_histogram(self, *args, **kwargs):
+        # Do nothing
+        self._logger.warning("Plotting weight histograms is not supported in NeptuneLogger")

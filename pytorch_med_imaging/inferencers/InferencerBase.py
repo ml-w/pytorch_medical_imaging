@@ -4,6 +4,7 @@ from mnts.mnts_logger import MNTSLogger
 from ..networks import *
 from ..pmi_data_loader.pmi_dataloader_base import PMIDataLoaderBase
 from ..solvers.SolverBase import SolverBase, SolverBaseCFG
+from ..integration import TB_plotter, NP_Plotter
 
 import torch
 import torchio as tio
@@ -16,6 +17,11 @@ class InferencerBase(object):
     r"""This is the base class of all inferencer, the inferencer cfg uses the same cfg as their solvers counter parts
     except they has different `required_attributes`. In addition, the inferencer also borrows some of the functions
     from :class:`SolverBase`.
+
+    Typically, you should see the flow to be like this:
+
+    .. mermaid::
+
 
     Attributes:
         [Required] net (torch.nn):
@@ -59,6 +65,7 @@ class InferencerBase(object):
         # initialize
         self._logger        = MNTSLogger[self.__class__.__name__]
         self._load_config(cfg)   # Load config from ``cls_cfg``
+        self._plotter = None
 
         self._logger.info("Inferencer was configured with options: {}".format(str(cfg)))
 
@@ -82,6 +89,20 @@ class InferencerBase(object):
         for att in self.required_attributes:
             if not hasattr(self, att):
                 raise AttributeError(f"Must sepcific {str(att)} in CFG.")
+
+    def set_plotter(self, plotter: Union[TB_plotter, str]) -> None:
+        r"""Externally set :attr:`tb_plotter` manually. Note that this
+        does not change
+
+        Returns:
+            TB_plotter
+        """
+        if not self._plotter is None:
+            self._logger.warning(f"Overriding CFG ``plotter``.")
+        else:
+            self._plotter = None
+            self.plotting = False
+        self._plotter = plotter
 
 
     def load_checkpoint(self, checkpoint_path: Union[str, Path] = None) -> None:

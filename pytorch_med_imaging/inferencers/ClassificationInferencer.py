@@ -15,6 +15,7 @@ from tqdm import *
 
 from .InferencerBase import InferencerBase
 from ..solvers import ClassificationSolverCFG
+from ..integration import NP_Plotter, TB_plotter
 from ..utils.visualization.segmentation_vis import draw_overlay_heatmap
 from ..pmi_data_loader.pmi_dataloader_base import PMIDataLoaderBase
 from ..med_img_dataset import DataLabel
@@ -233,6 +234,9 @@ class ClassificationInferencer(InferencerBase):
 
         dl = DataLabel.from_dict(out_decisions)
         dl.write(self.output_dir)
+        if self.plotting:
+            if self.plotter_type == 'neptune':
+                self._plotter.np_run['test/perf/preds'].upload(self.output_dir)
         self._dl = dl
         return self._dl
 
@@ -332,6 +336,9 @@ class ClassificationInferencer(InferencerBase):
                         perf['Sensitivity'], perf['Specificity'],perf['NPV'], perf['PPV'],
                         perf['ACC'], perf['AUC']
                     ))
+                    perf = {'test/perf/' + k: v for k, v in perf.items() if isinstance(v, (str, int, flot))}
+                    if self.plotting:
+                        self._plotter.save_dict(perf)
 
         except KeyError as e:
             self._logger.exception(e)
