@@ -1,3 +1,5 @@
+import numpy as np
+
 from .ClassificationInferencer import ClassificationInferencer
 from sklearn.metrics import roc_auc_score
 from typing import Iterable
@@ -85,8 +87,13 @@ class BinaryClassificationInferencer(ClassificationInferencer):
         for i in range(self._num_of_questions):
             _subdf = subdf[['%s_%s'%(a, i) for a in ['Prob_Class', 'Decision', 'Truth']]]
             subdf['perf_%s'%i] = _subdf[[f'Decision_{i}', f'Truth_{i}']].apply(BinaryClassificationInferencer._get_perf, axis=1)
-            auc += roc_auc_score(_subdf[f'Truth_{i}'], _subdf[f'Prob_Class_{i}'])
-        auc /= self._num_of_questions
+            try:
+                # This avoid error when there's only one class in AUC
+                auc += roc_auc_score(_subdf[f'Truth_{i}'], _subdf[f'Prob_Class_{i}'])
+            except ValueError:
+                auc = np.nan
+        if not np.isnan(auc):
+            auc /= self._num_of_questions
 
         # compute sensitivity, specificity ...etc
         perf = pd.DataFrame()
@@ -108,6 +115,8 @@ class BinaryClassificationInferencer(ClassificationInferencer):
         # Compute overall performance
         row = pd.Series(BinaryClassificationInferencer._get_sum_perf([TP, FP, TN, FN]), name='Overall')
         perf = pd.concat([perf, row.to_frame().T])
+        perf['AUC'] = '-'
+        perf.loc['Overall', 'AUC'] = f'{auc:.3f}'
 
         # confusion matrix
         mat_data = [[TP, FP], [FN, TN]]
