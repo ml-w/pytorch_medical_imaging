@@ -141,7 +141,7 @@ class ImageDataSet(PMIDataBase):
             >>> imgset = ImageDataSet('/home/usr/loadlist.txt', readmode='explicit')
 
 
-        **Geting image from object:**
+        **Geting torch tensor image from object:**
 
         1. Getting the first and second images:
 
@@ -159,6 +159,10 @@ class ImageDataSet(PMIDataBase):
 
             >>> print(imset)
 
+        **Getting torchio image object**
+
+        >>> imsset.data[id]
+
     .. hint::
         Use ``instance[item]`` to get the data as ``torch.Tensor``.
 
@@ -173,9 +177,7 @@ class ImageDataSet(PMIDataBase):
     def __init__(self, rootdir, readmode='normal', filtermode=None, verbose=False, dtype=float,
                  debugmode=False, **kwargs):
         super(ImageDataSet, self).__init__(verbose=verbose)
-        assert os.path.isdir(rootdir), "Cannot access directory: {}".format(rootdir)
-
-        self.rootdir            = rootdir
+        self.rootdir: Path      = Path(rootdir)
         self.data_source_path   = []
         self.data               = []
         self.metadata           = []
@@ -190,8 +192,43 @@ class ImageDataSet(PMIDataBase):
         self._id_globber        = kwargs.get('id_globber', "(^[a-zA-Z0-9]+)")
         self._debug             = debugmode
 
+        assert self.rootdir.is_dir()
         self._error_check()
         self._parse_root_dir()
+
+    def __len__(self) -> int:
+        return self.length
+
+    def __iter__(self) -> torch.Tensor:
+        for r in range(len(self)):
+            yield self.data[r]
+
+    def __getitem__(self, item) -> torch.Tensor:
+        r"""Override to generate tensor.
+
+        Args:
+            item (Any):
+                ID to get the item desired.
+
+        Returns:
+            ``torch.Tensor``
+        """
+        out = self.data[item][tio.DATA]
+        return out
+
+    def __str__(self):
+        s = "==========================================================================================\n" \
+            "Datatype: %s \n" \
+            "Root Path: %s \n" \
+            "Number of loaded images: %i\n" \
+            "Image Details:\n" \
+            "--------------\n"%(__class__.__name__, self.rootdir, self.length)
+        # "File Paths\tSize\t\tSpacing\t\tOrigin\n"
+        # printable = {'File Name': []}
+        if self.metadata_table is None:
+            self.update_metadata_table()
+        s += self.metadata_table.to_string()
+        return s
 
     def _error_check(self):
         assert self._readmode in ['normal', 'recursive', 'explicit'], 'Wrong readmode specified.'
@@ -207,7 +244,6 @@ class ImageDataSet(PMIDataBase):
             'Specifying arguemnets to filter is necessary'
         if self._filtermode == 'both':
             assert all([ k in self._filterargs for k in ['idlist', 'regex']]), 'No filter Args.'
-
 
     def _parse_root_dir(self):
         r"""
@@ -339,7 +375,7 @@ class ImageDataSet(PMIDataBase):
                 raise IndexError("Number of files is different from number of globbed IDs!")
             file_dirs = tmp_file_dirs[keep].tolist()
             filtered_away.extend(tmp_file_dirs[np.invert(keep)])
-            self._logger.debug(f"Filtering away: {filtered_away}")
+            # self._logger.debug(f"Filtering away: {filtered_away}")
 
             # Check if there are still things in the list
             if len(file_dirs) == 0:
@@ -397,53 +433,8 @@ class ImageDataSet(PMIDataBase):
             for fs in removed_fnames:
                 self._logger.warning("Cannot find " + fs + " in " + self.rootdir)
         file_dirs.sort()
-        self._logger.debug(f"Reading from: {file_dirs}")
+        # self._logger.debug(f"Reading from: {file_dirs}")
         return file_dirs
-
-    def get_raw_data_shape(self) -> list:
-        r"""Get shape of all files as a list (ignore load by slice option).
-
-        Returns:
-            list[tuples]
-        """
-        return [self.get_size(i) for i in range(len(self.metadata))]
-
-    def check_shape_identical(self, target_imset: Any) -> bool:
-        r"""Check if file shape is identical to another ImageDataSet. Convinient for checking if
-        the ground-truth and the inputs are of the same size.
-
-        .. TODO:
-            * Add spacing, origin check into this function (Hint: see match_dimension.py)
-
-        Args:
-            target_imset (ImageDataSet):
-                Target image dataset to compare with.
-
-        Returns:
-            bool
-        """
-        assert isinstance(target_imset, ImageDataSet), "Target is not image dataset."
-
-        self_shape = self.get_raw_data_shape()
-        target_shape = target_imset.get_raw_data_shape()
-
-        if len(self_shape) != len(target_shape):
-            self._logger.warning("Difference data length!")
-            return False
-
-        assert type(self_shape) == type(target_shape), "There are major discrepancies in dimension!"
-        truth_list = [a == b for a, b in zip(self_shape, target_shape)]
-        if not all(truth_list):
-            discrip = np.argwhere(np.array(truth_list) == False)
-            for x in discrip:
-                self._logger.warning(
-                            "Discripency in element %i, ID: %s, File:[%s, %s]" % (
-                                x,
-                                self.get_unique_IDs(x),
-                                os.path.basename(self.get_data_source(x)),
-                                os.path.basename(target_imset.get_data_source(x))))
-
-        return all(truth_list)
 
     def size(self, i=None) -> Union[int, torch.Size]:
         r"""Required by pytorch dataloader.
@@ -633,39 +624,86 @@ class ImageDataSet(PMIDataBase):
                 'origin': origin,
                 'direction': direction}
 
-    def __len__(self) -> int:
-        return self.length
-
-    def __iter__(self) -> torch.Tensor:
-        for r in range(len(self)):
-            yield self.data[r]
-
-    def __getitem__(self, item) -> torch.Tensor:
-        r"""Override to generate tensor.
-
-        Args:
-            item (Any):
-                ID to get the item desired.
+    def get_raw_data_shape(self) -> list:
+        r"""Get shape of all files as a list (ignore load by slice option).
 
         Returns:
-            ``torch.Tensor``
+            list[tuples]
         """
-        out = self.data[item][tio.DATA]
-        return out
+        return [self.get_size(i) for i in range(len(self.metadata))]
 
-    def __str__(self):
-        s = "==========================================================================================\n" \
-            "Datatype: %s \n" \
-            "Root Path: %s \n" \
-            "Number of loaded images: %i\n" \
-            "Image Details:\n" \
-            "--------------\n"%(__class__.__name__, self.rootdir, self.length)
-        # "File Paths\tSize\t\tSpacing\t\tOrigin\n"
-        # printable = {'File Name': []}
-        if self.metadata_table is None:
-            self.update_metadata_table()
-        s += self.metadata_table.to_string()
-        return s
+    def get_unique_values(self) -> Any:
+        r"""Get the tensor of all unique values in basedata. Only for integer tensors.
+        """
+        assert self[0].is_floating_point() == False, \
+            "This function is for integer tensors. Current datatype is: %s"%(self[0].dtype)
+        vals = unique(cat([unique(d) for d in self]))
+        return vals
+
+    def get_unique_values_n_counts(self) -> dict:
+        """Get a dictionary of unique values as key and its counts as value.
+
+        Returns:
+            dict: Key value pairs of unique values and their counts.
+        """
+        from torch.utils.data import DataLoader
+        assert self[0].is_floating_point() == False, \
+            "This function is for integer tensors. Current datatype is: %s"%(self[0].dtype)
+
+        out_dict = {}
+
+        # torchio reuqires some tricks to keep memory efficiencies.
+        subjects = [tio.Subject(im=d) for d in self.data]
+        subjects = tio.SubjectsDataset(subjects)
+        subjects_loader = DataLoader(subjects, batch_size=1, num_workers=12)
+
+        # Use a dataloader to do the trick
+        for d in tqdm(subjects_loader, desc="get_unique_values_n_counts"):
+            val, counts = unique(d['im'][tio.DATA], return_counts=True)
+            for v, c, in zip(val, counts):
+                if v.item() not in out_dict:
+                    out_dict[v.item()] = c.item()
+                else:
+                    out_dict[v.item()] += c.item()
+            del d
+        return out_dict
+
+    def check_shape_identical(self, target_imset: Any) -> bool:
+        r"""Check if file shape is identical to another ImageDataSet. Convinient for checking if
+        the ground-truth and the inputs are of the same size.
+
+        .. TODO:
+            * Add spacing, origin check into this function (Hint: see match_dimension.py)
+
+        Args:
+            target_imset (ImageDataSet):
+                Target image dataset to compare with.
+
+        Returns:
+            bool
+        """
+        assert isinstance(target_imset, ImageDataSet), "Target is not image dataset."
+
+        self_shape = self.get_raw_data_shape()
+        target_shape = target_imset.get_raw_data_shape()
+
+        if len(self_shape) != len(target_shape):
+            self._logger.warning("Difference data length!")
+            return False
+
+        assert type(self_shape) == type(target_shape), "There are major discrepancies in dimension!"
+        truth_list = [a == b for a, b in zip(self_shape, target_shape)]
+        if not all(truth_list):
+            discrip = np.argwhere(np.array(truth_list) == False)
+            for x in discrip:
+                self._logger.warning(
+                            "Discripency in element %i, ID: %s, File:[%s, %s]" % (
+                                x,
+                                self.get_unique_IDs(x),
+                                os.path.basename(self.get_data_source(x)),
+                                os.path.basename(target_imset.get_data_source(x))))
+
+        return all(truth_list)
 
     def update_metadata_table(self) -> pd.DataFrame:
         r"""
@@ -801,39 +839,4 @@ class ImageDataSet(PMIDataBase):
         self._logger.info(f"Writing {out_name}")
         sitk.WriteImage(out_im, out_name)
 
-    def get_unique_values(self) -> Any:
-        r"""Get the tensor of all unique values in basedata. Only for integer tensors.
-        """
-        assert self[0].is_floating_point() == False, \
-            "This function is for integer tensors. Current datatype is: %s"%(self[0].dtype)
-        vals = unique(cat([unique(d) for d in self]))
-        return vals
-
-    def get_unique_values_n_counts(self) -> dict:
-        """Get a dictionary of unique values as key and its counts as value.
-
-        Returns:
-            dict: Key value pairs of unique values and their counts.
-        """
-        from torch.utils.data import DataLoader
-        assert self[0].is_floating_point() == False, \
-            "This function is for integer tensors. Current datatype is: %s"%(self[0].dtype)
-
-        out_dict = {}
-
-        # torchio reuqires some tricks to keep memory efficiencies.
-        subjects = [tio.Subject(im=d) for d in self.data]
-        subjects = tio.SubjectsDataset(subjects)
-        subjects_loader = DataLoader(subjects, batch_size=1, num_workers=12)
-
-        # Use a dataloader to do the trick
-        for d in tqdm(subjects_loader, desc="get_unique_values_n_counts"):
-            val, counts = unique(d['im'][tio.DATA], return_counts=True)
-            for v, c, in zip(val, counts):
-                if v.item() not in out_dict:
-                    out_dict[v.item()] = c.item()
-                else:
-                    out_dict[v.item()] += c.item()
-            del d
-        return out_dict
 
