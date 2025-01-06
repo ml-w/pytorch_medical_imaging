@@ -173,7 +173,7 @@ class ClassificationInferencer(InferencerBase):
 
             out_tensor, gt_tensor = self._reshape_tensors(out_tensor, gt_tensor)
             dl = self._writter(out_tensor, uids, gt_tensor)
-            self._logger.debug('\n' + dl._data_table.to_string())
+            self._logger.debug('\n' + dl._data.to_string())
 
     def _prepare_network_output(self, out: torch.FloatTensor) -> torch.FloatTensor:
         r"""Introduced to alter the output of the model for further classification results generation. This can also

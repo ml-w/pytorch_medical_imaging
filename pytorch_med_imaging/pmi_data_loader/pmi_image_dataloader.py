@@ -16,6 +16,46 @@ __all__ = ['PMIImageDataLoader', 'PMIImageDataLoaderCFG']
 class PMIImageDataLoaderCFG(PMIDataLoaderBaseCFG):
     r"""Configuration for :class:`PMIImageDataLoader`.
 
+    .. mermaid::
+        stateDiagram-v2
+            [*] --> Initialize
+            Initialize: Initialize Dataloader with Config
+
+            state Initialize {
+                [*] --> ReadConfig: Read Configuration
+                ReadConfig --> PrepareIDs: Prepare ID List
+                PrepareIDs --> InitializeComplete: Configuration Ready
+            }
+
+            Initialize --> LoadData
+            LoadData: Load Data Based on Mode (Train/Inference)
+
+            state LoadData {
+                [*] --> RunModeCheck: Check Run Mode
+                RunModeCheck --> TrainingData: Load Training Data
+                RunModeCheck --> InferenceData: Load Inference Data
+
+                TrainingData --> PrepareData: Prepare Data Dictionary
+                InferenceData --> PrepareData: Prepare Data Dictionary
+
+                PrepareData --> PackSubjects: Pack Data into Subjects
+                PackSubjects --> CreateQueue: Create Queue for Data Loading
+                CreateQueue --> DataReady: Data Ready for Use
+            }
+
+            LoadData --> GetTorchDataLoader
+            GetTorchDataLoader: Create Torch DataLoader
+
+            state GetTorchDataLoader {
+                [*] --> LoadQueue: Load Queue with Subjects
+                LoadQueue --> ConfigureDataLoader: Configure DataLoader Settings
+                ConfigureDataLoader --> ReturnDataLoader: Return Torch DataLoader
+            }
+
+            InitializeComplete --> LoadData
+            DataReady --> GetTorchDataLoader
+            ReturnDataLoader --> [*]
+
     Class Attributes:
         data_types (iterable, Optional):
             Data type of input and ground-truth. Depending on how you use the dataloader, but generally speaking, its
@@ -107,7 +147,7 @@ class PMIImageDataLoader(PMIDataLoaderBase):
         Attributes are defined in :class:`PMIImageDataLoaderCFG`.
 
     .. hint::
-        Users are suppose to pass arguments to the super class for handling. If in doubt, look at the docs of parent
+        Users are supposed to pass arguments to the super class for handling. If in doubt, look at the docs of parent
         class!
 
 
@@ -117,6 +157,7 @@ class PMIImageDataLoader(PMIDataLoaderBase):
     cfg_cls = PMIImageDataLoaderCFG
     def __init__(self, cfg: PMIImageDataLoaderCFG, *args, **kwargs):
         super(PMIImageDataLoader, self).__init__(cfg, *args, **kwargs)
+        self._default_datakey = ['input', 'gt', 'probmap', 'mask']
 
     def _check_input(self):
         """Not implemented."""
@@ -125,7 +166,7 @@ class PMIImageDataLoader(PMIDataLoaderBase):
     def _read_config(self, config_file=None):
         """
         Defines attributes. Called when object is created. Extra attributes are declared in super function,
-        see the super class for more details. Params are read from `[LoaderParams]` section of the ini.
+        see the super class for more details.
 
         Args:
             config_file (str or dict, Optional): See :func:`PMIDataLoaderBase._read_config`.
@@ -142,7 +183,7 @@ class PMIImageDataLoader(PMIDataLoaderBase):
             default_queue_kwargs['num_workers'] = os.cpu_count()
         self.tio_queue_kwargs = default_queue_kwargs
 
-        # If samplers are specified create tio queues using these samplers.
+        # If samplers are specified create tio queues using these samplers. This is required for patch sampling
         if (self.sampler == 'weighted') :
             if self.probmap_dir is None:
                 msg = f"Weighted samplers requires probability map to sample patches. Specify 'probmap_dir' in cfg. "
@@ -254,7 +295,6 @@ class PMIImageDataLoader(PMIDataLoaderBase):
             self._logger.warning(f"Force data augmentation during inference.")
         return self._load_data_set_training(exclude_augment=not self.force_augment)
 
-
     def _prepare_data(self) -> dict:
         """This is an important function that will prepare the data as a dictionary. This dictionary will be passed
         to :func:`_pack_data_into_subjects` and then :func:`_create_queue`. The queue will return a ``dict`` like
@@ -275,13 +315,13 @@ class PMIImageDataLoader(PMIDataLoaderBase):
         gt_out = self._load_gt_data()
         self._logger.info("Reading masks...")
         mask_out = self._read_image(self.mask_dir, dtype='uint8')
-        prob_out = self._prepare_probmap()
+        prob_out = self._prepare_probmap() # For patch sampling
 
         data = {'input': img_out,
                 'gt': gt_out,
                 'mask': mask_out,
                 'probmap': prob_out,
-                'uid': img_out.get_unique_IDs()
+                'uid': img_out.id
                 }
         data['orientation'] = [i.orientation for i in img_out]
         for k in ['input', 'gt', 'mask', 'probmap']:

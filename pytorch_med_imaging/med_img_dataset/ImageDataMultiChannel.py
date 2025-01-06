@@ -5,6 +5,7 @@ from torch import cat, stack
 import torchio as tio
 import numpy as np
 import os
+import pandas as pd
 from typing import *
 
 class ImageDataMultiChannel(PMIDataBase):
@@ -83,6 +84,8 @@ class ImageDataMultiChannel(PMIDataBase):
                  concat_by_axis = 0,
                  *args, **kwargs):
         super(ImageDataMultiChannel, self).__init__()
+        self._logger.warning("This class is deprecated, you should use multiple ImageDataSet and concat "
+                             "them in loader/within network forward function.")
 
         # check input
         self._rootdir = rootdir
@@ -112,7 +115,6 @@ class ImageDataMultiChannel(PMIDataBase):
                     {os.path.join(self._rootdir, d): os.path.isdir(os.path.join(self._rootdir, d)) for d in self._channel_subdirs}
                 )
 
-
         # obtain first batch of ids
         self._logger.info("Testing first set of sub-dir data to define IDs.")
         self._basedata.append(ImageDataSet(os.path.join(self._rootdir,
@@ -140,20 +142,22 @@ class ImageDataMultiChannel(PMIDataBase):
                                                             self._channel_subdirs[i],
                                                             ),
                                                **_temp_dict))
+        self._data = pd.concat([d._data for d in self._basedata], axis=1)
+        self._data.columns = self._channel_subdirs
+
 
         # Calculate size
         self._size = self._basedata[0].size()
 
-
         # Check if dtype are the same
         self._logger.info("Checking if data are all the same datatype...")
-        self._UNIQUE_DTYPE = np.all([dat.type() == self._basedata[0].type() for dat in self._basedata])
+        self._UNIQUE_DTYPE = np.all([dat.dtype == self._basedata[0].dtype for dat in self._basedata])
         self._logger.info("{}".format(self._UNIQUE_DTYPE))
         if not self._UNIQUE_DTYPE:
-            msg = f"Not all data are of the same datatype! {[self._basedata[0].type() for dat in self._basedata]}"
+            msg = f"Not all data are of the same datatype! {[self._basedata[0].dtype for dat in self._basedata]}"
             raise TypeError(msg)
 
-    def get_unique_IDs(self, globber: Optional[str] = None) -> Iterable[str]:
+    def get_unique_IDs(self) -> Iterable[str]:
         r"""Get all IDs globbed by the specified globber. If its None,
         default globber used. If its not None, the class globber will be
         updated to the specified one.
@@ -168,7 +172,7 @@ class ImageDataMultiChannel(PMIDataBase):
             list: A sorted list of unique IDs globbed using `globber`.
 
         """
-        return self._basedata[0].get_unique_IDs(globber)
+        return self._basedata[0].get_unique_IDs()
 
     def size(self, i = None):
         r"""Required by pytorch dataloader."""
@@ -186,7 +190,14 @@ class ImageDataMultiChannel(PMIDataBase):
         return self.size()
 
     def __getitem__(self, item) -> torch.Tensor:
-        return cat([dat[item] for dat in self._basedata], dim=self._concat_by_axis)
+        dat = super().__getitem__(item)
+        if isinstance(dat, pd.DataFrame):
+            return stack([
+                    cat([dd[tio.DATA] for dd in dat.iloc[i]], dim=self._concat_by_axis) \
+                for i in range(dat.shape[0])
+            ])
+        else:
+            return cat([dd[tio.DATA] for dd in dat.values], dim=self._concat_by_axis)
 
     def get_data_by_ID(self, *args):
-        return cat([dat.get_data_by_ID(*args) for dat in self._basedata], dim=self._concat_by_axis)
+        return cat([dat.get_data_as_torch_tensor(*args) for dat in self._basedata], dim=self._concat_by_axis)

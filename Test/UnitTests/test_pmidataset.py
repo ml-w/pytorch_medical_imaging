@@ -3,6 +3,8 @@ import unittest
 from pathlib import Path
 
 import torch
+import numpy as np
+import torchio as tio
 from mnts.mnts_logger import MNTSLogger
 from pytorch_med_imaging.med_img_dataset import *
 
@@ -16,6 +18,7 @@ class Test_PMIData(unittest.TestCase):
     def setUpClass(cls) -> None:
         cls._logger = MNTSLogger('.', logger_name=cls.__name__, verbose=True,
                                  keep_file=False, log_level='debug')
+        cls._expected_class = torch.Tensor
 
     @classmethod
     def tearDownClass(cls):
@@ -34,8 +37,14 @@ class Test_PMIData(unittest.TestCase):
     def tearDown(self):
         self.temp_dir.cleanup()
 
+    def test_get_multipledata(self):
+        data = self.data[1:3]
+        for dd in data:
+            self.assertIsInstance(dd, self._expected_class)
+        return data
+
     def test_getUniqueIDs(self):
-        ids = self.data.get_unique_IDs(self._id_globber)
+        ids = self.data.get_unique_IDs()
         self.assertTupleEqual(tuple(ids),
                               tuple(f"MRI_0{i+1}" for i in range(len(self.data))))
 
@@ -45,13 +54,25 @@ class Test_PMIData(unittest.TestCase):
             self.assertTrue(torch.allclose(data, self.data[1]))    # Test also the sorting order is the same
         else:
             self._logger.warning(f"{self.__class__.__name__} does not return tensors.")
+            self._logger.debug(f"{data = }")
 
     def test_getDataByIndex(self):
         data = self.data[0]
 
+    def test_sort(self):
+        data = self.data.sort_uid()
+
+    def test_iterator(self):
+        for d in self.data:
+            self.assertIsInstance(d, self._expected_class)
+
+    def test_gettype(self):
+        self.data.dtype
+
     @classmethod
     def get_class_name(cls):
         return cls.__class__.__name__
+
 
 class Test_ImageDataSet(Test_PMIData):
     def __init__(self, *args, **kwargs):
@@ -64,11 +85,38 @@ class Test_ImageDataSet(Test_PMIData):
         self.seg_path = Path("./sample_data/seg")
         self.data = ImageDataSet(str(self.data_path), verbose=True, id_globber=self._id_globber)
         self.data_segment = ImageDataSet(str(self.seg_path), verbose=True, id_globber=self._id_globber)
+        self._expected_class = tio.Image
 
     def test_matchID(self):
         self._logger.debug(f"{self.data.get_unique_IDs()}")
         self._logger.debug(f"{self.data_segment.get_unique_IDs()}")
         self.assertTrue(self.data.get_unique_IDs() == self.data_segment.get_unique_IDs())
+
+    def test_printmetadata(self):
+        self.data.update_metadata_table()
+        self._logger.debug(f"{self.data.metadata_table}")
+
+    def test_nonuniqueID(self):
+        with self.assertRaises(KeyError):
+            ImageDataSet(
+                str(self.data_path),
+                verbose=True,
+                id_globber=self._id_globber,
+                raise_id_duplication=True)
+
+    def test_get_properties(self):
+        self._logger.debug(f"Size: {self.data.get_size(0) = }")
+        self._logger.debug(f"Origin: {self.data.get_origin(0) = }")
+        self._logger.debug(f"Direction: {self.data.get_direction(0) = }")
+        self._logger.debug(f"Orientation: {self.data.get_verbose_orientation(0) = }")
+
+    def test_get_data(self):
+        dat = self.data['MRI_01']
+        self.assertIsInstance(dat, self._expected_class)
+
+    def test_get_source_path(self):
+        path = self.data.data_source_path.iloc[0]
+        self.assertIsInstance(path, Path)
 
 class Test_DataLabel(Test_PMIData):
     def __init__(self, *args, **kwargs):
@@ -80,9 +128,31 @@ class Test_DataLabel(Test_PMIData):
         self.data_path = Path("./sample_data/sample_class_gt.csv")
         self.data = DataLabel(str(self.data_path))
 
+    def test_set_target_col(self):
+        self.data.set_target_column('Class', int)
+        dat = self.data[0]
+        self.assertIsInstance(dat, self._expected_class)
+
+    def test_set_multi_col(self):
+        # Differnet types
+        self.data.set_target_column(['Class', 'Class_2'], (int, str))
+        dat = self.data[0]
+        self._logger.debug(f"{dat = }")
+        self.assertIsInstance(dat, np.ndarray) # torch.Tensor does not support multi types
+        self.assertTupleEqual(tuple(dat.shape), (1, 2))
+
+        # Same types
+        self.data.set_target_column(['Class', 'Class_2'], int)
+        dat = self.data[0]
+        self.assertIsInstance(dat, self._expected_class)
+        self.assertTupleEqual(tuple(dat.shape), (1, 2))
+
+
+
 class Test_DataLabelConcat(Test_PMIData):
     def __init__(self, *args, **kwargs):
         super(Test_DataLabelConcat, self).__init__(*args, **kwargs)
+        self._expected_class = str
 
     def setUp(self):
         super(Test_DataLabelConcat, self).setUp()
@@ -93,6 +163,7 @@ class Test_DataLabelConcat(Test_PMIData):
 class Test_ImageDataSetMC(Test_PMIData):
     def __init__(self, *args, **kwargs):
         super(Test_ImageDataSetMC, self).__init__(*args, **kwargs)
+        self._expected_class = torch.Tensor
 
     def setUp(self):
         from pytorch_med_imaging.med_img_dataset import ImageDataMultiChannel
@@ -109,3 +180,11 @@ class Test_ImageDataSetMC(Test_PMIData):
     def test_get_data(self):
         data = self.data[0]
         self.assertEqual(data.shape[0], 2)
+
+    def test_get_data_dimension(self):
+        data = self.data[1]
+        self.assertTupleEqual(tuple(data.shape), (2, 124, 256, 256))
+
+    def test_get_multipledata(self):
+        data = super().test_get_multipledata()
+        self.assertTupleEqual(tuple(data.shape), (2, 2, 124, 256, 256))

@@ -82,7 +82,7 @@ class BinaryClassificationInferencer(ClassificationInferencer):
             self._logger.info("No target data provided. No summary to display.")
             return
 
-        subdf = self._dl._data_table.copy()
+        subdf = self._dl._data.copy()
         auc = 0
         for i in range(self._num_of_questions):
             _subdf = subdf[['%s_%s'%(a, i) for a in ['Prob_Class', 'Decision', 'Truth']]]
@@ -143,6 +143,16 @@ class BinaryClassificationInferencer(ClassificationInferencer):
             perf.loc['Overall']['NPV'], perf.loc['Overall']['PPV'], perf.loc['Overall']['ACC'],
             auc
         ))
+
+        # Log them to plotter if there's one
+        scalar_dict = {
+            'testing/perf/' + k: v for k, v in perf.loc['Overall'].to_dict().items()
+        }
+        self._logger.debug(f"{scalar_dict = }")
+        if self._plotter is not None and self.plotting:
+            self._plotter.log_dict(scalar_dict)
+
+
     @staticmethod
     def _get_perf(s):
         predict, truth = s

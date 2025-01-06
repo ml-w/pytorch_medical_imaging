@@ -931,7 +931,7 @@ class SolverBase(object):
             n.eval()
             for mb in tqdm(self.data_loader_val, desc="Validation", position=2):
                 s, g = self._unpack_minibatch(mb, self.unpack_key_forward)
-                self._logger.debug(f"s: {s.shape}, g: {g.shape}")
+
                 s = self._match_type_with_network(s)
                 g = self._match_type_with_network(g) # no assumption but should be long in segmentation only.
 

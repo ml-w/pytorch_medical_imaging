@@ -1,5 +1,5 @@
 import ast
-from typing import Any, Iterable, Optional, Union
+from typing import Any, Iterable, Optional, Union, Tuple
 
 import torch
 from torch import cat, unique
@@ -65,6 +65,10 @@ NIFTI_DICT = {
 class ImageDataSet(PMIDataBase):
     r"""
     ImageDataSet class that reads and load nifty in a specified directory.
+
+    .. note::
+        The ID globber is expected to glob unique IDs from the input file names. If it's not unique
+        and `raise_id_duplicate` is `False`, the first of the duplicat is kept.
 
     Attributes:
         root_dir (str):
@@ -175,46 +179,32 @@ class ImageDataSet(PMIDataBase):
         * ``tuple``: same as `list` inputs.
     """
     def __init__(self, rootdir, readmode='normal', filtermode=None, verbose=False, dtype=float,
-                 debugmode=False, **kwargs):
+                 debugmode=False, raise_id_duplication=False, **kwargs):
         super(ImageDataSet, self).__init__(verbose=verbose)
         self.rootdir: Path      = Path(rootdir)
-        self.data_source_path   = []
-        self.data               = []
         self.metadata           = []
         self.metadata_table     = None
-        self.length             = 0
         self.verbose            = verbose
-        self.dtype              = dtype
+        self._dtype             = dtype # This is the desired type
+        self._data              = pd.Series(name="Data")
         self._raw_length        = 0 # length of raw input (i.e. num of nii.gz files loaded)
         self._filterargs        = kwargs
         self._filtermode        = filtermode
         self._readmode          = readmode
         self._id_globber        = kwargs.get('id_globber', "(^[a-zA-Z0-9]+)")
         self._debug             = debugmode
+        self._raise_id_dup      = raise_id_duplication
 
-        assert self.rootdir.is_dir()
+        assert self.rootdir.is_dir(), f"Specified rootdir {rootdir} doesn't exist."
         self._error_check()
         self._parse_root_dir()
 
     def __len__(self) -> int:
-        return self.length
+        return self.data.shape[0]
 
-    def __iter__(self) -> torch.Tensor:
+    def __iter__(self) -> Iterable[tio.Image]:
         for r in range(len(self)):
-            yield self.data[r]
-
-    def __getitem__(self, item) -> torch.Tensor:
-        r"""Override to generate tensor.
-
-        Args:
-            item (Any):
-                ID to get the item desired.
-
-        Returns:
-            ``torch.Tensor``
-        """
-        out = self.data[item][tio.DATA]
-        return out
+            yield self.data.iloc[r]
 
     def __str__(self):
         s = "==========================================================================================\n" \
@@ -229,6 +219,23 @@ class ImageDataSet(PMIDataBase):
             self.update_metadata_table()
         s += self.metadata_table.to_string()
         return s
+
+    def iter_torch_tensor(self) -> Iterable[torch.Tensor]:
+        for r in range(len(self)):
+            if isinstance(item, slice):
+                out = torch.cat([d[tio.DATA] for d in out.values])
+            elif isinstance(out, (tio.Image, tio.ScalarImage, tio.LabelMap)):
+                out = out[tio.DATA]
+            yield out
+
+    @property
+    def length(self):
+        return len(self)
+
+    @property
+    def data_source_path(self):
+        return self.metadata['Path']
+
 
     def _error_check(self):
         assert self._readmode in ['normal', 'recursive', 'explicit'], 'Wrong readmode specified.'
@@ -245,85 +252,101 @@ class ImageDataSet(PMIDataBase):
         if self._filtermode == 'both':
             assert all([ k in self._filterargs for k in ['idlist', 'regex']]), 'No filter Args.'
 
+        if not isinstance(self._id_globber, str):
+            raise ArgumentError("id_globber must be specified and must be string.")
+
     def _parse_root_dir(self):
         r"""
         Main parsing function.
         """
-
         self._logger.info("Parsing root path: " + str(self.rootdir))
 
         #===================================
         # Read all nii.gz files exist first.
         #-----------------------------------
-        removed_fnames = []
         if self._readmode == 'normal':
-            file_dirs = os.listdir(self.rootdir)
-            file_dirs = fnmatch.filter(file_dirs, "*.nii.gz")
-            file_dirs = [os.path.join(self.rootdir, f) for f in file_dirs]
-        elif self._readmode == 'explicit':
+            file_dirs = self.rootdir.glob("*nii.*")
+        elif self._readmode == 'explicit' and self.rootdir.suffix == '.txt':
             file_dirs = [fs.rstrip() for fs in open(self.rootdir, 'r').readlines()]
             for fs in file_dirs:
                 if not os.path.isfile(fs):
                     file_dirs.remove(fs)
-                    removed_fnames.append(fs)
         elif self._readmode == 'recursive':
-            file_dirs = []
-            for root, folder, files in os.walk(self.rootdir):
-                if len(files):
-                    file_dirs.extend([os.path.join(root,f) for f in files])
-            file_dirs = fnmatch.filter(file_dirs, '*.nii.gz')
+            file_dirs = self.rootdir.rglob("*nii.*")
         else:
             raise AttributeError("file_dirs is not assigned!")
+        file_dirs = list(file_dirs)
 
         if len(file_dirs) == 0:
             self._logger.error("No target files found in {}.".format(self.rootdir))
             raise ArithmeticError("No target files found in {}.".format(self.rootdir))
+        else:
+            # establish the uid mapping
+            file_map = []
+            for f in file_dirs:
+                mo = re.search(self._id_globber, f.name)
+                if not mo is None:
+                    file_map.append(pd.Series({'UID': mo.group(),
+                                     'Path': f}))
+                else:
+                    self._logger.warning(f"File does not have an ID: {f.name}")
+            data_source_path = pd.concat(file_map, axis=1).T
+            data_source_path.set_index("UID", inplace=True, drop=True)
+
+        # Check if there's any duplicated index
+        if data_source_path.index.duplicated().any():
+            duplicated = data_source_path[data_source_path.index.duplicated(keep='first')]
+            self._logger.warning(f"Duplicated entries found in data_source_path! Dropping: \n{duplicated}")
+            if self._raise_id_dup:
+                raise KeyError("ID globber does not lead to unique IDs. Clean the source directory!")
+            else:
+                data_source_path = data_source_path[~data_source_path.index.duplicated(keep='first')]
 
         #==========================
         # Apply filter if specified
         #--------------------------
-        filtered_away = []
-        file_dirs = self._filter_filelist(file_dirs, filtered_away, removed_fnames)
-
-        self._logger.info("Found %s nii.gz files..."%len(file_dirs))
+        data_source_path = self._filter_filelist(data_source_path) # Note this might update self._data
+        self._logger.info("Found %s nii.gz files..."%len(data_source_path))
         self._logger.info("Start Loading")
-
 
         #=============
         # Reading data
         #-------------
-        for i, f in enumerate(tqdm(file_dirs, disable=not self.verbose, desc="Load Images")) \
-                if not self._debug else enumerate(tqdm(file_dirs[:10],
-                                                       disable=not self.verbose,
-                                                       desc="Load Images")):
+        for k, f in tqdm(data_source_path.iterrows(), disable=not self.verbose, desc="Load Images"):
+            f = f[0]
+            if self._debug and i >= 10:
+                break
+
             if self.verbose:
-                self._logger.info("Reading from "+f)
+                self._logger.info(f"Reading from {str(f)}")
 
             if not os.path.isfile(f):
                 self._logger.warning("Cannot find file!")
-                self._logger.debug(f"{os.listdir(os.path.dirname(f))}")
+                self._logger.debug(f"{os.listdir(f.parent)}")
 
             # if dtype is uint, treat as label
-            if np.issubdtype(self.dtype, np.unsignedinteger):
+            if np.issubdtype(self._dtype, np.unsignedinteger):
                 im = tio.LabelMap(f)
             else:
                 im = tio.ScalarImage(f, check_nans=True)
-            self.data_source_path.append(f)
-            self.data.append(im)
+            self._data[k] = [] # Pandas will try to cast the dtype, this prevents it
+            self._data[k] = im
 
             # read metadata
-            nib_im = nib.load(f)
+            nib_im = nib.load(str(f))
             im_header = nib_im.header
             im_header_dict = {key: im_header.structarr[key].tolist() for key in im_header.structarr.dtype.names}
             im_header_dict['orientation'] = im.orientation
-            self.metadata.append(im_header_dict)
+            im_header_dict['UID'] = k
+            self.metadata.append(pd.Series(im_header_dict))
+        self.metadata = pd.concat(self.metadata, axis=1).T
+        self.metadata.set_index("UID", inplace=True, drop=True)
+        self.metadata = self.metadata.join(data_source_path)
 
-            self._raw_length += 1
-        self.length = len(self.data_source_path)
         self._logger.info("Finished loading. Loaded {} files.".format(self.length))
         self._logger.debug(f"IDs of loaded images: {','.join(self.get_unique_IDs())}")
 
-    def _filter_filelist(self, file_dirs, filtered_away, removed_fnames):
+    def _filter_filelist(self, file_map: pd.DataFrame):
         r"""Filter the `file_dirs` using the specified attributions. Used in `parse_root_dir`."""
         # Filter by filelist
         #-------------------
@@ -331,24 +354,14 @@ class ImageDataSet(PMIDataBase):
         if (self._filtermode == 'idlist' or self._filtermode == 'both') and \
                 target_idlist not in ("", None) and self._id_globber is not None:
             self._logger.info("Globbing ID with globber: " + str(self._id_globber) + " ...")
-            file_basenames = [os.path.basename(f) for f in file_dirs]
-            file_ids = {f: re.search(self._id_globber, f) for f in file_basenames}
-            file_ids = {f: v.group() for f, v in file_ids.items() if v is not None}
-            if len(file_ids) != len(file_basenames):
-                self._logger.warning("Not all files were assigned an ID.")
-                no_ids = set(file_basenames) - set(list(file_ids.keys()))
-                self._logger.debug(f"{no_ids}")
-                self._logger.debug(f"{file_ids}")
-            # Don't sort otherwise the order of file_ids and file_dirs will become different.
-            file_ids = list(file_ids.values())
+            file_ids = file_map.index
 
             if isinstance(target_idlist, str) and not target_idlist == "":
-                mo = re.match('\[(?P<content>.*)\]', target_idlist)
-                if mo is not None:
-                    self._logger.debug(f"Globbed: {mo.groupdict()}")
+                target_idlist = target_idlist.strip('[]')
+                if target_idlist.find(',') >= 0 is not None:
                     self._logger.info(f"Detect input as a list string, splitting at the commas.")
-                    self._idlist = mo.groupdict()['content'].split(',')
-                else:
+                    self._idlist = target_idlist.split(',')
+                elif target_idlist.endswith(('.txt', '.ini')):
                     # If its a file directory
                     self._logger.info(f"Reading idlist from: {target_idlist}")
                     self._idlist = [r.strip() for r in open(target_idlist, 'r').readlines()]
@@ -365,76 +378,56 @@ class ImageDataSet(PMIDataBase):
                 raise TypeError(f"ID list is not correclty spefified. Expect str, list or None, got "
                                 f"{target_idlist} instead")
 
+            # warn about discrepancy
+            missing_ids = set(self._idlist) - set(file_ids)
             self._logger.debug(f'Target IDs: {self._idlist}')
             self._logger.debug(f'All globbed IDs: {file_ids}')
-            self._logger.debug(f"Missing ID(s): {set(self._idlist) - set(file_ids)}")
-            tmp_file_dirs = np.array(file_dirs)
-            keep = [id in self._idlist for id in file_ids]  # error near this could be because nothing is grabed
+            if len(missing_ids):
+                self._logger.warning(f"Missing ID(s): {set(self._idlist) - set(file_ids)}")
 
-            if len(file_dirs) != len(keep):
-                raise IndexError("Number of files is different from number of globbed IDs!")
-            file_dirs = tmp_file_dirs[keep].tolist()
-            filtered_away.extend(tmp_file_dirs[np.invert(keep)])
-            # self._logger.debug(f"Filtering away: {filtered_away}")
+            # Finally, set the filemap
+            file_map = file_map.loc[self._idlist]
 
             # Check if there are still things in the list
-            if len(file_dirs) == 0:
+            if len(file_map) == 0:
                 self._logger.warning("Nothing lefted in the file list after id-filtering! "
-                                     "That can't be right, continue with all files found.")
-                file_dirs = tmp_file_dirs.tolist()
+                                     "That can't be right, terminating.")
+                raise FileNotFoundError("ID globber setting exclude all files.")
 
         # Fitlter by regex
         # --------------
         if self._filtermode == 'regex' or self._filtermode == 'both':
             self._logger.info("Filtering ID with filter: {}".format(self._filterargs['regex']))
-            file_basenames = [os.path.basename(f) for f in file_dirs]
             # use REGEX if find paranthesis
             if self._filterargs['regex'] is None:
                 # do nothing if regex is Nonw
-                self._logger.warning('Regex input is None!')
+                self._logger.warning('Regex input is None, skipping')
                 pass
             # if find *, treat it as wild card, if find .* treat it as regex
             elif self._filterargs['regex'].find('*') == -1 or self._filterargs['regex'].find('.*') > -1:
                 try:
-                    keep = np.invert([re.match(self._filterargs['regex'], f) is None for f in file_basenames])
+                    keep = pd.Series({k: re.match(self._filterargs['regex'], v.name) is None \
+                                      for k, v in file_map['Path'].items()})
+                    file_map = file_map.loc[keep[~keep.values].index]
                 except Exception as e:
                     import sys, traceback as tr
-                    cl, exc, tb = sys.exc_info()
-                    self._logger.error(f"Error encountered when performing regex filtering.")
-                    self._logger.debug(f"Regex was {self._filterargs['regex']}")
-                    self._logger.debug(f"Filenames were {file_basenames}")
-                    self._logger.exception()
-
-                try:
-                    filtered_away.extend(np.array(file_dirs)[np.invert(keep)].tolist())
-                except IndexError:
-                    self._logger.exception("Error when trying to filter by regex.")
-                    self._logger.debug(f"keep: {keep}")
-                    self._logger.debug(f"file_dirs: {file_dirs}")
-                except:
-                    self._logger.exception("Unknown error when trying to filter by regex.")
-                tmp_file_dirs = np.array(file_dirs)
-                file_dirs = tmp_file_dirs[keep].tolist()
-                filtered_away.extend(tmp_file_dirs[np.invert(keep)])
+                    self._logger.exception(e)
+                    self._logger.debug(f"{file_map = }")
+                    raise e
             else:  # else use wild card
-                tmp_file_dirs = np.array(file_dirs)
-                file_dirs = fnmatch.filter(file_dirs, "*" + self._filterargs['regex'] + "*")
-                filtered_away.extend(list(set(tmp_file_dirs) - set(file_dirs)))
+                keep = fnmatch.filter(file_map.values, "*" + self._filterargs['regex'] + "*")
+                keep = [f in keep for f in file_map.values]
+                file_map = file_map.loc[keep]
 
             # Check if there are still things in the list
-            if len(file_dirs) == 0:
+            if file_map.shape[0] == 0:
                 self._logger.warning(
                     "Nothing lefted in the file list after regex-filtering! "
-                    "That can't be right, continue with all files found.")
-                file_dirs = tmp_file_dirs.tolist()
+                    "That can't be right, terminating")
+                raise FileNotFoundError("Regex setting exclude all files.")
 
-        if len(removed_fnames) > 0:
-            removed_fnames.sort()
-            for fs in removed_fnames:
-                self._logger.warning("Cannot find " + fs + " in " + self.rootdir)
-        file_dirs.sort()
-        # self._logger.debug(f"Reading from: {file_dirs}")
-        return file_dirs
+        file_map.sort_index(inplace=True)
+        return file_map
 
     def size(self, i=None) -> Union[int, torch.Size]:
         r"""Required by pytorch dataloader.
@@ -450,18 +443,9 @@ class ImageDataSet(PMIDataBase):
         else:
             return self.length
 
-    def type(self) -> Any:
-        r"""Return datatype of the elements."""
-        return self.data[0].data.type()
-
     def as_type(self, t) -> None:
         r"""Cast all elements to specified type."""
-        try:
-            self.data = self.data.type(t)
-            self.dtype = t
-        except Exception as e:
-            self._logger.error("Error encounted during type cast.")
-            self._logger.log_traceback()
+        raise DeprecationWarning("This is not functional anymore")
 
     def get_data_source(self, i) -> str:
         r"""Get directory of the source of the i-th element, sorted by filenames.
@@ -473,7 +457,10 @@ class ImageDataSet(PMIDataBase):
             str
 
         """
-        return self.data_source_path[i]
+        if isinstance(i, int):
+            return self.data_source_path.iloc[i]
+        else:
+            return self.data_source_path[i]
 
     def get_data_by_ID(self,
                        id: str,
@@ -498,7 +485,7 @@ class ImageDataSet(PMIDataBase):
         if globber is None:
             globber = self._id_globber
 
-        ids = self.get_unique_IDs(globber)
+        ids = self.get_unique_IDs()
         if len(set(ids)) != len(ids) and not get_all:
             self._logger.warning("IDs are not unique using this globber: %s!"%globber)
 
@@ -509,37 +496,31 @@ class ImageDataSet(PMIDataBase):
                                  f"{[self.get_data_source(i) for i in np.where(np.array(ids)==id)[0]]}")
             return [self.__getitem__(i) for i in np.where(np.array(ids)==id)[0]]
 
-    def get_unique_IDs(self, globber: Optional[str] = None) -> Iterable[str]:
-        r"""Get all IDs globbed by the specified globber. If its None,
-        default globber used. If its not None, the class globber will be
-        updated to the specified one.
+    def get_data_as_tioimage(self,
+                             item = Union[int, str],
+                             get_all: Optional[bool] = False):
+        if isinstance(item, str):
+            # check if it's duplicated index
+            if self._data.index.duplicated().loc[item]:
+                if get_all:
+                    self._logger.warning("Get_all option will be deprecated and all data must have unique ID. "
+                                         "Multiple data instance should be created for items with same ID.",
+                                         no_repeat=True)
+                    return self._data.loc[item]
+                else:
+                    self._logger.warning(f"Returning first that matches requested ID {item}. ")
+            else:
+                return self._data.loc[item].values[0]
+        else:
+            return self._data.iloc[item].values[0]
 
-        Args:
-            globber (str):
-                Regex pattern to glob ID from the loaded files. If `None`, the stored attribute
-                :attribute:`_id_globber` will be used.
+    def get_data_as_torch_tensor(self, item):
+        if isinstance(item, slice):
+            raise KeyError("This function does not support slice input.")
 
+        dat = self[item]
+        return dat[tio.DATA]
 
-        Return:
-            list: A sorted list of unique IDs globbed using `globber`.
-
-        """
-        import re
-
-        if not globber is None:
-            self._id_globber = globber
-        filenames = [os.path.basename(self.get_data_source(i)) for i in range(self.__len__())]
-
-        outlist = []
-        for f in filenames:
-            matchobj = re.search(self._id_globber, f)
-
-            if not matchobj is None:
-                outlist.append(f[matchobj.start():matchobj.end()])
-        if len(set(outlist)) !=len(outlist):
-            duplicate = pd.Series(data=outlist, index=outlist).duplicated()
-            self._logger.warning(f"Some IDs are not unique: \n{duplicate.to_string()}")
-        return outlist
 
     def get_size(self, i: int) -> Iterable[int]:
         r"""Get the size of the original image. Gives 3D size.
@@ -551,7 +532,7 @@ class ImageDataSet(PMIDataBase):
             Iterable[int]
         """
         i = i % len(self.metadata)
-        return [int(self.metadata[i]['dim'][j + 1]) for j in range(3)]
+        return self.metadata.iloc[i]['dim'][1:4]
 
     def get_spacing(self, i: int) -> Iterable[float]:
         r"""Get the spacing of the original image. Ignores load by slice and
@@ -564,7 +545,7 @@ class ImageDataSet(PMIDataBase):
             Iterable[float]: Spacing in mm.
         """
         i = i % len(self.metadata)
-        return [round(self.metadata[i]['pixdim'][j + 1], 8) for j in range(3)]
+        return [round(self.metadata.iloc[i]['pixdim'][j + 1], 8) for j in range(3)]
 
     def get_origin(self, i: int) -> Iterable[float]:
         r"""Get the origin of the image. Note that the output is rounded to the third decimal
@@ -578,9 +559,7 @@ class ImageDataSet(PMIDataBase):
 
 
         """
-        origin = [round(self.metadata[i][k], 3) for k in ['qoffset_x',
-                                                          'qoffset_y',
-                                                          'qoffset_z']]
+        origin = [round(self.metadata.iloc[i][k], 3) for k in ['qoffset_x','qoffset_y','qoffset_z']]
         return origin
 
     def get_direction(self, i: int) -> Iterable[float]:
@@ -597,12 +576,20 @@ class ImageDataSet(PMIDataBase):
             http://learningnotes.fromosia.com/index.php/2017/03/10/image-orientation-vtk-itk/
 
         """
-        direction = [round(self.metadata[i][k], 3) for k in ['quatern_b',
-                                                             'quatern_c',
-                                                             'quatern_d']]
-
-
+        direction = [round(self.metadata.iloc[i][k], 3) for k in ['quatern_b','quatern_c','quatern_d']]
         return direction
+
+    def get_verbose_orientation(self, i: int) -> Tuple[str]:
+        r"""Retrieve the detailed orientation of the image in verbose format (e.g., 'L', 'P', 'S').
+
+        Args:
+            i (int): Index of the image in the dataset.
+
+        Returns:
+            Tuple[str]: A tuple representing the orientation of the image.
+        """
+        orientation = self.metadata.iloc[i]['orientation']
+        return orientation
 
     def get_properties(self, i: int) -> dict:
         r"""Get the properties of the target data inlucing spacing, orientation, origin, dimension...etc
@@ -707,27 +694,17 @@ class ImageDataSet(PMIDataBase):
 
     def update_metadata_table(self) -> pd.DataFrame:
         r"""
-        Populate self.metadata_table
+        Populate self.metadata_table using :attr:`metadata` for a more readable view.
         """
         from pandas import DataFrame as df
-        printable = {'ID': [], 'File Name': [], 'Size': [], 'Spacing': [], 'Origin': [], 'Orientation': []}
-        for i in range(len(self.data_source_path)):
-            id_mo = re.search(self._id_globber, os.path.basename(self.data_source_path[i]))
-            id_mo = 'None' if id_mo is None else id_mo.group()
-            printable['ID'].append(id_mo)
-            printable['File Name'].append(os.path.basename(self.data_source_path[i]))
-
-            # TODO: temp fix
-            printable['Size'].append(self.metadata[i]['dim'][1:4])
-            printable['Spacing'].append([round(self.metadata[i]['pixdim'][j], 2) for j in range(1, 4)])
-            printable['Origin'].append([round(self.metadata[i][k], 3) for k in ['qoffset_x',
-                                                                                'qoffset_y',
-                                                                                'qoffset_z']])
-            printable['Orientation'].append(self.metadata[i]['orientation'])
-        data = df.from_dict(data=printable)
-        data = data.set_index('ID')
-        self.metadata_table = data
-        return data
+        printable = pd.DataFrame(index=self.metadata.index)
+        printable.join(self.metadata['Path'])
+        printable['Spacing (mm)'] = self.metadata['pixdim'].apply(lambda x: [round(xx, 2) for xx in x[1:4]])
+        printable['Origin'] = [[round(xx, 2) for xx in x] \
+                               for _, x in self.metadata[['qoffset_x', 'qoffset_y', 'qoffset_z']].iterrows()]
+        printable['Orientation'] = self.metadata.loc[printable.index]['orientation']
+        self.metadata_table = printable
+        return printable
 
     def write_all(self,
                   tensor_data: torch.Tensor,
@@ -839,4 +816,9 @@ class ImageDataSet(PMIDataBase):
         self._logger.info(f"Writing {out_name}")
         sitk.WriteImage(out_im, out_name)
 
-
+    def sort_uid(self):
+        r"""This is overriden because the data needs to maintain the same order as metadata."""
+        super().sort_uid()
+        self.metadata = self.metadata.loc[self._data.index]
+        if self.metadata_table is not None:
+            self.metadata_table = self.metadata_table.loc[self._data.index]

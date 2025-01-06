@@ -179,12 +179,14 @@ class NP_Plotter:
             raise TypeError(f"Parameters argument should be dictionary, got {type(params)} instead.")
         self.np_run['parameters'] = params
 
+    def add_tag(self, tag: str):
+        self.np_run['sys/tags'].add(tag)
+
     def track_data(self, dataset_dir: Union[str, Path], version_tag):
         r"""Tracks the dataset directory to detect any changes"""
         raise NotImplementedError
 
     def track_model(self):
-
         raise NotImplementedError
 
     def stop(self):

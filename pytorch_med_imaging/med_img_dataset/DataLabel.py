@@ -1,5 +1,7 @@
 import torch
 import pandas as pd
+import numpy as np
+from typing import Union
 from pathlib import Path
 from .PMIDataBase import PMIDataBase
 
@@ -24,45 +26,66 @@ class DataLabel(PMIDataBase):
         self._unique_ids = data_table.index
         if not self._unique_ids.unique:
             print("Warning! Unique ID is not unique!")
-        self._get_table = None
-        self._data_table = data_table
-        self._original_table = data_table
-        self._target_column = None
+        self._original_table: pd.DataFrame = data_table.copy()
+        self._data          : pd.DataFrame = data_table.copy()  # Note that in base class this is pd.Series
+        self._target_column : str          = None
 
     def set_computed_column(self, func, name='computed'):
         if not callable(func):
             self._logger.error("Input function {} is not callable.".format(func))
             return 1
 
-        self._data_table[name] = self._data_table.apply(func, axis=1)
+        if name in self._original_table.columns:
+            self._logger.warning(f"Name of computed column already exist in original table. This will break the"
+                                 f"originality of the table")
+
+        self._original_table[name] = self._original_table.apply(func, axis=1)
         self.set_target_column(name)
         return 0
 
     def set_target_column(self, target, dtype: type = None):
-        if target.find(','):
-            self._target_column = []
-            self._logger.debug("Multiple columns specified.")
-            for t in target.split(','):
-                if not t in self._data_table.columns:
-                    self._logger.warning("Cannot found specified target column {} in data table!"  
-                                         "Available columns are {}".format(t, self._data_table.columns))
-                else:
-                    self._target_column.append(t)
+        if isinstance(target, str):
+            if not ',' in target:
+                self._target_column = [target]
+            else:
+                target = []
+                self._logger.debug("Multiple columns specified.")
+                for t in target.split(','):
+                    if not t in self._original_table.columns:
+                        msg = ("Cannot found specified target column {} in data table! "
+                               "Available columns are {}").format(t, self._data.columns)
+                        self._logger.error(msg)
+                        raise KeyError(msg)
+                    else:
+                        self._target_column.append(t)
+        elif isinstance(target, (list, tuple)):
+            if not all(t in self._original_table.columns for t in target):
+                msg = ("Cannot found specified target column {} in data table! "
+                       "Available columns are {}").format(t, self._data.columns)
+                self._logger.error(msg)
+                raise KeyError(msg)
+            self._target_column = list(target)
         else:
-            if not target in self._data_table.columns:
-                self._logger.warning("Cannot found specified target column '{}' in data table!"
-                                     "Available columns are {}".format(target, self._data_table.columns))
-                self._logger.warning("Setting target to {} anyways.".format(target))
+            if not target in self._original_table.columns:
+                msg = ("Cannot found specified target column {} in data table! "
+                       "Available columns are {}").format(t, self._data.columns)
+                self._logger.error(msg)
+                raise KeyError(msg)
             self._target_column = target
-        self._logger.debug("columns are: {}".format(self._target_column))
-        self._get_table = self._data_table[self._target_column]
+        self._logger.debug("Setting columns to: {}".format(self._target_column))
+        self._data = self._original_table[self._target_column].copy()
 
         # type cast
         if not dtype is None:
             try:
-                self._get_table.loc[:, self._target_column] = self._get_table[self._target_column].astype(dtype)
+                if isinstance(dtype, (list, tuple)):
+                    assert len(dtype) == len(self._target_column), "Dtype length must be the same as target col"
+                    for t, d in zip(self._target_column, dtype):
+                        self._data.loc[:, t] = self._data[t].astype(d)
+                else:
+                    self._data.loc[:, self._target_column] = self._data[self._target_column].astype(dtype)
             except Exception as e:
-                self._logger.warning(f"Cannot cast column {self.target_column} to type {dtype}")
+                self._logger.warning(f"Cannot cast column {self._target_column} to type {dtype}")
                 self._logger.exception(e)
         return 0
 
@@ -96,59 +119,53 @@ class DataLabel(PMIDataBase):
         datalabel = DataLabel(df)
         return datalabel
 
-    def map_to_data(self, target, target_id_globber=None):
-        target_ids = target.get_unique_IDs(target_id_globber)
+    def map_to_data(self, target):
+        target_ids = target.get_unique_IDs()
         try:
-            self._data_table = self._original_table.loc[target_ids]
+            self._data = self._original_table.loc[target_ids]
             if not self._target_column is None:
-                self._get_table = self._data_table[self._target_column]
+                self._data = self._data[self._target_column]
             return 0
         except:
             self._logger.exception("Error when trying to map table to data.")
             return 1
 
     def get_unique_values(self):
-        return list(self._data_table[self._target_column].unique())
+        return list(self._data[self._target_column].unique())
 
     def size(self, item=None):
         return self.__len__()
 
     def write(self, out_fname):
-        self._data_table.to_csv(out_fname)
+        self._data.to_csv(out_fname)
 
     def to_numpy(self):
-        return self._data_table.to_numpy()
-
-    def get_unique_IDs(self, *args):
-        return list(self._data_table.index)
-
-    def get_data_by_ID(self, id):
-        return self.__getitem__(id)
+        return self._data.to_numpy()
 
     def __len__(self):
-        return len(self._data_table)
+        return len(self._data)
 
-    def __getitem__(self, item):
-        if self._get_table is None:
-            self._get_table = self._data_table
-
-        if isinstance(item, int):
-            out = self._get_table.iloc[item]
-        else:
-            out = self._get_table.loc[item]
+    def __getitem__(self, item) -> Union[torch.Tensor, np.ndarray]:
+        out = super().__getitem__(item)
         if len(out) == 1:
-                out = out.item()
+            out = out.item()
         else:
-                out = out.to_numpy()
+            out: np.ndarray = out.to_numpy()
+            if out.ndim == 1:
+                out = out.reshape(1, 2)
 
         try:
-            # if multiple rows are requested, a pandas dataframe object is directly returned
+            out = torch.tensor(out)
+            if out.dim() == 0:
+                out = out.reshape(1, -1)
             return torch.tensor(out)
-        except:
+        except TypeError:
+            self._logger.warning(f"Output is a vector of multiple types! Returning as is.", no_repeat=True)
+            return out
+        except Exception as e:
             self._logger.info(f"Failed to convert to tensor {out}")
+            self._logger.debug(f"Original error: {e}")
             return out
 
-
     def __str__(self):
-        return self._data_table.to_string()
-
+        return self._data.to_string()

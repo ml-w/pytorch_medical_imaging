@@ -182,8 +182,8 @@ class SegmentationInferencer(InferencerBase):
             self._logger.info(f"Ground-truth data specified, trying to compute summary.")
 
         arguments = ['-a',
-                     '--test-data', self.output_dir,
-                     '--gt-data', self.data_loader.data['gt'].rootdir,
+                     '--test-data', str(self.output_dir),
+                     '--gt-data', str(self.data_loader.data['gt'].rootdir),
                      '--idlist', '[{}]'.format(','.join(set(self.data_loader.data['gt'].get_unique_IDs()))),
                      '--id-globber', str(self.data_loader.data['gt']._id_globber)
                      ]

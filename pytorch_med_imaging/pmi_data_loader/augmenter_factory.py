@@ -3,6 +3,7 @@ import torchio as tio
 from pathlib import Path
 from typing import Optional
 from .lambda_tio_adaptor import LambdaAdaptor
+import re
 
 __all__ = ['create_transform_compose']
 
@@ -70,6 +71,9 @@ def create_transform_compose(yaml_file: Path,
 
     steps = []
     for key in data_loaded:
+        # If key has a number at the end, strip it
+        key = re.sub(r'-\d+$', '', key)
+
         # Check if the specified filter exist in tio
         if not hasattr(tio, key):
             raise AttributeError(f"The transform '{key}' is not available in tio.")

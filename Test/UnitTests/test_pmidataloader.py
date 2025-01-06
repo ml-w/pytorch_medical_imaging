@@ -2,6 +2,7 @@ import unittest
 from pytorch_med_imaging.pmi_data_loader.pmi_dataloader_base import *
 from pytorch_med_imaging.pmi_data_loader import *
 from mnts.mnts_logger import MNTSLogger
+from pathlib import Path
 import torchio as tio
 
 class TestDataLoader(unittest.TestCase):
@@ -33,11 +34,11 @@ class TestImageDataLoader(TestDataLoader):
     def setUp(self):
         super(TestImageDataLoader, self).setUp()
         # Setting class attributes make these values the new defaults when creating the cfg instances
-        PMIImageDataLoaderCFG.input_dir    = './sample_data/img/'
-        PMIImageDataLoaderCFG.target_dir   = './sample_data/seg/'
-        PMIImageDataLoaderCFG.mask_dir     = './sample_data/seg/'
-        PMIImageDataLoaderCFG.probmap_dir  = './sample_data/seg/'
-        PMIImageDataLoaderCFG.augmentation = './sample_data/config/sample_transform.yaml'
+        PMIImageDataLoaderCFG.input_dir    = Path('./sample_data/img/')
+        PMIImageDataLoaderCFG.target_dir   = Path('./sample_data/seg/')
+        PMIImageDataLoaderCFG.mask_dir     = Path('./sample_data/seg/')
+        PMIImageDataLoaderCFG.probmap_dir  = Path('./sample_data/seg/')
+        PMIImageDataLoaderCFG.augmentation = Path('./sample_data/config/sample_transform.yaml')
         PMIImageDataLoaderCFG.data_types   = [float, 'uint8']
         PMIImageDataLoaderCFG.id_globber   = "^\w+_\d+"
         PMIImageDataLoaderCFG.id_list     = ['MRI_01', 'MRI_02']

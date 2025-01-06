@@ -126,8 +126,11 @@ class PMIDataLoaderBase(object):
             Name of the data type.
         input_dir (str):
             Root directory of input to network.
-        target_dir (str, Optional):
+        target_dir (str):
             Root directory of input to loss function.
+        _default_datakey(list):
+            Override in child class to prevent additional data clashing with loaders' default behavior.
+            Affects :method:`append_data`.
 
     Args:
         cfg (dict or str):
@@ -174,6 +177,7 @@ class PMIDataLoaderBase(object):
                  **kwargs):
         self._cfg = cfg
         self._logger = MNTSLogger[self.__class__.__name__]
+        self._default_datakey = []
 
         if not self._check_input:
             raise AttributeError
@@ -340,7 +344,7 @@ class PMIDataLoaderBase(object):
         Returns:
             compose (tio.Compose):
         """
-        if isinstance(self.augmentation, str):
+        if isinstance(self.augmentation, (str, Path)):
             if Path(self.augmentation).is_file():
                 try:
                     self.transform = create_transform_compose(self.augmentation, exclude_augment=exclude_augment)
@@ -372,13 +376,13 @@ class PMIDataLoaderBase(object):
             raise IndexError(msg)
 
         # check if the IDs are aligned
-        ids = {k: set(_d.get_unique_IDs()) for k, _d in data_dict.items() if isinstance(_d, PMIDataBase)}
+        ids = {k: _d.get_unique_IDs() for k, _d in data_dict.items() if isinstance(_d, PMIDataBase)}
         if not all([ids[a] == ids[b] for a, b in itertools.combinations(ids.keys(), 2)]):
             uni = set.union(*list(ids.values()))
             _table = pd.concat([pd.Series([index in v for index in uni], index=uni, name=k) for k, v in ids.items()], axis=1)
             _table.sort_index(inplace=True)
             _table = _table[[False in list(row[1]) for row in _table.iterrows()]]
-            msg = f"Expect all data to have same unique IDs, but some are not: \n"
+            msg = f"Expect all data to have same unique IDs, but some do not: \n"
             msg += _table.to_string()
             raise IndexError(msg)
         elif len(ids) == 0:
@@ -432,3 +436,13 @@ class PMIDataLoaderBase(object):
                     if e in self.id_list:
                         self._logger.info("Removing {} from the list as specified.".format(e))
                         self.id_list.remove(e)
+
+    def append_data(self, key: str, data: PMIDataBase):
+        r"""Use this function to append data to the affects :method:`_prepare_data`. Note that in original design the
+        data is not loaded until :method:`_prepare_data` and hence the appended data must be robustly configured with
+        the """
+        if key in self._default_datakey:
+            raise KeyError(f"Key {key} collides with default data key: {self._default_datakey}")
+
+        raise NotImplementedError
+

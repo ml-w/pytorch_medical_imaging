@@ -3,26 +3,54 @@ from mnts.mnts_logger import MNTSLogger
 from torch.utils.data import Dataset
 from abc import *
 from typing import Iterable, Union, Any
+import pandas as pd
+
+from pytorch_med_imaging.utils.uid_ops import get_unique_IDs
+
 
 class PMIDataBase(Dataset):
+    r"""This is the base class of PMI Datasets
+
+    Attributes:
+        _data (pd.DataFrame):
+            This should be an ID mapper, which maps the UID to integer of individual data
+    """
     def __init__(self, *args, **kwargs):
         self._logger = MNTSLogger[self.__class__.__name__]
         super(PMIDataBase, self).__init__()
+        self._data: pd.Series = None # This should map the uid to the data
+
+    @property
+    def id(self):
+        if len(self._data) == 0:
+            self._logger.warning("Trying to get uid from empty dataset")
+        return self._data.index.to_list()
+
+    @property
+    def data(self):
+        return self._data
 
     @abstractmethod
     def size(self, i=None):
         raise NotImplementedError("Unfinished class implementation.")
 
-
     @abstractmethod
     def __getitem__(self, item) -> torch.Tensor:
         """All classes that inherit this should have this function implemented to return a
         torch.Tensor instance."""
-        raise NotImplementedError("Unfinished class implementation.")
+        if isinstance(item, str):
+            # Get item with unique ID
+            return self._data.loc[item]
+        else:
+            return self._data.iloc[item]
 
     @abstractmethod
     def __len__(self):
         raise NotImplementedError("Unfinished class implementation.")
+
+    def __iter__(self):
+        for i in range(len(self)):
+            yield self[i]
 
     @abstractmethod
     def get_unique_IDs(self) -> Iterable[str]:
@@ -31,7 +59,7 @@ class PMIDataBase(Dataset):
         Returns:
             Iterable
         """
-        raise NotImplemented("Unfinished class implementation")
+        return self._data.index.unique().to_list()
 
     @abstractmethod
     def get_data_by_ID(self, item: Any) -> torch.Tensor:
@@ -44,7 +72,46 @@ class PMIDataBase(Dataset):
         Returns:
             ``torch.Tensor``
         """
-        raise NotImplemented("Unfinished class implementation!")
+        if isinstance(item, str):
+            return self.__getitem__(item)
+        else:
+            raise KeyError("Unique ID of items must be string or integer.")
 
     def batch_done_callback(self, *args):
         raise NotImplementedError("Batch done callback was not implemented in this class")
+
+    def remap_to_master_data(self, target):
+        r"""Reorder the dataset to align with the target dataset.
+
+        This function modifies the current dataset so that its records are reordered
+        to match the order of the records in the target dataset.
+
+        Args:
+            target (PMIDataBase): The target dataset whose order is to be used for
+            remapping the current dataset.
+
+        Raises:
+            ValueError: If the target dataset is not compatible with the current dataset.
+
+        Example:
+            >>> current_data.remap_to_master_data(target_data)
+
+        """
+        # Reorder the current dataset based on the target dataset's order
+        self._data = self._data.loc[target.data.index.intersection(self._data.index)]
+        self._logger.info("Data UIDs successfully remapped to align with target dataset.")
+
+    def sort_uid(self) -> None:
+        r"""Sort the data based on uid.
+
+        .. note::
+            Original indexing will be lost! This will affect the data you get when you put interger for __getitem__
+        """
+        self._data.sort_index(inplace=True)
+
+    @property
+    def dtype(self) -> Any:
+        if isinstance(self._data, pd.Series):
+            return self._data.dtype
+        elif isinstance(self._data, pd.DataFrame):
+            return self._data.dtypes

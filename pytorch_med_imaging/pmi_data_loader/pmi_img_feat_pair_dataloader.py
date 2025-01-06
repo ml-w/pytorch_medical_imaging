@@ -1,3 +1,5 @@
+import unittest
+
 from .pmi_image_dataloader import PMIImageDataLoader, PMIImageDataLoaderCFG
 from ..med_img_dataset import DataLabel, DataLabelConcat
 
@@ -41,6 +43,9 @@ class PMIImageFeaturePairLoader(PMIImageDataLoader):
         * Image to coordinates
 
     For attributes and configurations, see :class:`PMIImageFeaturePairLoaderCFG`
+
+    ..warning::
+        This will be deprecated. Use ImageDataLoader with additional data
 
     Class Attributes:
         cfg_cls (type):
@@ -105,7 +110,7 @@ class PMIImageFeaturePairLoader(PMIImageDataLoader):
             gt_dat = DataLabel.from_xlsx(self.target_dir, self.excel_sheetname)
         return gt_dat
 
-
+@unittest.skip("This is not implemented")
 class PMIImageFeaturePairLoaderConcat(PMIImageFeaturePairLoader):
     r"""Basically same as the base class but change from using `DataLabel` to `DataLabelConcat`, which is for the
     circumstance where the one data point span across multiple rows of the target column.

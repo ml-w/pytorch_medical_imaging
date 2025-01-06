@@ -173,7 +173,7 @@ class TestClassificationSolver(TestSolver):
         ])
         self.solver.perfs = []
         self.solver.validation_losses = []
-        self.solver.plotter_dict = {'scalars': {'Loss/Validation Loss': None}}
+        self.solver.plotter_dict = {'scalars': {'loss/validation Loss': None}}
         self.solver._validation_step_callback(g, res, torch.Tensor([0.0]), range(len(g)))
         self.solver._validation_callback()
         print(self.solver.perfs)
