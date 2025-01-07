@@ -92,7 +92,7 @@ class PMIDataLoaderBase(object):
     assigning them an ID. Sometimes the pattern might be decided by the class itself. The IDs in training and testing
     sets can be stored in a .ini file with section `[FileList]` and attributes `training` and `testing` as comma
     separated values. If `run_mode` is specified as `train`, then the training IDs will be loaded. A torch `DataLoader`
-    can be obtained using :method:`get_torch_data_loader`.
+    can be obtained using :meth:`get_torch_data_loader`.
 
     This class is initialized using a :class:`PMIDataLoaderBaseCFG` instance. On calling `get_torch_data_loader`, this
     instance will try to create the data loader based on the configuration loaded from the CFG. It will try to call
@@ -130,7 +130,7 @@ class PMIDataLoaderBase(object):
             Root directory of input to loss function.
         _default_datakey(list):
             Override in child class to prevent additional data clashing with loaders' default behavior.
-            Affects :method:`append_data`.
+            Affects :meth:`append_data`.
 
     Args:
         cfg (dict or str):
@@ -438,11 +438,15 @@ class PMIDataLoaderBase(object):
                         self.id_list.remove(e)
 
     def append_data(self, key: str, data: PMIDataBase):
-        r"""Use this function to append data to the affects :method:`_prepare_data`. Note that in original design the
-        data is not loaded until :method:`_prepare_data` and hence the appended data must be robustly configured with
+        r"""Use this function to append data to the affects :meth:`_prepare_data`. Note that in original design the
+        data is not loaded until :meth:`_prepare_data` and hence the appended data must be robustly configured with
         the """
         if key in self._default_datakey:
             raise KeyError(f"Key {key} collides with default data key: {self._default_datakey}")
 
+        if not isinstance(data, (PMIDataBase)):
+            raise TypeError(f"Expect appended data to be PMI data. Got {type(data)} instead.")
+
+        self.additional_data.append((key, data))
         raise NotImplementedError
 

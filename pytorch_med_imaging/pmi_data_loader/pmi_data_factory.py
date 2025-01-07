@@ -3,15 +3,14 @@ from .pmi_image_dataloader import PMIImageDataLoader
 from mnts.mnts_logger import MNTSLogger
 import traceback as tr
 import re
+import ast
 
 __all__ = ['PMIDataFactory']
 
 class PMIDataFactory(object):
     def __init__(self):
-        self._possible_products = {
-            'PMIImageDataLoader': PMIImageDataLoader,
-            'PMIImageFeaturePair': PMIImageFeaturePairLoader,
-        }
+        self._possible_products = {k: ast.literal_eval(v + "Loader") for v in \
+                                   ['PMIImageData', 'PMIImageFeaturePair']}
 
         self._logger = MNTSLogger[__class__.__name__]
 

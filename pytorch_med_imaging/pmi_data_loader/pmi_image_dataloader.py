@@ -16,46 +16,6 @@ __all__ = ['PMIImageDataLoader', 'PMIImageDataLoaderCFG']
 class PMIImageDataLoaderCFG(PMIDataLoaderBaseCFG):
     r"""Configuration for :class:`PMIImageDataLoader`.
 
-    .. mermaid::
-        stateDiagram-v2
-            [*] --> Initialize
-            Initialize: Initialize Dataloader with Config
-
-            state Initialize {
-                [*] --> ReadConfig: Read Configuration
-                ReadConfig --> PrepareIDs: Prepare ID List
-                PrepareIDs --> InitializeComplete: Configuration Ready
-            }
-
-            Initialize --> LoadData
-            LoadData: Load Data Based on Mode (Train/Inference)
-
-            state LoadData {
-                [*] --> RunModeCheck: Check Run Mode
-                RunModeCheck --> TrainingData: Load Training Data
-                RunModeCheck --> InferenceData: Load Inference Data
-
-                TrainingData --> PrepareData: Prepare Data Dictionary
-                InferenceData --> PrepareData: Prepare Data Dictionary
-
-                PrepareData --> PackSubjects: Pack Data into Subjects
-                PackSubjects --> CreateQueue: Create Queue for Data Loading
-                CreateQueue --> DataReady: Data Ready for Use
-            }
-
-            LoadData --> GetTorchDataLoader
-            GetTorchDataLoader: Create Torch DataLoader
-
-            state GetTorchDataLoader {
-                [*] --> LoadQueue: Load Queue with Subjects
-                LoadQueue --> ConfigureDataLoader: Configure DataLoader Settings
-                ConfigureDataLoader --> ReturnDataLoader: Return Torch DataLoader
-            }
-
-            InitializeComplete --> LoadData
-            DataReady --> GetTorchDataLoader
-            ReturnDataLoader --> [*]
-
     Class Attributes:
         data_types (iterable, Optional):
             Data type of input and ground-truth. Depending on how you use the dataloader, but generally speaking, its
@@ -104,7 +64,7 @@ class PMIImageDataLoaderCFG(PMIDataLoaderBaseCFG):
     sampler                       : Optional[str]      = None                 # 'weighted' or 'uniform'
     sampler_kwargs                : Optional[dict]     = dict()               # pass to ``tio.Sampler``
     augmentation                  : Optional[str]      = None                 # yaml file to create tio transform
-    force_augment                 : Optional[bool]     = False
+    force_augment                 : Optional[bool]     = False                # Force augmentation even in inference
     create_new_attribute          : Optional[str]      = None                 # create a new attribute in subjects for callback
     patch_sampling_callback       : Optional[Callable] = None                 # callback to generate new data
     patch_sampling_callback_kwargs: Optional[dict]     = dict()               # kwargs pass to the callback
@@ -131,6 +91,40 @@ class PMIImageDataLoader(PMIDataLoaderBase):
         * Image to image
         * Image to segmentation
         * Image super-resolution
+
+    .. mermaid::
+        stateDiagram-v2
+            [*] --> Initialize
+            Initialize: Initialize Dataloader with Config
+            state Initialize {
+                [*] --> ReadConfig: Read Configuration
+                ReadConfig --> PrepareIDs: Prepare ID List
+                PrepareIDs --> InitializeComplete: Configuration Ready
+            }
+            Initialize --> LoadData
+            LoadData: Load Data Based on Mode (Train/Inference)
+            state LoadData {
+                [*] --> RunModeCheck: Check Run Mode
+                RunModeCheck --> TrainingData: Load Training Data
+                RunModeCheck --> InferenceData: Load Inference Data
+
+                TrainingData --> PrepareData: Prepare Data Dictionary
+                InferenceData --> PrepareData: Prepare Data Dictionary
+
+                PrepareData --> PackSubjects: Pack Data into Subjects
+                PackSubjects --> CreateQueue: Create Queue for Data Loading
+                CreateQueue --> DataReady: Data Ready for Use
+            }
+            LoadData --> GetTorchDataLoader
+            GetTorchDataLoader: Create Torch DataLoader
+            state GetTorchDataLoader {
+                [*] --> LoadQueue: Load Queue with Subjects
+                LoadQueue --> ConfigureDataLoader: Configure DataLoader Settings
+                ConfigureDataLoader --> ReturnDataLoader: Return Torch DataLoader
+            }
+            InitializeComplete --> LoadData
+            DataReady --> GetTorchDataLoader
+            ReturnDataLoader --> [*]
 
     Attributes:
         Attributes will be loaded from the supplied ``cfg`` into class
@@ -524,7 +518,7 @@ class PMIImageDataLoader(PMIDataLoaderBase):
 
     @property
     def patch_size(self):
-        r"""Return the patch_size passed to tio_queue_kwargs"""
+        r"""Return the :attr:`patch_size` passed to tio_queue_kwargs"""
         if hasattr(self.sampler_kwargs, 'patch_size'):
             if self.sampler_instance is None:
                 msg = f"Trying to fetch patch_size before sampler instance creation. This might lead to the deviation "\
@@ -538,7 +532,7 @@ class PMIImageDataLoader(PMIDataLoaderBase):
 
     @patch_size.setter
     def patch_size(self, patch_size):
-        r"""Convinient method to set :attr:`.patch_size`
+        r"""Convinient method to set :attr:`patch_size`
 
         Args:
             patch_size (Iterable[int]):
