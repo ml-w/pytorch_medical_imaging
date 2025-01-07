@@ -6,38 +6,61 @@ from .DataLabel import DataLabel
 from typing import Optional, Union, Iterable, Type, Any, Tuple
 
 class DataLabelConcat(DataLabel):
+    r"""Class to concatenate data labels from a specified data table.
+
+    This class processes a data table where each row may contain multiple values
+    that need to be combined into a single value based on the specified data type.
+    It allows for flexible configuration of the concatenation process, including
+    the choice of delimiter for string concatenation.
+
+    .. warning::
+        Currently, this class is written for text inputs. If the content are text,
+        they are concat into the same sentence. Otherwise, if the data type are
+        numbers, a list would be returned to keep the length flexible.
+
+    Args:
+        data_table (str):
+            The path to the data table file containing the labels.
+        dtype (type, Optional):
+            The data type for the concatenated result. Default is str, but can be
+            set to int or other types as needed.
+        config (dict, Optional):
+            A dictionary of configuration options, including settings specific to
+            each data type. Default is an empty dictionary.
+
+    Attributes:
+        _deliminator (str):
+            The character used to separate concatenated strings when dtype is str.
+
+    Examples:
+    ---------
+        Input:
+            +----+-----------------------------+
+            | ID | Text Value                  |
+            +====+=============================+
+            | A  | Some text written           |
+            +----+-----------------------------+
+            | A  | Another text sentence       |
+            +----+-----------------------------+
+            | B  | First line of text B        |
+            +----+-----------------------------+
+            | B  | Second line of text B       |
+            +----+-----------------------------+
+            | B  | Third line of text C        |
+            +----+-----------------------------+
+
+        >>> d = DataLabelConcat(input)
+        >>> d['A']
+        # "Some text written Another text sentence"
+        >>> d['B']
+        # "First line of text B Second line of text B Third line of text C"
+
+
+    """
     def __init__(self,
                  data_table: str,
                  dtype: Optional[type] = str,
                  config: Optional[dict] = {}):
-        """
-        Class to concatenate data labels from a specified data table.
-
-        This class processes a data table where each row may contain multiple values
-        that need to be combined into a single value based on the specified data type.
-        It allows for flexible configuration of the concatenation process, including
-        the choice of delimiter for string concatenation.
-
-        .. notes::
-            Currently, this class is written for text inputs. If the content are text,
-            they are concat into the same sentence. Otherwise, if the data type are
-            numbers, a list would be returned to keep the length flexible.
-
-        Args:
-            data_table (str):
-                The path to the data table file containing the labels.
-            dtype (type, Optional):
-                The data type for the concatenated result. Default is str, but can be
-                set to int or other types as needed.
-            config (dict, Optional):
-                A dictionary of configuration options, including settings specific to
-                each data type. Default is an empty dictionary.
-
-        Attributes:
-            _deliminator (str):
-                The character used to separate concatenated strings when dtype is str.
-
-        """
         super(DataLabelConcat, self).__init__(data_table)
         self._dtype = dtype
         self._deliminator = config.get('deliminator', ' ')
@@ -66,7 +89,17 @@ class DataLabelConcat(DataLabel):
         else:
             raise AttributeError(f"dtype is not supported, got {self.dtype}")
 
-    def __getitem__(self, item) -> Union[Any, Tuple[Any]]:
+    def __getitem__(self, item: Union[int, slice, str]) -> Union[Any, Tuple[Any]]:
+        r"""Returns an item from the data table.
+
+        Args:
+            item (int, slice, str):
+                Unique ID or numeric index
+
+        Returns:
+            torch.Tensor or np.ndarray or str:
+                The concatenated product.
+        """
         if isinstance(item, (int, slice)):
             out = self._data.iloc[item]
         else:
