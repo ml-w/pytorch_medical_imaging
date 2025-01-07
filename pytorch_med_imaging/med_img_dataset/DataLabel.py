@@ -1,11 +1,38 @@
 import torch
 import pandas as pd
 import numpy as np
-from typing import Union
+from typing import Union, List, Any, Iterable, Union
 from pathlib import Path
 from .PMIDataBase import PMIDataBase
 
 class DataLabel(PMIDataBase):
+    """
+    DataLabel is a class for managing labeled data from various sources such as CSV and Excel files.
+
+    This class inherits from `PMIDataBase` and provides functionalities to load data, set target columns,
+    compute new columns, and convert data to tensors or NumPy arrays.
+
+    Attributes:
+        _unique_ids (pd.Index):
+            Unique identifiers for the rows in the dataset.
+        _original_table (pd.DataFrame):
+            Original data loaded from the input source.
+        _data (pd.DataFrame):
+            Processed data for analysis.
+        _target_column (Union[str, List[str]]):
+            Target column(s) for prediction or analysis.
+
+    Args:
+        data_table (Union[str, Path, pd.DataFrame]):
+            Path to the data file or a DataFrame containing the data.
+        **kwargs:
+            Additional arguments passed to pandas read functions.
+
+    Raises:
+        AssertionError: If the input data_table is not a valid DataFrame.
+        KeyError: If specified target column(s) are not found in the original data.
+        Exception: If there is an issue converting data to a tensor.
+    """
     def __init__(self, data_table, **kwargs):
         """
         Datasheet should b arrange with rows of values
@@ -30,7 +57,34 @@ class DataLabel(PMIDataBase):
         self._data          : pd.DataFrame = data_table.copy()  # Note that in base class this is pd.Series
         self._target_column : str          = None
 
-    def set_computed_column(self, func, name='computed'):
+    def set_computed_column(self, func, name='computed') -> int:
+        r"""Set a column computed from other columns of the original data table.
+
+        This method applies a given function to each row of the original data
+        table and adds the resulting values as a new column. The name of the
+        computed column can be specified. If the specified name already exists
+        in the original table, a warning will be logged.
+
+        Args:
+            func (callable): A function that takes a row of the DataFrame and
+                returns a computed value.
+            name (str, optional): The name of the computed column. Defaults
+                to 'computed'.
+
+        Returns:
+            int:
+                - 0 if the operation was successful.
+                - 1 if the provided function is not callable.
+
+        Raises:
+            Warning: If the computed column name already exists in the original
+                     table.
+
+        .. note::
+            The computed column will be added to the `_original_table` DataFrame,
+            and the target column will be set to the name of the computed column.
+        """
+        # ... existing code ...
         if not callable(func):
             self._logger.error("Input function {} is not callable.".format(func))
             return 1
@@ -43,7 +97,30 @@ class DataLabel(PMIDataBase):
         self.set_target_column(name)
         return 0
 
-    def set_target_column(self, target, dtype: type = None):
+    def set_target_column(self, target, dtype: type = None) -> int:
+        r"""Sets the target column(s) for the DataLabel instance.
+
+        This method allows you to specify the target column(s) for prediction or analysis.
+        It can handle a single column as a string, multiple columns as a comma-separated string,
+        or a list/tuple of column names. The method also supports type casting of the target columns.
+
+        Args:
+            target (Union[str, list, tuple]):
+                The target column(s) to set.
+                    - If a string is provided without commas, it sets a single target column.
+                    - If a string with commas is provided, it sets multiple target columns.
+                    - If a list or tuple is provided, it sets multiple target columns as well.
+            dtype (type, optional):
+                The data type to which the target column(s) should be cast.
+                If not specified, no casting is performed.
+
+        Raises:
+            KeyError: If any specified target column(s) are not found in the original data table.
+
+        Returns:
+            int:
+                - 0 if the operation was successful.
+        """
         if isinstance(target, str):
             if not ',' in target:
                 self._target_column = [target]
@@ -90,7 +167,24 @@ class DataLabel(PMIDataBase):
         return 0
 
     @staticmethod
-    def from_csv(fname, **kwargs):
+    def from_csv(fname: str, **kwargs):
+        r"""Creates a DataLabel instance from a CSV file.
+
+        This static method reads data from the specified CSV file, converts the index to a string,
+        and initializes a DataLabel object with the resulting DataFrame. It also prints the
+        DataLabel instance for verification.
+
+        Args:
+            fname (str): The path to the CSV file to be read.
+            **kwargs: Additional keyword arguments passed to `pd.read_csv`.
+
+        Returns:
+            DataLabel: An instance of the DataLabel class containing the data from the CSV file.
+
+        Example:
+            >>> datalabel = DataLabel.from_csv('data.csv')
+            >>> print(datalabel)
+        """
         df = pd.read_csv(fname, **kwargs, index_col=0)
         df.index = df.index.astype('str')
         datalabel = DataLabel(df)
@@ -98,7 +192,25 @@ class DataLabel(PMIDataBase):
         return datalabel
 
     @staticmethod
-    def from_xlsx(fname, sheet_name=None, header_row=False):
+    def from_xlsx(fname: str, sheet_name=None, header_row=False):
+        r"""Creates a DataLabel instance from an Excel file.
+
+        This static method reads data from the specified Excel file and initializes a DataLabel
+        object with the resulting DataFrame. It allows you to specify which sheet to read from
+        and handles the index conversion to string.
+
+        Args:
+            fname (str): The path to the Excel file to be read.
+            sheet_name (str, optional): The name of the sheet to read. If None, the first sheet is used.
+            header_row (bool, optional): Indicates whether to treat the first row as header. Defaults to False.
+
+        Returns:
+            DataLabel: An instance of the DataLabel class containing the data from the Excel file.
+
+        Examples:
+            >>> datalabel = DataLabel.from_xlsx('data.xlsx', sheet_name='Sheet1')
+            >>> datalabel = DataLabel.from_xlsx('data.xlsx')
+        """
         # Unique IDs should be recorded in
         xfile = pd.ExcelFile(fname)
 
@@ -112,14 +224,33 @@ class DataLabel(PMIDataBase):
         return datalabel
 
     @staticmethod
-    def from_dict(dict, **kwargs):
-        df = pd.DataFrame.from_dict(dict, **kwargs)
+    def from_dict(in_dict: dict, **kwargs):
+        df = pd.DataFrame.from_dict(in_dict, **kwargs)
         df.set_index(df.keys()[0])
 
         datalabel = DataLabel(df)
         return datalabel
 
-    def map_to_data(self, target):
+    def map_to_data(self, target: PMIDataBase) -> int:
+        r"""Maps target IDs to the original data table and updates the data.
+
+        This method retrieves unique IDs from the provided target and attempts to map them
+        to the original data table. If successful, it updates the internal data attribute
+        with the rows corresponding to the target IDs. If a target column is specified,
+        it further filters the data to include only that column.
+
+        Args:
+            target (PMIDataBase): An object that provides the method `get_unique_IDs()`
+                to retrieve unique IDs for mapping.
+
+        Returns:
+            int:
+                - 0 if the mapping was successful.
+                - 1 if there was an error during the mapping process.
+
+        Raises:
+            Exception: Logs an error if the mapping process fails.
+        """
         target_ids = target.get_unique_IDs()
         try:
             self._data = self._original_table.loc[target_ids]
@@ -130,22 +261,34 @@ class DataLabel(PMIDataBase):
             self._logger.exception("Error when trying to map table to data.")
             return 1
 
-    def get_unique_values(self):
+    def get_unique_values(self) -> List[Any]:
         return list(self._data[self._target_column].unique())
 
-    def size(self, item=None):
+    def size(self, item=None) -> int:
         return self.__len__()
 
-    def write(self, out_fname):
+    def write(self, out_fname: str) -> None:
         self._data.to_csv(out_fname)
 
-    def to_numpy(self):
+    def to_numpy(self) -> np.ndarray:
         return self._data.to_numpy()
 
-    def __len__(self):
+    def __len__(self) -> int:
         return len(self._data)
 
     def __getitem__(self, item) -> Union[torch.Tensor, np.ndarray]:
+        r"""Returns an item from the datatable, as either torch.Tensor or
+        np.ndarray.
+
+        Args:
+            item (str or int):
+                Unique ID or numeric index
+
+        Returns:
+            torch.Tensor or np.ndarray:
+                Output will be converted to either torch.Tensor or np.ndarray with
+                `ndim = 2` and shaped :math:`(B \times C)`
+        """
         out = super().__getitem__(item)
         if len(out) == 1:
             out = out.item()

@@ -11,4 +11,4 @@ Soft Dice Loss
 
 Focal Loss
 ----------
-.. autofunction:: pytorch_med_imaging.loss.FocalLoss.FocalLoss
+.. autofunction:: pytorch_med_imaging.loss.FocalLoss.BinaryFocalLoss
