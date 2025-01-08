@@ -6,67 +6,48 @@
 PyTorch Meidcal Imaging's documentation
 =======================================
 
-
-Module List
------------
 .. toctree::
    :maxdepth: 2
+   :caption: Introduction
+
+   Introduction.rst
+
+
+.. toctree::
+   :maxdepth: 2
+   :caption: Tutorials
+
+   Tutorial/Quickstart.rst
+
+
+.. toctree::
+   :maxdepth: 2
+   :caption: API reference
 
    MedImgDataset.rst
-
-Controller
-----------
-.. toctree::
-   :maxdepth: 2
-
    controller.rst
-
-PMIDataLoader
--------------
-.. toctree::
-   :maxdepth: 2
-
    PMIDataLoader/PMIDataLoader.rst
-
-Solvers
----------
-.. toctree::
-   :maxdepth: 2
-
    Solvers/Solvers.rst
-
-Inferencers
------------
-.. toctree::
-   :maxdepth: 2
-
    Inferencers/Inferencers.rst
 
-Networks
---------
+
 .. toctree::
    :maxdepth: 2
+   :caption: Default Networks
 
    Networks/Networks.rst
-
-Loss Functions
---------------
-.. toctree::
-   :maxdepth: 2
-
    Loss/Loss.rst
 
-Metrics
--------
 .. toctree::
    :maxdepth: 2
+   :caption: Performance metrics
 
    Metrics/segmentation_metrics.rst
 
-Utils
------
+
 .. toctree::
    :maxdepth: 2
+   :caption: Utilities
 
    Utils/Utils.rst
 

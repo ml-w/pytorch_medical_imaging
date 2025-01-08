@@ -17,13 +17,16 @@ sys.path.insert(0, os.path.abspath('../../'))
 sys.path.insert(0, os.path.abspath('../../ThirdParty/surface-distance'))
 import pytorch_med_imaging
 import sphinx_rtd_theme
+import datetime
 
 
 # -- Project information -----------------------------------------------------
 
 project = 'PyTorch Meidcal Imaging'
-copyright = '2020, Matthew Wong'
-author = 'Matthew Wong'
+datetime.datetime.now().strftime('%Y-%m-%d')
+datetime.datetime.now().strftime('%B %d, %Y')
+copyright = f'2025, Lun M Wong. Last Update {datetime.datetime.now().strftime("%B %d, %Y")}'
+author = 'Lun M Wong'
 
 
 # -- General configuration ---------------------------------------------------
@@ -38,7 +41,8 @@ extensions = [
     'sphinx.ext.autosummary',
     'sphinx.ext.mathjax',
     'sphinx_rtd_theme',
-    'sphinxcontrib.mermaid'
+    'sphinxcontrib.mermaid',
+    'm2r2'
     # 'pytorch_med_imaging'
 ]
 
