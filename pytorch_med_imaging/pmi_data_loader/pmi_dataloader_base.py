@@ -178,6 +178,7 @@ class PMIDataLoaderBase(object):
         self._cfg = cfg
         self._logger = MNTSLogger[self.__class__.__name__]
         self._default_datakey = []
+        self._additional_data = None
 
         if not self._check_input:
             raise AttributeError
@@ -200,6 +201,12 @@ class PMIDataLoaderBase(object):
     @abstractmethod
     def _load_data_set_inference(self) -> tio.Queue:
         """Inherit in child class. Private method called to load data for inference mode."""
+        raise NotImplementedError
+
+    @abstractmethod
+    def _prepare_data(self) -> dict:
+        r"""This should return a dictionary that contains PMIDataLoader or iterables for later packaging into
+        `tio.Subjects`. """
         raise NotImplementedError
 
     @staticmethod
@@ -369,6 +376,14 @@ class PMIDataLoaderBase(object):
         r"""Create subjects from a dictionary of data"""
         data_exclude_none = {k: v for k, v in data_dict.items() if v is not None}
 
+        # Add additional data if present
+        if not self._additional_data is None:
+            for key, dat in self._additional_data:
+                # Assure key has not been inserted already
+                if key in data_dict:
+                    raise KeyError(f"Appended data key repeated: {key = }")
+                data_exclude_none[key] = dat
+
         # check if all items has the same length
         if not len(set([len(v) for v in data_exclude_none.values()])):
             msg = f"Expect all data to have the same length, but got: "
@@ -387,6 +402,8 @@ class PMIDataLoaderBase(object):
             raise IndexError(msg)
         elif len(ids) == 0:
             raise IndexError("Cannot glob any IDs using the provided globber.")
+
+        # map IDs to the same order,
 
         subjects = [tio.Subject(**{k: v for k, v in zip(data_exclude_none.keys(), row)})
                     for row in zip(*data_exclude_none.values())]
@@ -438,15 +455,19 @@ class PMIDataLoaderBase(object):
                         self.id_list.remove(e)
 
     def append_data(self, key: str, data: PMIDataBase):
-        r"""Use this function to append data to the affects :meth:`_prepare_data`. Note that in original design the
-        data is not loaded until :meth:`_prepare_data` and hence the appended data must be robustly configured with
-        the """
+        r"""Append data so it will be available to be unpacked."""
         if key in self._default_datakey:
             raise KeyError(f"Key {key} collides with default data key: {self._default_datakey}")
 
         if not isinstance(data, (PMIDataBase)):
             raise TypeError(f"Expect appended data to be PMI data. Got {type(data)} instead.")
 
-        self.additional_data.append((key, data))
-        raise NotImplementedError
+        if self._additional_data is None:
+            self._logger.info("Creating list to hold additional data.")
+            self._additional_data = []
+        else:
+            if key in self._additional_data:
+                raise KeyError(f"Attempting to insert the same key {key} as additional data.")
+        self._logger.info(f"Add data ({type(data)}) with {key = }.")
+        self._additional_data.append((key, data))
 

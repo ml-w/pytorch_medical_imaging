@@ -93,6 +93,10 @@ class PMIImageDataLoader(PMIDataLoaderBase):
         * Image super-resolution
 
     .. mermaid::
+
+        ---
+        title: Load Logic
+        ---
         stateDiagram-v2
             [*] --> Initialize
             Initialize: Initialize Dataloader with Config
@@ -122,8 +126,6 @@ class PMIImageDataLoader(PMIDataLoaderBase):
                 LoadQueue --> ConfigureDataLoader: Configure DataLoader Settings
                 ConfigureDataLoader --> ReturnDataLoader: Return Torch DataLoader
             }
-            InitializeComplete --> LoadData
-            DataReady --> GetTorchDataLoader
             ReturnDataLoader --> [*]
 
     Attributes:
