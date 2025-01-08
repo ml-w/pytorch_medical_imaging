@@ -51,6 +51,12 @@ PyTorch Meidcal Imaging's documentation
 
    Utils/Utils.rst
 
+.. toctree::
+   :maxdepth: 3
+   :caption: Others
+
+   dev_notes.rst
+
 Indices and tables
 ==================
 
