@@ -25,6 +25,9 @@ class PMITorchioDataLoaderCFG(PMIImageDataLoaderCFG):
             Input data. Must be either PMI data or iterable.
         input_dtypes (dict):
             Type of input data.
+        master_data_key (str, Optional):
+            Key of the data that would be used as master list when there's a conflict among the IDs of the included
+            data. Default to None.
         sampler (str, Optional):
             Determine the ``tio.Sampler`` used to sample the images. Support ['weighted'|'uniform'|'grid'] currently.
             Default to ``None``, which means no sampler is used (i.e., the whole image is loaded).
@@ -92,6 +95,7 @@ class PMITorchioDataLoaderCFG(PMIImageDataLoaderCFG):
     """
     input_data: Dict[str, Union[PMIDataBase, Iterable[Any]]] = None
     input_dtypes: Dict[str, Union[str, Type]] = {}
+    master_data: str = None
 
 
 class PMITorchioDataLoader(PMIImageDataLoader):
@@ -123,6 +127,20 @@ class PMITorchioDataLoader(PMIImageDataLoader):
                 self._logger.warning("Input iterable data detected. Note that automatic ordering for "
                                      "custom iterable data is not supported.")
                 data[k] = _v
+
+        # map to the master id
+        if not self.master_data_key is None:
+            if not self.master_data_key in self.input_data:
+                msg = "Master data specified but key is not found in data."
+                raise KeyError(msg)
+            for k, v in data.items():
+                if k == self.master_data_key:
+                    continue
+                try:
+                    v.remap_to_master_data(data[self.master_data_key])
+                except:
+                    self._logger.warning(f"Cannot remap data: {k}]")
+                    continue
 
         # Make sure the ID list are correctly configured
         for k, v in data.items():

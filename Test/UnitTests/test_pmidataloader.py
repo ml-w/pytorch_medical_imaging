@@ -1,9 +1,13 @@
 import unittest
 from pytorch_med_imaging.pmi_data_loader.pmi_dataloader_base import *
 from pytorch_med_imaging.pmi_data_loader import *
+from pytorch_med_imaging.pmi_data import DataLabel
 from mnts.mnts_logger import MNTSLogger
 from pathlib import Path
 import torchio as tio
+import copy
+from pytorch_med_imaging.pmi_data import ImageDataSet
+
 
 class TestDataLoader(unittest.TestCase):
     def setUp(self) -> None:
@@ -29,6 +33,15 @@ class TestDataLoader(unittest.TestCase):
             break
         return loader
 
+    def test_add_data(self):
+        datalabel = DataLabel.from_xlsx('./sample_data/sample_binaryclass_gt.xlsx')
+        datalabel.set_target_column('Class')
+        self.loader.append_data("additional_data", datalabel)
+        loader = self.loader._load_data_set_training()
+        for l in loader:
+            self._logger.debug(l)
+            self.assertIn('additional_data', l)
+            break
 
 class TestImageDataLoader(TestDataLoader):
     def setUp(self):
@@ -209,3 +222,62 @@ class TestPMIImageMCDataLoader(TestImageDataLoader):
                                   (2, 2, 250, 250, 15)) # Size specified in sample_transform.yaml
             break
 
+
+class TestPMITorchioDataLoader(TestDataLoader):
+    def setUp(self):
+        super().setUp()
+        self.cfg = PMITorchioDataLoaderCFG(
+            input_data = {
+                'input'  : './sample_data/img/',
+                'gt'     : './sample_data/seg/',
+                'probmap': './sample_data/seg/'
+            },
+            input_dtypes = {
+                'gt': 'uint8',
+                'probmap': 'uint8'
+            },
+            augmentation = Path('./sample_data/config/sample_transform.yaml'),
+            id_globber = "^\w+_\d+",
+            id_list = ['MRI_01', 'MRI_02'],
+            sampler = 'weighted',
+            inf_samples_per_vol = 5
+        )
+        self.cfg.sampler_kwargs['patch_size']           = [32, 32, 3]
+        self.cfg.tio_queue_kwargs['samples_per_volume'] = 2
+        self._logger.debug(f"{self.cfg = }")
+
+        # expected variables
+        self.num_subjects = len(self.cfg.id_list)
+        self.expected_training_queue_len = self.num_subjects * self.cfg.tio_queue_kwargs['samples_per_volume']
+        self.expected_inference_queue_len = self.num_subjects * self.cfg.inf_samples_per_vol
+
+        # prepare loader
+        self.loader = PMITorchioDataLoader(self.cfg)
+
+    def test_get_subject(self):
+        data_loader = self.loader.get_torch_data_loader(batch_size=2)
+        for mb in data_loader:
+            self.assertIn('input', mb)
+            self.assertIn('gt', mb)
+            self.assertIn('probmap', mb)
+
+    def test_map_to_master(self):
+        d = DataLabel.from_xlsx('./sample_data/sample_binaryclass_gt.xlsx')
+        d.set_target_column("Class")
+        new_list = ['MRI_01', 'MRI_02', 'MRI_04']
+
+        cfg = copy.deepcopy(self.cfg)
+        cfg.master_data_key = 'input'
+        cfg.id_list = new_list
+        cfg.input_data['label'] = d
+        loader = PMITorchioDataLoader(cfg)
+
+        for i, v in enumerate(loader._load_data_set_training()):
+            self.assertIn(v['uid'], new_list)
+            if i == 3:
+                break
+
+        for i, v in enumerate(loader._load_data_set_inference()):
+            self.assertIn(v['uid'], new_list)
+            if i == 3:
+                break

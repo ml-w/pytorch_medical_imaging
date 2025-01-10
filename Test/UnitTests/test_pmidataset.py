@@ -6,7 +6,7 @@ import torch
 import numpy as np
 import torchio as tio
 from mnts.mnts_logger import MNTSLogger
-from pytorch_med_imaging.med_img_dataset import *
+from pytorch_med_imaging.pmi_data import *
 
 
 class Test_PMIData(unittest.TestCase):
@@ -79,7 +79,7 @@ class Test_ImageDataSet(Test_PMIData):
         super(Test_ImageDataSet, self).__init__(*args, **kwargs)
 
     def setUp(self):
-        from pytorch_med_imaging.med_img_dataset import ImageDataSet
+        from pytorch_med_imaging.pmi_data import ImageDataSet
         super(Test_ImageDataSet, self).setUp()
         self.data_path = Path("./sample_data/img")
         self.seg_path = Path("./sample_data/seg")
@@ -123,7 +123,7 @@ class Test_DataLabel(Test_PMIData):
         super(Test_DataLabel, self).__init__(*args, **kwargs)
 
     def setUp(self):
-        from pytorch_med_imaging.med_img_dataset import DataLabel
+        from pytorch_med_imaging.pmi_data import DataLabel
         super(Test_DataLabel, self).setUp()
         self.data_path = Path("./sample_data/sample_class_gt.csv")
         self.data = DataLabel(str(self.data_path))
@@ -156,7 +156,7 @@ class Test_DataLabelConcat(Test_PMIData):
 
     def setUp(self):
         super(Test_DataLabelConcat, self).setUp()
-        from pytorch_med_imaging.med_img_dataset import DataLabelConcat
+        from pytorch_med_imaging.pmi_data import DataLabelConcat
         self.data = DataLabelConcat("./sample_data/sample_concat_df.xlsx")
         pass
 
@@ -166,7 +166,7 @@ class Test_ImageDataSetMC(Test_PMIData):
         self._expected_class = torch.Tensor
 
     def setUp(self):
-        from pytorch_med_imaging.med_img_dataset import ImageDataMultiChannel
+        from pytorch_med_imaging.pmi_data import ImageDataMultiChannel
         super(Test_ImageDataSetMC, self).setUp()
         self.data_path = Path("./sample_data/img")
         self.seg_path = Path("./sample_data/seg")
