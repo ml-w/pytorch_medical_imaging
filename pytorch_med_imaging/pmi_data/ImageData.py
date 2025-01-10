@@ -63,10 +63,17 @@ NIFTI_DICT = {
 }
 
 class ImageDataSet(PMIDataBase):
-    r"""
-    ImageDataSet class that reads and load nifty in a specified directory.
+    r"""ImageDataSet class that reads and load nifty in a specified directory.
 
-    .. note::
+    This class loads .nii.gz files from a specified directory and assign ID to each of the loaded files
+    based on a regex pattern. This class also loads header information, such as origin, direction of the
+    image files, which can be used to write the image with the same header information but different
+    data.
+
+    Iterating this class returns either a torchio.ScalarImage or torchio.LabelImage image depending on
+    the `dtype` argument.
+
+    .. hint::
         The ID globber is expected to glob unique IDs from the input file names. If it's not unique
         and `raise_id_duplicate` is `False`, the first of the duplicat is kept.
 
@@ -358,7 +365,7 @@ class ImageDataSet(PMIDataBase):
 
             if isinstance(target_idlist, str) and not target_idlist == "":
                 target_idlist = target_idlist.strip('[]')
-                if target_idlist.find(',') >= 0 is not None:
+                if target_idlist.find(',') >= 0 and target_idlist is not None:
                     self._logger.info(f"Detect input as a list string, splitting at the commas.")
                     self._idlist = target_idlist.split(',')
                 elif target_idlist.endswith(('.txt', '.ini')):
