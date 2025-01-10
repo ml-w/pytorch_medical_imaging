@@ -13,16 +13,28 @@ class PMIDataBase(Dataset):
 
     The key of this class is that it restrict images to have a standard
 
-    Override Guide:
-       To implement your own data class, you would need to implement a few abstract methods including:
+    Override Guide
+    ^^^^^^^^^^^^^^
 
-       1. :meth:`__getitem__`
-       2. :attr:`data` [Property]
-       3. :attr:`size` [Property]
-       4. :attr:`dtype` [Property]
+    Implement Abstract Methods:
+        To implement your own data class, you would need to implement a few abstract methods including:
+
+        1. :meth:`__getitem__`
+        2. :attr:`data` [Property]
+        3. :attr:`size` [Property]
+        4. :attr:`dtype` [Property]
+
+        These are required by the torch's default dataloader and ensure the data can be iterated by the
+        official dataloader.
+
+    Definitions of Attributes:
+        By default, the data is held in :attr:`_data` which should only be accessed by :attr:`data`.
+        The data should be stored as `pd.Series`, which index are the globbed unique IDs, and the name
+        of the series is the subject data key (as in `torchio.Subject`).
+
 
     Attributes:
-       _data (pd.DataFrame):
+       _data (pd.DataFrame or pd.Series):
            This should be an ID mapper, which maps the UID to integer of individual data.
            It is structured as a pandas DataFrame or Series where the index represents unique
            identifiers for each data entry and the values represent the corresponding data.
