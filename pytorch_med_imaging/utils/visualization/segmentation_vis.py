@@ -5,7 +5,7 @@ import torchio as tio
 import cv2
 import numpy as np
 import os
-from pytorch_med_imaging.med_img_dataset import ImageDataSet
+from pytorch_med_imaging.pmi_data import ImageDataSet
 from mnts.mnts_logger import MNTSLogger
 from typing import Optional, Iterable, Callable, Type, List, Dict, Tuple, Any
 
@@ -313,7 +313,7 @@ def contour_grid_by_dir(im_dir: str,
             If the `im_dir` or `seg_dir` does not contain matching image IDs.
 
     Note:
-        The function depends on the ImageDataSet class from the pytorch_med_imaging.med_img_dataset module, which must
+        The function depends on the ImageDataSet class from the pytorch_med_imaging.pmi_data module, which must
         be compatible with the data structure of the directories provided. The function assumes that the ImageDataSet
         can handle verbose output and dtype specifications.
 
@@ -321,7 +321,7 @@ def contour_grid_by_dir(im_dir: str,
         >>> contour_grid_by_dir('path/to/images', 'path/to/segmentations', 'path/to/output',
         >>>                     gt_dir='path/to/ground_truths', write_png=True)
     """
-    from pytorch_med_imaging.med_img_dataset import ImageDataSet
+    from pytorch_med_imaging.pmi_data import ImageDataSet
 
     if not os.path.isdir(output_dir):
         os.makedirs(output_dir, exist_ok=True)

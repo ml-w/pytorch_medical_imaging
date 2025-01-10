@@ -21,6 +21,8 @@ class InferencerBase(object):
     Typically, you should see the flow to be like this:
 
     .. mermaid::
+        flowchart TD
+            Solver --> |Morph into|Inf[Inferencer]
 
 
     Attributes:

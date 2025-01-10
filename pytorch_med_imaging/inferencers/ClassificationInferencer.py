@@ -18,7 +18,7 @@ from ..solvers import ClassificationSolverCFG
 from ..integration import NP_Plotter, TB_plotter
 from ..utils.visualization.segmentation_vis import draw_overlay_heatmap
 from ..pmi_data_loader.pmi_dataloader_base import PMIDataLoaderBase
-from ..med_img_dataset import DataLabel
+from ..pmi_data import DataLabel
 from ..networks.GradCAM import *
 
 __all__ = ['ClassificationInferencer']

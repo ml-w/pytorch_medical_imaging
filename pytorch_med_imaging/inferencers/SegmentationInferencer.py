@@ -2,7 +2,7 @@ import os
 
 import pandas as pd
 
-from ..med_img_dataset import ImageDataSet
+from ..pmi_data import ImageDataSet
 from ..pmi_data_loader.pmi_dataloader_base import PMIDataLoaderBase
 from ..pmi_data_loader import PMIImageDataLoader
 from ..solvers import SegmentationSolver, SegmentationSolverCFG

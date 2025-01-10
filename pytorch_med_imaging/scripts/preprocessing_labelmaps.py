@@ -1,5 +1,5 @@
 from ..utils.preprocessing_labelmaps import remap_label as rl, label_statistics
-from ..med_img_dataset import ImageDataSet
+from ..pmi_data import ImageDataSet
 from .console_entry import PMI_ConsoleEntry
 import os
 import ast

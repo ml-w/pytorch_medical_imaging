@@ -2,7 +2,7 @@ import numpy as np
 import os
 import pandas as pd
 
-from pytorch_med_imaging.med_img_dataset import ImageDataSet
+from pytorch_med_imaging.pmi_data import ImageDataSet
 from mnts.mnts_logger import MNTSLogger
 from tqdm import tqdm
 import argparse

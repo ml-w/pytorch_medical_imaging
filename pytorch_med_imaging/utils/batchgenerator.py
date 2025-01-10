@@ -78,7 +78,7 @@ def GenerateTestBatch(ids                 : Iterable,
             If False, raise error if target location already has files. Default to False.
 
     Examples:
-    >>> from pytorch_med_imaging.med_img_dataset.ImageData import ImageDataSet
+    >>> from pytorch_med_imaging.pmi_data.ImageData import ImageDataSet
     >>> from pytorch_med_imaging.utils.batchgenerator import GenerateTestBatch
     >>>
     >>> regex = r"^[0-9]+"
@@ -244,7 +244,7 @@ def check_batches_files(dir, globber=None):
 
 if __name__ == '__main__':
     import pandas as pd
-    from pytorch_med_imaging.med_img_dataset import ImageDataSet
+    from pytorch_med_imaging.pmi_data import ImageDataSet
     from pathlib import Path
 
     # table_dir = Path('../../NPC_Segmentation/99.Testing/Screening_Segmentation/v1_seg-datasheet.csv')

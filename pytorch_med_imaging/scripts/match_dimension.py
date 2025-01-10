@@ -1,4 +1,4 @@
-from ..med_img_dataset import ImageDataSet
+from ..pmi_data import ImageDataSet
 from mnts.mnts_logger import MNTSLogger
 import sys
 import configparser

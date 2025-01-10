@@ -156,7 +156,7 @@ class UNet_p(nn.Module):
 
 
     Examples:
-        >>> from med_img_dataset import ImageDataSet
+        >>> from pmi_data import ImageDataSet
         >>> from networks import UNet_p
         >>>
         >>> img = ImageDataSet('.', verbose=True)

@@ -4,7 +4,7 @@ import torch
 import numpy as np
 
 from torch.utils.data import DataLoader
-from ..med_img_dataset import ImageDataSet
+from ..pmi_data import ImageDataSet
 from tqdm import tqdm
 import pandas as pd
 import SimpleITK as sitk
