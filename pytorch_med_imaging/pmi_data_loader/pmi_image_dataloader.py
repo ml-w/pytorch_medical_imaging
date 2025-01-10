@@ -1,8 +1,8 @@
 import os
 import torchio
 from .pmi_dataloader_base import PMIDataLoaderBase, PMIDataLoaderBaseCFG
-from .. import med_img_dataset
-from ..med_img_dataset import ImageDataSet
+from .. import pmi_data
+from ..pmi_data import ImageDataSet
 from .lambda_tio_adaptor import CallbackQueue
 from .computations.queue_callback import *
 from typing import *
@@ -179,8 +179,14 @@ class PMIImageDataLoader(PMIDataLoaderBase):
             default_queue_kwargs['num_workers'] = os.cpu_count()
         self.tio_queue_kwargs = default_queue_kwargs
 
+        self._configure_sampler()
+        self.queue_args = [self.tio_queue_kwargs.pop(k)
+                           for k in ['max_length', 'samples_per_volume']] \
+                          + [self.sampler_instance] # follows torchio's args arrangments
+
+    def _configure_sampler(self):
         # If samplers are specified create tio queues using these samplers. This is required for patch sampling
-        if (self.sampler == 'weighted') :
+        if (self.sampler == 'weighted'):
             if self.probmap_dir is None:
                 msg = f"Weighted samplers requires probability map to sample patches. Specify 'probmap_dir' in cfg. "
                 raise KeyError(msg)
@@ -212,16 +218,13 @@ class PMIImageDataLoader(PMIDataLoaderBase):
         else:
             # If sampler is not specified, assume the whole image is sampled
             self.sampler_instance = None
-        self.queue_args = [self.tio_queue_kwargs.pop(k)
-                           for k in ['max_length', 'samples_per_volume']] \
-                          + [self.sampler_instance] # follows torchio's args arrangments
 
     def _read_image(self, root_dir, **kwargs):
         """Private method for convenience.
 
         Args:
-            root_dir (str): See :class:`med_img_dataset.ImageDataSet`
-            **kwargs: See :class:`med_img_dataset.ImageDataSet`
+            root_dir (str): See :class:`pmi_data.ImageDataSet`
+            **kwargs: See :class:`pmi_data.ImageDataSet`
 
         Raises:
             AttributeError: If there are no corresponding items in section `[LoaderParams]`.
@@ -230,13 +233,13 @@ class PMIImageDataLoader(PMIDataLoaderBase):
             (ImageDataSet or ImageDataSetAugment): Loaded image data set.
 
         See Also:
-            :class:`med_img_dataset.ImageDataSet`
+            :class:`pmi_data.ImageDataSet`
         """
         if root_dir is None or root_dir == '':
             self._logger.warning("Received `None` for root_dir arguement.")
             return None
 
-        self._image_class = med_img_dataset.ImageDataSet
+        self._image_class = pmi_data.ImageDataSet
         img_data =  self._image_class(root_dir, debugmode=self.debug_mode, filtermode='both',
                                       regex=self.id_globber, idlist=self.id_list, id_globber=self.id_globber, **kwargs)
         return img_data
@@ -321,7 +324,7 @@ class PMIImageDataLoader(PMIDataLoaderBase):
                 }
         data['orientation'] = [i.orientation for i in img_out]
         for k in ['input', 'gt', 'mask', 'probmap']:
-            if isinstance(data[k], med_img_dataset.ImageDataSet):
+            if isinstance(data[k], pmi_data.ImageDataSet):
                 data[f'{k}-shape'] = data[k].get_raw_data_shape()
         return data
 

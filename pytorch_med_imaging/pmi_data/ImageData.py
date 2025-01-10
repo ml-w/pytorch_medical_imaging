@@ -125,7 +125,7 @@ class ImageDataSet(PMIDataBase):
 
         1. Load all nii images in a folder:
 
-            >>> from pytorch_med_imaging.med_img_dataset import ImageDataSet
+            >>> from pytorch_med_imaging.pmi_data import ImageDataSet
             >>> imgset = ImageDataSet('/some/dir/')
 
         2. Load all nii images, filtered by string 'T2W' in string:
@@ -740,7 +740,7 @@ class ImageDataSet(PMIDataBase):
         orientation to LPS regardless of their original orientation. This typically works well, but
         issues may arise if DICOMs are loaded directly rather than Nifti files.
 
-        .. notes::
+        .. note::
             The method expects tensors to maintain LPS orientation. If tensors are processed with external
             packages like `torchio.ToCanonical` or `nib` which may alter orientation, they should be
             adjusted back to LPS to ensure compatibility with this method. This function is designed to

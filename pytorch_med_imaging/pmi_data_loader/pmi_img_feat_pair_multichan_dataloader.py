@@ -1,5 +1,5 @@
 from .pmi_img_feat_pair_dataloader import PMIImageFeaturePairLoader
-from .. import med_img_dataset
+from .. import pmi_data
 
 __all__ = ['PMIImageMCFeaturePairLoader']
 
@@ -46,8 +46,8 @@ class PMIImageMCFeaturePairLoader(PMIImageFeaturePairLoader):
         Private method for convenience.
 
         Args:
-            root_dir (str): See :class:`med_img_dataset.ImageDataSet`
-            **kwargs: See :class:`med_img_dataset.ImageDataSet`
+            root_dir (str): See :class:`pmi_data.ImageDataSet`
+            **kwargs: See :class:`pmi_data.ImageDataSet`
 
         Raises:
             AttributeError: If there are no corresponding items in section `[LoaderParams]`.
@@ -56,10 +56,10 @@ class PMIImageMCFeaturePairLoader(PMIImageFeaturePairLoader):
             (ImageDataSet or ImageDataSetAugment): Loaded image data set.
 
         See Also:
-            :class:`med_img_dataset.ImageDataSet`
+            :class:`pmi_data.ImageDataSet`
         """
         # default reader func
-        self._image_class = med_img_dataset.ImageDataMultiChannel
+        self._image_class = pmi_data.ImageDataMultiChannel
 
         concat_by_axis = self.get_from_loader_params_with_eval('concat_by_axis', -1)
         return self._image_class(root_dir, channel_subdirs=self._channel_subdirs, verbose=self._verbose,

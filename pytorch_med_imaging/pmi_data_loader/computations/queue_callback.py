@@ -9,7 +9,7 @@ supplied to the callback function by specifying LoaderParam.patch_sampling_callb
 """
 import torch
 import numpy as np
-from ...med_img_dataset.computations import lndp, lbp
+from ...pmi_data.computations import lndp, lbp
 from typing import Sequence, Union, Optional
 from torchio import Subject
 from torchio.constants import TYPE, DATA, LOCATION

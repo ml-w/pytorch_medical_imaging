@@ -1,5 +1,5 @@
 from .pmi_image_dataloader import PMIImageDataLoader, PMIImageDataLoaderCFG
-from ..med_img_dataset import ImageDataSet, ImageDataMultiChannel
+from ..pmi_data import ImageDataSet, ImageDataMultiChannel
 import torchio as tio
 import torch
 from typing  import *

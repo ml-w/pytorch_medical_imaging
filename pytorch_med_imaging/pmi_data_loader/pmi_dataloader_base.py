@@ -12,7 +12,7 @@ from torch.utils.data import DataLoader
 import torchio as tio
 from ..pmi_base_cfg import PMIBaseCFG
 from .augmenter_factory import create_transform_compose
-from ..med_img_dataset.PMIDataBase import PMIDataBase
+from ..pmi_data.PMIDataBase import PMIDataBase
 from mnts.mnts_logger import MNTSLogger
 from typing import *
 
@@ -100,7 +100,7 @@ class PMIDataLoaderBase(object):
     the same except for creating the augmentation filters. If `run_mode` is not `train`, the agumentation will ignore
     all non-normalizing filters.
 
-    This class generally uses data structures defined in `pmi.med_img_dataset`, which are iteraters that returns
+    This class generally uses data structures defined in `pmi.pmi_data`, which are iteraters that returns
     `torchio.Subject`. Once all subjects are collected, they are packed into `torchio.SubjectsDataset` using the
     function `_pack_data_into_subjects`, which is then passed to :func:`get_torch_data_loader`.
 

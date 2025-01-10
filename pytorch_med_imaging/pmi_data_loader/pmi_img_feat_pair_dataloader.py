@@ -1,7 +1,7 @@
 import unittest
 
 from .pmi_image_dataloader import PMIImageDataLoader, PMIImageDataLoaderCFG
-from ..med_img_dataset import DataLabel, DataLabelConcat
+from ..pmi_data import DataLabel, DataLabelConcat
 
 from typing import Optional
 import torchio as tio
