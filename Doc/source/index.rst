@@ -24,11 +24,11 @@ PyTorch Meidcal Imaging's documentation
    :maxdepth: 2
    :caption: API reference
 
-   MedImgDataset.rst
-   controller.rst
+   PMIData/PMIData.rst
    PMIDataLoader/PMIDataLoader.rst
    Solvers/Solvers.rst
    Inferencers/Inferencers.rst
+   controller.rst
 
 
 .. toctree::

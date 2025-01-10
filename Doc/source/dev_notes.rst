@@ -4,6 +4,8 @@ Developer's notes
 
 *(Last Update: 8th Jan, 2025)*
 
+.. py:currentmodule:: pytorch_med_imaging
+
 .. contents:: Table of Contents
 
 Current state of the project
@@ -19,8 +21,8 @@ Summary of weaknesses
 Difficulty for adding new networks
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-Data loading mechanisms entangles :class:`pytorch_med_imaging.pmi_data_loader.pmi_data_loader_base` and
-:class:`pytorch_med_imaging.pmi_data_base` classes. This makes it almost impossible to reuse the classes without
+Data loading mechanisms entangles :class:`pmi_data_loader.PMIDataLoaderBase` and
+:class:`med_img_dataset.PMIDataBase.PMIDataBase` classes. This makes it almost impossible to reuse the classes without
 implementing a child class that overrides the defined classes, unless the network network's I/O fits the default design
 in the package. This basically means one have to implement at least 3 components and define their CFG structure when
 a new network comes up:
@@ -52,6 +54,23 @@ That's when I though, maybe I need to write some tutorials.
     \textit{When I write this piece of code, only me and God knows what it does.} \\
     \textit{Now, only God knows.        } \\ \\
     \text{- Random Internet Meme}
+
+Identify what needs to be reusable
+----------------------------------
+
+The current implementation is not all bad. Decent efforts have been put into important espects of model training.
+
+- Logging system attached to `guildai` and `Neptune`
+- Hyperparameter settings on yaml level using `guildai` APIs
+- Text-based comparison matrix with version control
+- Attached to `torchio` for data classes
+
+What's limiting the reusability
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+1. :func:`solvers.SolverBase.solve_epoch` - Slightly different unpacking will require overriding the class
+2. :func:`solvers.SolverBase.step` - Is now fixed.
+
 
 Towards the future
 ------------------
