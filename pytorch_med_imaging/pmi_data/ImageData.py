@@ -81,7 +81,7 @@ class ImageDataSet(PMIDataBase):
         root_dir (str):
             Root dir of image loading.
         data_source_path (list of str):
-            Directories of the input image relative to the root dir
+            Directories of the input image relative to the root dir.
         data (torch.tensor or list of torch.tensor):
             Actual data to load from. It will be one stack of images if image dimensions are compatible or if
             specified to load data slices by slices.
@@ -94,16 +94,16 @@ class ImageDataSet(PMIDataBase):
         readmode (str, Optional):
             Decide image directories globbing method, whether to look into subdirectories or not.
             Possible values:
-                * `normal` - [Default] typical loading behavior, reading all nii/nii.gz files in the directory.
-                * `recursive` - search all subdirectories excluding softlinks, use with causion.
-                * `explicit` - specifying directories of the files to load.
+            * `normal` - [Default] typical loading behavior, reading all nii/nii.gz files in the directory.
+            * `recursive` - search all subdirectories excluding softlinks, use with causion.
+            * `explicit` - specifying directories of the files to load.
         filtermode (str, Optional):
             After grabbing file directories, they are filtered by either ID, regex or both. Corresponding att needed.
             Usage:
-                * `idlist`: Extract images that is on a specified list, globbed with `id_globber`. Requires att `idlist`.
-                * `regex`: Extract images that matches one regex sepcified with att `regex`.
-                * `both': Use both `idlist` and `regex` as filtering method. Requires both att specified.
-                * `None`: [Default] No filter, read all .nii.gz images in the directory.
+            * `idlist`: Extract images that is on a specified list, globbed with `id_globber`. Requires att `idlist`.
+            * `regex`: Extract images that matches one regex sepcified with att `regex`.
+            * `both': Use both `idlist` and `regex` as filtering method. Requires both att specified.
+            * `None`: [Default] No filter, read all .nii.gz images in the directory.
         idlist (str or list, Optional):
             If its `str`, it should be directory to a file containing IDs, one in each line, otherwise,
             an explicit list of strings. Need if filtermode is 'idlist'. Globber of id can be specified with attribute
@@ -480,7 +480,7 @@ class ImageDataSet(PMIDataBase):
                 The ID of the desired data.
             globber (str, Optional):
                 Regex pattern to glob ID from the loaded files. If `None`, the stored attribute
-                :attribute:`_id_globber` will be used.
+                :attr:`_id_globber` will be used.
             get_all (bool, Optional):
                 If ``True``, get all the data with the same IDs if muiltiple instances were
                 identified by the same ID. Default to ``False``.
