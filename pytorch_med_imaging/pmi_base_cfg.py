@@ -41,6 +41,7 @@ class PMIBaseCFG:
             if key in cls._special_attr or isinstance(value, property):
                 continue
 
+            # Copy all attributes except special methods
             if key.find('__') != 0:
                 try:
                     setattr(self, key, copy.deepcopy(value, {}))
@@ -51,6 +52,9 @@ class PMIBaseCFG:
         # replace instance attributes
         if len(kwargs):
             for key, value in kwargs.items():
+                # check if the value was defined in the class
+                if not hasattr(cls, key):
+                    warnings.warn(f"Trying to set non-standard attribute {key} to {cls}")
                 setattr(self, key, value)
 
     def __str__(self):
