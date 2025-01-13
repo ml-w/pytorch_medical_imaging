@@ -319,7 +319,7 @@ class ImageDataSet(PMIDataBase):
         #=============
         # Reading data
         #-------------
-        for k, f in tqdm(data_source_path.iterrows(), disable=not self.verbose, desc="Load Images"):
+        for i, (k, f) in enumerate(tqdm(data_source_path.iterrows(), disable=not self.verbose, desc="Load Images")):
             f = f[0]
             if self._debug and i >= 10:
                 break
