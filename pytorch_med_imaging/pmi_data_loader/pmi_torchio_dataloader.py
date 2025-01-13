@@ -95,7 +95,7 @@ class PMITorchioDataLoaderCFG(PMIImageDataLoaderCFG):
     """
     input_data: Dict[str, Union[PMIDataBase, Iterable[Any]]] = None
     input_dtypes: Dict[str, Union[str, Type]] = {}
-    master_data: str = None
+    master_data_key: str = None
 
 
 class PMITorchioDataLoader(PMIImageDataLoader):
@@ -108,6 +108,8 @@ class PMITorchioDataLoader(PMIImageDataLoader):
             raise KeyError("Keys of input dtypes are not in input.")
 
     def _prepare_data(self) -> dict:
+        r"""This class skip some checks and allows arbitrary data for loading in the minibatch. Furthermore, an
+        additional mapping that ensures the """
         # Load data if the input data are Path
         data = {}
         ids = {}
@@ -118,7 +120,7 @@ class PMITorchioDataLoader(PMIImageDataLoader):
             elif isinstance(v, (str, Path)):
                 v = Path(v)
                 if not v.is_dir():
-                    raise TypeError("String is specified as input but does not lead to image directory.")
+                    raise TypeError(f"String {str(v)} is specified as input but does not lead to image directory.")
                 # If directory, treat it as image path
                 _type = self.input_dtypes.get(k, 'float')
                 _data = self._read_image(v, dtype=_type)

@@ -393,6 +393,7 @@ class PMIDataLoaderBase(object):
         # check if the IDs are aligned
         ids = {k: _d.get_unique_IDs() for k, _d in data_dict.items() if isinstance(_d, PMIDataBase)}
         if not all([ids[a] == ids[b] for a, b in itertools.combinations(ids.keys(), 2)]):
+            # Build a DF for better viewing of the differences
             uni = set.union(*list(ids.values()))
             _table = pd.concat([pd.Series([index in v for index in uni], index=uni, name=k) for k, v in ids.items()], axis=1)
             _table.sort_index(inplace=True)
@@ -403,7 +404,17 @@ class PMIDataLoaderBase(object):
         elif len(ids) == 0:
             raise IndexError("Cannot glob any IDs using the provided globber.")
 
-        # map IDs to the same order,
+        # Map IDs to the same order
+        first_k = list(ids.keys())[0]
+        for k, v in data_exclude_none.items():
+            if k == first_k:
+                continue
+            try:
+                v.remap_to_master_data(data_exclude_none[first_k])
+            except:
+                self._logger(f"Failed to remap: {k}")
+        data_exclude_none['uid'] = list(ids[first_k])
+
 
         subjects = [tio.Subject(**{k: v for k, v in zip(data_exclude_none.keys(), row)})
                     for row in zip(*data_exclude_none.values())]

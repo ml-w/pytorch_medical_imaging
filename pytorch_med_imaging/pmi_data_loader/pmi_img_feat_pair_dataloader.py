@@ -81,7 +81,7 @@ class PMIImageFeaturePairLoader(PMIImageDataLoader):
             except IndexError:
                 dtype = None
             gt_dat.set_target_column(self.target_column, dtype=dtype)
-        gt_dat.map_to_data(data['input'])
+        gt_dat.remap_to_master_data(data['input'])
 
         # Load extra column and concat if extra column options were found
         if not self.net_in_column is None:
@@ -91,7 +91,7 @@ class PMIImageFeaturePairLoader(PMIImageDataLoader):
             else:
                 extra_dat = DataLabel.from_csv(self.target_dir)
             extra_dat.set_target_column(self.net_in_colname, dtype=self.net_in_dtype)
-            extra_dat.map_to_data(img_out)
+            extra_dat.remap_to_master_data(img_out)
             self._logger.debug(f"extradat: {extra_dat.size()}")
             self._logger.debug(f"out: {img_out}")
         else:
