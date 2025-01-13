@@ -219,8 +219,8 @@ This package comes with a batch generator which creates K-fold cross validation 
 create a script as follow:
 
 ```python
-import pandas 
-from pytorch_med_imaging.med_img_dataset import ImageDataSet
+import pandas
+from pytorch_med_imaging.pmi_data import ImageDataSet
 from pytorch_med_imaging.utils.batchgenerator import GenerateTestBatch
 
 # Define data directories
@@ -234,20 +234,20 @@ id_globber = r"^[0-9]"
 images = ImageDataSet(str(data_dir), verbose=True, id_globber=id_globber)
 im_ids = images.get_unique_IDs(id_globber)
 
- # Check if all images are available
- for i in table.index:
-     if i not in im_ids:
-         print(f"Dropping: {i}")
-         table.drop(i, axis=0, inplace=True)
- 
- # Create the batch file        
- GenerateTestBatch(images.get_unique_IDs(),
-                   5,
-                   out_file_dir.__str__(),
-                   # stratification_class=table['Tstage'],
-                   validation=len(images) // 10,
-                   prefix='B'
-                   )
+# Check if all images are available
+for i in table.index:
+    if i not in im_ids:
+        print(f"Dropping: {i}")
+        table.drop(i, axis=0, inplace=True)
+
+# Create the batch file        
+GenerateTestBatch(images.get_unique_IDs(),
+                  5,
+                  out_file_dir.__str__(),
+                  # stratification_class=table['Tstage'],
+                  validation=len(images) // 10,
+                  prefix='B'
+                  )
 ```
 
 This script will generate K + 1 files where K is the number of fold you specify (k = 5 in the script). The files created

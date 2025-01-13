@@ -16,8 +16,9 @@ PyTorch Meidcal Imaging's documentation
 .. toctree::
    :maxdepth: 2
    :caption: Tutorials
+   :glob:
 
-   Tutorial/Quickstart.rst
+   Tutorial/*
 
 
 .. toctree::
