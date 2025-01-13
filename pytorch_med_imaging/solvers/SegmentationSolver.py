@@ -172,6 +172,7 @@ class SegmentationSolver(SolverBase):
         out = self._match_type_with_network(out)
 
         if isinstance(self.loss_function, (nn.BCELoss, nn.BCEWithLogitsLoss)):
+            self._logger.info("Performing Logits on output.")
             out = F.log_softmax(out, dim=1)
             if not g.dim() == out.dim():
                 g = g.squeeze()
