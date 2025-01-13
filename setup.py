@@ -15,18 +15,18 @@ cmdclass = {}
 ext_modules = []
 if use_cython:
     ext_modules += [
-        Extension("pytorch_med_imaging.med_img_dataset.computations._LocalNeighborhoodDifferencePattern",
-                  ["pytorch_med_imaging/med_img_dataset/computations/_LocalNeighborhoodDifferencePattern.pyx"],
+        Extension("pytorch_med_imaging.pmi_data.computations._LocalNeighborhoodDifferencePattern",
+                  ["pytorch_med_imaging/pmi_data/computations/_LocalNeighborhoodDifferencePattern.pyx"],
                   include_dirs=[numpy.get_include()]),
     ]
     ext_modules += [
-        Extension("pytorch_med_imaging.med_img_dataset.computations._interpolation",
-                  ["pytorch_med_imaging/med_img_dataset/computations/_interpolation.pyx"],
+        Extension("pytorch_med_imaging.pmi_data.computations._interpolation",
+                  ["pytorch_med_imaging/pmi_data/computations/_interpolation.pyx"],
                   include_dirs=[numpy.get_include()]),
     ]
     ext_modules += [
-        Extension("pytorch_med_imaging.med_img_dataset.computations._prob_func",
-                  ["pytorch_med_imaging/med_img_dataset/computations/_prob_func.pyx"],
+        Extension("pytorch_med_imaging.pmi_data.computations._prob_func",
+                  ["pytorch_med_imaging/pmi_data/computations/_prob_func.pyx"],
                   include_dirs=[numpy.get_include()]),
     ]
     cmdclass.update({'build_ext': build_ext})
