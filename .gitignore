@@ -2,11 +2,14 @@
 *.c
 *.sh
 *.so
+*egg-info
 Backup
 *.pt
 .idea
 *build
 Configs
 /.SynologyWorkingDirectory/
+*DCM
 Doc/html
 Doc/doctrees
+/pytorch_medical_imaging.egg-info/
