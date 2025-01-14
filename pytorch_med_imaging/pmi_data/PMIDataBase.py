@@ -132,8 +132,10 @@ class PMIDataBase(Dataset):
 
         """
         # Reorder the current dataset based on the target dataset's order
+        original_ids = self.id.copy()
         self._data = self._data.loc[target.data.index.intersection(self._data.index)]
         self._logger.info("Data UIDs successfully remapped to align with target dataset.")
+        self._logger.debug(f"Before: [{','.join(original_ids)}], After: [{','.join(self.id)}]")
 
     def sort_uid(self) -> None:
         r"""Sort the data based on uid.
@@ -157,3 +159,19 @@ class PMIDataBase(Dataset):
         else:
             msg = "Default implementation for pd.Series and pd.DataFrame only."
             raise AttributeError(msg)
+
+    def remap_data_by_ids(self, id_list: Iterable):
+        r"""
+
+
+        Args:
+            id_list (Iterable):
+                This list must be unique
+
+        Returns:
+
+        """
+        if not len(self.data):
+            raise KeyError("There's no data to map")
+        self._logger.debug("Remapping data.")
+        self._data = self._data.loc[id_list]

@@ -3,7 +3,10 @@ import pandas as pd
 import numpy as np
 from typing import Union, List, Any, Iterable, Union
 from pathlib import Path
+
+from mnts.mnts_logger import MNTSLogger
 from .PMIDataBase import PMIDataBase
+import copy
 
 class DataLabel(PMIDataBase):
     """
@@ -188,7 +191,7 @@ class DataLabel(PMIDataBase):
         df = pd.read_csv(fname, **kwargs, index_col=0)
         df.index = df.index.astype('str')
         datalabel = DataLabel(df)
-        print(datalabel)
+        datalabel._logger.debug(f"\n{df.iloc[:10].to_string()}")
         return datalabel
 
     @staticmethod
@@ -231,7 +234,7 @@ class DataLabel(PMIDataBase):
         datalabel = DataLabel(df)
         return datalabel
 
-    def map_to_data(self, target: PMIDataBase) -> int:
+    def remap_to_master_data(self, target: PMIDataBase) -> int:
         r"""Maps target IDs to the original data table and updates the data.
 
         This method retrieves unique IDs from the provided target and attempts to map them
@@ -312,3 +315,31 @@ class DataLabel(PMIDataBase):
 
     def __str__(self):
         return self._data.to_string()
+
+    def __deepcopy__(self, memo):
+        r"""Creates a deep copy of the DataLabel instance.
+
+        This method ensures that all attributes of the DataLabel object are deeply copied,
+        including the original table, data, and other relevant attributes.
+
+        Args:
+            memo (dict): A dictionary used to store already-copied objects to
+                         prevent infinite recursion in case of circular references.
+
+        Returns:
+            DataLabel: A new instance of DataLabel with deeply copied attributes.
+        """
+        cls = self.__class__
+        new_instance = cls.__new__(cls)
+        memo[id(self)] = new_instance
+
+        for k, v in self.__dict__.items():
+            try:
+                if k == '_logger':
+                    setattr(new_instance, '_logger', MNTSLogger[cls.__name__])
+                else:
+                    setattr(new_instance, k, copy.deepcopy(v, memo))
+            except TypeError:
+                self._logger.warning(f"Failed to copy: {k = }, {v = }")
+
+        return new_instance

@@ -325,7 +325,7 @@ class ImageDataSet(PMIDataBase):
                 break
 
             if self.verbose:
-                self._logger.info(f"Reading from {str(f)}")
+                self._logger.info(f"Loading: {str(f)}...")
 
             if not os.path.isfile(f):
                 self._logger.warning("Cannot find file!")
@@ -829,3 +829,13 @@ class ImageDataSet(PMIDataBase):
         self.metadata = self.metadata.loc[self._data.index]
         if self.metadata_table is not None:
             self.metadata_table = self.metadata_table.loc[self._data.index]
+
+    def remap_data_by_ids(self, id_list: Iterable):
+        super().remap_data_by_ids(id_list)
+        try:
+            self.metadata = self.metadata.loc[id_list]
+            if not self.metadata_table is None:
+                self.metadata_table = self.metadata_table.loc[id_list]
+        except Exception as e:
+            self._logger.error("Error when remapping data.")
+            self._logger.exception(e)

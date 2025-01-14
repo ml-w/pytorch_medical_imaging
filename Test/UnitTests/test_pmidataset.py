@@ -69,6 +69,10 @@ class Test_PMIData(unittest.TestCase):
     def test_gettype(self):
         self.data.dtype
 
+    def test_remap_data_by_ids(self):
+        self.data.remap_data_by_ids(['MRI_04', 'MRI_01'])
+        self.assertEqual(self.data.id, ['MRI_04', 'MRI_01'])
+
     @classmethod
     def get_class_name(cls):
         return cls.__class__.__name__
