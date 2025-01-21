@@ -21,6 +21,7 @@ class InferencerBase(object):
     Typically, you should see the flow to be like this:
 
     .. mermaid::
+
         flowchart TD
             Solver --> |Morph into|Inf[Inferencer]
 
@@ -68,6 +69,7 @@ class InferencerBase(object):
         self._logger        = MNTSLogger[self.__class__.__name__]
         self._load_config(cfg)   # Load config from ``cls_cfg``
         self._plotter = None
+        self.plotting = False
 
         self._logger.info("Inferencer was configured with options: {}".format(str(cfg)))
 
