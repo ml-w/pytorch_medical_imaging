@@ -89,6 +89,7 @@ class PMIControllerCFG(PMIBaseCFG):
             Defines the type of plotter to be used. Defaults to `None`.
 
     .. note::
+
         * Don't confuse the `id_list` in this CFG with that in :class:`SolverBase`, the later is more flexible and can
           accept various specification formats.
         * The solver is used for both training and inference. The attribute :attr:`run_mode` determine which mode it
@@ -97,6 +98,7 @@ class PMIControllerCFG(PMIBaseCFG):
           the code will automatically recognize these two variable and use thme instead of the one in the solver_cfg.
 
     .. tips::
+
         If you would like to use a different data loader CFG in training and inference mode, define the private tag
         `_data_loader_cfg` and `_data_loader_inf_cfg` instead of `data_loader_cfg`. This would the property to return
         a data_loader_cfg based on the runtime :attr:`run_mode`.
@@ -134,7 +136,6 @@ class PMIControllerCFG(PMIBaseCFG):
 
     # Plotting related
     plotting         : Optional[bool] = False
-    plotter          : Optional[Any]  = None
     plotter_type     : Optional[str]  = None
     plotter_init_meta: Optional[dict] = {}
     neptune_id       : Optional[str]  = None
@@ -179,12 +180,14 @@ class PMIControllerCFG(PMIBaseCFG):
 
 class PMIController(object):
     r"""The controller to initiate training or inference. Based on the input cfg, this class will create a solver or
-    an inferencer, and also the dataloaders.
+    an inferencer, and also the dataloaders. The main role of the controller is to centralize the I/O that is not
+    related to the network training/inference, such as configuring dataloader...etc.
     """
     def __init__(self, cfg):
         # if global logger is already created, its configurations are not controlled by this controller
         if isinstance(MNTSLogger.global_logger, MNTSLogger):
             self._logger = MNTSLogger[self.__class__.__name__]
+            self._logger.info(f"Global logger already created: {MNTSLogger.global_logger}...")
 
         # Load configs
         self._load_config(cfg)
@@ -217,6 +220,7 @@ class PMIController(object):
 
             self._logger = MNTSLogger(log_dir, logger_name='pmi_controller', keep_file=self.keep_log,
                                       verbose=self.verbose, log_level='debug')
+
 
         self._required_attributes_train = [
             'cp_save_dir'
@@ -306,6 +310,7 @@ class PMIController(object):
             instances were initialized. The flags can be specified when calling ``guild run`` like this
 
             .. code-block:: bash
+
                 guild run solver_cfg.batch_size=10 controller_cfg.fold_code=['B00','B01','B02']
 
         .. important::
@@ -682,3 +687,10 @@ class PMIController(object):
             self._logger.exception(e)
             raise e
             self._plotter = None
+
+    @property
+    def plotter(self):
+        if self._plotter is None:
+            self._logger.error("No plotter was created.")
+        else:
+            return self._plotter
