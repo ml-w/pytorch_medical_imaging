@@ -57,6 +57,7 @@ PyTorch Meidcal Imaging's documentation
    :caption: Others
 
    dev_notes.rst
+   loggers.rst
 
 Indices and tables
 ==================

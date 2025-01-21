@@ -117,3 +117,22 @@ def patched_parse(self):
     self._unpatched_parse()
 GoogleDocstring._unpatched_parse = GoogleDocstring._parse
 GoogleDocstring._parse = patched_parse
+
+# -- Custom directives ----------------------
+
+from docutils.parsers.rst import Directive
+from docutils import nodes
+
+class HintDirective(Directive):
+    has_content = True
+
+    def run(self):
+        self.assert_has_content()
+        text = '\n'.join(self.content)
+        node = nodes.admonition(text, classes=["hint"])
+        node += nodes.title(text="Tips")
+        self.state.nested_parse(self.content, self.content_offset, node)
+        return [node]
+
+def setup(app):
+    app.add_directive("tips", HintDirective)
