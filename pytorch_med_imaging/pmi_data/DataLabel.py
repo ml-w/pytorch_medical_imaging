@@ -28,6 +28,10 @@ class DataLabel(PMIDataBase):
     Args:
         data_table (Union[str, Path, pd.DataFrame]):
             Path to the data file or a DataFrame containing the data.
+        target_column (Union[str, Iterable[str]], Optional):
+            If specified, call :meth:`set_target_column` after instance is created.
+        dtype (Any):
+            If specified with `target_column`, supply as kwargs to :meth:`set_target_column`
         **kwargs:
             Additional arguments passed to pandas read functions.
 
@@ -59,6 +63,11 @@ class DataLabel(PMIDataBase):
         self._original_table: pd.DataFrame = data_table.copy()
         self._data          : pd.DataFrame = data_table.copy()  # Note that in base class this is pd.Series
         self._target_column : str          = None
+
+        if (_target_column := kwargs.get('target_column', None)) is not None:
+            _dtype = kwargs.get('dtype', None)
+            self._target_column = _target_column
+            self.set_target_column(_target_column, dtype=_dtype)
 
     def set_computed_column(self, func, name='computed') -> int:
         r"""Set a column computed from other columns of the original data table.
@@ -140,15 +149,15 @@ class DataLabel(PMIDataBase):
                         self._target_column.append(t)
         elif isinstance(target, (list, tuple)):
             if not all(t in self._original_table.columns for t in target):
-                msg = ("Cannot found specified target column {} in data table! "
-                       "Available columns are {}").format(t, self._data.columns)
+                msg = ("Cannot found specified target column '{}' in data table! "
+                       "Available columns are {}").format(target, self._data.columns)
                 self._logger.error(msg)
                 raise KeyError(msg)
             self._target_column = list(target)
         else:
             if not target in self._original_table.columns:
-                msg = ("Cannot found specified target column {} in data table! "
-                       "Available columns are {}").format(t, self._data.columns)
+                msg = ("Cannot found specified target column '{}' in data table! "
+                       "Available columns are {}").format(target, self._data.columns)
                 self._logger.error(msg)
                 raise KeyError(msg)
             self._target_column = target
@@ -170,7 +179,7 @@ class DataLabel(PMIDataBase):
         return 0
 
     @staticmethod
-    def from_csv(fname: str, **kwargs):
+    def from_csv(fname: str, pdkwargs: dict = {}, **kwargs):
         r"""Creates a DataLabel instance from a CSV file.
 
         This static method reads data from the specified CSV file, converts the index to a string,
@@ -188,9 +197,9 @@ class DataLabel(PMIDataBase):
             >>> datalabel = DataLabel.from_csv('data.csv')
             >>> print(datalabel)
         """
-        df = pd.read_csv(fname, **kwargs, index_col=0)
+        df = pd.read_csv(fname, **pdkwargs, index_col=0)
         df.index = df.index.astype('str')
-        datalabel = DataLabel(df)
+        datalabel = DataLabel(df, **kwargs)
         datalabel._logger.debug(f"\n{df.iloc[:10].to_string()}")
         return datalabel
 

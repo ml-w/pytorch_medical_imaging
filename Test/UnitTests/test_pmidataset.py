@@ -2,6 +2,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
+import pandas as pd
 import torch
 import numpy as np
 import torchio as tio
@@ -151,6 +152,13 @@ class Test_DataLabel(Test_PMIData):
         self.assertIsInstance(dat, self._expected_class)
         self.assertTupleEqual(tuple(dat.shape), (1, 2))
 
+    def test_create_from_csv(self):
+        dat = DataLabel.from_csv(self.data_path)
+        self.assertIsInstance(dat.data, pd.DataFrame)
+
+    def test_create_from_csv_withkwargs(self):
+        dat = DataLabel.from_csv(self.data_path, target_column='Class')
+        self.assertEqual(['Class'], dat._target_column)
 
 
 class Test_DataLabelConcat(Test_PMIData):
