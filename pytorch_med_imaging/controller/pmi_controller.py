@@ -89,7 +89,6 @@ class PMIControllerCFG(PMIBaseCFG):
             Defines the type of plotter to be used. Defaults to `None`.
 
     .. note::
-
         * Don't confuse the `id_list` in this CFG with that in :class:`SolverBase`, the later is more flexible and can
           accept various specification formats.
         * The solver is used for both training and inference. The attribute :attr:`run_mode` determine which mode it
@@ -97,8 +96,7 @@ class PMIControllerCFG(PMIBaseCFG):
         * If you need different train and inference dataloader, specify `_data_loader_cfg` and `_data_loader_inf_cfg`,
           the code will automatically recognize these two variable and use thme instead of the one in the solver_cfg.
 
-    .. tips::
-
+    .. hint::
         If you would like to use a different data loader CFG in training and inference mode, define the private tag
         `_data_loader_cfg` and `_data_loader_inf_cfg` instead of `data_loader_cfg`. This would the property to return
         a data_loader_cfg based on the runtime :attr:`run_mode`.
