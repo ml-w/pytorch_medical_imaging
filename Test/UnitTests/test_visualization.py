@@ -1,9 +1,11 @@
 import unittest
 import torchio as tio
 import tempfile
+import matplotlib.pyplot as plt
 from pathlib import Path
-from pytorch_med_imaging.utils.visualization import *
+from pytorch_med_imaging.utils.visualization.segmentation_vis import *
 from mnts.mnts_logger import MNTSLogger
+
 
 class Test_visualization(unittest.TestCase):
     def __init__(self, *args, **kwargs):
@@ -26,6 +28,18 @@ class Test_visualization(unittest.TestCase):
     def tearDown(self):
         self.temp_out_dir.cleanup()
         # MNTSLogger.cleanup()
+
+    def test_draw_contour(self):
+        img = self.subject['t1'][tio.DATA].squeeze().permute(2, 0, 1).float().numpy()
+        seg = self.subject['seg'][tio.DATA].squeeze().permute(2, 0, 1).int().numpy()
+
+        cont = draw_contour(img[125].T,
+                            seg[125].T,
+                            contour_alpha=0.2,
+                            contour_thickness=1)
+        plt.imshow(cont)
+        plt.show()
+
 
     def test_draw_grid(self):
         img = self.subject['t1'][tio.DATA].squeeze().permute(2, 0, 1).unsqueeze(1)

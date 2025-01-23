@@ -7,7 +7,7 @@ import numpy as np
 import os
 from pytorch_med_imaging.pmi_data import ImageDataSet
 from mnts.mnts_logger import MNTSLogger
-from typing import Optional, Iterable, Callable, Type, List, Dict, Tuple, Any
+from typing import Optional, Iterable, Callable, Type, List, Dict, Tuple, Any, Union
 
 colormaps = {
     'Default': None,
@@ -158,8 +158,6 @@ def draw_grid(image: torch.Tensor,
                         (5, 20 * c), cv2.FONT_HERSHEY_COMPLEX_SMALL, 1, contour_color)
             pass
 
-
-
     if not ground_truth is None:
         gt_grid = make_grid(ground_truth, nrow=nrow, padding=padding, normalize=False)
         gt_grid_single = (gt_grid > 0).numpy()[0].astype('uint8') * 255
@@ -231,7 +229,7 @@ def draw_overlay_heatmap(baseim, heatmap):
 
     Args:
         baseim (np.array or torch.Tensor):
-            The base image as a float or double array or tensor. This should be a grayscale image.
+            The base image as a float or double array or tensor. This should be a 2D grayscale image.
         heatmap (np.array or torch.Tensor):
             The heatmap array or tensor to overlay. Values should range from 0 to 1 and be of type float or double.
 
@@ -259,7 +257,7 @@ def draw_overlay_heatmap(baseim, heatmap):
         (256, 256, 3)
 
     """
-    # convert input to cv format
+    # Convert input to cv format
     baseim = np.array(baseim)
     heatmap = np.array(heatmap)
 
@@ -549,3 +547,93 @@ def draw_grid_contour(im_grid, seg, crop=None, nrow=None, offset=0, background=0
         logger.error("Fail again to draw contour")
         logger.exception(e)
     return im_grid
+
+
+def draw_contour(img: np.ndarray,
+                 seg: np.ndarray,
+                 crop: Optional[bool] = None,
+                 crop_padding: Optional[int] = 0,
+                 contour_color: Optional[Union[Tuple[int, int, int], Iterable[Tuple[int, int, int]]]] = None,
+                 contour_thickness: Optional[int] = 2,
+                 contour_alpha: Optional[float] = 0.1
+                 ):
+    r"""Draw a coloured contour of a segmentation on a greyscale 2D image using open CV.
+
+    Args:
+        img (np.ndarray):
+            Input 2D grayscale image with dimensions H x W.
+        seg (np.ndarray):
+            Input 2D segmentation mask with dimensions H x W.
+        crop (bool, Optional):
+            Whether to crop the image tightly around the segmentation mask. Default is None.
+        crop_padding (int, Optional):
+            Padding to add around the cropped region. Default is 0.
+        contour_color (Union[Tuple[int, int, int], Iterable[Tuple[int, int, int]]], Optional):
+            Color(s) for the contour lines. Default is None.
+        contour_thickness (int, Optional):
+            Thickness of the contour lines. Default is 2.
+        contour_alpha (float, Optional):
+            Alpha blending value for the contours. Default is 0.5.
+
+    Returns:
+        np.ndarray:
+            The image with contours overlaid.
+    """
+    # Ensure `img` and `seg` are 2D arrays
+    assert img.ndim == 2, "Input image must be a 2D grayscale array."
+    assert seg.ndim == 2, "Segmentation mask must be a 2D array."
+
+    # Determine unique classes in segmentation
+    unique_classes = np.unique(seg)
+    if 0 in unique_classes:
+        unique_classes = unique_classes[unique_classes != 0]  # Ignore background class (0)
+
+    # Set default colors if none are provided
+    if contour_color is None:
+        # Define a custom colormap for segmentation contours
+        default_map = [
+            (255, 0, 0),    # Red for class 1
+            (0, 255, 0),    # Green for class 2
+            (0, 0, 255),    # Blue for class 3
+            (255, 255, 0),  # Yellow for class 4
+            (255, 0, 255),  # Magenta for class 5
+            (0, 255, 255),  # Cyan for class 6
+            (192, 192, 192), # Silver for class 7
+            (128, 0, 0),    # Maroon for class 8
+            (128, 128, 0),  # Olive for class 9
+            (0, 128, 0)     # Dark Green for class 10
+        ]
+        # Reuse colormap if not enough colors
+        contour_color = default_map * (len(unique_classes) // len(default_map) + 1)  # Repeat the colormap
+        contour_color = contour_color[:len(unique_classes)]  # Ensure it matches the number of unique classes
+    elif isinstance(contour_color, tuple):
+        contour_color = [contour_color] * len(unique_classes)
+    # Ensure enough colors are provided
+    assert len(contour_color) >= len(unique_classes), "Not enough colors provided for all unique classes."
+
+    # Crop the image if requested
+    if crop:
+        y_indices, x_indices = np.where(seg > 0)
+        y_min, y_max = max(0, y_indices.min() - crop_padding), min(img.shape[0], y_indices.max() + crop_padding)
+        x_min, x_max = max(0, x_indices.min() - crop_padding), min(img.shape[1], x_indices.max() + crop_padding)
+        img = img[y_min:y_max, x_min:x_max]
+        seg = seg[y_min:y_max, x_min:x_max]
+
+    # Convert the grayscale image to RGB for overlay
+    img = (img - np.mean(img)) / (img.max() - img.min())
+    img_rgb = cv2.cvtColor(img, cv2.COLOR_GRAY2BGR)
+    img_contour = np.zeros_like(img_rgb)
+
+    # Draw contours for each class
+    for i, cls in enumerate(unique_classes):
+        mask = (seg == cls).astype(np.uint8)  # Binary mask for the current class
+        contours, _ = cv2.findContours(mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+        if isinstance(contour_color, dict):
+            _color = np.array([*contour_color[cls]]).tolist()
+        else:
+            _color = np.array([*contour_color[i]]).tolist()
+        _img_contour = np.zeros_like(img_rgb)
+        cv2.drawContours(img_contour, contours, -1, _color, thickness=contour_thickness)
+        img_contour = cv2.addWeighted(img_contour, 1, _img_contour, 1, 0, dtype=-1)
+    img_rgb = cv2.addWeighted(img_contour, contour_alpha / 100, img_rgb, 1, 0, dtype=-1)
+    return img_rgb
