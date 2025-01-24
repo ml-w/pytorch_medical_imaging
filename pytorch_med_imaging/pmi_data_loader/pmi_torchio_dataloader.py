@@ -3,7 +3,7 @@ import torchio as tio
 from .pmi_dataloader_base import PMIDataLoaderBase, PMIDataLoaderBaseCFG
 from .pmi_image_dataloader import PMIImageDataLoader, PMIImageDataLoaderCFG
 from .. import pmi_data
-from ..pmi_data import ImageDataSet, PMIDataBase
+from ..pmi_data import DataLabel, ImageDataSet, PMIDataBase
 from .lambda_tio_adaptor import CallbackQueue
 from .computations.queue_callback import *
 from typing import *
@@ -28,6 +28,9 @@ class PMITorchioDataLoaderCFG(PMIImageDataLoaderCFG):
         master_data_key (str, Optional):
             Key of the data that would be used as master list when there's a conflict among the IDs of the included
             data. Default to None.
+        ignore_missing_ids (bool, Optional):
+            If set to True, no warning will be raised if the IDs of the data doesn't match, instead, data points without
+            full set of values will be dropped.
         sampler (str, Optional):
             Determine the ``tio.Sampler`` used to sample the images. Support ['weighted'|'uniform'|'grid'] currently.
             Default to ``None``, which means no sampler is used (i.e., the whole image is loaded).
@@ -93,9 +96,10 @@ class PMITorchioDataLoaderCFG(PMIImageDataLoaderCFG):
            >>>
 
     """
-    input_data: Dict[str, Union[PMIDataBase, Iterable[Any]]] = None
-    input_dtypes: Dict[str, Union[str, Type]] = {}
-    master_data_key: str = None
+    input_data        : Dict[str, Union[PMIDataBase, Iterable[Any]]] = None
+    input_dtypes      : Dict[str, Union[str        , Type]]          = {}
+    master_data_key   : str      = None
+    ignore_missing_ids: bool     = False
 
 
 class PMITorchioDataLoader(PMIImageDataLoader):
@@ -114,17 +118,32 @@ class PMITorchioDataLoader(PMIImageDataLoader):
         data = {}
         ids = {}
         for k, v in self.input_data.items():
+            self._logger.debug(f"Dealing with input key: {k}")
             if isinstance(v, PMIDataBase):
+                self._logger.debug("Detect PMIData, directly adding it to data.")
                 data[k] = v
                 continue
+            elif isinstance(v, (tuple, list)):
+                self._logger.debug(f"Detect CSV input format.")
+                # Consider this as tuple of (csv path, target column ilst)
+                if len(v) == 2:
+                    csv_path, tar_cols = v
+                    csv_path = Path(csv_path)
+                    if not csv_path.is_file() or not csv_path.suffix == '.csv':
+                        msg = (f"Recieve input ({k}: {v}) that represents csv loading format. However, path/file is not"
+                               f" correctly specified. It must ends with .csv suffix.")
+                        raise FileError(msg)
+                    data[k] = DataLabel.from_csv(csv_path, target_column=tar_cols)
             elif isinstance(v, (str, Path)):
+                self._logger.debug(f"Detect image data input format.")
                 v = Path(v)
-                if not v.is_dir():
-                    raise TypeError(f"String {str(v)} is specified as input but does not lead to image directory.")
-                # If directory, treat it as image path
-                _type = self.input_dtypes.get(k, 'float')
-                _data = self._read_image(v, dtype=_type)
-                data[k] = _data
+                if v.is_dir():
+                    # If directory, treat it as image path
+                    _type = self.input_dtypes.get(k, 'float')
+                    _data = self._read_image(v, dtype=_type)
+                    data[k] = _data
+                else:
+                    raise TypeError(f"String {str(v)} is specified as input but does not lead to image/data directory.")
             elif isinstance(v, Iterable):
                 self._logger.warning("Input iterable data detected. Note that automatic ordering for "
                                      "custom iterable data is not supported.")
@@ -154,7 +173,18 @@ class PMITorchioDataLoader(PMIImageDataLoader):
                            join='outer', axis=1)
         if ids_df.isna().any().any():
             self._logger.warning("IDs are not properly aligned")
-            self._logger.warning('\n' + ids_df.fillna("Missing").to_string())
+            if self.ignore_missing_ids:
+                self._logger.warning("Ignore misalignment specified")
+                final_ids = ids_df.dropna().index.tolist()
+                final_ids.sort()
+                for v in data.values():
+                    if isinstance(v, PMIDataBase):
+                        v.remap_data_by_ids(final_ids)
+                    else:
+                        raise KeyError("Some data loaded cannot be remapped! Too risky to ignore.")
+
+            else:
+                self._logger.warning('\n' + ids_df.fillna("Missing").to_string())
         # Note: No need to check length because ids right = length right
         return data
 

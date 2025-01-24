@@ -29,7 +29,14 @@ class PMIImageMCDataLoaderCFG(PMIImageDataLoaderCFG):
     new_attr: list = None
 
 class MCQueue(tio.Queue):
-    r"""This class is defined to wrap ``tio.Queue`` and generate
+    r"""This class is defined to wrap ``tio.Queue`` and generate patches that are concatenation of multiple images,
+    stacking along the channel dimension.
+
+    Args:
+        channel_concat (str):
+            The key of the images in a subject to concatenate. Order matters.
+        new_attributes (str):
+            The key of the new images generated from the concatenation.
 
     """
     def __init__(self, *args,
@@ -127,6 +134,22 @@ class PMIImageMCDataLoader(PMIImageDataLoader):
             raise AttributeError("Patch sampling callback cannot be used with ``MCQueue``!")
 
         queue_dict, training = self._prepare_queue_dict(exclude_augment, subjects, training)
+        if self.sampler_instance is None:
+            first_shape = subjects[0].shape[1:]
+            self._logger.debug(f"No sampler specified, use first shape in subjects: {first_shape = }.")
+            # Ad crop-or-pad to prevent shape issues
+            crop_or_pad = tio.CropOrPad(target_shape=first_shape)
+            if isinstance(subjects._transform, tio.Compose):
+                subjects._transform.transforms.append(crop_or_pad)
+            elif isinstance(subjects._transform, tio.Transform):
+                subjects._transform = tio.Compose([subjects._transform, crop_or_pad])
+            else:
+                subjects.set_transform(crop_or_pad)
+
+            # Reset sampler
+            self.sampler_instance = tio.UniformSampler(patch_size=first_shape)  # first dim is batch
+            self.queue_args[-1] = self.sampler_instance
+
         queue_dict['channel_concat'] = self._ch_concat
         if self.new_attr is None:
             queue_dict['new_attributes'] = ['input_concat', 'target_concat']
@@ -141,8 +164,6 @@ class PMIImageMCDataLoader(PMIImageDataLoader):
             return queue, self.queue_args[-1]
         else:
             return queue
-
-
 
     def _load_gt_data(self) -> None:
         raise ArithmeticError("Do not use this function.")

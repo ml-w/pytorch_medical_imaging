@@ -129,7 +129,13 @@ class PMIImageDataLoader(PMIDataLoaderBase):
             ReturnDataLoader --> [*]
 
     Attributes:
-        Attributes will be loaded from the supplied ``cfg`` into class
+        sampler_instance (tio.Sampler):
+            If :attr:`PMIImageDataLoaderCFG.sampler` is specified, this will be created. Note that the option in CFG
+            must be a string instead of a sample instance.
+
+    .. notes::
+
+        Attributes will be also loaded from the supplied ``cfg`` into class
 
     Class Attributes:
         cfg_cls (type):
@@ -369,7 +375,7 @@ class PMIImageDataLoader(PMIDataLoaderBase):
             training = self.run_mode
 
         queue_dict, training = self._prepare_queue_dict(exclude_augment, subjects, training)
-        if self.sampler is not None:
+        if self.sampler_instance is not None:
             # Create queue
             # If option to use post-sampling processing was provided, use CallbackQueue instead
             if  not self.patch_sampling_callback in ("", None):
@@ -417,8 +423,11 @@ class PMIImageDataLoader(PMIDataLoaderBase):
                               **queue_dict)
             self._logger.debug(f"Created queue: {queue}")
             self.queue = queue
-        if return_sampler and self.sampler is not None:
-            return queue, self.queue_args[-1]
+            self.sampler_instance = _sampler
+        if return_sampler:
+            if self.sampler_instance is None:
+                raise AttributeError("There's no sampler created.")
+            return queue, self.sampler_instance
         else:
             return queue
 
@@ -435,16 +444,7 @@ class PMIImageDataLoader(PMIDataLoaderBase):
         """
         if training is None:
             training = self.run_mode
-        if self.sampler_instance is None:
-            self._logger.info("No sampler is specified, setting the sampler to uniform and patchsize to shape of "
-                              "first image.")
-            # Set queue_args and queue_kwargs to load the whole image for each object to allow for caching
-            shape_of_input = subjects[0].shape
-            self._logger.debug(f"Shape of first image: {shape_of_input}")
 
-            # Reset sampler
-            self.sampler_instance = tio.UniformSampler(patch_size=shape_of_input[1:])  # first dim is batch
-            self.queue_args[-1] = self.sampler_instance
         queue_dict = self.tio_queue_kwargs.copy()
         # if exclude augment, don't shuffle
         if exclude_augment:

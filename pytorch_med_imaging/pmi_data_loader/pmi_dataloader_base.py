@@ -5,6 +5,7 @@ import pandas as pd
 import pprint
 import itertools
 import copy
+import random
 from abc import *
 from pathlib import Path
 from torch.utils.data import DataLoader
@@ -394,7 +395,7 @@ class PMIDataLoaderBase(object):
         ids = {k: _d.get_unique_IDs() for k, _d in data_dict.items() if isinstance(_d, PMIDataBase)}
         if not all([ids[a] == ids[b] for a, b in itertools.combinations(ids.keys(), 2)]):
             # Build a DF for better viewing of the differences
-            uni = set.union(*list(ids.values()))
+            uni = set.union(*[set(v) for v in ids.values()])
             _table = pd.concat([pd.Series([index in v for index in uni], index=uni, name=k) for k, v in ids.items()], axis=1)
             _table.sort_index(inplace=True)
             _table = _table[[False in list(row[1]) for row in _table.iterrows()]]
@@ -412,13 +413,15 @@ class PMIDataLoaderBase(object):
             try:
                 v.remap_to_master_data(data_exclude_none[first_k])
             except:
-                self._logger(f"Failed to remap: {k}")
+                self._logger.warning(f"Failed to remap: {k}")
         data_exclude_none['uid'] = list(ids[first_k])
-
 
         subjects = [tio.Subject(**{k: v for k, v in zip(data_exclude_none.keys(), row)})
                     for row in zip(*data_exclude_none.values())]
-        subjects = tio.SubjectsDataset(subjects=subjects, transform=transform)
+        if self.debug_mode:
+            subjects = tio.SubjectsDataset(subjects=random.sample(subjects, 5), transform=transform)
+        else:
+            subjects = tio.SubjectsDataset(subjects=subjects, transform=transform)
         return subjects
 
     def _read_id_configs(self):
