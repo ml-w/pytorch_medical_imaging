@@ -209,6 +209,11 @@ class SolverBase(object):
             The config parameters.
 
     Attributes:
+        perf (list):
+            This is a class attribute used for callbacks. Note that if you change the data format in the child class,
+            you would need to take extra measures to ensure :meth:`_validation_callback` and
+            :meth:`_validation_step_callback` is using this attribution correctly.
+
         _step_called_time (int):
             Number of time :func:`step` was called.
         _decayed_time (int):
@@ -257,6 +262,7 @@ class SolverBase(object):
         # external_att
         self.plotter_dict      = {}
         self.plotting          = False
+        self.early_stop = None
 
          # create loss function if not specified
         self.prepare_lossfunction()
@@ -925,7 +931,7 @@ class SolverBase(object):
         self.decay_optimizer(epoch_loss)
 
     def validation(self) -> list:
-        r"""Default pipeline for running the validation. This introduce two class attribute lists
+        r"""Default pipeline for running the validation. This introduces two class attribute lists
         :attr:`validation_losses` and :attr:`perfs`. They are to be used in :func:`_validation_step_callback` and also
         :func:`_validation_callback`.
 
@@ -949,6 +955,7 @@ class SolverBase(object):
             self._logger.warning(f"Network after get net {type(n) = }")
             n.eval()
             for mb in tqdm(self.data_loader_val, desc="Validation", position=2):
+                self._current_mb = mb
                 s, g = self._unpack_minibatch(mb, self.unpack_key_forward)
 
                 s = self._match_type_with_network(s)
@@ -959,7 +966,7 @@ class SolverBase(object):
                 else:
                     res = n.forward(s)
 
-                loss = self._loss_eval(res, s, g.squeeze().long())
+                loss = self._loss_eval(res, s, g)
                 self._logger.debug(f"_val IDs: {mb['uid']}") if not mb.get('uid', None) is None else None
                 self._logger.debug("_val_step_loss: {}".format(loss.cpu().data.item()))
 
@@ -972,8 +979,8 @@ class SolverBase(object):
                 else:
                     res = res.cpu()
 
-                self._validation_step_callback(g.cpu(), res, loss.cpu(), uids)
-                del mb, s, g, loss, res
+                self._validation_step_callback(self._var_to_cpu(g), res, self._var_to_cpu(loss), uids)
+                del mb, s, g, loss, res, self._current_mb
                 gc.collect()
             self._validation_loss = np.mean(self.validation_losses)
             self._validation_callback()
