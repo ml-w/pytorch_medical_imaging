@@ -233,7 +233,6 @@ class SolverBase(object):
                  *args, **kwargs):
         super(SolverBase, self).__init__()
         self._logger        = MNTSLogger[self.__class__.__name__]
-        self._load_config(cfg)   # Load config from ``cls_cfg``
 
         # Define minimal requirement to kick start a ``fit()``
         self._required_attributes = {
@@ -263,6 +262,9 @@ class SolverBase(object):
         self.plotter_dict      = {}
         self.plotting          = False
         self.early_stop = None
+
+        # Override settings from cfg
+        self._load_config(cfg)   # Load config from ``cls_cfg``
 
          # create loss function if not specified
         self.prepare_lossfunction()

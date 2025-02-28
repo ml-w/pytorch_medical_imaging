@@ -75,6 +75,7 @@ class ClassificationSolver(SolverBase):
         g, res = g.cpu().detach(), res.cpu().detach()
         _df = pd.DataFrame.from_dict({f'res_{d}': list(res[:, d].numpy())
                                       for d in range(res.shape[-1])})
+        g, res = self._align_g_res_size(g, res)
         if not self.ordinal_mse:
             if g.dim() == 1:
                 _df_gt = pd.DataFrame.from_dict({'gt': list(g.flatten().numpy())})
@@ -157,6 +158,8 @@ class ClassificationSolver(SolverBase):
         # If ordinal_mse mode, assume loss function is SmoothL1Loss
         if g.squeeze().dim() == 1 and not self.ordinal_mse:
             g = g.squeeze().long()
+        if g.dim() == 3 and g.shape[1] == 1:
+            g = g.squeeze()
         return g, res
 
     def _validation_step_callback(self, g: torch.Tensor, res: torch.Tensor, loss: Union[torch.Tensor, float],

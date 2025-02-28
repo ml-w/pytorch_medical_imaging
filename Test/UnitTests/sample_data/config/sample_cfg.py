@@ -70,6 +70,7 @@ class SampleClsLoaderCFG(PMIImageFeaturePairLoaderCFG):
     sampler_kwargs  : dict    = dict(
         patch_size = [128, 128, 3]
     )
+    target_column = 'Class'
 
     # This is how you change only one attribute of a default dict
     PMIImageFeaturePairLoaderCFG.tio_queue_kwargs['samples_per_volume'] = 10
