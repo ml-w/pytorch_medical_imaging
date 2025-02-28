@@ -33,6 +33,7 @@ class SegmentationInferencer(InferencerBase):
     # Reuse these functions
     _perf_measure = SegmentationSolver._perf_measure
     _DICE = SegmentationSolver._DICE
+    create_optimizer = InferencerBase._placeholder
 
     def __init__(self,cfg,
                  *args,
@@ -56,21 +57,6 @@ class SegmentationInferencer(InferencerBase):
         self.required_attributes = [
             'output_dir',
         ]
-
-    def _input_check(self):
-        r"""
-        .. deprecated::
-            This function have no use now.
-        Returns:
-
-        """
-        super()._input_check()
-        # output_dir = self.data_loader.output_dir
-        # if not os.path.isdir(output_dir):
-        #     # Try to make dir first
-        #     os.makedirs(self.output_dir, exist_ok=True)
-        #     assert os.path.isdir(self.output_dir), f"Cannot open output directory: {self.output_dir}"
-        return 0
 
     def _write_out(self, output_dir = None):
         r"""Write the segmentation. You can call :func:`.display_summary` to produce a summary of the performance.
@@ -165,6 +151,7 @@ class SegmentationInferencer(InferencerBase):
                     in_image_data.write_uid(out, index, self.output_dir)
             else:
                 raise NotImplementedError("For segmentation, it is expected that a sampler must be specified.")
+
 
 
     def display_summary(self):

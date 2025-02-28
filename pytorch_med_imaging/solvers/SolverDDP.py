@@ -165,7 +165,9 @@ class SolverDDPWrapper:
             checksums = [torch.zeros(32, dtype=torch.uint8).cuda() for i in range(self.world_size)]
         else:
             checksums = None
-        dist.gather(checksum, checksums, dst=0)
+        self._logger.debug(f"{checksum =}")
+        dist.barrier()
+        dist.gather(checksum, checksums, dst=0, async_op=False)
         if self.rank == 0:
             # revert the integer tensor back to hex md5 checksums
             checksums = ["".join([chr(i) for i in l]) for l in checksums]
@@ -211,20 +213,16 @@ class SolverDDPWrapper:
             dtype=torch.int32,
             device=f'cuda:{self.rank}'
         )
-        tensorlist = [torch.zeros_like(early_stop_ten) for i in range(dist.get_world_size())]
-
 
         # Broadcast the early stop flag from rank 0 to all other processes
         self._logger.debug(f"{self.solver.EARLY_STOP_FLAG}")
         self._logger.debug(f"Before {early_stop_ten = }")
-        dist.all_gather(tensorlist, early_stop_ten)
-        self._logger.debug(f"After {tensorlist = }")
+        dist.broadcast(early_stop_ten, 0)
+        self._logger.debug(f"After {early_stop_ten = }")
 
         # Update the EARLY_STOP_FLAG based on the broadcasted value
         self.solver.EARLY_STOP_FLAG = early_stop_ten.item() > 0
         self._logger.info(f"Early stopper stat: {self.EARLY_STOP_FLAG}")
-
-
 
     def _check_best_epoch(self,
                           checkpoint_path,
@@ -299,6 +297,4 @@ class SolverDDPWrapper:
     def _epoch_callback(self, *args, **kwargs) -> None:
         r"""Sync the network after each epoch just in case.n"""
         self.solver._epoch_callback_(*args, **kwargs)
-        # sync the network using this chance also
-        dist.barrier()
         self.check_if_network_synced(raise_error=True)

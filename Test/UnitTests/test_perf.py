@@ -34,7 +34,7 @@ class TestPerfSegmentation(unittest.TestCase):
         self._logger = MNTSLogger('.', 'pytest', verbose=True, log_level='DEBUG', keep_file=False)
         # Create mock data for segmentation
         self.mock_data_shape = (5, 1, 64, 64, 10)
-        self.mock_gt = np.zeros(self.mock_data_shape)
+        self.mock_gt = np.zeros(self.mock_data_shape).astype('int')
         self.mock_gt[:, :, :, :, 5:10] = 1
 
         self.mock_data_single_batch = (1, 1, 64, 64, 10)
@@ -42,7 +42,7 @@ class TestPerfSegmentation(unittest.TestCase):
         self.mock_gt_single_batch[:,:, :, :, 5] = 1
 
         # Generate mock data with squares of ones in several slices for numpy
-        self.mock_np_data = np.zeros(self.mock_data_shape)  # Start with all zeros
+        self.mock_np_data = np.zeros(self.mock_data_shape).astype('int')  # Start with all zeros
         for i in range(5):  # Create 5 slices with squares of ones
             for j in range(5):
                 start = np.random.randint(0, self.mock_data_shape[2] - 10)  # Random start for square
@@ -58,7 +58,7 @@ class TestPerfSegmentation(unittest.TestCase):
 
     def test_eval_torchtensor(self):
         # Test the EVAL function with numpy arrays
-        results = EVAL(torch.Tensor(self.mock_np_data), torch.Tensor(self.mock_gt))
+        results = EVAL(torch.Tensor(self.mock_np_data).int(), torch.Tensor(self.mock_gt).int())
         self.assertIsInstance(results, pd.DataFrame)
         self.assertFalse(results.empty)
         self._logger.info('\n' + results.to_string())

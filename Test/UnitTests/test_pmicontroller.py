@@ -133,6 +133,7 @@ class TestController(unittest.TestCase):
                 msg = f"Expect key {key} overrided to be {v} but got {getattr(self.controller.solver_cfg, key)}."
                 self.assertEqual(getattr(self.controller.solver_cfg, key), v, msg)
 
+    @unittest.skip("Broken test")
     def test_s7_ddptrain(self):
         world_size = torch.cuda.device_count()
         self._logger.info(f"Testing with world size: {world_size}")

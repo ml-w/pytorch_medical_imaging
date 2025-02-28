@@ -38,6 +38,13 @@ class SegmentationSolver(SolverBase):
         r"""This solver trains segmentation networks, but can also be used for image2image networks if you work with
         the loss function yourself. For attributes and settings, see :class:`SegmentationSolverCFG`.
 
+        Attributes:
+            perfs (list):
+                This a list of confusion matrix measurements. Each element is added confusion matrix `[tp, tn, fp, fn]`
+                that is updated in each :meth:`_validation_step_callback` call. It is reset at the beginning of each
+                validation loop.
+
+
         Args:
             cfg (SegmentationSolverCFG):
                 Configurations.

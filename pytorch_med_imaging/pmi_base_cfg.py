@@ -2,6 +2,7 @@ import sys
 import copy
 import pprint
 import re
+import warnings
 
 __all__ = ['PMIBaseCFG']
 

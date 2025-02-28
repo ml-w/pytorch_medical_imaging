@@ -2,10 +2,13 @@ import os
 from functools import wraps
 from pathlib import Path
 from typing import Any, Dict, Optional, Union
+from PIL import Image
 
 import neptune
 import re
 import threading
+
+import numpy as np
 
 from mnts.mnts_logger import MNTSLogger
 
@@ -70,6 +73,10 @@ class NP_Plotter:
     @project.setter
     def project(self, val):
         os.environ['NEPTUNE_PROJECT'] = val
+
+    @property
+    def run_id(self):
+        return self.np_run['sys/id'].fetch()
 
     def init_run(self, init_meta: Optional[dict] = {}) -> None:
         if not self.np_run is None:
@@ -202,3 +209,14 @@ class NP_Plotter:
     def plot_weight_histogram(self, *args, **kwargs):
         # Do nothing
         self._logger.warning("Plotting weight histograms is not supported in NeptuneLogger")
+
+    def add_image(self, key, image, **kwargs):
+        # if input is numpy array, make a PIL image out of it
+        try:
+            if isinstance(image, np.ndarray):
+                if not image.ndim >= 2:
+                    raise ArithmeticError(f"Trying to add image with wrong size: {image.shape = }")
+                image = Image.fromarray(np.flipud(image.transpose([1, 2, 0])))
+            self.np_run[key].append(image, **kwargs)
+        except Exception as e:
+            self._logger.error(e)

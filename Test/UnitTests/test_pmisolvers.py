@@ -34,6 +34,7 @@ class TestSolver(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         cls._logger = MNTSLogger(".", logger_name='unittest', keep_file=False, log_level='debug', verbose=True)
+        MNTSLogger.set_global_log_level('debug')
 
     def setUp(self):
         if self.__class__.__name__ == 'TestSolver':
@@ -163,7 +164,7 @@ class TestClassificationSolver(TestSolver):
         uids = ['1', '2', '3' , '4']
         self.solver._update_misclassification_record(dic, g, uids)
 
-    def test_validation_step(self):
+    def test_validation_step_callback(self):
         g = torch.LongTensor([1, 1, 1, 0])
         res = torch.FloatTensor([
             [0.8, 1.0],
@@ -189,6 +190,21 @@ class TestBinaryClassificationSolver(TestClassificationSolver):
     def _prepare_solver(self):
         self.solver = BinaryClassificationSolver(self.solver_cfg)
         self.solver_cls = BinaryClassificationSolver
+
+    def test_validation_step_callback(self):
+        g = torch.LongTensor([1, 1, 1, 0])
+        res = torch.FloatTensor([
+            0.8,
+            -10,
+            1.0,
+            12
+        ]).reshape(-1, 1)
+        self.solver.perfs = []
+        self.solver.validation_losses = []
+        self.solver.plotter_dict = {'scalars': {'loss/validation Loss': None}}
+        self.solver._validation_step_callback(g, res, torch.Tensor([0.0]), range(len(g)))
+        self.solver._validation_callback()
+        print(self.solver.perfs)
 
 class TestSolverCreateFromFlags(unittest.TestCase):
     @classmethod

@@ -551,12 +551,13 @@ def draw_grid_contour(im_grid, seg, crop=None, nrow=None, offset=0, background=0
 
 def draw_contour(img: np.ndarray,
                  seg: np.ndarray,
+                 gt_seg: Optional[np.ndarray] = None,
                  crop: Optional[bool] = None,
                  crop_padding: Optional[int] = 0,
                  contour_color: Optional[Union[Tuple[int, int, int], Iterable[Tuple[int, int, int]]]] = None,
                  contour_thickness: Optional[int] = 2,
                  contour_alpha: Optional[float] = 0.1
-                 ):
+                 ) -> np.ndarray:
     r"""Draw a coloured contour of a segmentation on a greyscale 2D image using open CV.
 
     Args:
@@ -564,6 +565,9 @@ def draw_contour(img: np.ndarray,
             Input 2D grayscale image with dimensions H x W.
         seg (np.ndarray):
             Input 2D segmentation mask with dimensions H x W.
+        gt_seg (np.ndarray, Optional):
+            Input 2D segmentation mask with dimensions H x W that is consdiered the ground truth. This is drawn with
+            green color.
         crop (bool, Optional):
             Whether to crop the image tightly around the segmentation mask. Default is None.
         crop_padding (int, Optional):
@@ -593,7 +597,7 @@ def draw_contour(img: np.ndarray,
         # Define a custom colormap for segmentation contours
         default_map = [
             (255, 0, 0),    # Red for class 1
-            (0, 255, 0),    # Green for class 2
+            (25, 128, 25),    # Green for class 2
             (0, 0, 255),    # Blue for class 3
             (255, 255, 0),  # Yellow for class 4
             (255, 0, 255),  # Magenta for class 5
@@ -618,9 +622,13 @@ def draw_contour(img: np.ndarray,
         x_min, x_max = max(0, x_indices.min() - crop_padding), min(img.shape[1], x_indices.max() + crop_padding)
         img = img[y_min:y_max, x_min:x_max]
         seg = seg[y_min:y_max, x_min:x_max]
+        if gt_seg is not None:
+            gt_seg = gt_seg[y_min:y_max, x_min:x_max]
 
     # Convert the grayscale image to RGB for overlay
     img = (img - np.mean(img)) / (img.max() - img.min())
+    img = (img - img.min()) * 255 # rescale range
+    img = img.astype('uint8')
     img_rgb = cv2.cvtColor(img, cv2.COLOR_GRAY2BGR)
     img_contour = np.zeros_like(img_rgb)
 
@@ -635,5 +643,79 @@ def draw_contour(img: np.ndarray,
         _img_contour = np.zeros_like(img_rgb)
         cv2.drawContours(img_contour, contours, -1, _color, thickness=contour_thickness)
         img_contour = cv2.addWeighted(img_contour, 1, _img_contour, 1, 0, dtype=-1)
-    img_rgb = cv2.addWeighted(img_contour, contour_alpha / 100, img_rgb, 1, 0, dtype=-1)
+
+    # Draw ground-truth as green
+    if gt_seg is not None:
+        mask = (gt_seg != 0).astype(np.uint8)  # Binary mask for the current class
+        contours, _ = cv2.findContours(mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+        _img_contour = np.zeros_like(img_rgb)
+        cv2.drawContours(img_contour, contours, -1, (0, 255, 0), thickness=2)
+        img_contour = cv2.addWeighted(img_contour, 1, _img_contour, 1, 0, dtype=-1)
+
+    img_rgb = cv2.addWeighted(img_contour, contour_alpha, img_rgb, 1, 0, dtype=-1)
     return img_rgb
+
+
+def draw_contour_3d(img: np.ndarray,
+                    seg: np.ndarray,
+                    slice_dim: Optional[int] = -1,
+                    crop: Optional[bool] = None,
+                    crop_padding: Optional[int] = 0,
+                    contour_color: Optional[Union[Tuple[int, int, int], Iterable[Tuple[int, int, int]]]] = None,
+                    contour_thickness: Optional[int] = 2,
+                    contour_alpha: Optional[float] = 0.1
+                    ) -> Iterable[np.ndarray]:
+    """
+    Loops :func:`draw_contour` for the entire stack.
+
+    Args:
+        img (np.ndarray):
+            A 3D input image stack. Must have the same shape as `seg`.
+        seg (np.ndarray):
+            A 3D segmentation mask. Must have the same shape as `img`.
+        slice_dim (int, Optional):
+            The axis along which slices are taken for contour drawing.
+            Must be 0, 1, or 2. Defaults to -1, which corresponds to the last axis.
+        crop (bool, Optional):
+            If `True`, crops the output images around the non-zero
+            region of the segmentation mask. Defaults to `None`.
+        crop_padding (int, Optional):
+            Padding (in pixels) to apply around the cropped region.
+            Effective only when `crop` is `True`. Defaults to 0.
+        contour_color (list or dict of Tuple[int, int, int], Optional):
+            Color(s) of the contour. Can be a single RGB tuple or an
+            iterable of RGB tuples for multiple labels. Defaults to `None`.
+        contour_thickness (int, Optional):
+            Thickness of the drawn contours in pixels. Defaults to 2.
+        contour_alpha (float, Optional):
+            Alpha blending factor for contours. A value between 0 (fully
+            transparent) and 1 (fully opaque). Defaults to 0.1.
+
+    Yields:
+        np.ndarray: A 2D image slice with the drawn contour.
+
+    Raises:
+        AssertionError: If `img` and `seg` have mismatched shapes.
+        AssertionError: If `img` is not a 3D array.
+        AssertionError: If `slice_dim` is not one of 0, 1, or 2.
+    """
+    assert all(a == b for a, b in zip(img.shape, seg.shape)), f"Shape mismatch: {img.shape = } {seg.shape = } "
+    assert img.ndim == 3, "3D input only"
+    assert slice_dim < 3, "Dim must be 0, 1 or 2"
+
+    # number of slice
+    s = img.shape[slice_dim]
+
+    # Rearrange the axis so that the target is the last axis
+    r_img = np.moveaxis(img, slice_dim, -1)  # Move the target dimension to the last axis
+    r_seg = np.moveaxis(seg, slice_dim, -1)  # Move the target dimension to the last axis
+    for idx in range(s):
+        slice_img = r_img[..., idx]
+        slice_seg = r_seg[..., seg]
+        slice_out = draw_contour(slice_img, slice_seg,
+                                 crop = crop,
+                                 crop_padding = crop_padding,
+                                 contour_color = contour_color,
+                                 contour_thickness = contour_thickness,
+                                 contour_alpha = contour_alpha)
+        yield slice_out

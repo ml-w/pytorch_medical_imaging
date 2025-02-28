@@ -24,6 +24,20 @@ class BinaryClassificationSolver(ClassificationSolver):
     of multiple questions.  Typically, the network output should have a dimension :math:`(B × C)` where :math:`C`
     is the number of question to answer. The target label should have the same dimension as the network output.
 
+    Attributes:
+        perf (dict):
+            A dictionary that stores various performance metrics during validation.
+
+            Expected Keys:
+            - :dics: (list)
+                A list of decision tensors generated from the network output.
+            - :gts: (list)
+                A list of ground truth tensors corresponding to the inputs.
+            - :predictions: (list)
+                A flattened list of predicted values from the network output.
+            - :uids: (list, optional)
+                A list of unique identifiers for each sample, if provided.
+
     Args:
         cfg (ClassificationSolverCFG):
             The configuration file.
@@ -70,7 +84,11 @@ class BinaryClassificationSolver(ClassificationSolver):
         df = {'prediction': predictions,
               'decision'  : torch.cat(dics, dim = 0).bool().tolist(),
               'truth'     : torch.cat(gts , dim = 0).bool().tolist()}
-        df = pd.DataFrame(data=df, index=uids)
+        if len(uids) == len(df['prediction']):
+            df = pd.DataFrame(data=df, index=uids)
+        else:
+            self._logger.warning("UIDs in store_dict is incorrect.")
+            df = pd.DataFrame(data=df)
         df['correct'] = df['decision'] == df['truth']
         self._logger.info(f"\n{df.to_string()}")
         # self._logger.debug("_val_perfs: \n%s"%res_table.T.to_string())
@@ -88,8 +106,8 @@ class BinaryClassificationSolver(ClassificationSolver):
 
 
     @staticmethod
-    def _compute_performance(dics: Iterable[torch.IntTensor],
-                             gts: Iterable[torch.IntTensor]) -> Tuple[float, pd.Series, pd.DataFrame]:
+    def _compute_performance(dics: Iterable[Union[torch.IntTensor, int, bool]],
+                             gts: Iterable[Union[torch.IntTensor, int, bool]]) -> Tuple[float, pd.Series, pd.DataFrame]:
         r"""Compute the performance as a table in terms of accuracy, sensitivity, specificity,
         positive and negative predictive values.
 
@@ -104,8 +122,10 @@ class BinaryClassificationSolver(ClassificationSolver):
         """
         # Compute accuracies
         # Stack the decisions per batch first
-        dics = torch.cat(dics, dim=0).bool()
-        gts = torch.cat(gts, dim=0).bool()
+        if isinstance(dics, (tuple, list)):
+            dics = torch.cat(dics, dim=0).bool()
+        if isinstance(gts, (tuple, list)):
+            gts = torch.cat(gts, dim=0).bool()
         tn, fp, fn, tp = confusion_matrix(gts.numpy().ravel(), dics.numpy().ravel(), labels=[0, 1]).ravel()
 
         accuracy = pd.Series((tp + tn) / float(tp + tn + fp + fn), name='Accuracy')
@@ -158,9 +178,7 @@ class BinaryClassificationSolver(ClassificationSolver):
             msg = f"Network output should have a dimension (B × C), but got: {list(res.shape)} instead."
             raise IndexError(msg)
         num_q = res.shape[1]
-        while g.dim() < 2:
-            g = g.unsqueeze(-1)
-        if not g.shape[1] == num_q:
+        while g.dim() != 2:
             g = g.reshape(-1, num_q)
         self._logger.debug(f"After align: res_size = {res.shape}; g_size = {g.shape}")
         return g, res

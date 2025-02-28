@@ -56,6 +56,9 @@ class ClassificationSolver(SolverBase):
                 Configuration.
 
         Attributes:
+            perfs (list):
+                A list of bool verificaiton results indicating correctly classified predictions.
+
             _validation_misclassification_record (dict):
                 Record of misclassifications during validation. This dictionary is populated in the method
                 :func:`_validation_step_callback` and is only populated when the argument `uid` is provided and is a

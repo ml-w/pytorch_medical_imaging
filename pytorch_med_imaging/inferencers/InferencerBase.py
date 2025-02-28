@@ -13,7 +13,7 @@ from dataclasses import dataclass
 from typing import Union, Any, Optional
 from pathlib import Path
 
-class InferencerBase(object):
+class InferencerBase(SolverBase):
     r"""This is the base class of all inferencer, the inferencer cfg uses the same cfg as their solvers counter parts
     except they has different `required_attributes`. In addition, the inferencer also borrows some of the functions
     from :class:`SolverBase`.
@@ -25,6 +25,10 @@ class InferencerBase(object):
         flowchart TD
             Solver --> |Morph into|Inf[Inferencer]
 
+
+    To create a new inferencer class, you must implement the following methods.
+
+    * :meth:`_write_out`
 
     Attributes:
         [Required] net (torch.nn):
@@ -50,8 +54,6 @@ class InferencerBase(object):
                  cfg: SolverBaseCFG,
                  *args,
                  **kwargs):
-        super(InferencerBase, self).__init__()
-
         # Defined required attributes
         self.required_attributes = [
             'output_dir',
@@ -63,13 +65,12 @@ class InferencerBase(object):
 
         # borrow methods from SolverBase
         self._check_write_out_ready = SolverBase._check_fit_ready
-        self._cfg = cfg
+        super(InferencerBase, self).__init__(cfg)
+
 
         # initialize
-        self._logger        = MNTSLogger[self.__class__.__name__]
         self._load_config(cfg)   # Load config from ``cls_cfg``
         self._plotter = None
-        self.plotting = False
 
         self._logger.info("Inferencer was configured with options: {}".format(str(cfg)))
 
@@ -81,8 +82,6 @@ class InferencerBase(object):
         self.CP_LOADED = False # whether `load_checkpoint` have been called
         self.load_checkpoint(self.cp_load_dir)
 
-
-
     def set_data_loader(self, data_loader: PMIDataLoaderBase):
         # SolverBase.set_data_loader(self, data_loader, None)
         self.data_loader = data_loader
@@ -93,20 +92,6 @@ class InferencerBase(object):
         for att in self.required_attributes:
             if not hasattr(self, att):
                 raise AttributeError(f"Must sepcific {str(att)} in CFG.")
-
-    def set_plotter(self, plotter: Union[TB_plotter, str]) -> None:
-        r"""Externally set :attr:`tb_plotter` manually. Note that this
-        does not change
-
-        Returns:
-            TB_plotter
-        """
-        if not self._plotter is None:
-            self._logger.warning(f"Overriding CFG ``plotter``.")
-        else:
-            self._plotter = None
-            self.plotting = False
-        self._plotter = plotter
 
 
     def load_checkpoint(self, checkpoint_path: Union[str, Path] = None) -> None:
@@ -174,25 +159,14 @@ class InferencerBase(object):
                 self.batch_size_val = self.batch_size
             self.batch_size = self.batch_size_val or self.batch_size // torch.cuda.device_count()
 
-    def _match_type_with_network(self, *args, **kwargs):
-        r"""See :func:`SolverBase._match_type_with_network`."""
-        return SolverBase._match_type_with_network(self, *args, **kwargs)
-
-    def _unpack_minibatch(self, *args, **kwargs):
-        r"""See :func:`SolverBase._unpack_minibatch`."""
-        return SolverBase._unpack_minibatch(self, *args, **kwargs)
-
-    def _check_write_out_ready(self):
-        r"""See :func:`SolverBase._check_write_out_ready`."""
-        return SolverBase._check_fit_ready(self)
-
-    def get_net(self):
-        r"""See :func:`SolverBase.get_net<pytorch_med_imaging.solvers.SolverBase.get_net>`."""
-        return SolverBase.get_net(self)
-
     def _prepare_data(self):
         r"""Try to load in training mode first to include the ground-truth but ignoring the augmentation."""
         try:
             self._inference_subjects = self.data_loader._load_data_set_training(True)
         except:
             self._inference_subjects = self.data_loader._load_data_set_inference()
+
+    def _placeholder(self, *args, **kwargs):
+        r"""This is a placeholder to cater for call from base class :class:`SolverBase` that is not suppose to be called
+        in the inferencers"""
+        pass
