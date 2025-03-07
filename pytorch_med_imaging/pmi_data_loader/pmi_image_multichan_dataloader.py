@@ -147,6 +147,7 @@ class PMIImageMCDataLoader(PMIImageDataLoader):
                 subjects.set_transform(crop_or_pad)
 
             # Reset sampler
+            self.sampler = 'uniform'
             self.sampler_instance = tio.UniformSampler(patch_size=first_shape)  # first dim is batch
             self.queue_args[-1] = self.sampler_instance
 

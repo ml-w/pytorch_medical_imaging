@@ -160,6 +160,16 @@ class PMIImageDataLoader(PMIDataLoaderBase):
     def __init__(self, cfg: PMIImageDataLoaderCFG, *args, **kwargs):
         super(PMIImageDataLoader, self).__init__(cfg, *args, **kwargs)
         self._default_datakey = ['input', 'gt', 'probmap', 'mask']
+        self._sampler_instance = None
+
+    @property
+    def sampler_instance(self):
+        return self._sampler_instance
+
+    @sampler_instance.setter
+    def sampler_instance(self, v):
+        self._sampler_instance = v
+        self.tio_queue_kwargs['sampler'] = v
 
     def _check_input(self):
         """Not implemented."""
@@ -187,8 +197,7 @@ class PMIImageDataLoader(PMIDataLoaderBase):
 
         self._configure_sampler()
         self.queue_args = [self.tio_queue_kwargs.pop(k)
-                           for k in ['max_length', 'samples_per_volume']] \
-                          + [self.sampler_instance] # follows torchio's args arrangments
+                           for k in ['max_length', 'samples_per_volume']] # follows torchio's args arrangments
 
     def _configure_sampler(self):
         # If samplers are specified create tio queues using these samplers. This is required for patch sampling
@@ -222,8 +231,10 @@ class PMIImageDataLoader(PMIDataLoaderBase):
                 self.sampler_kwargs['patch_overlap'] = overlap
             self.sampler_instance = tio.GridSampler(**self.sampler_kwargs)
         else:
-            # If sampler is not specified, assume the whole image is sampled
-            self.sampler_instance = None
+            self._logger.warning("Sampler was not set, using default Uniform sampler.")
+            self.sampler_instance = None # Sampler instance is created when queue is created to correctly configure
+                                         # image sampling dimension
+        self.tio_queue_kwargs['sampler'] = self.sampler_instance
 
     def _read_image(self, root_dir, **kwargs):
         """Private method for convenience.
@@ -402,27 +413,32 @@ class PMIImageDataLoader(PMIDataLoaderBase):
                 # ignore 'start_background` option for ordinary queues
                 queue = tio.Queue(subjects, *self.queue_args, **queue_dict)
 
-            self._logger.debug(f"Created queue: {queue}")
+            self._logger.info(f"Created queue with specified sampler: {queue}")
+            self._logger.debug(f"{self.sampler_instance = }")
+            self._logger.debug(f"{self.tio_queue_kwargs = }")
             self.queue = queue
         else:
-            # Because no sampler means the samples are loaded by default dataloader, it is needed to change the
-            # ``torch.utils.data.DataLoader` parameters to allow parallel loading. However, this is done in the
-            # method ``get_torch_data_loader()``.
-            # queue = subjects
+            # No sampler could risk having in consistent data size across batches. Here we by default use CropOrPad to
+            # align the sizes, unless there's already a Crop or pad there.
             self._logger.debug(f"No sampler specified, use first shape in subjects: {subjects[0].shape[1:]}.")
             # Ad crop-or-pad to prevent shape issues
             crop_or_pad = tio.CropOrPad(target_shape=subjects[0].shape[1:])
             if isinstance(subjects._transform, tio.Compose):
-                subjects._transform.transforms.append(crop_or_pad)
+                # Don't add crop or pad if there's already one
+                if not any(isinstance(ts, tio.CropOrPad) for ts in subjects._transform):
+                    subjects._transform.transforms.append(crop_or_pad)
             elif isinstance(subjects._transform, tio.Transform):
-                subjects._transform = tio.Compose([subjects._transform, crop_or_pad])
+                if not isinstance(subjects._transform, tio.CropOrPad):
+                    subjects._transform = tio.Compose([subjects._transform, crop_or_pad])
             else:
                 subjects.set_transform(crop_or_pad)
             _sampler = tio.UniformSampler(patch_size = subjects[0].shape[1:])
-            queue = tio.Queue(subjects, sampler=_sampler, samples_per_volume=1, max_length=self.queue_args[0],
+            queue_dict['sampler'] = _sampler
+            queue = tio.Queue(subjects, samples_per_volume=1, max_length=self.queue_args[0],
                               **queue_dict)
-            self._logger.debug(f"Created queue: {queue}")
+            self._logger.info(f"Created queue with default sampler: {queue}")
             self.queue = queue
+            self.sampler = 'uniform'
             self.sampler_instance = _sampler
         if return_sampler:
             if self.sampler_instance is None:

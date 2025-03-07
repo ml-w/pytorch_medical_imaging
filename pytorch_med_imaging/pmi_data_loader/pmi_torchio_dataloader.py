@@ -101,8 +101,13 @@ class PMITorchioDataLoaderCFG(PMIImageDataLoaderCFG):
     master_data_key   : str      = None
     ignore_missing_ids: bool     = False
 
+    use_aggregated_sampler: bool = False
+
 
 class PMITorchioDataLoader(PMIImageDataLoader):
+    r"""This data class is specifically designed to incoporate `torchio` into the PMI architecture. The PMI architecture
+    extracts minibatch from a dataloader in a dictionary
+    """
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
 
@@ -142,6 +147,9 @@ class PMITorchioDataLoader(PMIImageDataLoader):
                     _type = self.input_dtypes.get(k, 'float')
                     _data = self._read_image(v, dtype=_type)
                     data[k] = _data
+
+                    # Also save the loaded data's path, as it's path, we have to convert it to str
+                    data[f'{k}-srcpath'] = _data.data_source_path.apply(lambda x: str(x))
                 else:
                     raise TypeError(f"String {str(v)} is specified as input but does not lead to image/data directory.")
             elif isinstance(v, Iterable):
@@ -154,14 +162,19 @@ class PMITorchioDataLoader(PMIImageDataLoader):
             if not self.master_data_key in self.input_data:
                 msg = "Master data specified but key is not found in data."
                 raise KeyError(msg)
+            update = {}
             for k, v in data.items():
                 if k == self.master_data_key:
                     continue
                 try:
-                    v.remap_to_master_data(data[self.master_data_key])
+                    if isinstance(v, PMIDataBase):
+                        v.remap_to_master_data(data[self.master_data_key])
+                    elif isinstance(v, pd.DataFrame):
+                        update[k] = v.reindex(data[self.master_data_key].data.index, inplace=True)
                 except:
                     self._logger.warning(f"Cannot remap data: {k}]")
                     continue
+            data.update(update)
 
         # Make sure the ID list are correctly configured
         for k, v in data.items():
@@ -173,18 +186,27 @@ class PMITorchioDataLoader(PMIImageDataLoader):
                            join='outer', axis=1)
         if ids_df.isna().any().any():
             self._logger.warning("IDs are not properly aligned")
+            # Handle missing IDs
             if self.ignore_missing_ids:
                 self._logger.warning("Ignore misalignment specified")
                 final_ids = ids_df.dropna().index.tolist()
                 final_ids.sort()
-                for v in data.values():
+                update = {}
+                for k, v in data.items():
                     if isinstance(v, PMIDataBase):
                         v.remap_data_by_ids(final_ids)
+                    elif isinstance(v, (pd.Series, pd.DataFrame)):
+                        update[k] = v.reindex(final_ids)
                     else:
-                        raise KeyError("Some data loaded cannot be remapped! Too risky to ignore.")
-
+                        self._logger.inspect(v)
+                        raise KeyError(f"Some data ({k}) loaded cannot be remapped! Too risky to ignore.")
+                data.update(update)
             else:
                 self._logger.warning('\n' + ids_df.fillna("Missing").to_string())
+
+        # Save this dataframe
+        self._data_meta = ids_df
+
         # Note: No need to check length because ids right = length right
         return data
 
@@ -199,4 +221,3 @@ class PMITorchioDataLoader(PMIImageDataLoader):
                 # Place holder
                 self.probmap_dir = 1
         super()._configure_sampler()
-        

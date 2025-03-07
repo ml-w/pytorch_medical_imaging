@@ -126,11 +126,12 @@ class PMIControllerCFG(PMIBaseCFG):
     _data_loader_cfg    : PMIDataLoaderBaseCFG           = None # Use this for different train and inference loader
     _data_loader_inf_cfg: Optional[PMIDataLoaderBaseCFG] = None # Use this for different train and inference loader
     data_loader_val_cfg : Optional[PMIDataLoaderBaseCFG] = None
-    solver_cfg         : SolverBaseCFG = None
-    data_loader_cls    : type          = None
-    _data_loader_val_cls: type          = None
-    solver_cls         : type          = None
-    inferencer_cls     : type          = None
+    solver_cfg          : SolverBaseCFG                  = None
+    data_loader_cls     : type                           = None
+    _data_loader_val_cls: type                           = None
+    solver_cls          : type                           = None
+    inferencer_cls      : type                           = None
+    flags_file          : PathLike                       = 'flags.yaml' # This is for supporting guild's override
 
     # Plotting related
     plotting         : Optional[bool] = False
@@ -234,10 +235,10 @@ class PMIController(object):
             # if this is a neptune run, add the ID to the config
             if self.plotter_type == 'neptune':
                 current_np_id = self._plotter.np_run['sys/id'].fetch()
-                with open('./flags.yaml', 'r') as f:
+                with open(self.flags_file, 'r') as f:
                     flags = yaml.safe_load(f)
                 flags['controller_cfg']['neptune_id'] = current_np_id
-                with open('./flags.yaml', 'w') as f:
+                with open(self.flags_file, 'w') as f:
                     yaml.safe_dump(flags, f)
         else:
             self._plotter = None

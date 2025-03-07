@@ -485,3 +485,6 @@ class PMIDataLoaderBase(object):
         self._logger.info(f"Add data ({type(data)}) with {key = }.")
         self._additional_data.append((key, data))
 
+    def get_subjects(self, exclude_transform=False) -> List[tio.SubjectsDataset]:
+        data = self._prepare_data()
+        return self._pack_data_into_subjects(data, self._create_transform() if not exclude_transform else None)
