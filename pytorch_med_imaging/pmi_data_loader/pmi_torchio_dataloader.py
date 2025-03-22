@@ -134,10 +134,10 @@ class PMITorchioDataLoader(PMIImageDataLoader):
                 if len(v) == 2:
                     csv_path, tar_cols = v
                     csv_path = Path(csv_path)
-                    if not csv_path.is_file() or not csv_path.suffix == '.csv':
+                    if not csv_path.exists() or not csv_path.suffix == '.csv':
                         msg = (f"Recieve input ({k}: {v}) that represents csv loading format. However, path/file is not"
                                f" correctly specified. It must ends with .csv suffix.")
-                        raise FileError(msg)
+                        raise FileNotFoundError(msg)
                     data[k] = DataLabel.from_csv(csv_path, target_column=tar_cols)
             elif isinstance(v, (str, Path)):
                 self._logger.debug(f"Detect image data input format.")
@@ -184,7 +184,7 @@ class PMITorchioDataLoader(PMIImageDataLoader):
         # Create a DataFrame from the IDs
         ids_df = pd.concat([pd.Series([1] * len(v), index=v, name=k)for k, v in ids.items()],
                            join='outer', axis=1)
-        if ids_df.isna().any().any():
+        if ids_df.isna().any().any() and not self.debug_mode:
             self._logger.warning("IDs are not properly aligned")
             # Handle missing IDs
             if self.ignore_missing_ids:

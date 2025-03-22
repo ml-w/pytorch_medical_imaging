@@ -393,7 +393,9 @@ class PMIDataLoaderBase(object):
 
         # check if the IDs are aligned
         ids = {k: _d.get_unique_IDs() for k, _d in data_dict.items() if isinstance(_d, PMIDataBase)}
-        if not all([ids[a] == ids[b] for a, b in itertools.combinations(ids.keys(), 2)]):
+        if self.debug_mode:
+            self._logger.debug("Skipping ID check because system is in debug mode.")
+        elif not all([ids[a] == ids[b] for a, b in itertools.combinations(ids.keys(), 2)]):
             # Build a DF for better viewing of the differences
             uni = set.union(*[set(v) for v in ids.values()])
             _table = pd.concat([pd.Series([index in v for index in uni], index=uni, name=k) for k, v in ids.items()], axis=1)
