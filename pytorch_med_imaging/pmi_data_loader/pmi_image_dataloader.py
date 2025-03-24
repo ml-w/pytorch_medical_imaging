@@ -158,9 +158,9 @@ class PMIImageDataLoader(PMIDataLoaderBase):
     """
     cfg_cls = PMIImageDataLoaderCFG
     def __init__(self, cfg: PMIImageDataLoaderCFG, *args, **kwargs):
+        self._sampler_instance = None
         super(PMIImageDataLoader, self).__init__(cfg, *args, **kwargs)
         self._default_datakey = ['input', 'gt', 'probmap', 'mask']
-        self._sampler_instance = None
 
     @property
     def sampler_instance(self):
@@ -214,12 +214,14 @@ class PMIImageDataLoader(PMIDataLoaderBase):
                       f"samplers. Got {self.sampler_kwargs} instead."
                 raise KeyError(msg)
             self.sampler_instance = tio.WeightedSampler(**self.sampler_kwargs)
+            self._logger.info("Sampler configured as weighted sampler.")
         elif (self.sampler == 'uniform'):
             if not 'patch_size' in self.sampler_kwargs:
                 msg = f"Require 'patch_size' argument to use ``tio.UniformSampler``. Specify 'patch_size' in ``cfg.samp" \
                       f"ler_kwargs' dictionary."
                 raise KeyError(msg)
             self.sampler_instance = tio.UniformSampler(**self.sampler_kwargs)
+            self._logger.info("Sampler configured as uniform sampler.")
         elif (self.sampler == 'grid'):
             if not 'patch_size' in self.sampler_kwargs:
                 msg = f"Require 'patch_size' argument to use ``tio.GridSampler``. Specify 'patch_size' in ``cfg.samp" \
@@ -230,6 +232,7 @@ class PMIImageDataLoader(PMIDataLoaderBase):
                 overlap = [ps // 2 for ps in self.sampler_kwargs['patch_size']]
                 self.sampler_kwargs['patch_overlap'] = overlap
             self.sampler_instance = tio.GridSampler(**self.sampler_kwargs)
+            self._logger.info("Sampler configured as grid sampler.")
         else:
             self._logger.warning("Sampler was not set, using default Uniform sampler.")
             self.sampler_instance = None # Sampler instance is created when queue is created to correctly configure
