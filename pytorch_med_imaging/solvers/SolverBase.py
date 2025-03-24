@@ -228,6 +228,7 @@ class SolverBase(object):
         these results, you can decide in the :func:`.solve_epoch` the criteria for saving the state of the network.
 
     """
+    is_inferencer = False
     cls_cfg = SolverBaseCFG
     def __init__(self, cfg: SolverBaseCFG,
                  *args, **kwargs):
@@ -263,6 +264,10 @@ class SolverBase(object):
         self.plotting          = False
         self.early_stop = None
 
+        self.initialization(cfg, **kwargs)
+
+    def initialization(self, cfg: dict, **kwargs):
+        # Initialize attributes
         # Override settings from cfg
         self._load_config(cfg)   # Load config from ``cls_cfg``
 

@@ -49,6 +49,7 @@ class InferencerBase(SolverBase):
         * :class:`.SolverBase.SolverBaseCFG`
 
     """
+    is_inferencer = True
     cls_cfg = SolverBaseCFG()
     def __init__(self,
                  cfg: SolverBaseCFG,
@@ -67,7 +68,8 @@ class InferencerBase(SolverBase):
         self._check_write_out_ready = SolverBase._check_fit_ready
         super(InferencerBase, self).__init__(cfg)
 
-
+    def initialization(self, cfg: dict, **kwargs):
+        r"""Inferencer specific initalization"""
         # initialize
         self._load_config(cfg)   # Load config from ``cls_cfg``
         self._plotter = None
