@@ -73,15 +73,16 @@ class PMIImageFeaturePairLoader(PMIImageDataLoader):
         data = super(PMIImageFeaturePairLoader, self)._prepare_data()
 
         # Load selected columns only
-        gt_dat = data['gt']
-        if not self.target_column in (None, ""):
-            self._logger.info("Selecting target column: {}".format(self.target_column))
-            try:
-                dtype = self.data_types[1]
-            except IndexError:
-                dtype = None
-            gt_dat.set_target_column(self.target_column, dtype=dtype)
-        gt_dat.remap_to_master_data(data['input'])
+        if self.target_dir is not None:
+            gt_dat = data['gt']
+            if not self.target_column in (None, ""):
+                self._logger.info("Selecting target column: {}".format(self.target_column))
+                try:
+                    dtype = self.data_types[1]
+                except IndexError:
+                    dtype = None
+                gt_dat.set_target_column(self.target_column, dtype=dtype)
+            gt_dat.remap_to_master_data(data['input'])
 
         # Load extra column and concat if extra column options were found
         if not self.net_in_column is None:
@@ -103,12 +104,16 @@ class PMIImageFeaturePairLoader(PMIImageDataLoader):
 
     def _load_gt_data(self):
         # Load the datasheet
-        tar_dir = Path(self.target_dir)
-        if tar_dir.suffix == '.csv':
-            gt_dat = DataLabel.from_csv(self.target_dir)
-        elif tar_dir.suffix == '.xlsx':
-            gt_dat = DataLabel.from_xlsx(self.target_dir, self.excel_sheetname)
-        return gt_dat
+        if not self.target_dir is None:
+            tar_dir = Path(self.target_dir)
+            if tar_dir.suffix == '.csv':
+                gt_dat = DataLabel.from_csv(self.target_dir)
+            elif tar_dir.suffix == '.xlsx':
+                gt_dat = DataLabel.from_xlsx(self.target_dir, self.excel_sheetname)
+            return gt_dat
+        else:
+            self._logger.warning("Skipping ground-truth data loading as not provided.")
+            return None
 
 @unittest.skip("This is not implemented")
 class PMIImageFeaturePairLoaderConcat(PMIImageFeaturePairLoader):
@@ -129,9 +134,13 @@ class PMIImageFeaturePairLoaderConcat(PMIImageFeaturePairLoader):
         super(PMIImageFeaturePairLoaderConcat, self).__init__(*args, **kwargs)
 
     def _load_gt_data(self):
-        # Load the datasheet
-        if Path(self.target_dir).suffix == '.xlsx':
-            gt_dat = DataLabelConcat.from_xlsx(self.target_dir, sheet_name=self.excel_sheetname)
-        elif Path(self.target_dir).suffix == '.csv':
-            gt_dat = DataLabelConcat.from_csv(self.target_dir)
-        return gt_dat
+        if not self.target_dir is None:
+            # Load the datasheet
+            if Path(self.target_dir).suffix == '.xlsx':
+                gt_dat = DataLabelConcat.from_xlsx(self.target_dir, sheet_name=self.excel_sheetname)
+            elif Path(self.target_dir).suffix == '.csv':
+                gt_dat = DataLabelConcat.from_csv(self.target_dir)
+            return gt_dat
+        else:
+            self._logger.warning("Skipping ground-truth data loading as not provided.")
+            return None

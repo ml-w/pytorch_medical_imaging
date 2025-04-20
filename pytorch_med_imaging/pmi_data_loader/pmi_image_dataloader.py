@@ -273,7 +273,7 @@ class PMIImageDataLoader(PMIDataLoaderBase):
             tio.Queue
         """
         if self.target_dir is None:
-            raise IOError(f"Cannot load from {self.target_dir}")
+            self._logger.warning("There's no target_dir. Assumes inference mode.")
 
         self.data = self._prepare_data()
         # Create transform
