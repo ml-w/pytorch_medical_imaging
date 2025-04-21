@@ -102,3 +102,16 @@ class TestPerfSegmentation(unittest.TestCase):
 
         specificity = Specificity(TP, FP, TN, FN)
         self.assertAlmostEqual(specificity, TN / (TP + FP))
+
+    def test_surface_metrics_functions(self):
+        # These function only works on one image at  time
+        ASD = compute_ASD(self.mock_np_data[0].squeeze(), self.mock_gt[0].squeeze())
+        HD = compute_HD(self.mock_np_data[0].squeeze(), self.mock_gt[0].squeeze())
+        HD95 = compute_HD95(self.mock_np_data[0].squeeze(), self.mock_gt[0].squeeze())
+        self._logger.info(f"ASD: {ASD:.2f}, HD: {HD:.2f}, HD95: {HD95:.2f}")
+
+        # Test voxel spacing
+        ASD  = compute_ASD(self.mock_np_data[0].squeeze() , self.mock_gt[0].squeeze(), voxel_spacing=(0.5, 0.5, 3))
+        HD   = compute_HD(self.mock_np_data[0].squeeze()  , self.mock_gt[0].squeeze(), voxel_spacing=(0.5, 0.5, 3))
+        HD95 = compute_HD95(self.mock_np_data[0].squeeze(), self.mock_gt[0].squeeze(), voxel_spacing=(0.5, 0.5, 3))
+        self._logger.info(f"ASD: {ASD:.2f}, HD: {HD:.2f}, HD95: {HD95:.2f}")
