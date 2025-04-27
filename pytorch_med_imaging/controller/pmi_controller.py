@@ -612,6 +612,7 @@ class PMIController(object):
         self.solver.plotting = self.plotting
         self.solver.plotter_type = self.plotter_type
         self.solver.set_data_loader(loader, loader_val)
+        self._logger.info(f"Training model: {self.solver.get_net().__class__.__name__}")
         self.solver.fit(self.cp_save_dir,
                         debug_validation=self.debug_validation) # TODO: move checkpoint_save argument to else where
 
@@ -620,6 +621,7 @@ class PMIController(object):
         self._logger.info("Starting evalution...")
         # Create inferencer
         self.inferencer = inferencer = self.inferencer_cls(self.solver_cfg)
+        self._logger.info(f"Inferencing model: {self.inferencer.get_net().__class__.__name__}")
         # Create dataloader
         loader = self.data_loader_cls(self.data_loader_cfg)
         inferencer.set_data_loader(loader)

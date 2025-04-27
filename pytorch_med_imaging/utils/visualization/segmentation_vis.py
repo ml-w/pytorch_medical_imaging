@@ -670,7 +670,7 @@ def draw_contour_3d(img: np.ndarray,
 
     Args:
         img (np.ndarray):
-            A 3D input image stack. Must have the same shape as `seg`.
+            A 3D input image stack. Must have the same shape as `seg`.Phase 3 screening database_20250424.xlsx
         seg (np.ndarray):
             A 3D segmentation mask. Must have the same shape as `img`.
         slice_dim (int, Optional):

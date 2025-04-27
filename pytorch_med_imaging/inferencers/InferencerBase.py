@@ -68,6 +68,10 @@ class InferencerBase(SolverBase):
         self._check_write_out_ready = SolverBase._check_fit_ready
         super(InferencerBase, self).__init__(cfg)
 
+        # Inferencer flags
+        self._TARGET_DATASET_EXIST_FLAG = False
+
+
     def initialization(self, cfg: dict, **kwargs):
         r"""Inferencer specific initalization"""
         # initialize

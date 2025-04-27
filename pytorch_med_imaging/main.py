@@ -88,7 +88,7 @@ def console_entry(raw_args=None):
         logger.info(">" * 40 + " Start Main " + "<" * 40)
         try:
             main = PMIController(config, a)
-            main.np_run()
+            main.np_run() # Note this forwards to np_plotter
         except Exception as e:
             logger.error("Uncaught exception!")
             logger.exception(e)
