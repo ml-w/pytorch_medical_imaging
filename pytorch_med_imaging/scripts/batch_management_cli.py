@@ -146,8 +146,6 @@ def add(ctx, path, batch_name, sub_category, files):
         sub_category: Category to add files to (training/testing/validation)
         files: List of files to add
     """
-    path = ctx.obj['path']
-
     if not files:
         raise click.ClickException("No files provided")
 
