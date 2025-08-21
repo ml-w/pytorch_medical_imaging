@@ -385,9 +385,12 @@ class PMIController(object):
                 _old = getattr(inst, attr, None)
                 if _old is None:
                     continue
-                _new = _old.replace('{fold_code}', self.fold_code)
-                self._logger.debug(f"Replace {_old} with {_new}")
-                setattr(inst, attr, _new)
+                try:
+                    _new = _old.replace('{fold_code}', self.fold_code)
+                    self._logger.debug(f"Replace {_old} with {_new}")
+                    setattr(inst, attr, _new)
+                except:
+                    self._logger.error(f"Failed to replace {_old} with {_new}")
 
         # if in debug_mode
         if self.debug_mode:
