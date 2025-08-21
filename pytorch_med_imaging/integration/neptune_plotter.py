@@ -40,8 +40,8 @@ class NP_Plotter:
         self._logger = MNTSLogger[self.__class__.__name__]
 
         # Attributes
-        self.project = project or os.environ.get("NEPTUNE_PROJECT", None)
-        self.api_token = api_token or os.environ.get("NEPTUNE_API_TOKEN", None)
+        self.project = project or os.environ.get("NEPTUNE_PROJECT", "")
+        self.api_token = api_token or os.environ.get("NEPTUNE_API_TOKEN", "")
         self.np_run: neptune.Run = None
 
         # Create/Connect Neptune object
