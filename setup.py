@@ -1,4 +1,4 @@
-from setuptools import setup, Extension
+from setuptools import setup, Extension, find_packages
 from Cython.Build import cythonize
 import numpy
 
@@ -20,9 +20,8 @@ extensions = [
     ),
 ]
 setup(
-    name="pytorch-med-imaging",
-    version="1.0",
-    packages=["pytorch_med_imaging.pmi_data.computations"],
+    name="pytorch-medical-imaging",
+    version="0.1",  # 與 setup.cfg 保持一致
+    packages=find_packages(),  # 自動發現所有套件
     ext_modules=cythonize(extensions, language_level="3"),
 )
-

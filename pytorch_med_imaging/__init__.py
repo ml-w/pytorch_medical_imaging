@@ -5,6 +5,16 @@ from . import networks
 from . import inferencers
 from . import solvers
 from . import utils
+from . import controller
 
 # __all__ = ['MedImgDataset', 'PMIDataLoader', 'Loss', 'Networks', 'Inferencers', 'Solvers']
-# __all__ = ['loss', 'pmi_data', 'pmi_data_loader', 'networks', 'inferencers']
+__all__ = [
+    "pmi_data",
+    "pmi_data_loader",
+    "loss",
+    "networks",
+    "inferencers",
+    "solvers",
+    "utils",
+    "controller"
+]

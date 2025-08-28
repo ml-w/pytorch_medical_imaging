@@ -1,2 +1,3 @@
-graft pytorch_med_imaging/*
+recursive-include pytorch_med_imaging *.so
+recursive-include pytorch_med_imaging *.txt
 include DICOM-CT-PD-dict_v8.txt

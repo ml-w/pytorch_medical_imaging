@@ -53,9 +53,6 @@ class PMIBaseCFG:
         # replace instance attributes
         if len(kwargs):
             for key, value in kwargs.items():
-                # check if the value was defined in the class
-                if not hasattr(cls, key):
-                    warnings.warn(f"Trying to set non-standard attribute {key} to {cls}")
                 setattr(self, key, value)
 
     def __str__(self):
