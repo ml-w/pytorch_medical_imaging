@@ -92,63 +92,70 @@ class SegmentationInferencer(InferencerBase):
             if self.data_loader.sampler is not None:
                 # Loop through the data subject-by-subject
                 for index, subject in enumerate(tqdm(self.data_loader.queue._get_subjects_iterable(), desc="Steps", position=0)):
-                    # sample and inference
-                    self._logger.info(f"Processing subject: {subject}")
-
-                    # check if probmap is empty
-                    probmap = subject.get('probmap', None)
-                    if not probmap is None:
-                        if probmap.count_nonzero() == 0:
-                            self._logger.warning(f"Subject {subject['uid']} has no proper prob-map, skipping")
-                            continue
-                    else:
-                        if isinstance(self.data_loader.sampler_instance, (tio.WeightedSampler)):
-                            msg = "Weighted sampler was used but probmap for weights was not provided."
-                            raise AttributeError(msg)
-
-                    # create new sampling queue based on inf_sample_per_vol
-                    _queue, _aggregator = self.data_loader.create_aggregation_queue(
-                        subject, self.data_loader.inf_samples_per_vol)
-
-                    # create dataloader for the queue
-                    dataloader = DataLoader(_queue, batch_size=self.batch_size, num_workers=0)
-                    ndim = subject.get_first_image()[tio.DATA].dim()  # Assume channel dim always exist even
-                                                                      # if only has 1 channel
-                    # sample patches from the subject and perform inference.
-                    for i, mb in enumerate(tqdm(dataloader, desc="Patch", position=1)):
-                        s = self._unpack_minibatch(mb, self.unpack_key_inference)
-                        s = self._match_type_with_network(s)
-
-                        if isinstance(s, list):
-                            out = self.net.forward(*s)
-                        else:
-                            out = self.net.forward(s)
-                        self._logger.debug(f"{out.shape}, {mb[tio.LOCATION].shape}")
-                        # If the original input is 3D, but 2D patches was given out here, expand it back to 3D
-                        if ndim == 4:
-                            while out.dim() < 5: # should be B x C x H x W x Z
-                                out = out.unsqueeze(-1) # last dimension is the slice dimension
-                        _aggregator.add_batch(out, mb[tio.LOCATION])
-                    out = _aggregator.get_output_tensor()
-
-                    out[0] += 1E-7 # Work arround be behavior of torch.argmax(torch.zero(3)) = 2 instead of 0
-                    out = torch.argmax(out, dim=0, keepdim=True).int()  # Keep dim for recovering orientation
-
-                    # If augmentation was applied, inversely apply it to recover the original image
                     try:
-                        original_orientation = ''.join(subject['orientation'])
-                        self._logger.info(f"Trying to recover orientation to: {original_orientation}")
-                        _sub = tio.Subject(a=tio.LabelMap(tensor=out))
-                        _sub = sitk.DICOMOrient(_sub['a'].as_sitk(), original_orientation)
-                        out = torch.from_numpy(sitk.GetArrayFromImage(_sub)).int()
-                        # out = _sub['gt'][tio.DATA]
-                    except Exception as e:
-                        self._logger.exception(f"Recovering orientation failed: {e}")
-                        # torchio convention (H x W x D) to sitk convention (D x W x H)
-                        # * Note: No need if recovery of the orientation was done properly since as_sitk do the job - 6/1/2022
-                        out = out.squeeze().permute(2, 1, 0).int()
+                        # sample and inference
+                        self._logger.info(f"Processing subject: {subject}")
 
-                    in_image_data.write_uid(out, index, self.output_dir)
+                        # check if probmap is empty
+                        probmap = subject.get('probmap', None)
+                        if not probmap is None:
+                            if probmap.count_nonzero() <= 50:
+                                self._logger.warning(f"Subject {subject['uid']} has no proper prob-map, skipping")
+                                continue
+                        else:
+                            if isinstance(self.data_loader.sampler_instance, (tio.WeightedSampler)):
+                                msg = "Weighted sampler was used but probmap for weights was not provided."
+                                raise AttributeError(msg)
+
+                        # create new sampling queue based on inf_sample_per_vol
+                        _queue, _aggregator = self.data_loader.create_aggregation_queue(
+                            subject, self.data_loader.inf_samples_per_vol)
+
+                        # create dataloader for the queue
+                        dataloader = DataLoader(_queue, batch_size=self.batch_size, num_workers=0)
+                        ndim = subject.get_first_image()[tio.DATA].dim()  # Assume channel dim always exist even
+                                                                        # if only has 1 channel
+                        # sample patches from the subject and perform inference.
+                        for i, mb in enumerate(tqdm(dataloader, desc="Patch", position=1)):
+                            s = self._unpack_minibatch(mb, self.unpack_key_inference)
+                            s = self._match_type_with_network(s)
+
+                            if isinstance(s, list):
+                                out = self.net.forward(*s)
+                            else:
+                                out = self.net.forward(s)
+                            self._logger.debug(f"{out.shape}, {mb[tio.LOCATION].shape}")
+                            # If the original input is 3D, but 2D patches was given out here, expand it back to 3D
+                            if ndim == 4:
+                                while out.dim() < 5: # should be B x C x H x W x Z
+                                    out = out.unsqueeze(-1) # last dimension is the slice dimension
+                            _aggregator.add_batch(out, mb[tio.LOCATION])
+                        out = _aggregator.get_output_tensor()
+
+                        out[0] += 1E-7 # Work arround be behavior of torch.argmax(torch.zero(3)) = 2 instead of 0
+                        out = torch.argmax(out, dim=0, keepdim=True).int()  # Keep dim for recovering orientation
+
+                        # If augmentation was applied, inversely apply it to recover the original image
+                        try:
+                            original_orientation = ''.join(subject['orientation'])
+                            self._logger.info(f"Trying to recover orientation to: {original_orientation}")
+                            _sub = tio.Subject(a=tio.LabelMap(tensor=out))
+                            _sub = sitk.DICOMOrient(_sub['a'].as_sitk(), original_orientation)
+                            out = torch.from_numpy(sitk.GetArrayFromImage(_sub)).int()
+                            # out = _sub['gt'][tio.DATA]
+                        except Exception as e:
+                            self._logger.exception(f"Recovering orientation failed: {e}")
+                            # torchio convention (H x W x D) to sitk convention (D x W x H)
+                            # * Note: No need if recovery of the orientation was done properly since as_sitk do the job - 6/1/2022
+                            out = out.squeeze().permute(2, 1, 0).int()
+
+                        in_image_data.write_uid(out, index, self.output_dir)
+
+                    except Exception as e:
+                        self._logger.error(f"Unknown issue when dealing with subject: {subject['uid']}. Original error "
+                                           f"is as follow:")
+                        self._logger.exception(e)
+
             else:
                 raise NotImplementedError("For segmentation, it is expected that a sampler must be specified.")
 
