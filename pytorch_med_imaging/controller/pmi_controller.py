@@ -231,15 +231,21 @@ class PMIController(object):
 
         # Finally create plotter
         if self.plotting:
-            self.create_plotter()
-            # if this is a neptune run, add the ID to the config
-            if self.plotter_type == 'neptune':
-                current_np_id = self._plotter.np_run['sys/id'].fetch()
-                with open(self.flags_file, 'r') as f:
-                    flags = yaml.safe_load(f)
-                flags['controller_cfg']['neptune_id'] = current_np_id
-                with open(self.flags_file, 'w') as f:
-                    yaml.safe_dump(flags, f)
+            try:
+                self.create_plotter()
+                # if this is a neptune run, add the ID to the config
+                if self.plotter_type == 'neptune':
+                    current_np_id = self._plotter.np_run['sys/id'].fetch()
+                    with open(self.flags_file, 'r') as f:
+                        flags = yaml.safe_load(f)
+                    flags['controller_cfg']['neptune_id'] = current_np_id
+                    with open(self.flags_file, 'w') as f:
+                        yaml.safe_dump(flags, f)
+            except Exception as e:
+                self._logger.exception(e)
+                self._logger.warning("plotter cannot be created, shutting it down")
+                self._plotter = None
+                self.plotter_type = None
         else:
             self._plotter = None
 
