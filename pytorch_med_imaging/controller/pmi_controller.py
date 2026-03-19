@@ -234,20 +234,15 @@ class PMIController(object):
             try:
                 self.create_plotter()
                 # if this is a neptune run, add the ID to the config
-                if self.plotter_type == 'neptune':
-                    current_np_id = self._plotter.np_run['sys/id'].fetch()
-                    with open(self.flags_file, 'r') as f:
-                        flags = yaml.safe_load(f)
-                    flags['controller_cfg']['neptune_id'] = current_np_id
-                    with open(self.flags_file, 'w') as f:
-                        yaml.safe_dump(flags, f)
             except Exception as e:
                 self._logger.exception(e)
                 self._logger.warning("plotter cannot be created, shutting it down")
                 self._plotter = None
+                self.plotting=False
                 self.plotter_type = None
         else:
             self._plotter = None
+            self.plotting = False
 
 
     def _load_config(self, config_file = None):
@@ -571,7 +566,7 @@ class PMIController(object):
             controller_config = {'cfg/controller/' + k: v for k, v in self.__dict__.items() if
                                  isinstance(v, (str, int, float))}
             # record the run parameters
-            if self.plotting:
+            if self.plotting and self._plotter is not None:
                 self._plotter.save_dict(controller_config)
                 if hasattr(self, 'guild_dict'):
                     guild_config = {'cfg/guild/' + k: v for k, v in self.guild_dict.items()}
@@ -684,19 +679,24 @@ class PMIController(object):
                 writer = SummaryWriter(str(tensor_dir))
                 self._plotter = TB_plotter(writer)
             elif self.plotter_type == 'neptune':
-                self._logger.info("Using Neptune plotter")
-                self._plotter = NP_Plotter()
-                # check if there's already a run with the same guid ID
-                if self.neptune_id is not None:
-                    self._logger.warning(f"Neptune ID {self.neptune_id} exist, continuing plotting to this run.")
-                    self._plotter.continue_run(neptune_run_id=self.neptune_id)
-                else:
-                    self._plotter.init_run(init_meta=self.plotter_init_meta)
+                self._logger.warning(f"Neptune has been shutdown in 6th March 2026 and cease SaaS support. Falling "
+                                     f"back to no plotter")
+
+                self._plotter = None
+                self._plotting = False
+                # self._plotter = NP_Plotter()
+                # # check if there's already a run with the same guid ID
+                # if self.neptune_id is not None:
+                #     self._logger.warning(f"Neptune ID {self.neptune_id} exist, continuing plotting to this run.")
+                #     self._plotter.continue_run(neptune_run_id=self.neptune_id)
+                # else:
+                #     self._plotter.init_run(init_meta=self.plotter_init_meta)
+
         except Exception as e:
             self._logger.warning("Plotter creation encounters failure, falling back to no writer.")
             self._logger.exception(e)
-            raise e
             self._plotter = None
+            self._plotting = False
 
     @property
     def plotter(self):
