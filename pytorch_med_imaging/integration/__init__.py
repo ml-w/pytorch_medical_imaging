@@ -1,5 +1,5 @@
-from .neptune_plotter import NP_Plotter
 from .tb_plotter import TB_plotter
+from .weight_n_biases_plotter import WNB_Plotter
 
-__all__ = ['NP_Plotter', 'TB_plotter']
-avail_plotter = ['neptune', 'tensorboard']
+__all__ = ['TB_plotter', 'WNB_Plotter']
+avail_plotter = ['tensorboard', 'wandb']

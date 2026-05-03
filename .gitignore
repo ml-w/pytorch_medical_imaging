@@ -3,13 +3,18 @@
 *.sh
 *.so
 *egg-info
-Backup
 *.pt
-.idea
 *build
-Configs
-/.SynologyWorkingDirectory/
 *DCM
+
+# IDE files
+.idea
+.vscode
+CLAUDE.md
+
+# Runtime files
+Backup
+Configs
+.*
 Doc/html
 Doc/doctrees
-pytorch_medical_imaging.egg-info

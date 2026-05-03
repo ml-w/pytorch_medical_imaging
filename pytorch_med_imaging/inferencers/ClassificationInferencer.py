@@ -15,7 +15,7 @@ from tqdm import *
 
 from .InferencerBase import InferencerBase
 from ..solvers import ClassificationSolverCFG
-from ..integration import NP_Plotter, TB_plotter
+from ..integration import TB_plotter, WNB_Plotter
 from ..utils.visualization.segmentation_vis import draw_overlay_heatmap
 from ..pmi_data_loader.pmi_dataloader_base import PMIDataLoaderBase
 from ..pmi_data import DataLabel
@@ -234,9 +234,8 @@ class ClassificationInferencer(InferencerBase):
 
         dl = DataLabel.from_dict(out_decisions)
         dl.write(self.output_dir)
-        if self.plotting:
-            if self.plotter_type == 'neptune':
-                self._plotter.np_run['test/perf/preds'].upload(self.output_dir)
+        if self.plotting and self._plotter is not None:
+            self._plotter.save_file('test/perf/preds', self.output_dir)
         self._dl = dl
         return self._dl
 

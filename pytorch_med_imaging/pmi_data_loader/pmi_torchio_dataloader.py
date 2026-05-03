@@ -140,18 +140,21 @@ class PMITorchioDataLoader(PMIImageDataLoader):
                         raise FileNotFoundError(msg)
                     data[k] = DataLabel.from_csv(csv_path, target_column=tar_cols)
             elif isinstance(v, (str, Path)):
-                self._logger.debug(f"Detect image data input format.")
-                v = Path(v)
-                if v.is_dir():
-                    # If directory, treat it as image path
-                    _type = self.input_dtypes.get(k, 'float')
-                    _data = self._read_image(v, dtype=_type)
-                    data[k] = _data
-
-                    # Also save the loaded data's path, as it's path, we have to convert it to str
-                    data[f'{k}-srcpath'] = _data.data_source_path.apply(lambda x: str(x))
+                if v == 'None':
+                    self._logger.warning(f"Receive 'None' as input. Skipping dataload for key {k}")
                 else:
-                    raise TypeError(f"String {str(v)} is specified as input but does not lead to image/data directory.")
+                    self._logger.debug(f"Detect image data input format.")
+                    v = Path(v)
+                    if v.is_dir():
+                        # If directory, treat it as image path
+                        _type = self.input_dtypes.get(k, 'float')
+                        _data = self._read_image(v, dtype=_type)
+                        data[k] = _data
+
+                        # Also save the loaded data's path, as it's path, we have to convert it to str
+                        data[f'{k}-srcpath'] = _data.data_source_path.apply(lambda x: str(x))
+                    else:
+                        raise TypeError(f"String {str(v)} is specified as input but does not lead to image/data directory.")
             elif isinstance(v, Iterable):
                 self._logger.warning("Input iterable data detected. Note that automatic ordering for "
                                      "custom iterable data is not supported.")

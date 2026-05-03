@@ -4,7 +4,7 @@ from mnts.mnts_logger import MNTSLogger
 from ..networks import *
 from ..pmi_data_loader.pmi_dataloader_base import PMIDataLoaderBase
 from ..solvers.SolverBase import SolverBase, SolverBaseCFG
-from ..integration import TB_plotter, NP_Plotter
+from ..integration import TB_plotter, WNB_Plotter
 
 import torch
 import torchio as tio

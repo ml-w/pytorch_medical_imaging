@@ -18,7 +18,7 @@ from typing import Union, Iterable, Optional
 from pathlib import Path
 from ..pmi_base_cfg import PMIBaseCFG
 from ..integration.tb_plotter import TB_plotter
-from ..integration.neptune_plotter import NP_Plotter
+from ..integration.weight_n_biases_plotter import WNB_Plotter
 from .. import lr_scheduler as pmi_lr_scheduler
 from ..lr_scheduler import PMILRScheduler
 from ..pmi_data_loader import PMIDataLoaderBase, PMIDistributedDataWrapper
@@ -488,7 +488,7 @@ class SolverBase(object):
         else:
             self.early_stop = early_stop
 
-    def set_plotter(self, plotter: Union[TB_plotter, str]) -> None:
+    def set_plotter(self, plotter: Union[TB_plotter, WNB_Plotter, None]) -> None:
         r"""Externally set :attr:`tb_plotter` manually. Note that this
         does not change
 
