@@ -410,12 +410,14 @@ class PMIDataLoaderBase(object):
         # Map IDs to the same order
         first_k = list(ids.keys())[0]
         for k, v in data_exclude_none.items():
+            k: str
+            v: PMIDataBase
             if k == first_k:
                 continue
             try:
-                v.remap_to_master_data(data_exclude_none[first_k])
-            except:
-                self._logger.warning(f"Failed to remap: {k}")
+                v.remap_to_master_data(data_exclude_none[first_k]) # this is for mapping DataLabel mainly
+            except Exception as e:
+                self._logger.warning(f"Failed to remap: {k}; Error: {e}")
         data_exclude_none['uid'] = list(ids[first_k])
 
         subjects = [tio.Subject(**{k: v for k, v in zip(data_exclude_none.keys(), row)})

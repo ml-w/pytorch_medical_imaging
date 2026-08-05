@@ -76,15 +76,21 @@ class WNB_Plotter:
         if wandb.run is not None:
             self._logger.warning("An active W&B run already exists. Finishing it before starting a new one.")
             wandb.finish()
-        init_meta = init_meta or {}
+        init_meta = dict(init_meta or {})
+        # Allow plotter_init_meta to override the instance-level project/entity
+        project = init_meta.pop('project', self.project or None)
+        entity  = init_meta.pop('entity',  self.entity  or None)
         self._logger.info("Initializing W&B run.")
-        wandb.init(project=self.project, entity=self.entity or None, **init_meta)
+        wandb.init(project=project, entity=entity, **init_meta)
         self._logger.info(f"W&B run initialized: {wandb.run.name} (id={wandb.run.id})")
 
-    def continue_run(self, run_id: str) -> None:
+    def continue_run(self, run_id: str, init_meta: Optional[dict] = None) -> None:
         """Resume an existing W&B run by its run ID."""
+        init_meta = dict(init_meta or {})
+        project = init_meta.pop('project', self.project or None)
+        entity  = init_meta.pop('entity',  self.entity  or None)
         self._logger.info(f"Resuming W&B run: {run_id}")
-        wandb.init(project=self.project, entity=self.entity or None, id=run_id, resume='must')
+        wandb.init(project=project, entity=entity, id=run_id, resume='must', **init_meta)
 
     def stop(self) -> None:
         if wandb.run is not None:

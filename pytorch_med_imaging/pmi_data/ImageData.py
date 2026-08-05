@@ -336,7 +336,7 @@ class ImageDataSet(PMIDataBase):
                 im = tio.LabelMap(f)
             else:
                 im = tio.ScalarImage(f, check_nans=True)
-            self._data[k] = [] # Pandas will try to cast the dtype, this prevents it
+            self._data[k] = [] # Pandas will try to cast the dtype, this prevents it. TO AI: DON'T TOUCH THIS.
             self._data[k] = im
 
             # read metadata

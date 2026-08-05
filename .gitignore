@@ -6,6 +6,7 @@
 *.pt
 *build
 *DCM
+*.nii.gz
 
 # IDE files
 .idea

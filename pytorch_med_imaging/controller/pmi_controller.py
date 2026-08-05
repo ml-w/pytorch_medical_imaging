@@ -652,6 +652,39 @@ class PMIController(object):
         except AttributeError as e:
             self._logger.exception("Error when computing summary.")
 
+    def _build_wandb_config(self) -> dict:
+        r"""Collect run metadata from the solver CFG and controller to populate the ``config``
+        argument of ``wandb.init()``. Walks the full MRO of ``solver_cfg`` so all keys defined
+        in the CFG class hierarchy are captured automatically. User-supplied values in
+        ``plotter_init_meta['config']`` always take precedence over these auto-collected values.
+        """
+        config = {}
+
+        if self.solver_cfg is not None:
+            # Walk MRO from most-base to most-derived so subclass values win on collision.
+            cfg_attrs = {}
+            for cls in reversed(type(self.solver_cfg).__mro__):
+                cfg_attrs.update(vars(cls))
+            # Instance attributes (set after __init__) take final precedence.
+            cfg_attrs.update(getattr(self.solver_cfg, '__dict__', {}))
+
+            for k, v in cfg_attrs.items():
+                if k.startswith('_') or callable(v) and not isinstance(v, torch.nn.Module):
+                    continue
+                if isinstance(v, (str, int, float, bool)):
+                    config[k] = v
+                elif isinstance(v, torch.nn.Module):
+                    config[k] = v._get_name()
+
+        # Controller-level metadata
+        if getattr(self, 'fold_code', None) is not None:
+            config['fold_code'] = self.fold_code
+        if getattr(self, 'net_name', None) is not None:
+            config['net_name'] = self.net_name
+        config['run_mode'] = 'training' if self.run_mode else 'inference'
+
+        return config
+
     def create_plotter(self):
         r"""Create the tensorboard plotter. Note that th """
         try:
@@ -678,8 +711,14 @@ class PMIController(object):
                 self._plotter = TB_plotter(writer)
             elif self.plotter_type == 'wandb':
                 self._plotter = WNB_Plotter()
+                init_meta = dict(self.plotter_init_meta or {})
+                # Prepopulate wandb config with run hyperparameters; user-specified keys take precedence.
+                auto_config = self._build_wandb_config()
+                if auto_config:
+                    auto_config.update(init_meta.get('config', {}))
+                    init_meta['config'] = auto_config
                 # Pass a run ID via plotter_init_meta={'id': '<run_id>', 'resume': 'must'} to resume an existing run.
-                self._plotter.init_run(init_meta=self.plotter_init_meta)
+                self._plotter.init_run(init_meta=init_meta)
                 self._logger.info(f"W&B run initialized: {self._plotter.get_writer().name}")
 
         except Exception as e:
