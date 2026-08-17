@@ -17,10 +17,9 @@ import pandas as pd
 import concurrent.futures
 from tqdm import tqdm
 try:
-    from mpi4py import MPI
     from tqdm.contrib.concurrent import process_map
     MPI_AVAILABLE = True
-except ImportError:
+except (ImportError, OSError):
     MPI_AVAILABLE = False
 from tabulate import tabulate
 
@@ -73,6 +72,15 @@ def analyze_duplicates(cache: Dict) -> pd.DataFrame:
     else:
         return pd.DataFrame(columns=['file_path', 'hash', 'duplicate_group_size', 'duplicate_files'])
 
+def process_file(args):
+    file_path, rel_path, mtime = args
+    try:
+        file_hash = hash_nifti_data(file_path)
+        return (rel_path, file_hash, mtime, None)
+    except Exception as e:
+        return (rel_path, None, mtime, str(e))
+
+
 @click.group()
 @click.pass_context
 def cli(ctx):
@@ -85,7 +93,7 @@ def cli(ctx):
 @click.option('--output', '-o', type=click.Path(), help='Save duplicate analysis to CSV file')
 @click.option('--debug', is_flag=True, help='Debug mode: only process first 10 files')
 @click.option('--workers', default=None, type=int, help='Number of worker processes (default: cpu count)')
-@click.option('--mpi', is_flag=True, help='Enable MPI multiprocessing mode')
+@click.option('--mpi', is_flag=True, help='Use process_map (tqdm parallel) instead of ProcessPoolExecutor')
 @click.pass_context
 def hasher(ctx, directory: str, force: bool, output: str, debug: bool, workers: int, mpi: bool) -> None:
     """Process all NIFTI files in directory and analyze duplicate pixel data"""
@@ -114,14 +122,6 @@ def hasher(ctx, directory: str, force: bool, output: str, debug: bool, workers: 
         if not force and rel_path in cache and cache[rel_path]['mtime'] == mtime:
             continue
         files_to_process.append((file_path, rel_path, mtime))
-
-    def process_file(args):
-        file_path, rel_path, mtime = args
-        try:
-            file_hash = hash_nifti_data(file_path)
-            return (rel_path, file_hash, mtime, None)
-        except Exception as e:
-            return (rel_path, None, mtime, str(e))
 
     results = []
     if files_to_process:
