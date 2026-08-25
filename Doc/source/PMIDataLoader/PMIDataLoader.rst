@@ -83,3 +83,18 @@ Class definition
 .. autoclass:: PMIImageMCDataLoader
     :members:
     :private-members:
+
+PMITorchioDataLoader
+--------------------
+
+Configurations
+^^^^^^^^^^^^^^
+.. autodata:: PMITorchioDataLoaderCFG
+    :annotation:
+
+Class definition
+^^^^^^^^^^^^^^^^
+.. autoclass:: PMITorchioDataLoader
+    :members:
+    :show-inheritance:
+    :private-members:
