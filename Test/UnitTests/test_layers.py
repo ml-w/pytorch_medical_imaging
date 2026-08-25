@@ -4,7 +4,6 @@ import unittest
 from torch.masked import masked_tensor, as_masked_tensor
 from pytorch_med_imaging.networks.layers.StandardLayers3D import activation_funcs
 from pytorch_med_imaging.networks.layers.StandardLayers3D import *
-from pytorch_med_imaging.networks.AttentionResidual import *
 
 class Test3dLayers(unittest.TestCase):
     r"""Test the 3D layers implemented in pmi.networks.layers"""

@@ -4,8 +4,20 @@ from typing import *
 
 from pytorch_med_imaging.pmi_data_loader import *
 from pytorch_med_imaging.solvers import *
-from pytorch_med_imaging.networks import UNet_p, LiNet3d
+from pytorch_med_imaging.networks import UNet_p
 from pytorch_med_imaging.lr_scheduler import PMILRScheduler
+
+
+class _SimpleClfNet(nn.Module):
+    """Minimal 3-D classification net used only in unit tests."""
+    def __init__(self, in_ch, num_cls):
+        super().__init__()
+        self.pool = nn.AdaptiveAvgPool3d(1)
+        self.fc = nn.Linear(in_ch, num_cls)
+
+    def forward(self, x):
+        return self.fc(self.pool(x).flatten(1))
+
 
 class SampleSegLoaderCFG(PMIImageDataLoaderCFG):
     input_dir  : str = './sample_data/img'
@@ -98,7 +110,7 @@ class SampleClsSolverCFG(ClassificationSolverCFG):
     unpack_key_forward: Iterable[str] = ['input', 'gt']
     unpack_key_inference: Iterable[str] = ['input']
 
-    net          : torch.nn.Module   = LiNet3d(1, 3, use_layer_norm=True)
+    net          : torch.nn.Module   = _SimpleClfNet(1, 3)
     loss_function: torch.nn          = nn.CrossEntropyLoss(weight = torch.as_tensor(class_weights))
     optimizer    : str               = 'Adam'
     data_loader  : PMIDataLoaderBase = None
@@ -112,4 +124,4 @@ class SampleClsSolverCFG(ClassificationSolverCFG):
 class SampleBinClsSolverCFG(SampleClsSolverCFG):
     class_weights  = [1.5]
     loss_function: torch.nn = nn.BCEWithLogitsLoss(weight = torch.as_tensor(class_weights))
-    net: torch.nn.Module = LiNet3d(1, 1, use_layer_norm=True)
+    net: torch.nn.Module = _SimpleClfNet(1, 1)
