@@ -1,6 +1,3 @@
-[submodule "ThirdParty/surface-distance"]
-	path = ThirdParty/surface-distance
-	url = git@github.com:alabamagan/surface-distance.git
 [submodule "ThirdParty/torchio"]
 	path = ThirdParty/torchio
 	url = git@github.com:alabamagan/torchio.git

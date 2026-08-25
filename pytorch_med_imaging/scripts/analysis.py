@@ -6,7 +6,7 @@ from pytorch_med_imaging.pmi_data import ImageDataSet
 from mnts.mnts_logger import MNTSLogger
 from tqdm import tqdm
 import argparse
-from surface_distance import compute_surface_distances, compute_average_surface_distance
+from pytorch_med_imaging.perf.segmentation_perf import compute_ASD as _compute_ASD
 
 
 __all__ = ['ASD', 'SSIM', 'DICE', 'segmentation_analysis']
@@ -19,9 +19,7 @@ def ASD(seg, test, spacing):
     seg = seg.squeeze()
     test = test.squeeze()
     assert seg.ndim == 3 and test.ndim == 3, "Input dim in-correct: {} {}".format(seg.shape, test.shape)
-
-    return np.sum(compute_average_surface_distance(
-        compute_surface_distances(seg, test, spacing))) / 2.
+    return _compute_ASD(test, seg, voxel_spacing=spacing)
 
 def GrossVolume_Test(gt, test, spacing):
     """
