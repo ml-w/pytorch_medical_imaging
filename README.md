@@ -1,6 +1,10 @@
 # Introduction
 
-This repository aims to be a pipeline that uses Pytorch to train and inference deep learning model for medical imaging data.
+This repository aims to be a pipeline that uses Pytorch to train and inference deep learning model for medical imaging 
+data. Intensity normalization is especially important for MRI weighted images because a fixed physical scale is not 
+available. Normalizing the intensity profile there is a requirement for quantitative analyses (aside of volumes) for 
+MRI images. However, MRI normalization is unfortunately often complicated with site-specific techniques and requring
+tissue references. This repo aims to allow one-click reproduction of normalization pipeline.
 
 # Installation
 
@@ -18,7 +22,6 @@ Install custom repos that are pre-requisits:
 ```bash
 pip install ./mri_normalization_tools
 pip install pytorch_medical_imaging/ThirdParty/torchio # forked version refined for this package
-pip install pytorch_medical_imaging/ThirdParty/surface-distance # for in-built system to evalute performance
 ```
 
 Install the main package locally:
@@ -41,7 +44,7 @@ pip install git+https://github.com/alabamagan/torchio
 
 ### MRI image normalization tools
 
-This package uses the logger from MNTS, which is the normalization tool I wrote for convinience and reproducibility.
+This package uses the logger from MNTS, which is the normalization tool I wrote for convenience and reproducibility. This package was developed in sync with MNTS, so if you use the nightly version there shall be no conflicts, except there are certain LFS assets that won't be usable. 
 
 To install:
 
@@ -142,7 +145,9 @@ For example, if you wish to perform classification, you will typically use `Clas
 
 ## Using CFG with `guildai`
 
-This package has also developed a system to train and inference with the help of experiement management package `guildai` (not to be confused with `guild` although most of its commands are based on `guild` as executable entry). You can use command line to define the hyperparameters you want for model training provided that you set up the flags correctly. From the [Call-hierarchy](#call-hierarchy) diagram, you see how the instance were created in sequential order behind the scene. However, in practice, you would typically create the `Controller` first, which will create the solver/inferencer. 
+> `guildai` is now an abandoned project, but the current version still works and remain very robust. This package will remain recommending `guildai` for experiment managements.
+
+This package has also developed a system to train and inference with the help of experiment management package `guildai` (not to be confused with `guild` although most of its commands are based on `guild` as executable entry). You can use command line to define the hyperparameters you want for model training provided that you set up the flags correctly. From the [Call-hierarchy](#call-hierarchy) diagram, you see how the instance were created in sequential order behind the scene. However, in practice, you would typically create the `Controller` first, which will create the solver/inferencer. 
 
 For example, if you wish to train a classificaiton network, you will typically use the `ClassificationSolver` and `ClassificationInferencer`. The syntax is as follow: 
 
