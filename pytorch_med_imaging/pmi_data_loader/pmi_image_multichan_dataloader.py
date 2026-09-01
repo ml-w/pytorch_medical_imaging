@@ -133,6 +133,7 @@ class PMIImageMCDataLoader(PMIImageDataLoader):
         if not self.patch_sampling_callback in ("", None):
             raise AttributeError("Patch sampling callback cannot be used with ``MCQueue``!")
 
+        # if sampler is missing, creat a uniform sampler
         queue_dict, training = self._prepare_queue_dict(exclude_augment, subjects, training)
         if self.sampler_instance is None:
             first_shape = subjects[0].shape[1:]
@@ -146,10 +147,10 @@ class PMIImageMCDataLoader(PMIImageDataLoader):
             else:
                 subjects.set_transform(crop_or_pad)
 
-            # Reset sampler
+            # Reset sampler so the old sampler is not passed around
             self.sampler = 'uniform'
             self.sampler_instance = tio.UniformSampler(patch_size=first_shape)  # first dim is batch
-            self.queue_args[-1] = self.sampler_instance
+            queue_dict['sampler'] = self.sampler_instance # 4 arguments in `tio.Queue`
 
         queue_dict['channel_concat'] = self._ch_concat
         if self.new_attr is None:
