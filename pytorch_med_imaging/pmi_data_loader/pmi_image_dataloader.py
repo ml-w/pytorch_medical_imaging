@@ -63,7 +63,7 @@ class PMIImageDataLoaderCFG(PMIDataLoaderBaseCFG):
     data_types                    : Optional[Iterable] = [float, float]
     sampler                       : Optional[str]      = None                 # 'weighted' or 'uniform'
     sampler_kwargs                : Optional[dict]     = dict()               # pass to ``tio.Sampler``
-    augmentation                  : Optional[str]      = None                 # yaml file to create tio transform
+    augmentation                  : Optional[Union[str, tio.Compose]] = None          # yaml file to create tio transform
     force_augment                 : Optional[bool]     = False                # Force augmentation even in inference
     create_new_attribute          : Optional[str]      = None                 # create a new attribute in subjects for callback
     patch_sampling_callback       : Optional[Callable] = None                 # callback to generate new data
@@ -331,6 +331,10 @@ class PMIImageDataLoader(PMIDataLoaderBase):
         """
         self._logger.info("Reading input images...")
         img_out = self._read_image(self.input_dir, dtype=self.data_types[0])
+        if img_out is None:
+            msg = f"`input_dir` is None or empty — cannot load input images. Check your config."
+            self._logger.error(msg)
+            raise AttributeError(msg)
         gt_out = self._load_gt_data()
         self._logger.info("Reading masks...")
         mask_out = self._read_image(self.mask_dir, dtype='uint8')

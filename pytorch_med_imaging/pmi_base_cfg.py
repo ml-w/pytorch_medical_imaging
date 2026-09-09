@@ -38,8 +38,9 @@ class PMIBaseCFG:
         cls = self.__class__
         cls_dict = { attr: getattr(cls, attr) for attr in dir(cls) }
         self._no_str = [] # the keys of this class will not be stringified by __str__()
-        for key, value in cls_dict.items():
-            if key in cls._special_attr or isinstance(value, property):
+        for key, value in cls_dict.items() or  isinstance(value, property):
+            if key in cls._special_attr:
+                # protector to prevent copying objects that can't be copied
                 continue
 
             # Copy all attributes except special methods

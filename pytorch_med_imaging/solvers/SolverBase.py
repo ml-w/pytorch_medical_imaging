@@ -389,8 +389,12 @@ class SolverBase(object):
             if dist.is_initialized():
                 if dist.get_rank() != 0:
                     return
-            self.data_loader_val = data_loader_val.get_torch_data_loader(self.batch_size_val or self.batch_size,
-                                                                         exclude_augment=True)
+            try:
+                self.data_loader_val = data_loader_val.get_torch_data_loader(self.batch_size_val or self.batch_size,
+                                                                             exclude_augment=True)
+            except Exception as e:
+                self._logger.warning(f"Validation data loader failed to load, skipping validation: {e}")
+                self.data_loader_val = None
 
     def set_lr_scheduler(self,
                          scheduler: Union[str, PMILRScheduler],

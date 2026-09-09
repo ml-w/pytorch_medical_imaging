@@ -211,9 +211,11 @@ class PMIDataLoaderBase(object):
         raise NotImplementedError
 
     @staticmethod
-    def parse_ini_filelist(filelist, mode):
+    def parse_ini_filelist(filelist, mode) -> Union[List, None]:
         r"""
-        Parse the ini file for this class.
+        Parse the ini file for this class. However, as there can be many situations, i.e., training without testing
+        or validation data, inference without training data, the parse will return `None` if it fails to process the
+        file
 
         Args:
             filelist (str): Relative directory to the ini filelist.
@@ -232,16 +234,21 @@ class PMIDataLoaderBase(object):
                 training=ID_a,ID_b,...,ID_m
 
         """
+        assert filelist.endswith('.ini'), f"This parser can only process .ini files, got {filelist} instead."
         assert os.path.isfile(filelist), "Cannot locate filelist {}".format(filelist)
 
         fparser = configparser.ConfigParser()
         fparser.read(filelist)
 
         # test
-        if re.match('(?=.*train.*)', mode) is not None:
-            return fparser['FileList'].get('training').split(',')
-        else:
-            return fparser['FileList'].get('testing').split(',')
+        try:
+            if re.match('(?=.*train.*)', mode) is not None:
+                return fparser['FileList'].get('training').split(',')
+            else:
+                return fparser['FileList'].get('testing').split(',')
+        except:
+            MNTSLogger['PMIDataLoaderBaseCFG'].warning("Cannot parse the ini file correctly. Returning `None`.")
+            return None
 
     def load_dataset(self, exclude_augment = None):
         r"""
@@ -365,6 +372,11 @@ class PMIDataLoaderBase(object):
                 self._logger.warning(f"Transform file provided but could not be located! Got {str(self.augmentation)}")
                 self.augmentation = False
                 self.transform = None
+        elif isinstance(self.augmentation, tio.Compose):
+            self._logger.warning("Warning, provided `tio.Compmose` directly for transform. Argument `exclude_augment`"
+                                 " will be ignored.")
+            self.transform = self.augmentation
+            self.transform
         else:
             self._logger.warning(f"`self.augmentation` was not defined!")
             self.augmentation = False
