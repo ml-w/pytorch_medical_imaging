@@ -1,3 +1,4 @@
+import ast
 import os
 import re
 
@@ -6,7 +7,7 @@ from ..pmi_base_cfg import PMIBaseCFG
 from ..pmi_data_loader import PMIDataLoaderBase, PMIDataLoaderBaseCFG, PMIDistributedDataWrapper
 from ..integration import *
 from pathlib import Path
-from typing import Union, Optional, Any
+from typing import TYPE_CHECKING, Union, Optional, Any
 
 import yaml
 from mnts.mnts_logger import MNTSLogger
@@ -123,15 +124,18 @@ class PMIControllerCFG(PMIBaseCFG):
     verbose : Optional[bool] = True
 
     # Configurations
-    _data_loader_cfg    : PMIDataLoaderBaseCFG           = None # Use this for different train and inference loader
-    _data_loader_inf_cfg: Optional[PMIDataLoaderBaseCFG] = None # Use this for different train and inference loader
-    data_loader_val_cfg : Optional[PMIDataLoaderBaseCFG] = None
-    solver_cfg          : SolverBaseCFG                  = None
-    data_loader_cls     : type                           = None
-    _data_loader_val_cls: type                           = None
-    solver_cls          : type                           = None
-    inferencer_cls      : type                           = None
-    flags_file          : PathLike                       = 'flags.yaml' # This is for supporting guild's override
+    _data_loader_cfg     : PMIDataLoaderBaseCFG           = None         # Use this for different train and inference loader
+    _data_loader_inf_cfg : Optional[PMIDataLoaderBaseCFG] = None         # Use this for different train and inference loader
+    data_loader_val_cfg  : Optional[PMIDataLoaderBaseCFG] = None
+    solver_cfg           : SolverBaseCFG                  = None
+    data_loader_cls      : type                           = None
+    _data_loader_val_cls : type                           = None         # Use this for different validation  dataloader
+    solver_cls           : type                           = None
+    inferencer_cls       : type                           = None
+    flags_file           : PathLike                       = 'flags.yaml' # This is for supporting guild's override
+    cp_save_dir          : PathLike                       = None
+    cp_load_dir          : PathLike                       = None
+
 
     # Plotting related
     plotting         : Optional[bool] = False
@@ -150,7 +154,7 @@ class PMIControllerCFG(PMIBaseCFG):
     @data_loader_cfg.setter
     def data_loader_cfg(self, x):
         r"""This will make sure deep copy works."""
-        if self.solver_cfg.run_mode == 'training':
+        if self.run_mode == 'training':
             self._data_loader_cfg = x
         else:
             self._data_loader_inf_cfg = x
@@ -181,6 +185,46 @@ class PMIController(object):
     an inferencer, and also the dataloaders. The main role of the controller is to centralize the I/O that is not
     related to the network training/inference, such as configuring dataloader...etc.
     """
+    if TYPE_CHECKING:
+        # Injected at runtime from PMIControllerCFG via _load_config / __dict__.update
+        cfg: PMIControllerCFG
+        
+        fold_code                     : Optional[str]
+        run_mode                      : bool  # str in CFG; _load_config converts it to bool
+        id_list                       : Optional[PathLike]
+        id_list_val                   : Optional[PathLike]
+        output_dir                    : Optional[PathLike]
+        debug_mode                    : Optional[bool]
+        debug_validation              : Optional[bool]
+        validate_on_testing_set       : Optional[bool]
+        validate_on_training_set      : Optional[bool]
+        inference_on_training_set     : Optional[bool]
+        inference_on_validation_set   : Optional[bool]
+        inference_all_checkpoints     : Optional[bool]
+        matmul_precision              : Optional[str]
+        
+        log_dir                       : Optional[str]
+        keep_log                      : Optional[bool]
+        verbose                       : Optional[bool]
+        
+        data_loader_cls               : type
+        solver_cls                    : type
+        inferencer_cls                : Optional[type]
+        flags_file                    : Optional[PathLike]
+        plotting                      : Optional[bool]
+        plotter_type                  : Optional[str]
+        plotter_init_meta             : Optional[dict]
+
+        # Read/writes
+        cp_save_dir: PathLike
+        cp_load_dir: PathLike
+        
+        # Set by the controller itself
+        _logger                       : Any
+        _plotter                      : Any
+        solver                        : Any
+        inferencer                    : Any
+
     def __init__(self, cfg):
         # if global logger is already created, its configurations are not controlled by this controller
         if isinstance(MNTSLogger.global_logger, MNTSLogger):
@@ -369,6 +413,12 @@ class PMIController(object):
         * ``inference_on_validation_set``
 
         """
+        # Guild AI passes all overrides as strings, so normalise sentinel strings to Python None.
+        _str_none = {'None', 'none', ''}
+        for _attr in ('id_list', 'id_list_val', 'fold_code'):
+            if isinstance(getattr(self, _attr, None), str) and getattr(self, _attr) in _str_none:
+                setattr(self, _attr, None)
+
         # Fold code replace filelist and checkpoints
         if not self.fold_code is None:
             # rebuild data loader id lists
@@ -411,13 +461,62 @@ class PMIController(object):
         # Read the id lists, note that ``controller.id_list`` and ``data_loader.id_list`` are different in nature
         try:
             if not self.id_list is None:
-                testing_ids = PMIDataLoaderBase.parse_ini_filelist(self.id_list, 'testing')
-                training_ids = PMIDataLoaderBase.parse_ini_filelist(self.id_list, 'training')
-                testing_ids.sort()
-                training_ids.sort()
+                self._logger.info(f"Reading training/testing IDs from: {self.id_list}")
+                # if mode is training, we require more rigid definition of ids
+                if self.run_mode:
+                    testing_ids = PMIDataLoaderBase.parse_ini_filelist(self.id_list, 'testing')
+                    training_ids = PMIDataLoaderBase.parse_ini_filelist(self.id_list, 'training')
+                    testing_ids.sort()
+                    training_ids.sort()
+                    self._logger.info(
+                        f"Parsed {len(training_ids)} training IDs and {len(testing_ids)} testing IDs from INI."
+                    )
+                    self._logger.debug(f"Training IDs: {training_ids}")
+                    self._logger.debug(f"Testing IDs:  {testing_ids}")
+                    # If id_list_val is not set, auto-populate from the 'validation' section of the same INI
+                    if getattr(self, 'id_list_val', None) is None:
+                        try:
+                            _val_ids = PMIDataLoaderBase.parse_ini_filelist(self.id_list, 'validation')
+                            if _val_ids:
+                                self.id_list_val = _val_ids
+                                self._logger.info(
+                                    f"Auto-populated id_list_val from id_list [FileList] 'validation' section: "
+                                    f"{len(_val_ids)} IDs."
+                                )
+                                self._logger.debug(f"Validation IDs (auto from id_list): {_val_ids}")
+                            else:
+                                self._logger.debug("No 'validation' section found in id_list INI; skipping auto-populate.")
+                        except Exception as _e:
+                            self._logger.debug(f"Could not read 'validation' section from id_list INI: {_e}")
+                # more flexibility with inference mode
+                else:
+                    # check if id list is a string or already a list
+                    if isinstance(self.id_list, list):
+                        # assume this sets the testing ids, and no training ids provided
+                        testing_ids = self.id_list
+                        testing_ids.sort()
+                        self._logger.info(f"Using {len(testing_ids)} testing IDs provided as list.")
+                        self._logger.debug(f"Testing IDs (list): {testing_ids}")
+                    elif isinstance(self.id_list, str):
+                        # if it's a string, check if it's a filename
+                        if Path(self.id_list).is_file():
+                            testing_ids = PMIDataLoaderBase.parse_ini_filelist(self.id_list, 'testing')
+                            self._logger.info(f"Parsed {len(testing_ids)} testing IDs from INI.")
+                            self._logger.debug(f"Testing IDs (INI): {testing_ids}")
+                        elif re.match(r'\[.*\]|\(.*\)', self.id_list) is not None:
+                            testing_ids = ast.literal_eval(self.id_list)
+                            self._logger.info(f"Parsed {len(testing_ids)} testing IDs from literal string.")
+                            self._logger.debug(f"Testing IDs (literal): {testing_ids}")
+                    elif isinstance(self.id_list, (list, tuple)):
+                        testing_ids = list(self.id_list)
+                        testing_ids.sort()
+                        self._logger.info(f"Using {len(testing_ids)} testing IDs provided as sequence.")
+                        self._logger.debug(f"Testing IDs (sequence): {testing_ids}")
+
             else:
-                # if no IDs provide, perform training/inference on all data within the folder by setting id_list
+                # if no IDs provided, perform training/inference on all data within the folder by setting id_list
                 # of the loaders to ``None``
+                self._logger.info("No id_list specified; training/inference will use all subjects in the data directory.")
                 testing_ids = training_ids = None
         except Exception as e:
             if self._logger.log_level == 10:
@@ -429,11 +528,25 @@ class PMIController(object):
         # validation id_lists
         try:
             if not self.id_list_val is None:
-                # if a txt file is provided
+                # if a file path is provided: try [FileList] INI 'validation' section first,
+                # fall back to plain-text (one ID per line)
                 if isinstance(self.id_list_val, (str, Path)):
                     self._logger.info(f"Reading validation set ID from: {self.id_list_val}")
-                    with open(self.id_list_val, 'r') as _val_txt:
-                        validation_ids = [r.rstrip() for r in _val_txt.readlines()]
+                    try:
+                        validation_ids = PMIDataLoaderBase.parse_ini_filelist(self.id_list_val, 'validation')
+                        if not validation_ids:
+                            raise ValueError("Empty or missing [FileList] validation section.")
+                        self._logger.info(f"Parsed {len(validation_ids)} validation IDs from INI [FileList] section.")
+                        self._logger.debug(f"Validation IDs (INI): {validation_ids}")
+                    except Exception as _ini_exc:
+                        self._logger.debug(
+                            f"Could not parse '{self.id_list_val}' as INI [FileList] "
+                            f"({type(_ini_exc).__name__}: {_ini_exc}); falling back to plain-text."
+                        )
+                        with open(self.id_list_val, 'r') as _val_txt:
+                            validation_ids = [r.rstrip() for r in _val_txt.readlines()]
+                        self._logger.info(f"Read {len(validation_ids)} validation IDs from plain-text file.")
+                        self._logger.debug(f"Validation IDs (plain-text): {validation_ids}")
                     validation_ids.sort()
                 else:
                     # if a list of str is provided
@@ -459,6 +572,23 @@ class PMIController(object):
             if not self.data_loader_val_cfg is None:
                 self.data_loader_val_cfg.id_list = validation_ids
                 self._logger.debug(f"Validation IDs: {validation_ids}")
+                # Sync paths from training loader into val loader for attrs still at empty/None default.
+                # This ensures data_loader_val_cfg sees the same directories as data_loader_cfg
+                # when only a data_loader_cfg: section is present in flags.yaml.
+                for _attr in ('input_dir', 'probmap_dir', 'target_dir', 'id_globber'):
+                    _val_val = getattr(self.data_loader_val_cfg, _attr, None)
+                    _train_val = getattr(self.data_loader_cfg, _attr, None)
+                    if not _val_val and _train_val:
+                        self._logger.debug(
+                            f"Syncing data_loader_val_cfg.{_attr} from data_loader_cfg: "
+                            f"{_val_val!r} -> {_train_val!r}"
+                        )
+                        setattr(self.data_loader_val_cfg, _attr, _train_val)
+                    else:
+                        self._logger.debug(
+                            f"data_loader_val_cfg.{_attr} = {_val_val!r} "
+                            f"(no sync needed; train={_train_val!r})"
+                        )
             # Handle the special options
             if self.validate_on_testing_set:
                 self._logger.debug(f"validate_on_testing_set mode")
@@ -526,8 +656,13 @@ class PMIController(object):
 
     @data_loader_cfg.setter
     def data_loader_cfg(self, x):
-        self._logger.warning("Overriding `data_loader_cfg` with {x}.")
-        self.cfg.data_loader_cfg = x
+        self._logger.warning(f"Overriding `data_loader_cfg` with {x}.")
+        # PMIBaseCFG.__setattr__ bypasses property setters (always writes to __dict__),
+        # so we must set the backing attributes directly.
+        if self.run_mode:  # True = training
+            self.cfg._data_loader_cfg = x
+        else:
+            self.cfg._data_loader_inf_cfg = x
 
     @property
     def data_loader_val_cfg(self):
@@ -535,7 +670,7 @@ class PMIController(object):
 
     @data_loader_val_cfg.setter
     def data_loader_val_cfg(self, x):
-        self._logger.warning("Overriding `data_loader_val_cfg` with {x}.")
+        self._logger.warning(f"Overriding `data_loader_val_cfg` with config: \n{x}.")
         self.cfg.data_loader_val_cfg = x
 
     @property
@@ -544,7 +679,7 @@ class PMIController(object):
 
     @solver_cfg.setter
     def solver_cfg(self, x):
-        self._logger.warning("Overriding `solver_cfg` with {x}.")
+        self._logger.warning(f"Overriding `solver_cfg` with config: \n{x}.")
         self.cfg.solver_cfg = x
 
     def _cleanup_DDP(self):
