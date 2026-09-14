@@ -134,26 +134,36 @@ class CircularDoubleConv(nn.Module):
         return x
 
 
+_NORM2D = {
+    'batch':    nn.BatchNorm2d,
+    'instance': nn.InstanceNorm2d,
+    'none':     lambda c: nn.Identity(),
+}
+
+
 class ReflectiveDoubleConv(nn.Module):
-    def __init__(self, in_ch, out_ch, kernsize=3, linear=False):
+    def __init__(self, in_ch, out_ch, kernsize=3, linear=False, norm_type='batch'):
         super(ReflectiveDoubleConv, self).__init__()
 
+        if norm_type not in _NORM2D:
+            raise ValueError(f"norm_type must be one of {list(_NORM2D)}, got '{norm_type}'")
+        Norm = _NORM2D[norm_type]
         pad = kernsize // 2
 
         if linear:
             self.conv = nn.Sequential(
                 nn.Conv2d(in_ch, out_ch, kernsize, padding_mode='reflect', padding=pad),
-                nn.BatchNorm2d(out_ch),
+                Norm(out_ch),
                 nn.Conv2d(out_ch, out_ch, kernsize, padding_mode='reflect', padding=pad),
-                nn.BatchNorm2d(out_ch)
+                Norm(out_ch)
             )
         else:
             self.conv = nn.Sequential(
                 nn.Conv2d(in_ch, out_ch, kernsize, padding_mode='reflect', padding=pad),
-                nn.BatchNorm2d(out_ch),
+                Norm(out_ch),
                 nn.ReLU(inplace=True),
                 nn.Conv2d(out_ch, out_ch, kernsize, padding_mode='reflect', padding=pad),
-                nn.BatchNorm2d(out_ch),
+                Norm(out_ch),
                 nn.ReLU(inplace=True)
             )
 

@@ -18,7 +18,7 @@ class Down(nn.Module):
         dropout (float. Optional): Drop out ratio. Default to 0.
 
     """
-    def __init__(self, in_chan, out_chan, pool_mode='avg', dropout=0):
+    def __init__(self, in_chan, out_chan, pool_mode='avg', dropout=0, norm_type='batch'):
         super(Down, self).__init__()
 
         self._in_chan = in_chan
@@ -40,7 +40,7 @@ class Down(nn.Module):
         else:
             pool = pool(self._down_factor)
 
-        mods = [pool, ReflectiveDoubleConv(in_chan,out_chan)]
+        mods = [pool, ReflectiveDoubleConv(in_chan, out_chan, norm_type=norm_type)]
         if dropout > 0:
             mods.append(nn.Dropout2d(dropout))
         self.conv = nn.Sequential(*mods)
@@ -69,7 +69,7 @@ class Up(nn.Module):
         up_mode (str, Optional): `{'nearest'|'bilinear'|'cubic'|'learn'}`. Mode for upsampling. Default to `nearest`
         dropout (float, Optional):
     """
-    def __init__(self, in_chan, out_chan, up_mode='nearest', dropout=0):
+    def __init__(self, in_chan, out_chan, up_mode='nearest', dropout=0, norm_type='batch'):
         super(Up, self).__init__()
 
         self._in_chan = in_chan
@@ -91,8 +91,8 @@ class Up(nn.Module):
 
 
         self.upsample = self.upsampling[up_mode]
-        self.upconv = ReflectiveDoubleConv(in_chan, in_chan // 2)
-        self.conv = ReflectiveDoubleConv(in_chan, out_chan)
+        self.upconv = ReflectiveDoubleConv(in_chan, in_chan // 2, norm_type=norm_type)
+        self.conv   = ReflectiveDoubleConv(in_chan, out_chan,     norm_type=norm_type)
 
         if dropout > 0:
             self.conv = nn.Sequential(self.conv,
@@ -180,7 +180,8 @@ class UNet_p(nn.Module):
         apparently this implementation is not the best implementation of a network with encoder-decoder structure.
 
     """
-    def __init__(self, in_chan, out_chan, layers=4, down_mode='avg', up_mode='learn', dropout=0.1):
+    def __init__(self, in_chan, out_chan, layers=4, down_mode='avg', up_mode='learn', dropout=0.1,
+                 norm_type='batch'):
         super(UNet_p, self).__init__()
 
         self._in_chan = in_chan
@@ -188,23 +189,23 @@ class UNet_p(nn.Module):
         self._down_mode = down_mode
         self._up_mode = up_mode
         self._layers = layers
+        self._norm_type = norm_type
         self._start_chans = 64
 
-        self.inconv = ReflectiveDoubleConv(in_chan, self._start_chans)
+        self.inconv = ReflectiveDoubleConv(in_chan, self._start_chans, norm_type=norm_type)
 
         # Downs
         down_chans = [(self._start_chans * 2 ** i,
                        self._start_chans * 2 ** (i + 1))
                       for i in range(layers)]
-        self.downs = nn.ModuleList([Down(*dc, down_mode, dropout=dropout)
+        self.downs = nn.ModuleList([Down(*dc, down_mode, dropout=dropout, norm_type=norm_type)
                                     for dc in down_chans])
-
 
         # Ups
         up_chans = [(self._start_chans * 2 ** (layers - i),
                      self._start_chans * 2 ** (layers - i - 1))
                     for i in range(layers)]
-        self.ups = nn.ModuleList([Up(*uc, up_mode=up_mode, dropout=dropout)
+        self.ups = nn.ModuleList([Up(*uc, up_mode=up_mode, dropout=dropout, norm_type=norm_type)
                                   for uc in up_chans])
         self.lastconv = nn.Conv2d(self._start_chans, out_chan, 1)
 

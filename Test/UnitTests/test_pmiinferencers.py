@@ -1,3 +1,4 @@
+import os
 import tempfile
 import unittest
 import pytest
@@ -41,9 +42,10 @@ class TestInferencer(unittest.TestCase):
         self._prepare_cfg()
         self._prepare_loader()
 
-        # Save a dummy checkpoint to tempfile first
-        self.cp_load_tmp_file = tempfile.NamedTemporaryFile(suffix='.pt', mode='w+')
+        # delete=False + close: Windows locks NamedTemporaryFile until closed
+        self.cp_load_tmp_file = tempfile.NamedTemporaryFile(suffix='.pt', delete=False)
         self.cp_load_dir = self.cp_load_tmp_file.name
+        self.cp_load_tmp_file.close()
         torch.save(self.inferencer_cfg.net.state_dict(), self.cp_load_dir)
         self.inferencer_cfg.cp_load_dir = self.cp_load_dir
 
@@ -51,8 +53,11 @@ class TestInferencer(unittest.TestCase):
 
 
     def tearDown(self):
-        self.cp_load_tmp_file.close()
         self.temp_output_dir.cleanup()
+        try:
+            os.unlink(self.cp_load_dir)
+        except OSError:
+            pass
 
     @abstractmethod
     def _prepare_cfg(self):

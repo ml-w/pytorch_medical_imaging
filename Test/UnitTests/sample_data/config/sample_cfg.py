@@ -4,7 +4,7 @@ from typing import *
 
 from pytorch_med_imaging.pmi_data_loader import *
 from pytorch_med_imaging.solvers import *
-from pytorch_med_imaging.networks import UNet_p
+from pytorch_med_imaging.networks import UNet_p, MultiScaleDiscriminator
 from pytorch_med_imaging.lr_scheduler import PMILRScheduler
 
 
@@ -125,3 +125,75 @@ class SampleBinClsSolverCFG(SampleClsSolverCFG):
     class_weights  = [1.5]
     loss_function: torch.nn = nn.BCEWithLogitsLoss(weight = torch.as_tensor(class_weights))
     net: torch.nn.Module = _SimpleClfNet(1, 1)
+
+
+# ── Img2Img (modality transfer) ───────────────────────────────────────────────
+
+class SampleImg2ImgLoaderCFG(PMIImageDataLoaderCFG):
+    r"""Loader CFG for modality-transfer tests.
+
+    Uses the same MRI images for both ``input`` and ``target`` (no CT data in
+    the test fixtures).  This exercises the full 2.5-D pipeline mechanics
+    without requiring paired multi-modality data.
+    """
+    input_dir  : str = './sample_data/img'
+    target_dir : str = './sample_data/img'   # MRI→MRI; tests mechanics, not semantics
+
+    id_globber : str = r'^MRI_\d+'
+
+    data_types     : Iterable = [float, float]
+    sampler        : str      = 'uniform'
+    sampler_kwargs : dict     = dict(patch_size=[32, 32, 1])   # 2.5-D: one axial slice
+
+    # Small queue to keep training-loop tests fast
+    tio_queue_kwargs: dict = dict(
+        max_length=4,
+        num_workers=0,
+        samples_per_volume=2,
+        shuffle_patches=False,
+        shuffle_subjects=False,
+        start_background=False,
+        verbose=False,
+    )
+
+
+class SampleImg2ImgSolverCFG(Img2ImgSolverCFG):
+    r"""Supervised (no GAN) modality-transfer solver CFG for unit tests."""
+    # Training hyper params
+    init_lr       : float = 1e-3
+    batch_size    : int   = 2
+    num_of_epochs : int   = 2
+
+    # I/O
+    unpack_key_forward   : list = ['input', 'gt']
+    unpack_key_inference : list = ['input']
+
+    # Networks and loss
+    net           : nn.Module = UNet_p(1, 1, layers=2, norm_type='instance')
+    loss_function : nn.Module = nn.L1Loss()
+    optimizer     : str       = 'Adam'
+
+    # Device — auto-detects GPU so tests run on CI machines too
+    use_cuda      : bool  = torch.cuda.is_available()
+
+    # Disabled to keep tests fast
+    lambda_freq   : float = 0.0
+    lambda_tv     : float = 0.0
+
+
+class SampleImg2ImgGANSolverCFG(SampleImg2ImgSolverCFG):
+    r"""Conditional GAN modality-transfer solver CFG for unit tests.
+
+    Uses the smallest possible discriminator (``num_scales=1``, ``ndf=8``,
+    ``n_layers=1``) to keep test runtime low.
+    """
+    # Fresh generator so G and D have independent parameter sets
+    net           : nn.Module = UNet_p(1, 1, layers=2, norm_type='instance')
+    # Conditional discriminator: 1-ch source + 1-ch target = 2 in_channels
+    discriminator : nn.Module = MultiScaleDiscriminator(
+        in_channels=2, num_scales=1, ndf=8, n_layers=1)
+
+    use_adversarial : bool  = True
+    lambda_fm       : float = 1.0   # feature matching on
+    lambda_freq     : float = 0.0   # spectral loss off (speed)
+    lambda_tv       : float = 0.0

@@ -1,8 +1,11 @@
+import os
 import tempfile
 import unittest
 import yaml
 import copy
 from abc import abstractmethod
+
+import pytest
 from pytorch_med_imaging.solvers.earlystop import LossReferenceEarlyStop, BaseEarlyStop
 from pytorch_med_imaging.lr_scheduler import PMILRScheduler
 from sample_data.config.sample_cfg import *
@@ -43,7 +46,9 @@ class TestSolver(unittest.TestCase):
         self._prepare_cfg()
         self._prepare_loader()
         self._prepare_solver()
-        self.solver_cp_save_path = tempfile.NamedTemporaryFile('w', suffix='.pt')
+        # delete=False + close: Windows locks NamedTemporaryFile until closed
+        self.solver_cp_save_path = tempfile.NamedTemporaryFile('w', suffix='.pt', delete=False)
+        self.solver_cp_save_path.close()
 
     @abstractmethod
     def _prepare_cfg(self):
@@ -91,21 +96,26 @@ class TestSolver(unittest.TestCase):
         pass
 
     def tearDown(self):
-        self.solver_cp_save_path.close()
+        try:
+            os.unlink(self.solver_cp_save_path.name)
+        except OSError:
+            pass
 
+    @pytest.mark.slow
     def test_s3_fit(self):
         self.solver.set_data_loader(self.data_loader)
         self.solver.fit(self.solver_cp_save_path.name)
 
+    @pytest.mark.slow
     def test_s4_early_stop(self):
         self._add_early_stop()
         self.solver.set_data_loader(self.data_loader)
         self.solver.fit(self.solver_cp_save_path.name)
-        pass
 
     def _add_early_stop(self):
         self.solver.early_stop = LossReferenceEarlyStop(1, 1)
 
+    @pytest.mark.slow
     def test_s5_validation(self):
         data_loader_cfg_train = self.data_loader_cfg_cls(
             id_list = ['MRI_01', 'MRI_02']
@@ -119,6 +129,7 @@ class TestSolver(unittest.TestCase):
         self.solver.set_data_loader(dataloader_train, dataloader_test)
         self.solver.fit(self.solver_cp_save_path.name)
 
+    @pytest.mark.slow
     def test_max_step(self):
         self.solver.set_data_loader(self.data_loader)
         self.solver.max_step = 1
