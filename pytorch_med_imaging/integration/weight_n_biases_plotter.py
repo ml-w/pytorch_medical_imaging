@@ -10,7 +10,13 @@ import torch
 from cv2 import (applyColorMap, COLORMAP_JET, COLORMAP_BONE, COLORMAP_COOL, COLORMAP_HOT)
 from torchvision.utils import make_grid
 
-import wandb
+try:
+    import wandb
+    _WANDB_AVAILABLE = True
+except ImportError:
+    wandb = None
+    _WANDB_AVAILABLE = False
+
 from mnts.mnts_logger import MNTSLogger
 from pytorch_med_imaging.utils.visualization.segmentation_vis import draw_grid
 
@@ -20,6 +26,10 @@ __all__ = ['WNB_Plotter']
 def check_init(func):
     @wraps(func)
     def wrapper(self, *args, **kwargs):
+        if not _WANDB_AVAILABLE:
+            return
+        if getattr(self, '_disabled', False):
+            return
         if wandb.run is None:
             self._logger.error("W&B run has not been initialized. Have you called 'init_run()'?")
             return
@@ -44,11 +54,18 @@ class WNB_Plotter:
 
         self._logger = MNTSLogger[self.__class__.__name__]
 
+        if not _WANDB_AVAILABLE:
+            self._logger.warning("wandb is not installed. W&B logging will be disabled.")
+            self._disabled = True
+            self._initialized = True
+            return
+
         self.project = project or os.environ.get('WANDB_PROJECT', '')
         self.entity = entity or os.environ.get('WANDB_ENTITY', '')
         if api_key:
             os.environ['WANDB_API_KEY'] = api_key
 
+        self._disabled = False
         self._last_writer_index = 0
         self._registered_module_config = {}
         self._write_n_iteration = 1000
@@ -66,6 +83,8 @@ class WNB_Plotter:
         return cls._instance
 
     def get_writer(self):
+        if not _WANDB_AVAILABLE or self._disabled:
+            return None
         return wandb.run
 
     # ------------------------------------------------------------------
@@ -73,26 +92,39 @@ class WNB_Plotter:
     # ------------------------------------------------------------------
 
     def init_run(self, init_meta: Optional[dict] = None) -> None:
-        if wandb.run is not None:
-            self._logger.warning("An active W&B run already exists. Finishing it before starting a new one.")
-            wandb.finish()
-        init_meta = dict(init_meta or {})
-        # Allow plotter_init_meta to override the instance-level project/entity
-        project = init_meta.pop('project', self.project or None)
-        entity  = init_meta.pop('entity',  self.entity  or None)
-        self._logger.info("Initializing W&B run.")
-        wandb.init(project=project, entity=entity, **init_meta)
-        self._logger.info(f"W&B run initialized: {wandb.run.name} (id={wandb.run.id})")
+        if not _WANDB_AVAILABLE or self._disabled:
+            return
+        try:
+            if wandb.run is not None:
+                self._logger.warning("An active W&B run already exists. Finishing it before starting a new one.")
+                wandb.finish()
+            init_meta = dict(init_meta or {})
+            project = init_meta.pop('project', self.project or None)
+            entity  = init_meta.pop('entity',  self.entity  or None)
+            self._logger.info("Initializing W&B run.")
+            wandb.init(project=project, entity=entity, **init_meta)
+            self._logger.info(f"W&B run initialized: {wandb.run.name} (id={wandb.run.id})")
+        except Exception as e:
+            self._logger.warning(f"W&B initialization failed ({e}). W&B logging will be disabled for this run.")
+            self._disabled = True
 
     def continue_run(self, run_id: str, init_meta: Optional[dict] = None) -> None:
         """Resume an existing W&B run by its run ID."""
-        init_meta = dict(init_meta or {})
-        project = init_meta.pop('project', self.project or None)
-        entity  = init_meta.pop('entity',  self.entity  or None)
-        self._logger.info(f"Resuming W&B run: {run_id}")
-        wandb.init(project=project, entity=entity, id=run_id, resume='must', **init_meta)
+        if not _WANDB_AVAILABLE or self._disabled:
+            return
+        try:
+            init_meta = dict(init_meta or {})
+            project = init_meta.pop('project', self.project or None)
+            entity  = init_meta.pop('entity',  self.entity  or None)
+            self._logger.info(f"Resuming W&B run: {run_id}")
+            wandb.init(project=project, entity=entity, id=run_id, resume='must', **init_meta)
+        except Exception as e:
+            self._logger.warning(f"W&B resume failed ({e}). W&B logging will be disabled for this run.")
+            self._disabled = True
 
     def stop(self) -> None:
+        if not _WANDB_AVAILABLE or self._disabled:
+            return
         if wandb.run is not None:
             self._logger.info("Finishing W&B run.")
             wandb.finish()

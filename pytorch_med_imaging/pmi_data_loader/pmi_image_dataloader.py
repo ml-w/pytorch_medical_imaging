@@ -13,6 +13,41 @@ import re
 
 __all__ = ['PMIImageDataLoader', 'PMIImageDataLoaderCFG']
 
+import numpy as np
+import warnings as _warnings
+
+
+class WeightedSamplerWithFallback(tio.WeightedSampler):
+    """WeightedSampler that falls back to uniform sampling when the probability map is all-zero.
+
+    This handles patients whose segmentation masks are empty (all zeros), which would otherwise
+    crash with RuntimeError. Fallback behaviour: uniform probability over the valid (non-border)
+    patch region. If the image is too small for any valid patch center, the center voxel is used.
+    """
+
+    def process_probability_map(self, probability_map, subject):
+        data = probability_map[0].numpy().astype(np.float64)
+        assert data.ndim == 3
+        self.clear_probability_borders(data, self.patch_size)
+        total = data.sum()
+        if total == 0:
+            path = getattr(self.get_probability_map_image(subject), 'path', subject)
+            _warnings.warn(
+                f'Empty probability map found: {path}\n'
+                'Falling back to uniform sampling over the valid patch region.'
+            )
+            # Rebuild uniform map — clear_probability_borders is destructive so start fresh
+            data = np.ones(probability_map.shape[1:], dtype=np.float64)
+            self.clear_probability_borders(data, self.patch_size)
+            total = data.sum()
+            if total == 0:
+                # Image smaller than the patch — fall back to the center voxel
+                center = tuple(s // 2 for s in data.shape)
+                data[center] = 1.0
+                total = 1.0
+        data /= total
+        return data
+
 class PMIImageDataLoaderCFG(PMIDataLoaderBaseCFG):
     r"""Configuration for :class:`PMIImageDataLoader`.
 
@@ -213,8 +248,8 @@ class PMIImageDataLoader(PMIDataLoaderBase):
                 msg = f"`sampler_kwargs` must contain both 'patch_size' and 'probability_map' keys for weighted" \
                       f"samplers. Got {self.sampler_kwargs} instead."
                 raise KeyError(msg)
-            self.sampler_instance = tio.WeightedSampler(**self.sampler_kwargs)
-            self._logger.info("Sampler configured as weighted sampler.")
+            self.sampler_instance = WeightedSamplerWithFallback(**self.sampler_kwargs)
+            self._logger.info("Sampler configured as weighted sampler (with empty-probmap fallback).")
         elif (self.sampler == 'uniform'):
             if not 'patch_size' in self.sampler_kwargs:
                 msg = f"Require 'patch_size' argument to use ``tio.UniformSampler``. Specify 'patch_size' in ``cfg.samp" \

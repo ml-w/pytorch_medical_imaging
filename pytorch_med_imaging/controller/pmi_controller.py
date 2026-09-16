@@ -419,6 +419,27 @@ class PMIController(object):
             if isinstance(getattr(self, _attr, None), str) and getattr(self, _attr) in _str_none:
                 setattr(self, _attr, None)
 
+        # For data loader fields that use None as "keep CFG class default", delete the instance
+        # attribute so the class-level default remains visible. Applies to any loader field where
+        # None in flags.yaml means "don't override" rather than "explicitly set to None".
+        for _loader_cfg in (
+            getattr(self, 'data_loader_cfg', None),
+            getattr(self, 'data_loader_val_cfg', None),
+        ):
+            if _loader_cfg is None:
+                continue
+            for _attr in ('id_globber',):
+                val = getattr(_loader_cfg, _attr, _str_none)  # sentinel if attr missing
+                if isinstance(val, str) and val in _str_none:
+                    self._logger.debug(
+                        f"Resetting {_attr} on {type(_loader_cfg).__name__} to CFG class default "
+                        f"(was '{val}')"
+                    )
+                    try:
+                        delattr(_loader_cfg, _attr)
+                    except AttributeError:
+                        pass  # already a class attribute; nothing to delete
+
         # Fold code replace filelist and checkpoints
         if not self.fold_code is None:
             # rebuild data loader id lists
@@ -701,6 +722,7 @@ class PMIController(object):
             # record the run parameters
             if self.plotting and self._plotter is not None:
                 self._plotter.save_dict(controller_config)
+                self._plotter.add_tag(self.net_name)
                 if hasattr(self, 'guild_dict'):
                     guild_config = {'cfg/guild/' + k: v for k, v in self.guild_dict.items()}
                     self._plotter.save_dict(guild_config)

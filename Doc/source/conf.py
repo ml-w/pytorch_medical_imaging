@@ -15,7 +15,7 @@ import pytorch_med_imaging
 # -- Project information -----------------------------------------------------
 
 project = 'PyTorch Medical Imaging'
-copyright = f'2025, Lun M Wong. Last Update {datetime.datetime.now().strftime("%B %d, %Y")}'
+copyright = f'2026, Lun M Wong. Last Update {datetime.datetime.now().strftime("%B %d, %Y")}'
 author = 'Lun M Wong'
 
 
@@ -31,6 +31,7 @@ extensions = [
     'sphinx.ext.viewcode',
     'sphinx.ext.intersphinx',
     'sphinx_copybutton',
+    'sphinx_design',
     'sphinxcontrib.mermaid',
     'm2r2',
 ]
@@ -45,7 +46,14 @@ templates_path = ['_templates']
 exclude_patterns = []
 
 # napoleon
-napolean_use_keyword = True
+napoleon_google_docstring = True
+napoleon_numpy_docstring = False
+napoleon_use_param = False       # render Args as a definition list, not :param: directives
+napoleon_use_rtype = False       # keep return type inside Returns section, not a separate :rtype:
+napoleon_use_ivar = True
+napoleon_use_keyword = True
+napoleon_attr_annotations = True
+napoleon_preprocess_types = True  # hyperlink type names in Args/Returns to their API docs
 
 # prefix
 modindex_common_prefix = ['pytorch_med_imaging']
@@ -54,10 +62,15 @@ add_module_names = False
 
 # -- Options for HTML output -------------------------------------------------
 
-html_theme = 'furo'
+html_theme = 'pydata_sphinx_theme'
 html_logo = "_static/cuhk_logo.gif"
 html_theme_options = {
-    'sidebar_hide_name': False,
+    'navbar_align': 'left',
+    'navigation_depth': 4,
+    'show_toc_level': 2,
+}
+html_sidebars = {
+    '**': ['sidebar-nav-bs'],
 }
 
 html_static_path = ['_static']
