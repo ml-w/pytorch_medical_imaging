@@ -1,5 +1,7 @@
 import os
 import re
+import time as _time
+import warnings as _warnings
 import configparser
 import pandas as pd
 import pprint
@@ -18,6 +20,9 @@ from mnts.mnts_logger import MNTSLogger
 from typing import *
 
 __all__ = ['PMIDataLoaderBaseCFG', 'PMIDataLoaderBase']
+
+_WORKER_CRASH_SIGNATURES = ('shared memory', 'no such file or directory')
+
 
 class PMIDataLoaderBaseCFG(PMIBaseCFG):
     """Config required to initialize :class:`PMIDataLoader`.
@@ -64,6 +69,9 @@ class PMIDataLoaderBaseCFG(PMIBaseCFG):
     id_globber   : Optional[str] = "(^[a-zA-Z0-9]+)"
     run_mode     : Optional[str] = 'train'
     debug_mode   : Optional[bool] = False
+    nfs_resilient             : bool  = True   # wrap DataLoader with NFS crash recovery
+    nfs_resilient_max_retries : int   = 10     # max consecutive crashes before re-raise
+    nfs_resilient_backoff     : float = 30.0   # seconds to wait before restarting workers
 
     def _as_dict(self):
         r"""This function is not supposed to be private, but it needs the private tag to be spared by :func:`.__init__`
@@ -305,7 +313,58 @@ class PMIDataLoaderBase(object):
                                     num_workers = num_workers,
                                     drop_last   = False,
                                     pin_memory  = False)
-        return out_loader
+        self._torch_loader = out_loader
+        return self
+
+    def __iter__(self):
+        """Iterate over batches with built-in NFS worker-crash recovery.
+
+        If a TorchIO Queue worker is killed by the kernel (e.g. while blocked on an
+        NFS read), the shared-memory object it created disappears before the main
+        process can read it, raising ``RuntimeError: unable to open shared memory
+        object ... No such file or directory``.  This method catches that signature,
+        waits ``nfs_resilient_backoff`` seconds for the mount to recover, restarts the
+        Queue's internal subjects-loader workers, and resumes — skipping the one
+        failed batch.  After ``nfs_resilient_max_retries`` consecutive failures the
+        error is re-raised.
+        """
+        if not hasattr(self, '_torch_loader'):
+            raise RuntimeError(
+                "Call get_torch_data_loader() before iterating over the data loader."
+            )
+        max_retries = getattr(self, 'nfs_resilient_max_retries', 10)
+        backoff     = getattr(self, 'nfs_resilient_backoff', 30.0)
+        consecutive = 0
+        it = iter(self._torch_loader)
+        while True:
+            try:
+                yield next(it)
+                consecutive = 0
+            except StopIteration:
+                return
+            except RuntimeError as exc:
+                msg = str(exc).lower()
+                if any(s in msg for s in _WORKER_CRASH_SIGNATURES) \
+                        and consecutive < max_retries:
+                    consecutive += 1
+                    _warnings.warn(
+                        f'DataLoader worker crash (likely transient NFS issue); '
+                        f'retry {consecutive}/{max_retries}, '
+                        f'waiting {backoff:.0f}s then restarting Queue workers.\n'
+                        f'Error: {exc}'
+                    )
+                    _time.sleep(backoff)
+                    _q = getattr(self._torch_loader, 'dataset', None)
+                    if isinstance(_q, tio.Queue):
+                        _q.patches_list.clear()
+                        _q._subjects_iterable = None
+                        _q._initialize_subjects_iterable()
+                    it = iter(self._torch_loader)
+                else:
+                    raise
+
+    def __len__(self):
+        return len(self._torch_loader)
 
     def _read_config(self, config_file=None):
         """

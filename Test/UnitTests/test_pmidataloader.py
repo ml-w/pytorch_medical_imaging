@@ -1,5 +1,8 @@
 import unittest
-from pytorch_med_imaging.pmi_data_loader.pmi_dataloader_base import *
+from unittest.mock import MagicMock, patch
+from pytorch_med_imaging.pmi_data_loader.pmi_dataloader_base import (
+    PMIDataLoaderBase, PMIDataLoaderBaseCFG, _WORKER_CRASH_SIGNATURES
+)
 from pytorch_med_imaging.pmi_data_loader import *
 from pytorch_med_imaging.pmi_data import DataLabel
 from mnts.mnts_logger import MNTSLogger
@@ -281,3 +284,174 @@ class TestPMITorchioDataLoader(TestDataLoader):
             self.assertIn(v['uid'], new_list)
             if i == 3:
                 break
+
+
+# ---------------------------------------------------------------------------
+# Minimal concrete stub — no real I/O, used only for NFS resilience tests
+# ---------------------------------------------------------------------------
+class _StubLoader(PMIDataLoaderBase):
+    def _check_input(self):         return True
+    def _load_data_set_training(self, exclude_augment=False): return MagicMock()
+    def _load_data_set_inference(self): return MagicMock()
+    def _prepare_data(self):        return {}
+
+
+def _stub_loader(**overrides):
+    """Return a _StubLoader with _torch_loader pre-set and no real data loading."""
+    loader = object.__new__(_StubLoader)
+    loader._torch_loader = MagicMock()
+    loader.nfs_resilient_max_retries = overrides.get('nfs_resilient_max_retries', 10)
+    loader.nfs_resilient_backoff     = overrides.get('nfs_resilient_backoff', 0.0)
+    return loader
+
+
+class TestNFSResilience(unittest.TestCase):
+    """Unit tests for NFS worker-crash resilience in PMIDataLoaderBase.__iter__."""
+
+    def test_normal_iteration_yields_all_batches(self):
+        loader = _stub_loader()
+        batches = ['a', 'b', 'c']
+        loader._torch_loader.__iter__ = MagicMock(return_value=iter(batches))
+        loader._torch_loader.__len__  = MagicMock(return_value=3)
+        self.assertEqual(list(loader), batches)
+
+    def test_len_proxies_to_inner_loader(self):
+        loader = _stub_loader()
+        loader._torch_loader.__len__ = MagicMock(return_value=42)
+        self.assertEqual(len(loader), 42)
+
+    def test_single_crash_is_recovered(self):
+        loader = _stub_loader(nfs_resilient_max_retries=3)
+        crash  = RuntimeError('unable to open shared memory object: No such file or directory')
+        call_count = [0]
+
+        def flaky_iter():
+            call_count[0] += 1
+            if call_count[0] == 1:
+                yield 'batch_0'
+                raise crash
+            yield 'batch_1'
+            yield 'batch_2'
+
+        loader._torch_loader.__iter__ = flaky_iter
+        loader._torch_loader.dataset  = None
+
+        with patch('pytorch_med_imaging.pmi_data_loader.pmi_dataloader_base._time.sleep') as mock_sleep, \
+             patch('pytorch_med_imaging.pmi_data_loader.pmi_dataloader_base._warnings.warn'):
+            result = list(loader)
+
+        mock_sleep.assert_called_once_with(0.0)
+        self.assertEqual(result, ['batch_0', 'batch_1', 'batch_2'])
+
+    def test_exceeding_max_retries_reraises(self):
+        loader = _stub_loader(nfs_resilient_max_retries=2)
+        crash  = RuntimeError('shared memory object: No such file or directory')
+
+        def always_crash():
+            raise crash
+            yield  # make it a generator
+
+        loader._torch_loader.__iter__ = always_crash
+        loader._torch_loader.dataset  = None
+
+        with patch('pytorch_med_imaging.pmi_data_loader.pmi_dataloader_base._time.sleep'), \
+             patch('pytorch_med_imaging.pmi_data_loader.pmi_dataloader_base._warnings.warn'):
+            with self.assertRaises(RuntimeError) as ctx:
+                list(loader)
+
+        self.assertIs(ctx.exception, crash)
+
+    def test_consecutive_counter_resets_on_success(self):
+        """A successful batch resets the retry counter so a later crash still gets retries."""
+        loader = _stub_loader(nfs_resilient_max_retries=1)
+        crash  = RuntimeError('shared memory: No such file or directory')
+        attempt = [0]
+
+        def intermittent():
+            attempt[0] += 1
+            if attempt[0] == 1:
+                yield 'ok_1'
+                raise crash
+            yield 'ok_2'
+
+        loader._torch_loader.__iter__ = intermittent
+        loader._torch_loader.dataset  = None
+
+        with patch('pytorch_med_imaging.pmi_data_loader.pmi_dataloader_base._time.sleep'), \
+             patch('pytorch_med_imaging.pmi_data_loader.pmi_dataloader_base._warnings.warn'):
+            result = list(loader)
+
+        self.assertEqual(result, ['ok_1', 'ok_2'])
+
+    def test_unrelated_runtime_error_is_not_caught(self):
+        loader    = _stub_loader(nfs_resilient_max_retries=5)
+        unrelated = RuntimeError('CUDA out of memory.')
+
+        def bad_iter():
+            raise unrelated
+            yield
+
+        loader._torch_loader.__iter__ = bad_iter
+        loader._torch_loader.dataset  = None
+
+        with patch('pytorch_med_imaging.pmi_data_loader.pmi_dataloader_base._time.sleep') as mock_sleep:
+            with self.assertRaises(RuntimeError) as ctx:
+                list(loader)
+
+        self.assertIs(ctx.exception, unrelated)
+        mock_sleep.assert_not_called()
+
+    def test_queue_workers_are_restarted_on_crash(self):
+        loader = _stub_loader(nfs_resilient_max_retries=3)
+        crash  = RuntimeError('shared memory: No such file or directory')
+
+        mock_queue = MagicMock(spec=tio.Queue)
+        mock_queue.patches_list       = MagicMock()
+        mock_queue._subjects_iterable = 'old_iter'
+        iters = [0]
+
+        def flaky():
+            iters[0] += 1
+            if iters[0] == 1:
+                raise crash
+            yield 'batch'
+
+        loader._torch_loader.__iter__ = flaky
+        loader._torch_loader.dataset  = mock_queue
+
+        with patch('pytorch_med_imaging.pmi_data_loader.pmi_dataloader_base._time.sleep'), \
+             patch('pytorch_med_imaging.pmi_data_loader.pmi_dataloader_base._warnings.warn'):
+            result = list(loader)
+
+        mock_queue.patches_list.clear.assert_called_once()
+        self.assertIsNone(mock_queue._subjects_iterable)
+        mock_queue._initialize_subjects_iterable.assert_called_once()
+        self.assertEqual(result, ['batch'])
+
+    def test_iter_without_torch_loader_raises(self):
+        loader = object.__new__(_StubLoader)
+        with self.assertRaises(RuntimeError):
+            list(loader)
+
+    def test_all_crash_signatures_trigger_recovery(self):
+        for sig in _WORKER_CRASH_SIGNATURES:
+            with self.subTest(signature=sig):
+                loader = _stub_loader(nfs_resilient_max_retries=1)
+                crash  = RuntimeError(f'prefix {sig.upper()} suffix')
+                iters  = [0]
+
+                def flaky():
+                    iters[0] += 1
+                    if iters[0] == 1:
+                        raise crash
+                    yield 'ok'
+
+                loader._torch_loader.__iter__ = flaky
+                loader._torch_loader.dataset  = None
+
+                with patch('pytorch_med_imaging.pmi_data_loader.pmi_dataloader_base._time.sleep'), \
+                     patch('pytorch_med_imaging.pmi_data_loader.pmi_dataloader_base._warnings.warn'):
+                    result = list(loader)
+
+                self.assertEqual(result, ['ok'])
+                iters[0] = 0

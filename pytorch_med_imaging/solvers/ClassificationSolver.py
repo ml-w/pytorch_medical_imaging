@@ -128,7 +128,7 @@ class ClassificationSolver(SolverBase):
         # required dimension of CrossEntropy is either (B) or (B, num_class)
         if isinstance(self.loss_function, nn.CrossEntropyLoss):
             # squeeze (B, 1) to (B)
-            g = g.squeeze()
+            g = g.squeeze(1)
 
         self._logger.debug(f"Output size out: {out.shape}({out.dtype}) g: {g.shape}({g.dtype})")
         # Cross entropy does not need any processing, just give the raw output

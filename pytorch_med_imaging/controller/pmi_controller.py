@@ -272,6 +272,9 @@ class PMIController(object):
             'cp_load_dir'
         ]
 
+
+    def init_plotter(self):
+        r"""Initiate plotter based on loaded CFG."""
         # Finally create plotter
         if self.plotting:
             try:
@@ -399,20 +402,42 @@ class PMIController(object):
 
 
     def _pre_process_flags(self) -> None:
-        r"""The flags defined in :class:`PMIControllerCFG` might need to further change the CFGs of the solver and the
-        data loader. This method implements this. Essentially, the first part of this method replaces the key tag
-        ``'{fold_code}'`` in several attributes with the value stored in :attr:`self.fold_code`. This allows users to
-        define K-fold data split and train various folds without having to copy the configuration in each fold. Second,
-        this method deals with the special options
+        r"""Resolve and propagate all controller-level flags into the solver and data-loader CFGs.
 
-        Special options:
+        Called once during controller initialisation, before any loader or solver is constructed.
+        The method proceeds in three groups:
 
-        * ``validate_on_testing_set``
-        * ``validate_on_training_set``
-        * ``inference_on_training_set``
-        * ``inference_on_validation_set``
+        **Group 1 – Normalise inputs**
+            Guild AI passes overrides as strings, so ``'None'``, ``'none'``, and ``''`` are
+            converted to Python ``None`` for :attr:`id_list`, :attr:`id_list_val`, and
+            :attr:`fold_code`.  Loader attributes that use a sentinel to mean *"keep the CFG
+            class default"* (currently ``id_globber``) are reset by deleting the instance
+            attribute.  When :attr:`fold_code` is set, the placeholder ``'{fold_code}'`` is
+            substituted in path attributes on both ``self`` and :attr:`solver_cfg`.
+
+        **Group 2 – Parse ID lists**
+            Debug mode is propagated to all sub-CFGs.  If :attr:`id_list_val` is set but no
+            validation loader config exists, one is shallow-copied from :attr:`data_loader_cfg`.
+            :attr:`id_list` is then resolved into ``training_ids`` / ``testing_ids`` (training
+            mode requires a ``[FileList]`` INI; inference mode also accepts a list or a string
+            literal).  :attr:`id_list_val` is resolved into ``validation_ids`` via INI
+            ``[validation]`` section or plain-text fallback.  Raises :exc:`FileNotFoundError`
+            if either list is set but cannot be parsed.
+
+        **Group 3 – Wire everything together**
+            Parsed IDs are written into loader CFGs.  In training mode, empty directory
+            attributes on :attr:`data_loader_val_cfg` are synced from :attr:`data_loader_cfg`.
+            The following special flags override the default ID assignment after it is set:
+
+            * ``validate_on_testing_set`` / ``validate_on_training_set``
+            * ``inference_on_training_set`` / ``inference_on_validation_set``
+
+            Finally, ``cp_save_dir`` / ``cp_load_dir`` are copied into :attr:`solver_cfg` and
+            :attr:`matmul_precision` is applied via :func:`torch.set_float32_matmul_precision`
+            (PyTorch ≥ 2.0 only).
 
         """
+        # ── Group 1: Normalise inputs ─────────────────────────────────────────────────────────────
         # Guild AI passes all overrides as strings, so normalise sentinel strings to Python None.
         _str_none = {'None', 'none', ''}
         for _attr in ('id_list', 'id_list_val', 'fold_code'):
@@ -459,9 +484,10 @@ class PMIController(object):
                     _new = _old.replace('{fold_code}', self.fold_code)
                     self._logger.debug(f"Replace {_old} with {_new}")
                     setattr(inst, attr, _new)
-                except:
+                except (AttributeError, TypeError):
                     self._logger.error(f"Failed to replace {_old} with {_new}")
 
+        # ── Group 2: Parse ID lists ───────────────────────────────────────────────────────────────
         # if in debug_mode
         if self.debug_mode:
             self._logger.info("Running in debug mode.")
@@ -469,7 +495,7 @@ class PMIController(object):
                 self.data_loader_cfg.debug_mode = True
                 self.solver_cfg.debug_mode = True
                 self.data_loader_val_cfg.debug_mode = True
-            except:
+            except AttributeError:
                 pass
 
         # if `id_list_val` is defined but `data_loader_val` isn't, try to create it from the `data_loader`
@@ -585,6 +611,7 @@ class PMIController(object):
                   f"{self.id_list_val}, but target does not fit the required format."
             raise FileNotFoundError(msg)
 
+        # ── Group 3: Wire everything together ─────────────────────────────────────────────────────
         # put the defined IDs to work
         if self.run_mode: # during training mode
             self.data_loader_cfg.id_list = training_ids
@@ -665,6 +692,13 @@ class PMIController(object):
             raise TypeError(msg)
 
         for  k, v in new_value_dict.items():
+            # Try to convert numerical values stored as string back into values
+            if isinstance(v, str) and v != "":
+                try:
+                    if re.match('[0-9\.e\+\-]+', v) is not None:
+                        v = ast.literal_eval(v)
+                except (ValueError, SyntaxError):
+                    pass
             if hasattr(target_cfg, k) and not v is None: # Dont override if new value is ``None``
                 self._logger.debug(f"Overriding tag {k}: {getattr(target_cfg, k)} -> {v}")
             else:
@@ -715,6 +749,9 @@ class PMIController(object):
             self._logger.info(f"Before preprocess flag {self.solver_cls = }")
             self._pre_process_flags()
             self._logger.info(f"After {self.solver_cls = }")
+
+            # Initiate plotter
+            self.init_plotter()
 
             # write down the configurations before execution
             controller_config = {'cfg/controller/' + k: v for k, v in self.__dict__.items() if
@@ -869,6 +906,9 @@ class PMIController(object):
             elif self.plotter_type == 'wandb':
                 self._plotter = WNB_Plotter()
                 init_meta = dict(self.plotter_init_meta or {})
+                # Add net-name to init_meta
+                init_meta['name'] += '-' + self.cfg.net_name
+
                 # Prepopulate wandb config with run hyperparameters; user-specified keys take precedence.
                 auto_config = self._build_wandb_config()
                 if auto_config:
